@@ -1,6 +1,7 @@
 import { parse } from 'yaml';
 import { EMPTY_TEST_CASE, emptyProblemData } from '@libs/database';
 import type { ProblemData, ProblemTestCase } from '@libs/database';
+import { requiredJudgeFeatures } from '@libs/judging';
 import { compileInitYaml } from './init-yaml';
 import { ProblemDataError } from './problem-data.error';
 
@@ -221,6 +222,110 @@ describe('compileInitYaml', () => {
       'Only C++, Pascal, or Java checkers are supported.',
     );
   });
+  it('lists Polygon headers after the bridged checker source; without headers the source stays one name', () => {
+    const polygonChecker = {
+      checker: 'bridged' as const,
+      customChecker: 'check.cpp',
+      checkerArgs: { type: 'testlib', lang: 'CPP17' },
+      cases: [plain(1)],
+    };
+    expect(
+      init({ ...polygonChecker, helperHeaders: ['testlib.h', 'limits.h'] })
+        .checker,
+    ).toEqual({
+      name: 'bridged',
+      args: {
+        files: ['check.cpp', 'testlib.h', 'limits.h'],
+        lang: 'CPP17',
+        type: 'testlib',
+      },
+    });
+    expect(init(polygonChecker).checker).toEqual({
+      name: 'bridged',
+      args: { files: 'check.cpp', lang: 'CPP17', type: 'testlib' },
+    });
+    expect(
+      init({ helperHeaders: ['testlib.h'], cases: [plain(1)] }).checker,
+    ).toBe('standard');
+  });
+  describe('an interactive problem', () => {
+    const polygonInteractive: Partial<ProblemData> = {
+      grader: 'interactive',
+      customGrader: 'interactor.cpp',
+      checker: 'bridged',
+      customChecker: 'check.cpp',
+      checkerArgs: { type: 'testlib', lang: 'CPP17' },
+      helperHeaders: ['testlib.h', 'constraints.h'],
+      interactiveChecker: true,
+      cases: [plain(1)],
+    };
+    it('from Polygon names its checker, with the headers, in interactive.checker', () => {
+      expect(init(polygonInteractive).interactive).toEqual({
+        files: ['interactor.cpp', 'testlib.h', 'constraints.h'],
+        type: 'testlib',
+        lang: 'CPP17',
+        checker: {
+          name: 'bridged',
+          args: {
+            files: ['check.cpp', 'testlib.h', 'constraints.h'],
+            lang: 'CPP17',
+            type: 'testlib',
+          },
+        },
+      });
+    });
+    it('from Polygon with an hcmp checker names the built-in one', () => {
+      const hcmp = {
+        ...polygonInteractive,
+        checker: 'standard' as const,
+        customChecker: null,
+        checkerArgs: null,
+      };
+      expect(init(hcmp).interactive).toMatchObject({ checker: 'standard' });
+    });
+    it('without the flag leaves the verdict to the interactor (legacy)', () => {
+      const legacy = { ...polygonInteractive, interactiveChecker: false };
+      expect(init(legacy).interactive).not.toHaveProperty('checker');
+    });
+  });
+  it.each<[string, Partial<ProblemData>]>([
+    ['standard', {}],
+    ['bridged, no headers', { checker: 'bridged', customChecker: 'c.cpp' }],
+    [
+      'bridged with headers',
+      { checker: 'bridged', customChecker: 'c.cpp', helperHeaders: ['a.h'] },
+    ],
+    [
+      'interactive, legacy',
+      { grader: 'interactive', customGrader: 'i.cpp', helperHeaders: ['a.h'] },
+    ],
+    [
+      'interactive with checker',
+      {
+        grader: 'interactive',
+        customGrader: 'i.cpp',
+        interactiveChecker: true,
+      },
+    ],
+    [
+      'flag on a standard grader',
+      { interactiveChecker: true, helperHeaders: ['a.h'] },
+    ],
+  ])(
+    'asks for a newer judge exactly when init.yml uses interactive.checker or a checker file list: %s',
+    (_label, overrides) => {
+      const yaml = init({ ...overrides, cases: [plain(1)] });
+      const interactive = yaml.interactive as
+        Record<string, unknown> | undefined;
+      const checkerFiles = (yaml.checker as { args?: { files?: unknown } })
+        ?.args?.files;
+      const needsNewJudge =
+        interactive?.checker !== undefined || Array.isArray(checkerFiles);
+      expect(requiredJudgeFeatures(data(overrides)).length > 0).toBe(
+        needsNewJudge,
+      );
+    },
+  );
   it('maps graders: file io, interactive, signature (with allow_main), output_only', () => {
     expect(
       init({

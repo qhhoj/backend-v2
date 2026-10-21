@@ -79,32 +79,25 @@ describe('parseAssets', () => {
     );
   });
 
-  it('prefers the interactor: interactive grader, checker ignored but named', () => {
-    const interactive = (polygonChecker: string | null) => ({
+  it('keeps the checker of an interactive problem beside its interactor', () => {
+    const withInteractor = (checker: { name?: string; path: string } | null) =>
+      assets({ ...oneTest, interactor: 'files/interactor.cpp', checker });
+    expect(
+      withInteractor({ name: 'std::wcmp.cpp', path: 'files/check.cpp' }),
+    ).toEqual({
+      ...bridged('std::wcmp.cpp'),
       grader: 'interactive',
-      checker: 'standard',
-      checkerArgs: null,
-      checkerSource: null,
-      polygonChecker,
       interactorSource: 'files/interactor.cpp',
     });
     expect(
-      assets({
-        ...oneTest,
-        interactor: 'files/interactor.cpp',
-        checker: { name: 'std::wcmp.cpp', path: 'files/check.cpp' },
-      }),
-    ).toEqual(interactive('std::wcmp.cpp'));
-    expect(
-      assets({
-        ...oneTest,
-        interactor: 'files/interactor.cpp',
-        checker: { path: 'files/Check.java' },
-      }),
-    ).toEqual(interactive('files/Check.java'));
-    expect(
-      assets({ ...oneTest, interactor: 'files/interactor.cpp', checker: null }),
-    ).toEqual(interactive(null));
+      withInteractor({ name: 'std::hcmp.cpp', path: 'files/check.cpp' }),
+    ).toMatchObject({ grader: 'interactive', checker: 'standard' });
+    expect(() => withInteractor({ path: 'files/Check.java' })).toThrow(
+      new PolygonImportError('checker must use C++'),
+    );
+    expect(() => withInteractor(null)).toThrow(
+      new PolygonImportError('checker not found'),
+    );
     expect(() =>
       assets({ ...oneTest, interactor: 'files/interactor.java' }),
     ).toThrow(new PolygonImportError('interactor must use C++'));

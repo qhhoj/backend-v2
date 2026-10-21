@@ -5,14 +5,20 @@ import type { SourceCheck } from '@libs/database';
 import type { SourceCheckJob } from '@libs/problems';
 import type { Model } from 'mongoose';
 
+/** Where a checked source lives and the headers stored beside it. */
+export interface CheckedSource {
+  code: string;
+  headers: string[];
+}
+
 @Injectable()
 export class SourceCheckRepository {
   constructor(
     @InjectModel(Problem.name) private readonly problems: Model<Problem>,
   ) {}
 
-  /** The problem's code while `job.file` is still its uploaded `job.kind`; null when it was replaced or removed, or the problem is deleted. */
-  async codeIfCurrent(job: SourceCheckJob): Promise<string | null> {
+  /** The problem's code and the headers its sources compile with, while `job.file` is still its uploaded `job.kind`; null when it was replaced or removed, or the problem is deleted. */
+  async sourceIfCurrent(job: SourceCheckJob): Promise<CheckedSource | null> {
     const row = await this.problems
       .findOne(
         {
@@ -20,11 +26,13 @@ export class SourceCheckRepository {
           deletedAt: null,
           [`data.${job.kind}`]: job.file,
         },
-        { code: 1 },
+        { code: 1, 'data.helperHeaders': 1 },
       )
-      .lean<{ code: string }>()
+      .lean<{ code: string; data?: { helperHeaders?: string[] } }>()
       .exec();
-    return row?.code ?? null;
+    return row
+      ? { code: row.code, headers: row.data?.helperHeaders ?? [] }
+      : null;
   }
 
   /** Writes the result unless the check now belongs to another upload. */

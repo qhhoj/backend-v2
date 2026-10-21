@@ -14,3 +14,4 @@ export * from './requeue';
 export * from './effects-due';
 export * from './external-judge';
 export * from './test-generation';
+export * from './judge-features';

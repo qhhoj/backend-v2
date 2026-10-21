@@ -78,27 +78,18 @@ function parseChecker(root: XmlElement, checker: XmlElement): CheckerAssets {
   };
 }
 
-/** Legacy `parse_assets`: an interactor wins and its checker is ignored, because the judge runs an interactive problem's checker only from `interactive.checker`, which older judges refuse (judge-v2#34). The returned paths come from problem.xml and are resolved by `PolygonPackage`, never used directly. */
+/** Legacy `parse_assets`, with Polygon's model for an interactor: the problem checker still decides each case, reading what the interactor wrote (init.yml `interactive.checker`). An hcmp checker maps to `standard` there too. The returned paths come from problem.xml and are resolved by `PolygonPackage`, never used directly. */
 export function parseAssets(root: XmlElement): PolygonAssets {
-  const interactor = descendant(root, 'interactor');
   const checker = descendant(root, 'checker');
-  if (interactor)
-    return {
-      grader: 'interactive',
-      ...STANDARD_CHECKER,
-      polygonChecker: polygonCheckerOf(checker),
-      interactorSource: sourcePath(
-        interactor,
-        'interactor',
-        'interactor must use C++',
-      ),
-    };
   if (!checker)
     throw new PolygonImportError('checker not found', 'checker_unsupported');
+  const interactor = descendant(root, 'interactor');
   return {
-    grader: 'standard',
+    grader: interactor ? 'interactive' : 'standard',
     ...parseChecker(root, checker),
     polygonChecker: polygonCheckerOf(checker),
-    interactorSource: null,
+    interactorSource: interactor
+      ? sourcePath(interactor, 'interactor', 'interactor must use C++')
+      : null,
   };
 }

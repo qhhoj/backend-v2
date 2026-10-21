@@ -16,7 +16,12 @@ import {
   SubmissionSource,
   uuidStr,
 } from '@libs/database';
-import { effectsDue, EXTERNAL_JUDGE_NAME, gradedJobOf } from '@libs/judging';
+import {
+  effectsDue,
+  EXTERNAL_JUDGE_NAME,
+  gradedJobOf,
+  requiredJudgeFeatures,
+} from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import type { AssignmentRef } from '@libs/judge-proto';
 import type { QueuedSubmission } from '../dispatch/slots';
@@ -25,6 +30,20 @@ import { submissionFilePath } from './submission-file-path';
 
 /** Judge disconnects forgiven while a submission is in flight; the next one is an internal error. */
 export const MAX_REQUEUES = 1;
+/** The problem data fields `requiredJudgeFeatures` reads (`data` is not selected by default). */
+const JUDGED_DATA_PROJECTION = {
+  'data.grader': 1,
+  'data.checker': 1,
+  'data.helperHeaders': 1,
+  'data.interactiveChecker': 1,
+} as const;
+/** How judges know a queued submission's problem. */
+interface JudgedProblem {
+  /** The mirror root's code for a mirror; undefined when that problem is gone. */
+  code: string | undefined;
+  requiredFeatures: string[];
+  isExternal: boolean;
+}
 /** The IE message of a claimed row whose problem, source or uploaded file is gone. */
 const MISSING_DATA_MESSAGE = 'Submission data is missing';
 /** A P/G row, the judge it names and the generation it runs. */
@@ -156,12 +175,45 @@ export class SubmissionsRepository {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  /** Queued submissions (all, or those of `ids`) in dispatch order; those of a problem the external judge takes only with `external` (then only those), with the codes judges know (a mirror is judged under its root's code) and the judge pinned at submit, kept by an accept timeout and a resync (a judge loss or RETRY drops it). A row whose problem or language is gone is skipped. */
+  /** Queued submissions (all, or those of `ids`) in dispatch order; those of a problem the external judge takes only with `external` (then only those), with the codes judges know (a mirror is judged under its root's code), the judge features its root's data needs, and the judge pinned at submit, kept by an accept timeout and a resync (a judge loss or RETRY drops it). A row whose problem or language is gone is skipped. */
   async loadQueued(
     ids?: string[],
     { external = false }: { external?: boolean } = {},
   ): Promise<QueuedSubmission[]> {
-    const rows = await this.submissions
+    const rows = await this.queuedRows(ids);
+    const problems = await this.judgedProblemsOf(
+      unique(rows.map((row) => uuidStr(row.problem))),
+    );
+    const keyOf = await this.languageKeysOf(
+      unique(rows.map((row) => uuidStr(row.language))),
+    );
+    const metaOf = await this.contestMetaOf(
+      rows.filter((row) => row.contest).map((row) => uuidStr(row._id)),
+    );
+    return rows.flatMap((row) => {
+      const problem = problems.get(uuidStr(row.problem));
+      const languageKey = keyOf.get(uuidStr(row.language));
+      if (!problem?.code || !languageKey || problem.isExternal !== external)
+        return [];
+      return [
+        {
+          id: uuidStr(row._id),
+          problemCode: problem.code,
+          languageKey,
+          priority: row.priority,
+          generation: row.judgeGeneration ?? 0,
+          judgeName: row.pinnedJudge ?? null,
+          bannedJudges: metaOf.get(uuidStr(row._id))?.bannedJudges ?? [],
+          retryBannedJudges: [],
+          requiredFeatures: problem.requiredFeatures,
+        },
+      ];
+    });
+  }
+
+  /** QU rows (all, or those of `ids`) in dispatch order. */
+  private queuedRows(ids?: string[]) {
+    return this.submissions
       .find(
         { status: 'QU', ...(ids && { _id: { $in: ids } }) },
         {
@@ -175,66 +227,54 @@ export class SubmissionsRepository {
       )
       .sort({ priority: 1, _id: 1 })
       .lean();
+  }
+
+  /** Per problem id: the code judges know it by and the features its data needs, both from its mirror root when it has one, and whether the external judge takes it. */
+  private async judgedProblemsOf(
+    problemIds: string[],
+  ): Promise<Map<string, JudgedProblem>> {
+    const judgedFields = { code: 1, ...JUDGED_DATA_PROJECTION };
     const problems = await this.problems
       .find(
-        { _id: { $in: unique(rows.map((row) => uuidStr(row.problem))) } },
-        { code: 1, mirrorRoot: 1, 'externalJudge.isActive': 1 },
+        { _id: { $in: problemIds } },
+        { ...judgedFields, mirrorRoot: 1, 'externalJudge.isActive': 1 },
       )
       .lean();
-    const isExternal = new Set(
-      problems
-        .filter((problem) => problem.externalJudge?.isActive)
-        .map((problem) => uuidStr(problem._id)),
-    );
     const rootIds = problems.flatMap((problem) =>
       problem.mirrorRoot ? [uuidStr(problem.mirrorRoot)] : [],
     );
     const roots = rootIds.length
-      ? await this.problems.find({ _id: { $in: rootIds } }, { code: 1 }).lean()
+      ? await this.problems
+          .find({ _id: { $in: unique(rootIds) } }, judgedFields)
+          .lean()
       : [];
-    const codeOf = new Map(
-      [...problems, ...roots].map((problem) => [
-        uuidStr(problem._id),
-        problem.code,
-      ]),
+    const byId = new Map(
+      [...problems, ...roots].map((row) => [uuidStr(row._id), row]),
     );
-    const judgedCodeOf = new Map(
-      problems.map((problem) => [
-        uuidStr(problem._id),
-        codeOf.get(uuidStr(problem.mirrorRoot ?? problem._id)),
-      ]),
+    return new Map(
+      problems.map((problem) => {
+        const judged = byId.get(uuidStr(problem.mirrorRoot ?? problem._id));
+        const entry: JudgedProblem = {
+          code: judged?.code,
+          requiredFeatures: judged?.data
+            ? requiredJudgeFeatures(judged.data)
+            : [],
+          isExternal: Boolean(problem.externalJudge?.isActive),
+        };
+        return [uuidStr(problem._id), entry];
+      }),
     );
+  }
+
+  private async languageKeysOf(
+    languageIds: string[],
+  ): Promise<Map<string, string>> {
     const languages = await this.languages
-      .find(
-        { _id: { $in: unique(rows.map((row) => uuidStr(row.language))) } },
-        { key: 1 },
-      )
+      .find({ _id: { $in: languageIds } }, { key: 1 })
       .lean();
-    const keyOf = new Map(
+    return new Map(
       languages.map((language) => [uuidStr(language._id), language.key]),
     );
-    const metaOf = await this.contestMetaOf(
-      rows.filter((row) => row.contest).map((row) => uuidStr(row._id)),
-    );
-    return rows.flatMap((row) => {
-      if (isExternal.has(uuidStr(row.problem)) !== external) return [];
-      const problemCode = judgedCodeOf.get(uuidStr(row.problem));
-      const languageKey = keyOf.get(uuidStr(row.language));
-      return problemCode && languageKey
-        ? [
-            {
-              id: uuidStr(row._id),
-              problemCode,
-              languageKey,
-              priority: row.priority,
-              generation: row.judgeGeneration ?? 0,
-              judgeName: row.pinnedJudge ?? null,
-              bannedJudges: metaOf.get(uuidStr(row._id))?.bannedJudges ?? [],
-              retryBannedJudges: [],
-            },
-          ]
-        : [];
-    });
   }
 
   /** Resync: queued rows pinned to a judge that is not connected and were submitted before `olderThan` fall back to any judge (the judge may be blocked, deleted or offline for good). Returns their ids. */

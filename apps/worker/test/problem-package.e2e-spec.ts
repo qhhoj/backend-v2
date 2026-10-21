@@ -59,6 +59,7 @@ describe('problem package build', () => {
         customGrader: null,
         customHeader: null,
         helperHeaders: ['testlib.h'],
+        interactiveChecker: false,
         checker: 'standard',
         checkerArgs: null,
         grader: 'standard',

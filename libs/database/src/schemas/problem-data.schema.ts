@@ -87,8 +87,10 @@ export class ProblemData {
   @Prop({ type: String, default: null }) customChecker!: string | null;
   @Prop({ type: String, default: null }) customGrader!: string | null;
   @Prop({ type: String, default: null }) customHeader!: string | null;
-  /** Headers a Polygon package ships (its own testlib.h included), stored beside its interactor, which compiles with them. */
+  /** Headers a Polygon package ships (its own testlib.h included), stored beside its checker and interactor, which compile with them. */
   @Prop({ type: [String], default: [] }) helperHeaders!: string[];
+  /** An interactive problem also runs its checker on what the interactor wrote (Polygon's model); false keeps the legacy rule that the interactor alone decides. */
+  @Prop({ default: false }) interactiveChecker!: boolean;
   @Prop({ type: String, default: 'standard', enum: CHECKERS })
   checker!: Checker;
   @Prop({ type: Mixed, default: null }) checkerArgs!: JsonObject | null;
@@ -167,6 +169,7 @@ export const emptyProblemData = (): ProblemData => ({
   customGrader: null,
   customHeader: null,
   helperHeaders: [],
+  interactiveChecker: false,
   checker: 'standard',
   checkerArgs: null,
   grader: 'standard',
