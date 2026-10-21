@@ -95,6 +95,7 @@ function generationTestOf(
   if (node.attributes['from-file'] !== undefined)
     throw new PolygonImportError(
       'multi-file generators are not supported; build a full package',
+      'package_needs_full',
     );
   if (node.attributes.method === 'manual') {
     if (!hasMember(test.inputPath))
@@ -222,7 +223,10 @@ export function buildGenerationPlan(
   hasMember: HasMember,
 ): GenerationPlan {
   if (descendant(root, 'interactor'))
-    throw new PolygonImportError('interactive problems need a full package');
+    throw new PolygonImportError(
+      'interactive problems need a full package',
+      'package_needs_full',
+    );
   const nodes = testNodesOf(root);
   const tests = testPlan.tests.map((test) =>
     generationTestOf(test, nodes[test.index], hasMember),

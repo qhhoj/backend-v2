@@ -1,6 +1,11 @@
 import { POLYGON_SYNC_RESULTS } from '@libs/database';
 import type { PolygonSyncResult } from '@libs/database';
+import type { ImportErrorParams, PolygonImportErrorCode } from '@libs/problems';
 import { ApiProperty } from '@nestjs/swagger';
+import {
+  ApiImportErrorCode,
+  ApiImportErrorParams,
+} from '../../imports/dto/import-error.decorators';
 import { PolygonLatestPackageResponse } from './polygon-problem.response';
 
 export class PolygonLinkResponse {
@@ -25,6 +30,11 @@ export class PolygonLinkResponse {
   lastSyncResult!: PolygonSyncResult | null;
   /** Why the last sync failed, as shown to the requester. */
   lastSyncError!: string | null;
+  /** The last sync's failure as a code (`imported_needs_attention` when it imported but needs a repair); null after a success. */
+  @ApiImportErrorCode()
+  lastSyncErrorCode!: PolygonImportErrorCode | null;
+  @ApiImportErrorParams()
+  lastSyncErrorParams!: ImportErrorParams | null;
   autoSync!: boolean;
 }
 

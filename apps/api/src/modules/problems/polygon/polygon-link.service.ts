@@ -3,7 +3,11 @@ import type { AuthContext } from '@libs/auth';
 import { AppError } from '@libs/common';
 import type { PolygonLink } from '@libs/database';
 import { latestPackageOf, PolygonClient } from '@libs/problems';
-import type { LinkedProblem } from '@libs/problems';
+import type {
+  ImportErrorParams,
+  LinkedProblem,
+  PolygonImportErrorCode,
+} from '@libs/problems';
 import type { ProblemDocument } from '../core/problems.repository';
 import { RevisionsRepository } from '../core/revisions.repository';
 import { ProblemImportsService } from '../imports/problem-imports.service';
@@ -132,5 +136,11 @@ const linkView = (link: PolygonLink): PolygonLinkResponse => ({
   lastSyncAt: link.lastSyncAt,
   lastSyncResult: link.lastSyncResult,
   lastSyncError: link.lastSyncError,
+  lastSyncErrorCode: (link.lastSyncErrorCode ??
+    null) as PolygonImportErrorCode | null,
+  // An empty object is not stored (Mongoose minimizes it).
+  lastSyncErrorParams: link.lastSyncErrorCode
+    ? ((link.lastSyncErrorParams ?? {}) as ImportErrorParams)
+    : null,
   autoSync: link.autoSync,
 });

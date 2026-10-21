@@ -23,6 +23,8 @@ const syncedFields = (
   lastSyncAt: now,
   lastSyncResult: 'ok' as const,
   lastSyncError: null,
+  lastSyncErrorCode: null,
+  lastSyncErrorParams: null,
   lastSyncPackageId: source.packageId,
 });
 

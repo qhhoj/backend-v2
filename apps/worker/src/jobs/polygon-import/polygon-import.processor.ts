@@ -1,7 +1,8 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
+import { UnrecoverableError } from 'bullmq';
 import type { Job } from 'bullmq';
-import { POLYGON_ERROR_PREFIX, POLYGON_QUEUE } from '@libs/problems';
+import { AUTO_RETRIED_IMPORT_ERRORS, POLYGON_QUEUE } from '@libs/problems';
 import type {
   ImportProgress,
   PolygonImportJob,
@@ -9,17 +10,13 @@ import type {
 } from '@libs/problems';
 import type { PolygonSyncStep } from '@libs/database';
 import { DiscordWebhooksService } from '@libs/community';
+import { importFailureOf } from './import-failure';
+import type { ImportFailure } from './import-failure';
 import { ImportQuota } from './import-quota.service';
 import { ImportTracker } from './import-tracker';
-import { PolygonImportError } from './polygon-import.error';
 import { PolygonImportRepository } from './polygon-import.repository';
 import { PolygonImportService } from './polygon-import.service';
 import { PolygonSyncRunsRepository } from './polygon-sync-runs.repository';
-
-/** What a failure the requester may not see reads as; the api shows the same text. */
-const GENERIC_FAILURE = 'Import failed';
-/** The api shows at most this much of an import error; the history keeps the same. */
-const MAX_RECORDED_ERROR = 1000;
 
 @Processor(POLYGON_QUEUE, { concurrency: 1 })
 export class PolygonImportProcessor extends WorkerHost {
@@ -35,55 +32,87 @@ export class PolygonImportProcessor extends WorkerHost {
     super();
   }
 
-  /** A `PolygonImportError` is shown to the requester, so it is stored with the prefix the api looks for. Every Polygon job is recorded in the sync history; a failure also stores its step on the job and, for a sync, on the problem's link, and gives back the credits of a create. A created organization problem is announced like one made on the site. */
+  /** Every Polygon job is recorded in the sync history; a failure also stores its step and code on the job and, for a sync, on the problem's link, and gives back the credits of a create. A created organization problem is announced like one made on the site. */
   async process(job: Job<PolygonImportJob>): Promise<PolygonImportResult> {
     const tracker = new ImportTracker((progress) => this.report(job, progress));
-    const jobId = job.id ?? '';
     try {
-      if (!jobId) throw new Error('A queued job always has an id');
-      const result = await this.imports.import(jobId, job.data, tracker);
+      if (!job.id) throw new Error('A queued job always has an id');
+      const result = await this.imports.import(job.id, job.data, tracker);
+      await this.recordSuccess(job, result);
+      return result;
+    } catch (error) {
+      throw await this.failed(job, tracker.step, error);
+    }
+  }
+
+  /** An import that committed but needs a repair (`attention`) completes, and is recorded like a failed sync so the link shows it. */
+  private async recordSuccess(
+    job: Job<PolygonImportJob>,
+    result: PolygonImportResult,
+  ): Promise<void> {
+    if (result.attention) {
+      const { code, params, message } = result.attention;
+      await this.recordFailure(job, 'finishing', {
+        code,
+        params,
+        message,
+        reason: message,
+      });
+    } else
       await this.bestEffort('Sync run', () =>
-        this.runs.record(jobId, job.data, {
+        this.runs.record(job.id ?? '', job.data, {
           result: 'ok',
           problemId: result.problemId,
         }),
       );
-      if (job.data.mode === 'create' && job.data.organizationId)
-        await this.bestEffort('Announcement', () =>
-          this.announce(job.data, result.problemId),
-        );
-      return result;
-    } catch (error) {
-      const shown = error instanceof PolygonImportError;
-      await this.recordFailure(
-        job,
-        tracker.step,
-        shown ? error.message.slice(0, MAX_RECORDED_ERROR) : GENERIC_FAILURE,
+    if (job.data.mode === 'create' && job.data.organizationId)
+      await this.bestEffort('Announcement', () =>
+        this.announce(job.data, result.problemId),
       );
-      throw shown ? new Error(POLYGON_ERROR_PREFIX + error.message) : error;
-    }
+  }
+
+  /** The error BullMQ records: an outage the job may outlast is retried once later with nothing recorded yet; anything else is final (`UnrecoverableError`) and recorded. */
+  private async failed(
+    job: Job<PolygonImportJob>,
+    step: PolygonSyncStep,
+    error: unknown,
+  ): Promise<Error> {
+    const failure = importFailureOf(error);
+    if (failure.code === 'import_failed')
+      this.logger.error(
+        `Polygon import of ${job.data.code} failed`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    if (retriesLater(job, failure)) return new Error(failure.reason);
+    await this.recordFailure(job, step, failure);
+    return new UnrecoverableError(failure.reason);
   }
 
   /** Recording never masks the import's own error. */
   private async recordFailure(
     job: Job<PolygonImportJob>,
     step: PolygonSyncStep,
-    reason: string,
+    failure: ImportFailure,
   ): Promise<void> {
     await this.bestEffort('Failed step', () =>
-      job.updateData({ ...job.data, failedStep: step }),
+      job.updateData({
+        ...job.data,
+        failedStep: step,
+        errorCode: failure.code,
+        errorParams: failure.params,
+      }),
     );
     await this.bestEffort('Credit refund', () =>
       this.quota.refundFailed(job.id ?? '', job.data, step),
     );
     await this.bestEffort('Sync failure', () =>
-      this.repository.recordSyncFailure(job.data, reason),
+      this.repository.recordSyncFailure(job.data, failure),
     );
     await this.bestEffort('Sync run', () =>
       this.runs.record(job.id ?? '', job.data, {
         result: 'failed',
         step,
-        error: reason,
+        failure,
       }),
     );
   }
@@ -136,3 +165,11 @@ export class PolygonImportProcessor extends WorkerHost {
     );
   }
 }
+
+/** BullMQ runs the job again (after its backoff) when attempts are left and the failure is an outage that may pass. */
+const retriesLater = (
+  job: Job<PolygonImportJob>,
+  failure: ImportFailure,
+): boolean =>
+  AUTO_RETRIED_IMPORT_ERRORS.has(failure.code) &&
+  job.attemptsMade + 1 < (job.opts?.attempts ?? 1);

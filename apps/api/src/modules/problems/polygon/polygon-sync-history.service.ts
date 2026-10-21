@@ -1,3 +1,4 @@
+import type { ImportErrorParams, PolygonImportErrorCode } from '@libs/problems';
 import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
@@ -80,5 +81,10 @@ const runView = (
   result: run.result,
   failedStep: run.failedStep,
   error: run.error,
+  errorCode: (run.errorCode ?? null) as PolygonImportErrorCode | null,
+  // An empty object is not stored (Mongoose minimizes it).
+  errorParams: run.errorCode
+    ? ((run.errorParams ?? {}) as ImportErrorParams)
+    : null,
   finishedAt: run.createdAt,
 });

@@ -9,7 +9,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { getQueueToken } from '@nestjs/bullmq';
-import { Worker } from 'bullmq';
+import { UnrecoverableError, Worker } from 'bullmq';
 import type { Queue } from 'bullmq';
 import {
   POLYGON_ERROR_PREFIX,
@@ -154,7 +154,9 @@ afterAll(() => api.teardown());
       });
       const worker = new Worker<PolygonImportJob>(
         POLYGON_QUEUE,
-        (job) => Promise.reject(new Error(reasonOf(job.data.code))),
+        // The worker's processor fails a job for good this way (a plain error is retried).
+        (job) =>
+          Promise.reject(new UnrecoverableError(reasonOf(job.data.code))),
         {
           connection,
           prefix: queue.opts.prefix,
@@ -195,12 +197,21 @@ afterAll(() => api.teardown());
       expect((await statusOf(jobId, creator).expect(200)).body).toEqual({
         data: {
           id: jobId,
+          code: 'newsum',
+          mode: 'create',
+          purpose: null,
           state: 'waiting',
           step: 'queued',
           progress: null,
+          queuePosition: 1,
           result: null,
           error: null,
+          errorCode: null,
+          errorParams: null,
+          retryable: false,
           failedStep: null,
+          createdAt: expect.any(String) as unknown,
+          finishedAt: null,
         },
       });
     });

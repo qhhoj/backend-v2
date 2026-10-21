@@ -15,6 +15,8 @@ const link: PolygonLink = {
   lastSyncAt: new Date(0),
   lastSyncResult: 'ok',
   lastSyncError: null,
+  lastSyncErrorCode: null,
+  lastSyncErrorParams: null,
   lastSyncPackageId: 10,
   autoSync: true,
   options: {

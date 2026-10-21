@@ -79,6 +79,15 @@ export class PolygonClient {
     return this.call('problem.packages', { problemId: String(problemId) });
   }
 
+  /** The tests of the `tests` testset (the one an import takes), without their input text. */
+  tests(problemId: number): Promise<unknown[]> {
+    return this.call('problem.tests', {
+      problemId: String(problemId),
+      testset: 'tests',
+      noInputs: 'true',
+    });
+  }
+
   statements(problemId: number): Promise<Record<string, PolygonStatement>> {
     return this.call('problem.statements', { problemId: String(problemId) });
   }
