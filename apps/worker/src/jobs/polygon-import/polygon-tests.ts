@@ -34,8 +34,10 @@ interface Group {
   cases: number[];
 }
 
-/** problem.xml is untrusted: bounds keep the dependency closure and the output finite; the case bound is the requester's `maxCases`, and real problems have far fewer groups. */
+/** problem.xml is untrusted: bounds keep the dependency closure and the output finite; the distinct-test bound is the requester's `maxCases`, and real problems have far fewer groups. */
 const MAX_GROUPS = 1000;
+/** Judged cases once batches copy their dependencies' tests: the bridge's per-submission case limit (`MAX_SUBMISSION_CASES`). */
+const MAX_JUDGED_CASES = 10_000;
 const MAX_POINTS = 1_000_000;
 const MAX_PATTERN_WIDTH = 9;
 const POINT_PRECISION = 1000;
@@ -101,6 +103,15 @@ interface NumberedTests {
 interface PlannedRows {
   batches: Group[];
   plainCases: number[];
+}
+/** One scoring unit of the case table: a plain case, or a batch with its S and E rows; `rows[0]` carries the points. */
+interface RowBlock {
+  points: number;
+  rows: ProblemTestCase[];
+}
+export interface FileIoNames {
+  inputFile: string;
+  outputFile: string;
 }
 
 function findTestset(root: XmlElement): XmlElement {
@@ -237,17 +248,20 @@ function groupClosure(group: Group, groups: Map<string, Group>): number[] {
   return [...cases].sort((left, right) => left - right);
 }
 
-/** Complete-group groups as batches over their dependency closure; the S and E rows count against `maxCases` too. */
-function expandBatches(groups: Map<string, Group>, maxCases: number): Group[] {
-  let plannedRows = 0;
+/** Complete-group groups as batches over their dependency closure. `maxCases` bounds distinct tests (readTestNodes); the copies only count against the judge's case limit, on top of the `plainCaseCount` plain cases. */
+function expandBatches(
+  groups: Map<string, Group>,
+  plainCaseCount: number,
+): Group[] {
+  let judgedCases = plainCaseCount;
   return [...groups.values()]
     .filter((group) => group.policy === 'complete-group')
     .map((group) => {
       const cases = groupClosure(group, groups);
-      plannedRows += cases.length + 2;
-      if (plannedRows > maxCases)
+      judgedCases += cases.length;
+      if (judgedCases > MAX_JUDGED_CASES)
         throw new PolygonImportError(
-          `expanded batch rows exceed the limit of ${maxCases}`,
+          `batches with their dependencies expand to more than ${MAX_JUDGED_CASES} judged cases`,
         );
       return { ...group, cases };
     });
@@ -264,13 +278,13 @@ const toThousandths = (points: number) => Math.round(points * POINT_PRECISION);
 function scaleToIntegerPoints(
   { batches, plainCases }: PlannedRows,
   declaredCasePoints: number[],
-): { batches: Group[]; integerCasePoints: number[] } {
+): { batches: Group[]; integerCasePoints: number[]; rescaled: boolean } {
   const allPoints = [
     ...batches.map((batch) => batch.points),
     ...plainCases.map((index) => declaredCasePoints[index]),
   ];
   if (allPoints.every((points) => Number.isInteger(points)))
-    return { batches, integerCasePoints: declaredCasePoints };
+    return { batches, integerCasePoints: declaredCasePoints, rescaled: false };
   const divisor = allPoints.map(toThousandths).reduce(gcd, 0) || 1;
   const scale = (points: number) => toThousandths(points) / divisor;
   return {
@@ -279,7 +293,22 @@ function scaleToIntegerPoints(
       points: scale(batch.points),
     })),
     integerCasePoints: declaredCasePoints.map(scale),
+    rescaled: true,
   };
+}
+
+/** A testlib checker's `quitp(x)` is x points of the test, which the judge reads against the rescaled points. testlib's std:: checkers never award partial points and the percent flag makes x relative, so only a custom checker without it is refused. */
+function refuseRescaledCheckerPoints(root: XmlElement): void {
+  const checker = descendant(root, 'checker');
+  const percent =
+    descendant(root, 'judging')?.attributes[
+      'treat-points-from-checker-as-percent'
+    ] === 'true';
+  if (!checker || percent || checker.attributes.name?.startsWith('std::'))
+    return;
+  throw new PolygonImportError(
+    'fractional points with a custom checker: QHHOJ scales points to integers, so partial points from the checker would be misread; use integer points or enable "treat points from checker as percent"',
+  );
 }
 
 const totalPoints = (
@@ -304,47 +333,77 @@ function dropZeroPointRows(
   };
 }
 
-/** S/E-wrapped batches first, then plain cases in test order; a problem scoring nothing gives its last scoring row one point (legacy). */
-function buildCaseRows(
-  { batches, plainCases }: PlannedRows,
+const batchBlock = (batch: Group, tests: PlannedTest[]): RowBlock => ({
+  points: batch.points,
+  rows: [
+    row({ type: 'S', points: batch.points }),
+    ...batch.cases.map((index) =>
+      row({ input: tests[index].inputName, output: tests[index].outputName }),
+    ),
+    row({ type: 'E' }),
+  ],
+});
+
+const caseBlock = (
+  index: number,
   { tests, casePoints }: { tests: PlannedTest[]; casePoints: number[] },
-  isPartial: boolean,
-): ProblemTestCase[] {
-  const cases: ProblemTestCase[] = [];
-  let lastScored: ProblemTestCase | null = null;
-  for (const batch of batches) {
-    if (!batch.cases.length) continue;
-    lastScored = row({ type: 'S', points: batch.points });
-    cases.push(lastScored);
-    for (const index of batch.cases)
-      cases.push(
-        row({ input: tests[index].inputName, output: tests[index].outputName }),
-      );
-    cases.push(row({ type: 'E' }));
-  }
-  for (const index of [...plainCases].sort((left, right) => left - right)) {
-    lastScored = row({
+): RowBlock => ({
+  points: casePoints[index],
+  rows: [
+    row({
       input: tests[index].inputName,
       output: tests[index].outputName,
       points: casePoints[index],
-    });
-    cases.push(lastScored);
-  }
-  if (!isPartial && lastScored) lastScored.points = 1;
-  return cases;
+    }),
+  ],
+});
+
+/** S/E-wrapped batches, then plain cases in test order; every 0-point block goes after all scoring ones, because the judge stops at a failed 0-point case. A problem scoring nothing gives its last block one point (legacy). */
+function buildCaseRows(
+  { batches, plainCases }: PlannedRows,
+  scoring: { tests: PlannedTest[]; casePoints: number[] },
+  isPartial: boolean,
+): ProblemTestCase[] {
+  const blocks = [
+    ...batches
+      .filter((batch) => batch.cases.length)
+      .map((batch) => batchBlock(batch, scoring.tests)),
+    ...[...plainCases]
+      .sort((left, right) => left - right)
+      .map((index) => caseBlock(index, scoring)),
+  ];
+  const ordered = [
+    ...blocks.filter((block) => block.points > 0),
+    ...blocks.filter((block) => block.points === 0),
+  ];
+  const lastBlock = ordered.at(-1);
+  if (!isPartial && lastBlock) lastBlock.rows[0].points = 1;
+  return ordered.flatMap((block) => block.rows);
 }
 
-function fileIoArgs(judging: XmlElement | null): JsonObject | null {
+/** Polygon's `input-file`/`output-file`, empty for stdin/stdout. The judge redirects both files or neither, so a package naming only one is refused. */
+export function fileIoNamesOf(root: XmlElement): FileIoNames {
+  const judging = descendant(root, 'judging');
   const inputFile = judging?.attributes['input-file'] ?? '';
   const outputFile = judging?.attributes['output-file'] ?? '';
-  return inputFile && outputFile
+  if (Boolean(inputFile) !== Boolean(outputFile))
+    throw new PolygonImportError(
+      `Polygon sets only the ${inputFile ? `input file ${shown(inputFile)}` : `output file ${shown(outputFile)}`}; QHHOJ needs both I/O files or neither`,
+    );
+  return { inputFile, outputFile };
+}
+
+const fileIoArgs = ({
+  inputFile,
+  outputFile,
+}: FileIoNames): JsonObject | null =>
+  inputFile
     ? {
         io_method: 'file',
         io_input_file: inputFile,
         io_output_file: outputFile,
       }
     : null;
-}
 
 /** Polygon gives milliseconds and bytes; problems store seconds and KiB, clamped to the editor's limits. */
 function readLimitsAndGraderArgs(
@@ -367,11 +426,11 @@ function readLimitsAndGraderArgs(
       Math.floor(memoryLimitBytes / BYTES_PER_KIB),
       PROBLEM_LIMITS.memoryLimit,
     ),
-    graderArgs: fileIoArgs(descendant(root, 'judging')),
+    graderArgs: fileIoArgs(fileIoNamesOf(root)),
   };
 }
 
-/** Legacy `parse_tests`: complete-group groups become batches (a batch also runs every test of the groups it depends on; the judge caches results), each-test groups become plain cases, fractional points are scaled to integers, and a problem scoring nothing gives its last case one point. */
+/** Legacy `parse_tests`: complete-group groups become batches (a batch also runs every test of the groups it depends on), each-test groups become plain cases, 0-point rows go last, fractional points are scaled to integers (refused for a custom checker that may award absolute partial points), and a problem scoring nothing gives its last case one point. */
 export function planTests(
   root: XmlElement,
   options: TestPlanOptions,
@@ -381,14 +440,16 @@ export function planTests(
   const patterns = readPathPatterns(testset);
   const groups = parseGroups(testset);
   const numbered = assignTestsToGroups(testNodes, patterns, groups);
+  const plainCases = [...numbered.ungroupedCases, ...eachTestCases(groups)];
   const rowsBeforeScaling: PlannedRows = {
-    batches: expandBatches(groups, options.maxCases),
-    plainCases: [...numbered.ungroupedCases, ...eachTestCases(groups)],
+    batches: expandBatches(groups, plainCases.length),
+    plainCases,
   };
   const scaled = scaleToIntegerPoints(
     rowsBeforeScaling,
     numbered.declaredCasePoints,
   );
+  if (scaled.rescaled) refuseRescaledCheckerPoints(root);
   const scoredRows = { ...rowsBeforeScaling, batches: scaled.batches };
   const isPartial = totalPoints(scoredRows, scaled.integerCasePoints) !== 0;
   const rowsToEmit = isPartial
