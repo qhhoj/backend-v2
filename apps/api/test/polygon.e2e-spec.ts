@@ -1225,7 +1225,7 @@ describe('Polygon routes', () => {
     it('queues a sync that overwrites the local edits only on request, and never joins one that keeps them', async () => {
       polygon.reply('problem.packages', { result: [pkg(11, 4, 'READY')] });
       const { jobId } = dataOf<{ jobId: string }>(
-        await post(`${links()}/sync`).expect(202),
+        await authed(api.http().post(`${links()}/sync`), importer).expect(202),
       );
       expect((await queue.getJob(jobId))?.data).not.toHaveProperty(
         'overwriteLocalEdits',

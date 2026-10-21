@@ -71,7 +71,9 @@ export class ProblemPolygonLinkController {
    * settings come from the package too, except each one edited on QHHOJ since
    * the last import, which is kept unless the body sets
    * `overwriteLocalEdits`; the job's `result.localEdits` lists what was kept
-   * and what was updated.
+   * and what was updated. The link's statement options are checked against
+   * Polygon's working copy, which may be newer than the package synced: a
+   * language not in the package yet can be set to `skip`.
    * The result is recorded on the link. Answers 202 with a `jobId` to poll at
    * `GET /problems/imports/{jobId}`; the id is one per problem and package, so
    * while a sync of that package (manual or automatic) is queued or running
@@ -128,7 +130,8 @@ export class ProblemPolygonLinkController {
    * permission and the write access, else it fails and is recorded on the
    * link. The statement and test options apply from the next sync (manual or
    * automatic; one already queued keeps its own) and are checked against
-   * Polygon's statements and tests first, with the codes a sync fails with
+   * Polygon's statements and tests (its working copy, which may be newer than
+   * the newest package) first, with the codes a sync fails with
    * (400 `statement_language_required`, `statement_language_unmapped`,
    * `statement_language_repeated`, `tutorial_language_required`,
    * `too_many_testcases`, `params` as the job's `errorParams`); Polygon not
