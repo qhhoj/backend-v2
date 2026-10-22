@@ -151,13 +151,14 @@ export class UsersRepository {
       .exec());
   }
 
-  /** Signups waiting for activation (resend): inactive, no ban, never logged in, not yet abandoned (`dateJoined` after `cutoff`). */
+  /** Signups waiting for activation (resend): inactive, not banned or deactivated by staff, never logged in, not yet abandoned (`dateJoined` after `cutoff`). */
   findPendingByEmail(email: string, cutoff: Date): Promise<UserDocument[]> {
     return this.users
       .find({
         email,
         isActive: false,
         banReason: null,
+        deactivatedAt: null,
         lastLogin: null,
         dateJoined: { $gte: cutoff },
       })
@@ -165,11 +166,11 @@ export class UsersRepository {
       .exec();
   }
 
-  /** False when the user is missing, already active or banned. */
+  /** False when the user is missing, already active, banned or deactivated by staff. */
   async activate(userId: string): Promise<boolean> {
     const { matchedCount } = await this.users
       .updateOne(
-        { _id: userId, isActive: false, banReason: null },
+        { _id: userId, isActive: false, banReason: null, deactivatedAt: null },
         { $set: { isActive: true } },
       )
       .exec();

@@ -36,6 +36,6 @@ export class ContestStreamsController {
     @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
-    await this.streams.openContest(auth ?? null, key, request, reply);
+    await this.streams.openContest(auth, key, request, reply);
   }
 }
