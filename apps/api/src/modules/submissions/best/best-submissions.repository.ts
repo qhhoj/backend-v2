@@ -3,9 +3,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { FilterQuery, Model } from 'mongoose';
 import { Submission, User, uuidStr } from '@libs/database';
 
-/** Best first: most points, then fastest, then least memory, then earliest. */
+/** Best first: most points, then fastest (a row without a time, such as an overridden compile error, after every timed one), then least memory, then earliest. */
 const BEST_FIRST = {
   points: -1,
+  noTime: 1,
   time: 1,
   memory: 1,
   date: 1,
@@ -83,6 +84,8 @@ export class BestSubmissionsRepository {
         { $match: match },
         ...(byContestPoints ? CONTEST_POINTS_STAGES : []),
         { $project: ROW_FIELDS },
+        // a null time sorts before every number
+        { $set: { noTime: { $eq: [{ $ifNull: ['$time', null] }, null] } } },
         {
           $group: {
             _id: '$user',
@@ -91,6 +94,7 @@ export class BestSubmissionsRepository {
         },
         { $replaceWith: '$best' },
         { $sort: BEST_FIRST },
+        { $unset: 'noTime' },
         {
           $facet: {
             items: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
