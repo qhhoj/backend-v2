@@ -21,7 +21,9 @@ ENV_FILE="$ROOT/etc/qhhoj/env"
 AUTHFILE="$ROOT/etc/qhhoj/ghcr-auth.json"
 HEALTH_TRIES="${QHHOJ_DEPLOY_HEALTH_TRIES:-30}"
 LOCK_WAIT="${QHHOJ_DEPLOY_LOCK_WAIT:-900}" # seconds; sudo env_reset keeps the override out of production
-KEEP=5
+# Backend images and frontend releases kept after a good deploy: the live one and the one `rollback` returns to (an
+# image is about 2.3 GB on a disk shared with other projects; only ghcr.io/qhhoj/backend-v2 tags are ever removed).
+KEEP=2
 ASSET_MAX_AGE_DAYS=14 # older assets of previous releases are not carried into a new release
 TAG_RE='^(v[0-9]+\.[0-9]+\.[0-9]+|sha-[0-9a-f]{12})$'
 EX_USAGE=64
@@ -35,7 +37,9 @@ env_value() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -1; }
 
 history_file() { echo "$STATE/$1.history"; }
 live() { tail -n 1 "$(history_file "$1")" 2>/dev/null || true; }
-record() { echo "$2" >> "$(history_file "$1")"; }
+# A redeploy of the live version is not a new entry: the history's last KEEP lines must stay KEEP distinct versions
+# (prune keeps exactly those, and rollback returns to the line before the live one).
+record() { [ "$2" = "$(live "$1")" ] || echo "$2" >> "$(history_file "$1")"; }
 drop_last() { local file; file="$(history_file "$1")"; sed -i '$d' "$file"; }
 
 running_contest() { # a running contest that ends within 24 h; long practice contests do not block deploys

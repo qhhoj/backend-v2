@@ -28,6 +28,7 @@ ensure_dirs() {
   install -d -m 2750 "$ROOT/srv/qhhoj/problem-data"
   for dir in pdf-cache contest-data user-data; do install -d -m 2700 "$ROOT/srv/qhhoj/$dir"; done
   chown -R "$ID:$ID" "$ROOT/srv/qhhoj"
+  grant_pull_read
   install -d -m 700 "$ROOT/backup"
   # qhhoj-deploy (root) keeps its history here: root-owned; only incoming/ is writable by the deploy user
   install -d -m 755 "$ROOT/var/lib/qhhoj-deploy"
@@ -39,6 +40,14 @@ ensure_dirs() {
   install -d -m 700 "$ROOT/etc/qhhoj"
 }
 
+grant_pull_read() { # the laptop pull's read ACL on the owner-only trees (RUNBOOK "Pull copy" step 6), once that user exists
+  # `install -d -m 2700` above resets the group bits of an existing directory, and with them the ACL mask that the
+  # entry needs: re-apply it on every run (-R also covers files made before the default entry was set).
+  id qhhoj-pull >/dev/null 2>&1 || return 0
+  command -v setfacl >/dev/null || die "the qhhoj-pull user exists but setfacl is missing: apt install acl"
+  setfacl -R -m u:qhhoj-pull:rX -m d:u:qhhoj-pull:rX "$ROOT/srv/qhhoj/contest-data" "$ROOT/srv/qhhoj/user-data"
+}
+
 install_files() {
   install -d "$ROOT/usr/local/sbin" "$ROOT/etc/containers/systemd" "$ROOT/etc/systemd/system" "$ROOT/etc/sudoers.d" "$ROOT/etc/nginx/snippets"
   install -m 755 "$here/qhhoj-deploy" "$ROOT/usr/local/sbin/qhhoj-deploy"
@@ -46,6 +55,9 @@ install_files() {
   install -m 644 "$here/quadlet/qhhoj.target" "$ROOT/etc/systemd/system/qhhoj.target"
   # Backups: the timer is enabled by hand once /etc/qhhoj/backup.env and the repositories exist (RUNBOOK "Backups").
   install -m 755 "$here/backup/qhhoj-backup" "$ROOT/usr/local/sbin/qhhoj-backup"
+  install -m 644 "$here/backup/qhhoj-backup-lib.sh" "$ROOT/usr/local/sbin/qhhoj-backup-lib.sh" # sourced by the backup scripts
+  # The laptop's pull copy: the forced command of the qhhoj-pull key; idle until that user exists (RUNBOOK "Pull copy").
+  install -m 755 "$here/backup/pull/qhhoj-pull-serve" "$ROOT/usr/local/sbin/qhhoj-pull-serve"
   install -m 755 "$here/backup/restore-test.sh" "$ROOT/usr/local/sbin/qhhoj-backup-restore-test"
   install -m 644 "$here/backup/qhhoj-backup.service" "$here/backup/qhhoj-backup.timer" "$ROOT/etc/systemd/system/"
   visudo -cf "$here/sudoers.qhhoj-deploy" >/dev/null || die "sudoers file does not parse"

@@ -99,13 +99,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      # restic: deploy/backup/qhhoj-backup.test.sh runs the backup script against real (temp-dir) repositories.
-      - run: sudo apt-get install -y shellcheck restic
-      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/install-host.sh deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh deploy/backup/qhhoj-backup deploy/backup/*.sh
+      # restic: the backup and pull tests run the scripts against real (temp-dir) repositories; rsync ships rrsync.
+      - run: sudo apt-get install -y shellcheck restic rsync
+      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/install-host.sh deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh deploy/backup/qhhoj-backup deploy/backup/*.sh deploy/backup/pull/qhhoj-pull deploy/backup/pull/qhhoj-pull-serve deploy/backup/pull/*.sh
       - name: Run script tests
         run: |
           shopt -s nullglob
-          for t in deploy/*.test.sh deploy/*/*.test.sh; do echo "== $t"; bash "$t"; done
+          for t in deploy/*.test.sh deploy/*/*.test.sh deploy/*/*/*.test.sh; do echo "== $t"; bash "$t"; done
   # The required check (with changes): it fails when any job above failed or was cancelled; a skipped job passes.
   ci-ok:
     if: always()

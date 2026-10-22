@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# qhhoj-pull-serve: the forced command of the qhhoj-pull user's one ssh key; the owner's laptop pulls its backup copy
+# through it (RUNBOOK "Backups" -> "Pull copy (owner laptop)"). Installed to /usr/local/sbin with qhhoj-backup-lib.sh.
+# It runs as qhhoj-pull, at idle CPU and I/O priority (the site and the judge share the host), and allows exactly:
+#   ping                                    exit 0 and nothing else: the laptop's reachability probe
+#   dump                                    a point-in-time mongodump --archive --oplog of the instance, on stdout
+#   rsync --server --sender <opts> . <dir>  a read-only rsync (rrsync -ro) of problem-data, media, contest-data or
+#                                           user-data under /srv/qhhoj, or of paths below them
+# Anything else is refused with exit 1 and logged to syslog (auth facility, tag qhhoj-pull-serve).
+# The read-only backup credentials: /etc/qhhoj-pull/mongo.env (MONGO_BACKUP_URL, MONGO_BACKUP_PASSWORD; root:qhhoj-pull 640).
+set -euo pipefail
+
+# Tests set ROOT and stub tools; under sshd (SSH_CONNECTION) the override is ignored whatever AcceptEnv passes on.
+ROOT="${QHHOJ_PULL_ROOT:-}"
+[ -z "${SSH_CONNECTION:-}" ] || ROOT=""
+[ -n "$ROOT" ] || export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+lib="$(dirname "$(readlink -f "$0")")/qhhoj-backup-lib.sh" # installed beside it; in the repository one level up
+[ -r "$lib" ] || lib="$(dirname "$lib")/../qhhoj-backup-lib.sh"
+# shellcheck source=deploy/backup/qhhoj-backup-lib.sh
+. "$lib"
+
+CREDENTIALS="$ROOT/etc/qhhoj-pull/mongo.env"
+DATA_ROOT="$ROOT/srv/qhhoj"
+DATA_DIRS=(problem-data media contest-data user-data)
+TAG=qhhoj-pull-serve
+
+note() { logger -t "$TAG" -p "auth.$1" -- "$2" || true; } # priority message
+refuse() { note warning "refused: ${1:0:200}"; echo "$TAG: refused" >&2; exit 1; }
+idle() { exec ionice -c 3 -t nice -n 19 "$@"; } # command...: replaces this process
+
+serve_dump() {
+  [ -r "$CREDENTIALS" ] || { note err "cannot read $CREDENTIALS"; echo "$TAG: no credentials" >&2; exit 1; }
+  # shellcheck source=/dev/null
+  . "$CREDENTIALS"
+  note info "dump"
+  export GOMAXPROCS=2 # mongodump starts a thread per host CPU otherwise
+  idle mongodump --config <(mongodump_config) --archive --oplog --numParallelCollections=1 --quiet
+}
+
+allowed_path() { # rsync path argument: one of DATA_DIRS or a path below one, never with a '..' segment
+  local path="$1" dir
+  [[ /$path/ != */../* ]] || return 1
+  for dir in "${DATA_DIRS[@]}"; do
+    if [ "$path" = "$dir" ] || [[ $path == "$dir/"* ]]; then return 0; fi
+  done
+  return 1
+}
+
+serve_rsync() { # command: the sender side of a pull; rrsync -ro refuses writes, --delete and --remove-source-files
+  local words word paths=0 dot=0
+  # Plain words only: no newline (read would see the first line only), quote, glob or shell character reaches rrsync.
+  [[ $1 =~ ^[A-Za-z0-9\ ./_=,+-]+$ ]] || refuse "$1"
+  read -ra words <<< "$1"
+  for word in "${words[@]:3}"; do
+    if [ "$dot" = 1 ]; then
+      allowed_path "$word" || refuse "$1"
+      paths=$((paths + 1))
+    elif [ "$word" = . ]; then
+      dot=1
+    fi
+  done
+  [ "$paths" -gt 0 ] || refuse "$1"
+  note info "rsync ${words[*]: -$paths}"
+  idle rrsync -ro "$DATA_ROOT"
+}
+
+main() {
+  local command="${SSH_ORIGINAL_COMMAND:-}"
+  case "$command" in
+    ping) note info "ping" ;;
+    dump) serve_dump ;;
+    "rsync --server --sender "*) serve_rsync "$command" ;;
+    *) refuse "${command:-<no command>}" ;;
+  esac
+}
+
+main "$@"

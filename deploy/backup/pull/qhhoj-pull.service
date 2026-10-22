@@ -1,0 +1,21 @@
+# qhhoj-pull.service (systemd --user, the owner's laptop): one run of ~/.local/bin/qhhoj-pull, started by
+# qhhoj-pull.timer (RUNBOOK "Backups" -> "Pull copy"). Exit 75 (host unreachable: just woken, no network yet) retries
+# after 10 min, up to 4 starts in 2 h; any other failure leaves the unit failed (systemctl --user --failed).
+[Unit]
+Description=QHHOJ backup pull from the host (restic)
+StartLimitIntervalSec=2h
+StartLimitBurst=4
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/qhhoj-pull
+RestartForceExitStatus=75
+RestartSec=10min
+# A oneshot has no start timeout by default; the first run copies all of problem-data.
+TimeoutStartSec=12h
+Nice=10
+IOSchedulingClass=idle
+# The partial snapshots still to forget and the last check time (qhhoj-backup-lib.sh): ~/.local/state/qhhoj-pull.
+StateDirectory=qhhoj-pull
+StateDirectoryMode=0700
+UMask=0077
