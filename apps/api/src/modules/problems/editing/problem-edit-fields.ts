@@ -1,5 +1,6 @@
 import { isDuplicateKey, unique, ValidationFailedError } from '@libs/common';
 import type { Problem } from '@libs/database';
+import type { ProblemDataFilesService } from '@libs/problems';
 import type { UpdateProblemDto } from './dto/problem-edit.dto';
 
 /** The only field a request may set to null (it clears the license). */
@@ -62,6 +63,21 @@ export const codeTakenError = () =>
       message: 'Problem code is taken.',
     },
   ]);
+
+/** A 400 on field `code` (issue `data_directory_taken`) when `<code>/` is already on disk: a problem given the code would be judged with, and expose, the tests left there (by a rename whose move failed). */
+export async function assertNoDataDirectory(
+  dataFiles: Pick<ProblemDataFilesService, 'exists'>,
+  code: string,
+): Promise<void> {
+  if (await dataFiles.exists(code))
+    throw new ValidationFailedError('Problem data directory is taken', [
+      {
+        field: 'code',
+        code: 'data_directory_taken',
+        message: 'A test data directory for this code already exists.',
+      },
+    ]);
+}
 
 /** Runs a write, reporting a duplicate `code` as `validation_failed`. */
 export async function withCodeTaken<Result>(

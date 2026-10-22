@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, unique, ValidationFailedError } from '@libs/common';
+import { AppError, unique } from '@libs/common';
 import { BASE_STATEMENT_LANGUAGE, uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
 import { fieldDiff, ProblemDataFilesService } from '@libs/problems';
@@ -19,6 +19,7 @@ import { assertOrganizationCodePrefix } from './organization-code-prefix';
 import { OrganizationProblemRules } from './organization-problem-rules.service';
 import { ProblemEditPolicyService } from './problem-edit-policy.service';
 import {
+  assertNoDataDirectory,
   toFields,
   withCodeTaken,
   withoutRenderedHtml,
@@ -124,6 +125,7 @@ export class ProblemEditingService {
     }
     this.policy.assertCreateGates(principal, dto, fields, organization?.id);
     await this.policy.assertReferences(dto);
+    await assertNoDataDirectory(this.dataFiles, dto.code);
     // Validation is done: spend now, refund if the insert fails (a taken code included).
     const problem = await this.quota.charged(
       chargedOrganization(principal, fields),
@@ -291,15 +293,8 @@ export class ProblemEditingService {
     original: ProblemDocument,
   ): Promise<void> {
     const newCode = fields.code;
-    const isRename = newCode !== undefined && newCode !== original.code;
-    if (isRename && (await this.dataFiles.exists(newCode)))
-      throw new ValidationFailedError('Problem data directory is taken', [
-        {
-          field: 'code',
-          code: 'data_directory_taken',
-          message: 'A test data directory for this code already exists.',
-        },
-      ]);
+    if (newCode !== undefined && newCode !== original.code)
+      await assertNoDataDirectory(this.dataFiles, newCode);
   }
 
   private async recordRevisionAndEmitEvents(

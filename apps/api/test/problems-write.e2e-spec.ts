@@ -1,3 +1,5 @@
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ProblemEvents } from '../src/modules/problems/core/problem.events';
 import {
   authed,
@@ -362,6 +364,32 @@ afterAll(() => api.teardown());
       await authed(api.http().get(`${PROBLEMS}/second`), setter).expect(404);
       await authed(api.http().get(`${PROBLEMS}/third`), setter).expect(200);
       expect(events).toContainEqual(['codeRenamed', 'second', 'third']);
+    });
+    it('refuses to create, suggest or clone a problem onto a leftover data directory, keeping its files', async () => {
+      const leftover = join(api.problemDataRoot, 'leftover');
+      mkdirSync(leftover, { recursive: true });
+      writeFileSync(join(leftover, '.data-version'), '7\n');
+      await createProblem(api, catalog, { code: 'origin', isPublic: false });
+      const attempts = [
+        authed(api.http().post(PROBLEMS), setter).send({
+          ...valid,
+          code: 'leftover',
+        }),
+        authed(api.http().post(`${PROBLEMS}/suggest`), admin).send({
+          ...valid,
+          code: 'leftover',
+        }),
+        authed(api.http().post(`${PROBLEMS}/origin/clone`), admin).send({
+          code: 'leftover',
+        }),
+      ];
+      for (const attempt of attempts)
+        expect(issueCodesOf(await attempt.expect(400))).toEqual([
+          'data_directory_taken',
+        ]);
+      expect(await api.problems.countDocuments({ code: 'leftover' })).toBe(0);
+      expect(readFileSync(join(leftover, '.data-version'), 'utf8')).toBe('7\n');
+      rmSync(leftover, { recursive: true, force: true });
     });
     it('emits publicityChanged with the suggester and re-renders every statement when isFullMarkup flips', async () => {
       const problem = await createProblem(api, catalog, {

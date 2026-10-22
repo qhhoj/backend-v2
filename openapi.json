@@ -33827,7 +33827,7 @@
         "x-enveloped": true
       },
       "post": {
-        "description": "Needs `judge.add_problem`. The creator becomes a curator. Some fields are\ngated: `isPublic` needs `judge.change_public_visibility`,\n`isManuallyManaged` needs `judge.change_manually_managed`, `isFullMarkup`\nneeds `judge.problem_full_markup`, people, licence, organizations and other\nstaff fields need `judge.edit_all_problem`, and a time limit above 5 seconds\nneeds `judge.high_problem_timelimit` (400 `time_limit_too_high`). Writes a\nrevision, charges the organization's quota for organization-private problems\n(403 `quota_exceeded`) and returns the new problem as `GET /problems/{code}`\nwould. A taken or reserved code is 400 `code_taken`.",
+        "description": "Needs `judge.add_problem`. The creator becomes a curator. Some fields are\ngated: `isPublic` needs `judge.change_public_visibility`,\n`isManuallyManaged` needs `judge.change_manually_managed`, `isFullMarkup`\nneeds `judge.problem_full_markup`, people, licence, organizations and other\nstaff fields need `judge.edit_all_problem`, and a time limit above 5 seconds\nneeds `judge.high_problem_timelimit` (400 `time_limit_too_high`). Writes a\nrevision, charges the organization's quota for organization-private problems\n(403 `quota_exceeded`) and returns the new problem as `GET /problems/{code}`\nwould. A taken or reserved code is 400 `code_taken`; a code whose test\ndata directory already exists is 400 `data_directory_taken`.",
         "operationId": "ProblemEditingController_create",
         "parameters": [],
         "requestBody": {
@@ -35141,7 +35141,7 @@
     },
     "/api/internal/problems/{code}/clone": {
       "post": {
-        "description": "Needs `judge.clone_problem` and edit rights on the source. Copies the\nstatement, limits, languages, classification and visibility settings; test\ndata, translations, editorial, people and counters are not copied. The\ncaller becomes the only curator and the clone starts private. Charges the\norganization's quota when the source is organization-private (403\n`quota_exceeded`); a taken code is 400 `code_taken`. Returns the new\nproblem.",
+        "description": "Needs `judge.clone_problem` and edit rights on the source. Copies the\nstatement, limits, languages, classification and visibility settings; test\ndata, translations, editorial, people and counters are not copied. The\ncaller becomes the only curator and the clone starts private. Charges the\norganization's quota when the source is organization-private (403\n`quota_exceeded`); a taken code is 400 `code_taken`, and a code whose\ntest data directory already exists is 400 `data_directory_taken`. Returns\nthe new problem.",
         "operationId": "ProblemEditingController_clone",
         "parameters": [
           {

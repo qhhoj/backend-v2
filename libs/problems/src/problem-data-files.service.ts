@@ -95,8 +95,12 @@ export class ProblemDataFilesService {
     return this.removeFile(code, INIT_FILE);
   }
 
-  /** Runs one data change under the problem's cross-process lock (api and worker both write data) and the judge's marker; the marker is removed on success and on every error path. A writer that finds the lock taken gets the 409 `busy` conflict at once. */
-  withDataWrite<T>(code: string, work: () => Promise<T>): Promise<T> {
+  /** Runs one data change under the problem's cross-process lock (api and worker both write data) and the judge's marker; the marker is removed on success and on every error path. A writer that finds the lock taken gets the 409 `busy` conflict, at once unless it waits up to `waitSeconds`. */
+  withDataWrite<T>(
+    code: string,
+    work: () => Promise<T>,
+    { waitSeconds = 0 }: { waitSeconds?: number } = {},
+  ): Promise<T> {
     const marker = this.markerPath(code);
     return withRedisLock(
       this.redis,
@@ -105,6 +109,7 @@ export class ProblemDataFilesService {
         ttlSeconds: DATA_WRITE_LOCK_SECONDS,
         busyMessage:
           "Another change to this problem's data is in progress, try again",
+        waitSeconds,
       },
       async () => {
         await writeFileAtomically(marker, Buffer.alloc(0), this.root);
