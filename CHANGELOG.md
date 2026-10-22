@@ -1,5 +1,24 @@
 # qhhoj-backend
 
+## 2.34.9
+
+### Patch Changes
+
+- 3f188c1: A judge's Final RETRY for a run the user already aborted ends the submission as AB instead of requeuing it for another judge.
+- 822b6ca: Contest event streams treat a session short of its 2FA or password gate as anonymous. Activation resend and activation skip accounts deactivated by staff.
+- f9b4654: Grading no longer rounds a near-miss case sum (9.96 of 10) up to full marks: case points stay a tenth below the total unless every point was earned, and a non-partial problem gives full points only when the cases earned their whole total.
+- 9240157: The contest export names a problem taken out of the contest by its code, in `submissions.csv` and in `sources/<code>/`, instead of `problem`.
+- 39c6c60: Problem create, suggest and clone refuse a code whose test data directory already exists (400 `data_directory_taken`). A Polygon import takes the data lock before its commit, waiting up to 60 s for an API data write, so a committed import no longer leaves its files unwritten.
+- 8aa2a13: External judge: poll once more before timing a run out; refuse `.`/`..` remote ids; clear the API token when the base URL changes origin.
+- 7c1af90: A zip or Polygon-link import that changes a problem's `authors` or `curators` needs `judge.edit_all_problem`, as the editor does: an update may only repeat the stored lists, a create may name only the requester as curator and no author. Otherwise 403 `forbidden`, before the package is stored.
+- 97ed59d: ioi16 credits each case outside batches on its own instead of pooling them under one minimum, and rounds a cell to 3 decimals so a full cell counts as solved. A 0-point contest problem has no solvers, first solve or balloons.
+- 4bdf1de: PUT and uploads refuse what judge-v2 refuses: a generator (upload or stored), an output limit above 64 MiB, and case files in dot folders; a delete is never refused, so a stored generator can always be removed; uploads can no longer take, and deletes no longer remove, a Polygon helper header.
+- 8be538f: Every UUID body, query and path field is lowercased before use, so an uppercase id acts exactly like the lowercase one. Fixes: moving a problem into an organization named by an uppercase id skipped its storage limit and its code prefix; kicking a co-admin named by an uppercase id removed them instead of answering 409 `admin_not_kickable`.
+- c4adb89: In-memory queriers (groups, settings, catalogs) re-apply the change-stream events handled while a resync was loading, so a permission revoke, setting change or catalog delete made during the load is no longer undone by the swap until the next resync.
+- ab2b149: A score override on an IE or AB submission clears its cases, so ioi16 no longer credits a batch the run stopped inside. Best submissions rank a row without a time (an overridden CE, IE or AB) after every timed row of equal points.
+- 279bbde: The posts sitemap and the sitemap index count posts published after the API started; the publish-time filter is now built per request instead of once at boot.
+- be355ea: Sync API: a contest PUT keeps the isPretested, maxSubmissions and outputPrefixOverride set on each remaining problem instead of resetting them to defaults.
+
 ## 2.34.8
 
 ### Patch Changes
