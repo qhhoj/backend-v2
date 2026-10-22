@@ -91,6 +91,25 @@ describe('ExternalJudgeClient', () => {
   });
 
   it.each([
+    ['..', 'me'],
+    ['CodeForces', '..'],
+    ['.', '490B'],
+  ])(
+    'refuses the dot segment in %s/%s without calling the external judge',
+    async (oj, problemId) => {
+      const { calls, fetchFn } = fakeFetch(() => json({ title: 'T' }));
+      const client = new ExternalJudgeClient(fakeSettings(CONFIGURED), fetchFn);
+      expect((await errorOf(client.problem(oj, problemId)))?.code).toBe(
+        'external_judge_not_found',
+      );
+      expect((await errorOf(client.status('..')))?.code).toBe(
+        'external_judge_not_found',
+      );
+      expect(calls).toEqual([]);
+    },
+  );
+
+  it.each([
     [401, 'external_judge_unauthorized', false],
     [403, 'external_judge_unauthorized', false],
     [404, 'external_judge_not_found', false],

@@ -280,6 +280,34 @@ describe('External judge adapter (bridge)', () => {
     });
   });
 
+  /** Past maxWaitMinutes, and in the same write pointed at a remote run that answers `answer` (so no earlier poll sees it). */
+  const timeOutWith = async (id: string, answer: Response) => {
+    const remoteId = `late-${id}`;
+    pcd.answers.set(remoteId, [answer]);
+    await externalRuns().updateOne(
+      { _id: id },
+      { submittedAt: new Date(Date.now() - 31 * 60_000), remoteId },
+    );
+  };
+
+  it('polls once more past maxWaitMinutes: a final remote answer counts, a failed poll ends as IE', async () => {
+    pcd.script = [[200, PROCESSING]];
+    const problem = await externalProblem();
+    const judged = await submitTo(problem);
+    const unreachable = await submitTo(problem);
+    await waitUntil(async () => (await stored(judged)).status === 'G');
+    await waitUntil(async () => (await stored(unreachable)).status === 'G');
+    await timeOutWith(judged, json(200, done({ statusCanonical: 'AC' })));
+    await timeOutWith(unreachable, json(503, {}));
+    await finished(judged);
+    await finished(unreachable);
+    expect(await stored(judged)).toMatchObject({ status: 'D', result: 'AC' });
+    expect(await stored(unreachable)).toMatchObject({
+      status: 'IE',
+      error: TIMED_OUT_MESSAGE(30),
+    });
+  });
+
   it('keeps at most maxInFlight runs on the remote judge', async () => {
     await settings().set('externalJudge.maxInFlight', 1, null);
     pcd.script = [[200, PROCESSING]];

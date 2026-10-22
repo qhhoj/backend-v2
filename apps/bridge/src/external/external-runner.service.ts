@@ -142,26 +142,23 @@ export class ExternalRunnerService {
     }
   }
 
-  /** One held run: lost (no remote id for this generation), timed out, not due yet, still judging, or finished. */
+  /** One held run: lost (no remote id for this generation), not due yet, still judging, or finished; past maxWaitMinutes it is polled once more and ends as IE unless that answer is final. */
   private async advance(row: HeldRow): Promise<void> {
     const run = await this.repository.runOf(row.id);
     if (!run || run.generation !== row.generation || !run.remoteId)
       return this.lost(row);
-    if (this.isTimedOut(run))
-      return this.finish(row, {
+    const timedOut = this.isTimedOut(run);
+    if (!timedOut && !this.isDue(run)) return;
+    const outcome = await this.poll(row, run.remoteId);
+    if (outcome && outcome.kind !== 'processing')
+      return this.finish(row, outcome);
+    if (timedOut)
+      await this.finish(row, {
         kind: 'internal-error',
         message: TIMED_OUT_MESSAGE(
           this.settings.get('externalJudge.maxWaitMinutes'),
         ),
       });
-    if (!this.isDue(run)) return;
-    const answer = await this.poll(row, run.remoteId);
-    if (!answer) return;
-    await this.repository.answered(row.id, row.generation, answer);
-    const outcome = mapExternalResult(answer, {
-      partial: await this.repository.isPartial(row.id),
-    });
-    if (outcome.kind !== 'processing') await this.finish(row, outcome);
   }
 
   /** The bridge stopped between claim and submit: the remote may or may not have the run. Requeued once (the judge-loss rule), internal error the second time, so it is submitted at most twice and never lost. */
@@ -194,27 +191,27 @@ export class ExternalRunnerService {
     return Date.now() - since.getTime() >= interval;
   }
 
-  /** The remote answer, or null: a transient failure backs off, any other ends the run as an internal error. */
+  /** What the remote says now, or null after a transient failure (backs off); any other failure is an internal error. */
   private async poll(
     row: HeldRow,
     remoteId: string,
-  ): Promise<RemoteRun | null> {
+  ): Promise<ExternalOutcome | null> {
+    let answer: RemoteRun;
     try {
-      return await this.client.status(remoteId);
+      answer = await this.client.status(remoteId);
     } catch (error) {
-      if (error instanceof ExternalJudgeError && !error.isTransient) {
-        await this.finish(row, {
-          kind: 'internal-error',
-          message: error.message,
-        });
-        return null;
-      }
+      if (error instanceof ExternalJudgeError && !error.isTransient)
+        return { kind: 'internal-error', message: error.message };
       this.logger.warn(
         `Polling the external run of submission ${row.id} failed: ${(error as Error).message}`,
       );
       await this.repository.pollFailed(row.id, row.generation);
       return null;
     }
+    await this.repository.answered(row.id, row.generation, answer);
+    return mapExternalResult(answer, {
+      partial: await this.repository.isPartial(row.id),
+    });
   }
 
   private async waitForSubmitGap(): Promise<void> {
