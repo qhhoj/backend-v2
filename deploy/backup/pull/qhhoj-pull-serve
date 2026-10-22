@@ -2,6 +2,7 @@
 # qhhoj-pull-serve: the forced command of the qhhoj-pull user's one ssh key; the owner's laptop pulls its backup copy
 # through it (RUNBOOK "Backups" -> "Pull copy (owner laptop)"). Installed to /usr/local/sbin with qhhoj-backup-lib.sh.
 # It runs as qhhoj-pull, at idle CPU and I/O priority (the site and the judge share the host), and allows exactly:
+#   ping                                    exit 0 and nothing else: the laptop's reachability probe
 #   dump                                    a point-in-time mongodump --archive --oplog of the instance, on stdout
 #   rsync --server --sender <opts> . <dir>  a read-only rsync (rrsync -ro) of problem-data, media, contest-data or
 #                                           user-data under /srv/qhhoj, or of paths below them
@@ -9,8 +10,9 @@
 # The read-only backup credentials: /etc/qhhoj-pull/mongo.env (MONGO_BACKUP_URL, MONGO_BACKUP_PASSWORD; root:qhhoj-pull 640).
 set -euo pipefail
 
+# Tests set ROOT and stub tools; under sshd (SSH_CONNECTION) the override is ignored whatever AcceptEnv passes on.
 ROOT="${QHHOJ_PULL_ROOT:-}"
-# sshd hands over a fixed environment; tests set ROOT and stub tools.
+[ -z "${SSH_CONNECTION:-}" ] || ROOT=""
 [ -n "$ROOT" ] || export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 lib="$(dirname "$(readlink -f "$0")")/qhhoj-backup-lib.sh" # installed beside it; in the repository one level up
 [ -r "$lib" ] || lib="$(dirname "$lib")/../qhhoj-backup-lib.sh"
@@ -65,6 +67,7 @@ serve_rsync() { # command: the sender side of a pull; rrsync -ro refuses writes,
 main() {
   local command="${SSH_ORIGINAL_COMMAND:-}"
   case "$command" in
+    ping) note info "ping" ;;
     dump) serve_dump ;;
     "rsync --server --sender "*) serve_rsync "$command" ;;
     *) refuse "${command:-<no command>}" ;;

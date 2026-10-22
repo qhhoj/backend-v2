@@ -10,7 +10,6 @@ ARCHIVE_NAME=qhhoj-mongo.archive
 CHECK_EVERY_MIN=$((6 * 24 * 60 + 12 * 60)) # about weekly `restic check` that also reads a sample of the stored data
 CHECK_SUBSET=5%
 FAILED=()
-DUMP_RC=0 # exit status of the last db_snapshot producer (qhhoj-pull: 255 = ssh could not reach the host)
 
 mongodump_config() { # YAML for mongodump --config: the password stays out of argv and of mongodump's error messages
   local q="'" qq="''"
@@ -73,16 +72,16 @@ retry_stranded() { # repo: forget the partial snapshots earlier runs left in it;
 }
 
 db_snapshot() { # repo producer...: stream the producer's archive into a new snapshot; a failed producer forgets it
-  local repo="$1" json="$WORK/backup.json" restic_rc id tags=(--tag "$DB_TAG")
+  local repo="$1" json="$WORK/backup.json" dump_rc restic_rc id tags=(--tag "$DB_TAG")
   shift
   [ "${MONGO_OPLOG:-1}" != 1 ] || tags+=(--tag "$OPLOG_TAG")
   set +e
   "$@" | restic -r "$repo" backup --stdin --stdin-filename "$ARCHIVE_NAME" "${tags[@]}" --json > "$json"
-  DUMP_RC=${PIPESTATUS[0]} restic_rc=${PIPESTATUS[1]}
+  dump_rc=${PIPESTATUS[0]} restic_rc=${PIPESTATUS[1]}
   set -e
   id="$(summary_value "$json" snapshot_id)"
-  if [ "$DUMP_RC" -ne 0 ]; then
-    log "database dump failed (exit $DUMP_RC) for $repo"
+  if [ "$dump_rc" -ne 0 ]; then
+    log "database dump failed (exit $dump_rc) for $repo"
     forget_partial "$repo" "$id"
     return 1
   fi

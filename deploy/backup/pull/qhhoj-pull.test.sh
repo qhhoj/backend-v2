@@ -8,6 +8,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 for tool in restic rsync rrsync python3; do
   command -v "$tool" > /dev/null || { echo "qhhoj-pull.test: $tool is not installed" >&2; exit 1; }
 done
+unset SSH_CONNECTION # qhhoj-pull-serve ignores QHHOJ_PULL_ROOT under sshd, so a test run over ssh would hit the real paths
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 bin="$work/bin" host="$work/host" calls="$work/calls" out="$work/out"
 data="$host/srv/qhhoj"
@@ -30,12 +31,13 @@ EOF
 # shellcheck disable=SC2016 # $* belongs to the stubs
 for tool in logger notify-send; do printf '#!/usr/bin/env bash\necho "%s $*" >> "%s"\n' "$tool" "$calls" > "$bin/$tool"; done
 # fake ssh: drops its options and the host name, then runs qhhoj-pull-serve with the rest as the forced command's
-# SSH_ORIGINAL_COMMAND; FAKE_SSH_DOWN fails like an unreachable host (255).
+# SSH_ORIGINAL_COMMAND; FAKE_SSH_DOWN fails like an unreachable host (255), FAKE_SSH_DROP_DUMP like a link lost mid-dump.
 cat > "$bin/ssh" <<EOF
 #!/usr/bin/env bash
 [ -z "\${FAKE_SSH_DOWN:-}" ] || { echo "ssh: connect to host \$*: Network is unreachable" >&2; exit 255; }
 while [ \$# -gt 0 ]; do case "\$1" in -[iloFp]) shift 2 ;; -*) shift ;; *) break ;; esac; done
 shift
+[ -z "\${FAKE_SSH_DROP_DUMP:-}" ] || [ "\$*" != dump ] || { printf partial; echo "Connection reset" >&2; exit 255; }
 SSH_ORIGINAL_COMMAND="\$*" QHHOJ_PULL_ROOT="$host" exec bash "$here/qhhoj-pull-serve"
 EOF
 chmod +x "$bin"/*
@@ -51,13 +53,21 @@ grep -q s3cret "$calls" && fail "the password must not be in mongodump's argv"
 grep -qx "password: 's3cret'" "$work/mongodump-config" || fail "the password reaches mongodump through its config file"
 grep -qx 'logger -t qhhoj-pull-serve -p auth.info -- dump' "$calls" || fail "the dump is logged"
 
+: > "$calls"; serve ping > "$out" 2>&1 || fail "ping"
+[ ! -s "$out" ] && ! grep -q mongodump "$calls" || fail "ping only answers"
+grep -qx 'logger -t qhhoj-pull-serve -p auth.info -- ping' "$calls" || fail "the ping is logged"
+if [ ! -e /etc/qhhoj-pull/mongo.env ]; then # under sshd the test root is ignored: the real (here missing) credentials
+  SSH_CONNECTION='192.0.2.1 50000 192.0.2.2 22' serve dump > "$out" 2>&1 && fail "QHHOJ_PULL_ROOT must be ignored under sshd"
+  grep -q 'no credentials' "$out" || fail "under sshd the real credentials file is read"
+fi
+
 mv "$host/etc/qhhoj-pull/mongo.env" "$work/mongo.env"; : > "$calls"
 serve dump > /dev/null 2>&1 && fail "a dump without credentials fails"
 grep -q mongodump "$calls" && fail "no dump without credentials"
 mv "$work/mongo.env" "$host/etc/qhhoj-pull/mongo.env"
 
 opts='-logDtpre.iLsfxCIvu'
-for command in '' ls 'dump now' dumpx 'bash -c id' "rsync --server $opts . media/" \
+for command in '' ls 'dump now' dumpx 'ping now' pingx 'bash -c id' "rsync --server $opts . media/" \
   "rsync --server --sender $opts . pdf-cache/" "rsync --server --sender $opts . media/../pdf-cache" \
   "rsync --server --sender $opts . /etc" "rsync --server --sender $opts . ." "rsync --server --sender $opts ." \
   "rsync --server --sender $opts . media/ ; touch $work/pwned" "rsync --server --sender $opts . media/ --remove-source-files" \
@@ -132,11 +142,20 @@ pull || fail "a good night before the outage"
 db_before="$(count qhhoj-db)" files_before="$(count qhhoj-files)"
 : > "$calls"; set +e; FAKE_SSH_DOWN=1 pull; rc=$?; set -e
 [ "$rc" = 75 ] || fail "unreachable host exits 75, got $rc"
-grep -q 'cannot reach fakehost' "$out" || fail "the unreachable host is named"
+grep -q 'cannot reach fakehost' "$out" && grep -q 'ssh: .*Network is unreachable' "$out" || fail "the unreachable host and ssh's reason are named"
 [ "$(count qhhoj-db)" = "$db_before" ] && [ "$(count qhhoj-files)" = "$files_before" ] || fail "an unreachable host changes nothing"
 grep -q notify-send "$calls" && fail "a recent good pull: no notification"
 touch -d '2 days ago' "$STATE_DIRECTORY/last-success"; set +e; FAKE_SSH_DOWN=1 pull; set -e
 grep -q '^notify-send .*cannot reach fakehost' "$calls" || fail "an old last good pull raises a notification"
+
+# A link lost during the dump (ssh 255 after a good probe) is a failed database step, not an unreachable host.
+pull || fail "a good night before the dropped link"
+db_before="$(count qhhoj-db)"
+: > "$calls"; set +e; FAKE_SSH_DROP_DUMP=1 pull; rc=$?; set -e
+[ "$rc" = 1 ] || fail "a dump lost mid-stream exits 1, got $rc"
+grep -q 'failed: database' "$out" && ! grep -q 'cannot reach' "$out" || fail "reported as a failed database step"
+[ "$(count qhhoj-db)" = "$db_before" ] || fail "the partial snapshot of a dropped dump is forgotten"
+grep -q 'files snapshot of' "$out" || fail "the files step still runs after a dropped dump"
 
 # Bad configuration exits 64.
 rm "$QHHOJ_PULL_ENV"; set +e; pull; rc=$?; set -e

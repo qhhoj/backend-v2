@@ -37,9 +37,16 @@ grep -q "groupadd -g 987 qhhoj" "$calls" && grep -q "useradd -u 987" "$calls" ||
 grep -q "systemctl daemon-reload" "$calls" && grep -q "systemctl enable qhhoj.target" "$calls" || fail "systemd"
 grep -q "systemctl start" "$calls" && fail "must not start services"
 grep -q "systemctl enable .*qhhoj-backup" "$calls" && fail "the backup timer waits for its env file and repositories"
+grep -q setfacl "$calls" && fail "no pull ACL before the qhhoj-pull user exists"
 
 echo "# edited" > "$root/etc/nginx/snippets/qhhoj-gate.conf"; install_host >/dev/null
 grep -q edited "$root/etc/nginx/snippets/qhhoj-gate.conf" || fail "gate snippet is kept on re-install"
+
+# Once qhhoj-pull exists, every run re-grants its read ACL (the run's chmod to 2700 masks it on existing trees).
+fresh; stub id '[ "$1" = qhhoj-pull ]'; stub setfacl; install_host >/dev/null || fail "install with the pull user"
+grep -qxF "setfacl -R -m u:qhhoj-pull:rX -m d:u:qhhoj-pull:rX $root/srv/qhhoj/contest-data $root/srv/qhhoj/user-data" "$calls" \
+  || fail "the pull user's read ACL on contest-data and user-data"
+: > "$calls"; install_host >/dev/null; grep -q "^setfacl .*contest-data" "$calls" || fail "a re-run re-grants the ACL"
 
 fresh; STUB_TAKEN=987 install_host >/dev/null 2>&1 && fail "uid 987 taken by another user must refuse"
 echo "install-host ok"

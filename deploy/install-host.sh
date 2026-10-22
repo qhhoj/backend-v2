@@ -28,6 +28,7 @@ ensure_dirs() {
   install -d -m 2750 "$ROOT/srv/qhhoj/problem-data"
   for dir in pdf-cache contest-data user-data; do install -d -m 2700 "$ROOT/srv/qhhoj/$dir"; done
   chown -R "$ID:$ID" "$ROOT/srv/qhhoj"
+  grant_pull_read
   install -d -m 700 "$ROOT/backup"
   # qhhoj-deploy (root) keeps its history here: root-owned; only incoming/ is writable by the deploy user
   install -d -m 755 "$ROOT/var/lib/qhhoj-deploy"
@@ -37,6 +38,14 @@ ensure_dirs() {
   install -d -m 755 "$ROOT/var/www/qhhoj/releases"
   install -d -m 755 "$ROOT/var/www/qhhoj-maintenance"
   install -d -m 700 "$ROOT/etc/qhhoj"
+}
+
+grant_pull_read() { # the laptop pull's read ACL on the owner-only trees (RUNBOOK "Pull copy" step 6), once that user exists
+  # `install -d -m 2700` above resets the group bits of an existing directory, and with them the ACL mask that the
+  # entry needs: re-apply it on every run (-R also covers files made before the default entry was set).
+  id qhhoj-pull >/dev/null 2>&1 || return 0
+  command -v setfacl >/dev/null || die "the qhhoj-pull user exists but setfacl is missing: apt install acl"
+  setfacl -R -m u:qhhoj-pull:rX -m d:u:qhhoj-pull:rX "$ROOT/srv/qhhoj/contest-data" "$ROOT/srv/qhhoj/user-data"
 }
 
 install_files() {

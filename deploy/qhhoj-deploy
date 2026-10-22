@@ -37,7 +37,9 @@ env_value() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -1; }
 
 history_file() { echo "$STATE/$1.history"; }
 live() { tail -n 1 "$(history_file "$1")" 2>/dev/null || true; }
-record() { echo "$2" >> "$(history_file "$1")"; }
+# A redeploy of the live version is not a new entry: the history's last KEEP lines must stay KEEP distinct versions
+# (prune keeps exactly those, and rollback returns to the line before the live one).
+record() { [ "$2" = "$(live "$1")" ] || echo "$2" >> "$(history_file "$1")"; }
 drop_last() { local file; file="$(history_file "$1")"; sed -i '$d' "$file"; }
 
 running_contest() { # a running contest that ends within 24 h; long practice contests do not block deploys

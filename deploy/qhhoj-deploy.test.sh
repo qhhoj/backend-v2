@@ -266,10 +266,23 @@ grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.2.0 ghcr.io/qhhoj/backend-v2:cur
 : > "$calls"; set +e; STUB_IMAGES="v2.1.0 v2.2.0 v2.4.0" STUB_HEALTH=fail deploy backend v2.4.0 >/dev/null 2>&1; set -e
 grep -q '^podman rmi' "$calls" && fail "a failed deploy prunes nothing"
 
+# a redeploy of the live tag keeps the real rollback target (history is not A, B, B)
+fresh; deploy backend v2.1.0 >/dev/null; deploy backend v2.2.0 >/dev/null; : > "$calls"
+STUB_IMAGES="v2.1.0 v2.2.0" deploy backend v2.2.0 --force >/dev/null || fail "redeploy of the live tag"
+grep -q '^podman rmi' "$calls" && fail "a redeploy of the live tag pruned $(grep '^podman rmi' "$calls")"
+[ "$(hist)" = "$(printf 'v2.1.0\nv2.2.0')" ] || fail "a redeploy adds no history entry: $(hist | tr '\n' ' ')"
+: > "$calls"; deploy rollback backend >/dev/null || fail "rollback after a redeploy"
+grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.1.0 ghcr.io/qhhoj/backend-v2:current" "$calls" || fail "rollback after a redeploy lands on v2.1.0"
+
 # a good frontend deploy keeps the live release and the rollback target only
 fresh_frontend
 for v in v2.1.0 v2.2.0 v2.3.0; do tarball "$v"; deploy frontend "$v" >/dev/null || fail "frontend $v"; done
 [ "$(ls "$www/releases")" = "$(printf 'v2.2.0\nv2.3.0')" ] || fail "releases kept: $(ls "$www/releases" | tr '\n' ' ')"
 deploy rollback frontend >/dev/null && [ "$(readlink "$www/current")" = releases/v2.2.0 ] || fail "rollback lands on the kept release"
+
+fresh_frontend
+for v in v2.1.0 v2.2.0 v2.2.0; do tarball "$v"; deploy frontend "$v" >/dev/null || fail "frontend $v"; done
+[ "$(ls "$www/releases")" = "$(printf 'v2.1.0\nv2.2.0')" ] || fail "a frontend redeploy keeps the rollback target: $(ls "$www/releases" | tr '\n' ' ')"
+[ "$(fhist)" = "$(printf 'v2.1.0\nv2.2.0')" ] || fail "a frontend redeploy adds no history entry"
 
 echo "qhhoj-deploy backend ok"
