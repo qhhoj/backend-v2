@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { PartialType } from '@nestjs/swagger';
 import {
   IsOptional,
@@ -17,7 +18,7 @@ const OPTIONAL_HTTP_URL = /^(https?:\/\/\S+)?$/;
 
 export class CatalogIdParamDto {
   /** Catalog row id. */
-  @IsUUID('7') id!: string;
+  @LowercaseUuid() @IsUUID('7') id!: string;
 }
 
 /** A problem type or problem group. No property initializers (`PartialType` would inherit them). */

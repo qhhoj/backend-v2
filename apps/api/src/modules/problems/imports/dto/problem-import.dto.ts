@@ -15,7 +15,7 @@ import {
   Min,
 } from 'class-validator';
 import { IsProblemCode } from '../../core/dto/problem-code.decorator';
-import { toArray } from '@libs/common';
+import { toArray, LowercaseUuid } from '@libs/common';
 import { SYNC_JOB_ID } from '@libs/problems';
 import { toBoolean } from '../../core/dto/transforms';
 import { LANGUAGE_PAIR } from '../statement-language-pairs';
@@ -38,18 +38,21 @@ export class PolygonImportQueryDto {
   /** Author user ids; repeat the parameter. */
   @IsOptional()
   @Transform(toArray)
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   authors?: string[];
   /** Curator user ids; repeat the parameter. On create the caller is added. */
   @IsOptional()
   @Transform(toArray)
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   curators?: string[];
   /** Problem group id. */
-  @IsOptional() @IsUUID('7') groupId?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') groupId?: string;
   /** Problem type ids; repeat the parameter. */
   @IsOptional()
   @Transform(toArray)
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   typeIds?: string[];
   /** Points the problem is worth, 800 to 3500. */

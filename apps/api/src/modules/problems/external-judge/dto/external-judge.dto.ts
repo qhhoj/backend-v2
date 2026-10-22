@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -19,7 +20,7 @@ const MAX_TEXT = 100;
 
 export class ExternalLanguageDto {
   /** Site language id. */
-  @IsUUID() languageId!: string;
+  @LowercaseUuid() @IsUUID() languageId!: string;
   /** The remote OJ's language id. */
   @IsString() @Length(1, MAX_TEXT) remoteId!: string;
   /** The remote OJ's language name, for display. */

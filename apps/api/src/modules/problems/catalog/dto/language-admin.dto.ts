@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { OmitType, PartialType } from '@nestjs/swagger';
 import {
   IsBoolean,
@@ -72,5 +73,5 @@ export class UpdateLanguageDto extends PartialType(
 
 export class LanguageIdParamDto {
   /** Language id. */
-  @IsUUID('7') id!: string;
+  @LowercaseUuid() @IsUUID('7') id!: string;
 }

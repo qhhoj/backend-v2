@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { ORGANIZATION_TAG_SLUG_PATTERN } from '@libs/database';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
@@ -65,6 +66,7 @@ export class SetProblemTagsDto {
   @IsArray()
   @ArrayMaxSize(20)
   @ArrayUnique()
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   tagIds!: string[];
 }

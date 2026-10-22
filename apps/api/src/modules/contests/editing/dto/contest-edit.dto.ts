@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
 import {
   CONTEST_FORMAT_NAMES,
@@ -39,7 +40,7 @@ import { IsTimestamp } from '../../../problems/core/dto/timestamp';
 
 export class ContestProblemDto {
   /** Id of the problem to include. */
-  @IsUUID('7') problem!: string;
+  @LowercaseUuid() @IsUUID('7') problem!: string;
   /** Points the problem is worth. */
   @IsInt() @Min(0) @Max(PROBLEM_LIMITS.points.max) points!: number;
   /** Whether partial scores are given. */
@@ -103,11 +104,20 @@ export class CreateContestDto {
   @Matches(CONTEST_TAG_PATTERN, { each: true })
   tags?: string[];
   /** User ids of the authors. */
-  @IsOptional() @IsUUID('7', { each: true }) authors?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  authors?: string[];
   /** User ids with edit rights besides the authors. */
-  @IsOptional() @IsUUID('7', { each: true }) curators?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  curators?: string[];
   /** User ids who can see the contest and spectate it before it starts. */
-  @IsOptional() @IsUUID('7', { each: true }) testers?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  testers?: string[];
   /** Start, ISO 8601. */
   @IsTimestamp() startTime!: string;
   /** End, ISO 8601. */
@@ -138,17 +148,26 @@ export class CreateContestDto {
   /** Only the listed contestants may see it. Clearing it on a visible contest that becomes public needs `judge.change_contest_visibility`. */
   @IsOptional() @IsBoolean() isPrivate?: boolean;
   /** User ids allowed in a private contest. */
-  @IsOptional() @IsUUID('7', { each: true }) privateContestants?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  privateContestants?: string[];
   /** Only members of the listed organizations may see it. Clearing it on a visible contest that becomes public needs `judge.change_contest_visibility`. */
   @IsOptional() @IsBoolean() isOrganizationPrivate?: boolean;
   /** Organization ids tied to the contest. */
-  @IsOptional() @IsUUID('7', { each: true }) organizations?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  organizations?: string[];
   /** Stored hashed; an empty string removes it. */
   @IsOptional() @IsString() @MaxLength(255) accessCode?: string;
   /** Stored hashed; an empty string removes it. */
   @IsOptional() @IsString() @MaxLength(255) rankingAccessCode?: string;
   /** User ids banned from joining. */
-  @IsOptional() @IsUUID('7', { each: true }) bannedUsers?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  bannedUsers?: string[];
   /** Names of judges that may not judge this contest. */
   @IsOptional()
   @Matches(JUDGE_NAME_PATTERN, { each: true })
@@ -162,7 +181,10 @@ export class CreateContestDto {
   @IsIn(SCOREBOARD_VISIBILITIES)
   scoreboardVisibility?: ScoreboardVisibility;
   /** User ids who may see the scoreboard whatever its visibility. */
-  @IsOptional() @IsUUID('7', { each: true }) viewContestScoreboard?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  viewContestScoreboard?: string[];
   /** Seconds; 0 disables the ranking cache. */
   @IsOptional() @IsInt() @Min(0) @Max(86400) scoreboardCacheTimeout?: number;
   /**
@@ -188,7 +210,10 @@ export class CreateContestDto {
   /** Track on-site balloon deliveries. */
   @IsOptional() @IsBoolean() balloons?: boolean;
   /** User ids of balloon volunteers. */
-  @IsOptional() @IsUUID('7', { each: true }) balloonStaff?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  balloonStaff?: string[];
   /**
    * Publish the problems and editorials automatically when the contest ends.
    */
@@ -203,7 +228,10 @@ export class CreateContestDto {
   /** Rate every participant, not only those who solved a problem. */
   @IsOptional() @IsBoolean() rateAll?: boolean;
   /** User ids excluded from rating. */
-  @IsOptional() @IsUUID('7', { each: true }) rateExclude?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  rateExclude?: string[];
   /** Rating floor applied when rating the contest; null for none. */
   @IsOptional() @IsInt() ratingFloor?: number | null;
   /** Rating ceiling applied when rating the contest; null for none. */

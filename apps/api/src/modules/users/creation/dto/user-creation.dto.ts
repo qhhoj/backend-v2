@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -49,5 +50,5 @@ export class CreateUsersDto {
   @Type(() => NewUserDto)
   users!: NewUserDto[];
   /** An organization every new account joins (a school import). */
-  @IsOptional() @IsUUID('7') organizationId?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') organizationId?: string;
 }

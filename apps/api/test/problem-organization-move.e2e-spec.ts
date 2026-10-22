@@ -189,6 +189,33 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
     expect((await stored('tiny_big'))?.organizations).toEqual([ids.alpha]);
   });
 
+  it('meters an organization named by an uppercase id against what it already stores', async () => {
+    const full = await createOrganization(api, {
+      slug: 'full',
+      adminIds: [ids.owner],
+      quotaStorageBytes: 10,
+    });
+    await problem('full_held', [uuidStr(full._id)], { dataBytes: 8 });
+    await problem('full_small', [ids.alpha], { dataBytes: 5 });
+    await patch('owner', 'full_small', {
+      organizations: [uuidStr(full._id).toUpperCase()],
+    })
+      .expect(403)
+      .expect(errorCode('quota_exceeded'));
+    expect((await stored('full_small'))?.organizations).toEqual([ids.alpha]);
+  });
+
+  it('checks a new code against the prefix of an organization named by an uppercase id', async () => {
+    await problem('alpha_upper', [ids.alpha]);
+    await patch('owner', 'alpha_upper', {
+      organizations: [ids.beta.toUpperCase()],
+      code: 'alpha_upper_renamed',
+    })
+      .expect(400)
+      .expect(issueCodes(['organization_code_prefix']));
+    expect((await stored('alpha_upper'))?.organizations).toEqual([ids.alpha]);
+  });
+
   it('moves a problem onto the site only with judge.add_problem', async () => {
     await problem('alpha_out', [ids.alpha], { isPublic: false });
     const toSite = { organizations: [], isOrganizationPrivate: false };

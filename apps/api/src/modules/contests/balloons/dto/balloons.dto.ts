@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
-import { PageMetaResponse } from '@libs/common';
+import { PageMetaResponse, LowercaseUuid } from '@libs/common';
 import { ContestKeyParamDto } from '../../core/dto/contest-params.dto';
 
 export const BALLOON_STATES = ['pending', 'delivered', 'all'] as const;
@@ -35,9 +35,9 @@ export class BalloonQueryDto {
 
 export class BalloonItemParamDto extends ContestKeyParamDto {
   /** Id of the team's participation. */
-  @IsUUID('7') participation!: string;
+  @LowercaseUuid() @IsUUID('7') participation!: string;
   /** Id of the solved problem. */
-  @IsUUID('7') problem!: string;
+  @LowercaseUuid() @IsUUID('7') problem!: string;
 }
 
 export class BalloonTeamResponse {

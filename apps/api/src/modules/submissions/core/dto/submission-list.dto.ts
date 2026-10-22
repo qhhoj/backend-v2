@@ -13,7 +13,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { toArray } from '@libs/common';
+import { toArray, LowercaseUuid } from '@libs/common';
 
 export class SubmissionListQueryDto {
   /** Page number, from 1. */
@@ -40,6 +40,7 @@ export class SubmissionListQueryDto {
   @IsOptional()
   @Transform(toArray)
   @ArrayMaxSize(50)
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   language?: string[];
   /** Only submissions with these verdicts (`AC`, `WA`, `TLE`, ...); repeat the parameter. `IE`, `SC` are staff only. */

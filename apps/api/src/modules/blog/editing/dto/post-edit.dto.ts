@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { OmitType, PartialType } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
@@ -55,6 +56,7 @@ export class UpdatePostDto extends PartialType(
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(20)
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   authorIds?: string[];
 }

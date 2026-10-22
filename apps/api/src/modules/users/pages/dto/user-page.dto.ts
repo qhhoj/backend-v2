@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
@@ -34,5 +35,5 @@ export class ActivityQueryDto {
 
 export class UserCommentsQueryDto {
   /** Id of the last comment of the previous page; returns older comments. */
-  @IsOptional() @IsUUID('7') before?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') before?: string;
 }

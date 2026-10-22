@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -88,6 +89,7 @@ export class UpdateUserByStaffDto {
   @IsArray()
   @ArrayMaxSize(100)
   @ArrayUnique()
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   organizations?: string[];
 }

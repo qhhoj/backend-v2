@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import {
   ArrayMaxSize,
   ArrayUnique,
@@ -84,7 +85,7 @@ export class UpdateProfileDto {
   /** IANA time zone name used to show dates, for example `Asia/Ho_Chi_Minh`. */
   @IsOptional() @IsTimeZone() timezone?: string;
   /** Id of the default programming language. */
-  @IsOptional() @IsUUID('7') languageId?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') languageId?: string;
   /** Site theme id; unknown ids fall back to the operating system scheme. */
   @IsOptional() @Matches(SITE_THEME_PATTERN) siteTheme?: string;
   /** The whole look replaces the stored one; `null` clears it (the site's look). */
@@ -104,6 +105,7 @@ export class UpdateProfileDto {
   @IsArray()
   @ArrayMaxSize(100)
   @ArrayUnique()
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   organizations?: string[];
 }
