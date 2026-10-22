@@ -93,10 +93,10 @@ Purged tombstones keep their old `polygonLink`; clear them so the unique index i
 
 ### Install (once, as root)
 
-1. `apt install restic` (Ubuntu 24.04: 0.16.4).
+1. `apt install restic` (Ubuntu 24.04: 0.16.4); `mongodump --version` must be 100.3 or newer (`--config` with `uri` and `password`).
 2. A read-only backup user. The built-in role `backup` reads every database and the oplog, which `--oplog` needs (the app user `qhhoj` cannot): `mongosh "mongodb://admin@127.0.0.1:27017/?authSource=admin&replicaSet=rs0"` (password in `/root/qhhoj-secrets/mongo.env`), then `db.getSiblingDB('admin').createUser({ user: 'qhhoj-backup', pwd: passwordPrompt(), roles: [{ role: 'backup', db: 'admin' }] })`; add its password to `/root/qhhoj-secrets/mongo.env`.
 3. Files: re-run `install-host.sh` from a fresh copy of `deploy/`, or only `install -m 755 backup/qhhoj-backup /usr/local/sbin/qhhoj-backup && install -m 755 backup/restore-test.sh /usr/local/sbin/qhhoj-backup-restore-test && install -m 644 backup/qhhoj-backup.service backup/qhhoj-backup.timer /etc/systemd/system/ && systemctl daemon-reload`.
-4. `install -m 600 -o root -g root backup/backup.env.example /etc/qhhoj/backup.env` and fill it: `RESTIC_PASSWORD` (`openssl rand -base64 32`), `MONGO_BACKUP_PASSWORD`, `OFFSITE_REPO` and its backend credentials.
+4. `install -m 600 -o root -g root backup/backup.env.example /etc/qhhoj/backup.env` and fill it: `RESTIC_PASSWORD` (`openssl rand -base64 32`), `MONGO_BACKUP_PASSWORD`, `OFFSITE_REPO` and its backend credentials. An `sftp:` repository: `ssh` once as root to the target to accept its host key (the unit sees `/root` read-only and cannot write `known_hosts`).
 5. `set -a; . /etc/qhhoj/backup.env; set +a; restic init -r "$LOCAL_REPO"`, and `restic init -r "$OFFSITE_REPO"` when set.
 6. First run by hand: `systemctl start qhhoj-backup.service` (it blocks until done; the first offsite run uploads all of `problem-data`), then `journalctl -u qhhoj-backup -n 50` ends with `qhhoj-backup: done`.
 7. `qhhoj-backup-restore-test` (and `qhhoj-backup-restore-test offsite`) ends with `restore-test: ok`.
@@ -104,7 +104,7 @@ Purged tombstones keep their old `polygonLink`; clear them so the unique index i
 
 ### Check and list
 
-- Monthly, right after a night's run: `qhhoj-backup-restore-test [local|offsite]` restores the newest database snapshot into a throwaway `mongod` (port `RESTORE_TEST_PORT`, under `RESTORE_TEST_DIR`, 0.25 GiB cache, removed afterwards) and compares each collection's count with the live database (`RESTORE_TEST_TOLERANCE_PCT`, at least 10 documents; a missing collection fails).
+- Monthly, right after a night's run: `qhhoj-backup-restore-test [local|offsite]` restores the newest database snapshot into a throwaway `mongod` (port `RESTORE_TEST_PORT`, under `RESTORE_TEST_DIR`, 0.25 GiB cache, removed afterwards; refused unless the archive's size plus `RESTORE_TEST_MIN_FREE_GB` (1) is free) and compares each collection's count with the live database (`RESTORE_TEST_TOLERANCE_PCT`, at least 10 documents; a missing collection fails).
 - Snapshots: `set -a; . /etc/qhhoj/backup.env; set +a; restic -r "$LOCAL_REPO" snapshots --tag qhhoj-db` (offsite: `-r "$OFFSITE_REPO"`, `--tag qhhoj-files` for files); `restic -r ... ls <id>` lists a files snapshot.
 
 ### Restore the database

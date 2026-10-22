@@ -32,7 +32,7 @@ load_config() {
   SCRATCH_PARENT="${RESTORE_TEST_DIR:-/backup/restore-test}"
   PORT="${RESTORE_TEST_PORT:-27999}"
   TOLERANCE_PCT="${RESTORE_TEST_TOLERANCE_PCT:-2}"
-  LOCAL_MIN_FREE_GB="${LOCAL_MIN_FREE_GB:-3}"
+  MIN_FREE_GB="${RESTORE_TEST_MIN_FREE_GB:-1}"
   export RESTIC_CACHE_DIR="${RESTIC_CACHE_DIR:-/var/cache/qhhoj-backup}"
 }
 
@@ -54,12 +54,12 @@ find_snapshot() { # sets SNAPSHOT and OPLOG from the newest database snapshot
   log "snapshot $SNAPSHOT from $REPO (oplog: $OPLOG)"
 }
 
-check_space() { # the restored database must fit above the free-space floor the backup keeps
+check_space() { # the archive size bounds the restored database; MIN_FREE_GB more stays free for the site and the judge
   local size free
   size="$(restic -r "$REPO" stats --mode restore-size --json "$SNAPSHOT" | grep -o '"total_size":[0-9]*' | cut -d: -f2)"
   free=$(($(df -Pk "$SCRATCH_PARENT" | awk 'NR == 2 { print $4 }') * 1024))
-  [ "$free" -ge $((size + LOCAL_MIN_FREE_GB * 1024 * 1024 * 1024)) ] \
-    || fail "$((free >> 20)) MiB free in $SCRATCH_PARENT; the archive is $((size >> 20)) MiB plus LOCAL_MIN_FREE_GB=$LOCAL_MIN_FREE_GB"
+  [ "$free" -ge $((size + MIN_FREE_GB * 1024 * 1024 * 1024)) ] \
+    || fail "$((free >> 20)) MiB free in $SCRATCH_PARENT; the archive is $((size >> 20)) MiB plus RESTORE_TEST_MIN_FREE_GB=$MIN_FREE_GB"
 }
 
 start_scratch_mongod() { # small cache and lowest priority: the site and the judge share the host
