@@ -39,11 +39,12 @@ export abstract class BaseCatalogQuerier<Item extends { _id: string }>
   }
 
   async resync() {
-    this.items = new Map(
-      (await this.loadAll(this.model)).map((doc) => [
-        uuidStr(doc._id),
-        this.toItem(doc),
-      ]),
+    await this.replaceState(
+      () => this.loadAll(this.model),
+      (docs) =>
+        (this.items = new Map(
+          docs.map((doc) => [uuidStr(doc._id), this.toItem(doc)]),
+        )),
     );
   }
 

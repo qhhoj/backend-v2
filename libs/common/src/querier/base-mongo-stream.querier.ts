@@ -26,6 +26,8 @@ export interface StreamHandlers {
 /** In-memory read model for small, simple, frequently read data. Deletes reach `onDelete` only when the subclass passes one; without it a deleted row lingers until the next resync. */
 export abstract class BaseMongoStreamQuerier {
   private readonly streamLogger = new Logger(BaseMongoStreamQuerier.name);
+  /** One list per snapshot load in flight: the stream events handled since that load began. */
+  private readonly loadsInFlight = new Set<Array<() => void>>();
 
   constructor(private readonly scheduler: SchedulerRegistry) {}
 
@@ -99,16 +101,19 @@ export abstract class BaseMongoStreamQuerier {
     });
     stream.on('change', (change: ChangeStreamDocument) => {
       if (change.operationType === 'delete')
-        return handlers.onDelete?.(change.documentKey._id);
+        return this.apply(() => handlers.onDelete?.(change.documentKey._id));
       if (!['insert', 'update', 'replace'].includes(change.operationType))
         return;
-      handlers
-        .onChange(change as QuerierChange)
-        .catch((error: Error) =>
-          this.streamLogger.warn(
-            `Querier change handler failed (${model.modelName}): ${error.message}`,
-          ),
-        );
+      this.apply(
+        () =>
+          void handlers
+            .onChange(change as QuerierChange)
+            .catch((error: Error) =>
+              this.streamLogger.warn(
+                `Querier change handler failed (${model.modelName}): ${error.message}`,
+              ),
+            ),
+      );
     });
     stream.on('error', (err: Error) => {
       this.streamLogger.warn(
@@ -117,6 +122,30 @@ export abstract class BaseMongoStreamQuerier {
       stream.close().catch(() => {});
     });
     return stream;
+  }
+
+  /** Applies a stream event now, and records it for every load in flight to apply again after its swap. */
+  private apply(event: () => void) {
+    event();
+    for (const events of this.loadsInFlight) events.push(event);
+  }
+
+  /**
+   * Loads a fresh state and installs it, then re-applies the stream events handled during the load: they went to
+   * the state being replaced, and the snapshot may predate them. Every resync swaps its state through here.
+   */
+  protected async replaceState<State>(
+    load: () => Promise<State>,
+    install: (state: State) => void,
+  ) {
+    const events: Array<() => void> = [];
+    this.loadsInFlight.add(events);
+    try {
+      install(await load());
+    } finally {
+      this.loadsInFlight.delete(events);
+    }
+    events.forEach((event) => event());
   }
 
   /** Every row of a small collection, tagged so index profiling excuses this intended scan. */

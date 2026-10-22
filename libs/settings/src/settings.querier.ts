@@ -38,9 +38,14 @@ export class SettingsQuerier
   }
 
   async resync() {
-    const next = new Map<SettingKey, unknown>();
-    for (const row of await this.loadAll(this.model)) this.load(next, row);
-    this.values = next;
+    await this.replaceState(
+      () => this.loadAll(this.model),
+      (rows) => {
+        const next = new Map<SettingKey, unknown>();
+        for (const row of rows) this.load(next, row);
+        this.values = next;
+      },
+    );
   }
 
   get<Key extends SettingKey>(key: Key): SettingValue<Key> {

@@ -33,11 +33,12 @@ export class GroupsQuerier
   }
 
   async resync() {
-    this.perms = new Map(
-      (await this.loadAll(this.model)).map((group) => [
-        uuidStr(group._id),
-        group.permissions,
-      ]),
+    await this.replaceState(
+      () => this.loadAll(this.model),
+      (groups) =>
+        (this.perms = new Map(
+          groups.map((group) => [uuidStr(group._id), group.permissions]),
+        )),
     );
   }
 
