@@ -21014,7 +21014,7 @@
         ]
       },
       "patch": {
-        "description": "Superuser only, never on your own account. Adds and removes roles and direct permissions and sets the staff and superuser flags; absent fields stay, and a role granted meanwhile elsewhere is kept. Applies on the user's next request. Errors: 400 `validation_failed` with issues `permission_unknown` (a codename outside the catalog the user does not already hold), `group_unknown`, `added_and_removed`; 403 `forbidden` unless you are still a superuser, or for yourself; 404 `not_found`; 409 `conflict` with issue `busy` while another access change is saved.",
+        "description": "Superuser only, never on your own account. Requires a browser session, or an API token of a superuser; refused while impersonating. Adds and removes roles and direct permissions and sets the staff and superuser flags; absent fields stay, and a role granted meanwhile elsewhere is kept. Applies on the user's next request. The audit record of a change made with an API token says so in its comment. Errors: 400 `validation_failed` with issues `permission_unknown` (a codename outside the catalog the user does not already hold), `group_unknown`, `added_and_removed`; 403 `forbidden` unless you are still a superuser, for yourself, or for an API token that is not a superuser's; 404 `not_found`; 409 `conflict` with issue `busy` while another access change is saved.",
         "operationId": "AccessController_changeAccess",
         "parameters": [
           {

@@ -12,6 +12,7 @@ export const PUBLIC_ROUTE = 'auth:public';
 export const BEFORE_TWO_FACTOR_ROUTE = 'auth:before-two-factor';
 export const PWNED_PASSWORD_ROUTE = 'auth:pwned';
 export const SESSION_ONLY_ROUTE = 'auth:session-only';
+export const SUPERUSER_TOKEN_ROUTE = 'auth:superuser-token';
 export const NO_IMPERSONATION_ROUTE = 'auth:no-impersonation';
 export const REQUIRED_PERMISSION = 'auth:permission';
 export const SERVICE_ONLY_ROUTE = 'auth:service-only';
@@ -26,6 +27,9 @@ export const AllowBeforeTwoFactor = () =>
 export const AllowPwnedPassword = () => SetMetadata(PWNED_PASSWORD_ROUTE, true);
 /** Management endpoints: API tokens (Bearer) are refused, a browser session is required. */
 export const SessionOnly = () => SetMetadata(SESSION_ONLY_ROUTE, true);
+/** On a `@SessionOnly()` route, also admits an API token whose user is a superuser (owner automation); any other token still gets the session-only 403. Inert on a route that is not session-only. */
+export const AllowSuperuserToken = () =>
+  SetMetadata(SUPERUSER_TOKEN_ROUTE, true);
 /** Refused (403 `forbidden`) while a superuser impersonates: account-security changes and the reads of second-factor state (password change, sign out everywhere, API token regeneration, 2FA enrolment/removal, WebAuthn credential routes, the security-key list). */
 export const NoImpersonation = () => SetMetadata(NO_IMPERSONATION_ROUTE, true);
 export const RequirePermission = (permission: Permission) =>

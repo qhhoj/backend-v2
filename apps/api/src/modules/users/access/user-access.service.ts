@@ -28,6 +28,9 @@ const accessOf = (user: AccessFields) => ({
   isSuperuser: user.isSuperuser,
 });
 
+/** The revision comment of an access change made with an API token; a browser-session change leaves it empty. */
+export const VIA_API_TOKEN_COMMENT = 'via API token';
+
 /** A user's groups, direct permissions and staff/superuser flags. The principal is rebuilt from the user row on every request, so a change applies to the user's next request without a new sign-in. */
 @Injectable()
 export class UserAccessService {
@@ -51,6 +54,7 @@ export class UserAccessService {
     principal: Principal,
     username: string,
     dto: ChangeUserAccessDto,
+    { viaToken }: { viaToken: boolean },
   ): Promise<UserAccessResponse> {
     assertDisjoint('groups', dto.addGroups, dto.removeGroups);
     assertDisjoint('permissions', dto.addPermissions, dto.removePermissions);
@@ -73,7 +77,7 @@ export class UserAccessService {
       );
       const after = await this.users.findById(before._id);
       if (!after) throw new AppError('not_found', 404, 'No such user');
-      await this.audit(principal, before, after);
+      await this.audit(principal, before, after, viaToken);
       const groups = await this.access.findGroups(after.groups.map(uuidStr));
       return this.responseOf(principal, after, groups);
     });
@@ -95,6 +99,7 @@ export class UserAccessService {
     principal: Principal,
     before: AccessFields,
     after: AccessFields,
+    viaToken: boolean,
   ): Promise<void> {
     const [was, now] = [accessOf(before), accessOf(after)];
     const changes = Object.fromEntries(
@@ -109,7 +114,7 @@ export class UserAccessService {
       action: 'staff_set_access',
       userId: principal.userId,
       changes,
-      comment: '',
+      comment: viaToken ? VIA_API_TOKEN_COMMENT : '',
     });
   }
 

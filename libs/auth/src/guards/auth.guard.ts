@@ -17,6 +17,7 @@ import {
   REQUIRED_SCOPE,
   SERVICE_ONLY_ROUTE,
   SESSION_ONLY_ROUTE,
+  SUPERUSER_TOKEN_ROUTE,
 } from '../decorators/auth.decorators';
 import { constantTimeEqual, sha256 } from '../crypto';
 import {
@@ -78,12 +79,7 @@ export class AuthGuard implements CanActivate {
     if (readRouteMetadata<boolean>(PUBLIC_ROUTE)) return true;
     const { auth } = request;
     if (!auth) throw new AppError('unauthorized', 401, 'Login required');
-    if (auth.viaToken && readRouteMetadata<boolean>(SESSION_ONLY_ROUTE))
-      throw new AppError(
-        'forbidden',
-        403,
-        'This endpoint requires a browser session',
-      );
+    if (auth.viaToken) this.assertTokenAllowed(auth, readRouteMetadata);
     if (auth.session)
       this.assertSessionAllows(request, auth.session, readRouteMetadata);
     const permission = readRouteMetadata<Permission>(REQUIRED_PERMISSION);
@@ -202,6 +198,24 @@ export class AuthGuard implements CanActivate {
       (await this.fromSession(request)) ??
       undefined;
     await this.refreshCookie(reply, request.auth);
+  }
+
+  /** A `@SessionOnly()` route refuses API tokens, except a superuser's on a route marked `@AllowSuperuserToken()`; superuser is read from the principal built from the user row. */
+  private assertTokenAllowed(
+    auth: AuthContext,
+    readRouteMetadata: RouteMetadataReader,
+  ): void {
+    if (!readRouteMetadata<boolean>(SESSION_ONLY_ROUTE)) return;
+    if (
+      auth.principal.isSuperuser &&
+      readRouteMetadata<boolean>(SUPERUSER_TOKEN_ROUTE)
+    )
+      return;
+    throw new AppError(
+      'forbidden',
+      403,
+      'This endpoint requires a browser session',
+    );
   }
 
   /** Browser-session rules, in the order users meet them: CSRF token, second factor, breached password, impersonation. */

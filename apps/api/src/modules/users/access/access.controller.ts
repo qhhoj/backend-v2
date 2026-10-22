@@ -1,6 +1,7 @@
 import { ApiTags } from '@nestjs/swagger';
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import {
+  AllowSuperuserToken,
   CurrentAuth,
   NoImpersonation,
   PERMISSION_CATALOG,
@@ -24,7 +25,7 @@ import {
 import { GroupsAdminService } from './groups-admin.service';
 import { UserAccessService } from './user-access.service';
 
-/** Roles and permissions. Staff with `judge.change_profile` read them; only a superuser changes them. Browser session only, not while impersonating. */
+/** Roles and permissions. Staff with `judge.change_profile` read them; only a superuser changes them. Browser session only, not while impersonating; changing a user's access also takes a superuser's API token. */
 @SessionOnly()
 @NoImpersonation()
 @RequirePermission('judge.change_profile')
@@ -108,14 +109,17 @@ export class AccessController {
    * Change a user's roles and permissions
    *
    * @remarks
-   * Superuser only, never on your own account. Adds and removes roles and direct permissions and sets the staff and superuser flags; absent fields stay, and a role granted meanwhile elsewhere is kept. Applies on the user's next request. Errors: 400 `validation_failed` with issues `permission_unknown` (a codename outside the catalog the user does not already hold), `group_unknown`, `added_and_removed`; 403 `forbidden` unless you are still a superuser, or for yourself; 404 `not_found`; 409 `conflict` with issue `busy` while another access change is saved.
+   * Superuser only, never on your own account. Requires a browser session, or an API token of a superuser; refused while impersonating. Adds and removes roles and direct permissions and sets the staff and superuser flags; absent fields stay, and a role granted meanwhile elsewhere is kept. Applies on the user's next request. The audit record of a change made with an API token says so in its comment. Errors: 400 `validation_failed` with issues `permission_unknown` (a codename outside the catalog the user does not already hold), `group_unknown`, `added_and_removed`; 403 `forbidden` unless you are still a superuser, for yourself, or for an API token that is not a superuser's; 404 `not_found`; 409 `conflict` with issue `busy` while another access change is saved.
    */
+  @AllowSuperuserToken()
   @Patch('users/:username/access')
   changeAccess(
     @CurrentAuth() auth: AuthContext,
     @Param() { username }: UsernameParamDto,
     @Body(RefuseNullFieldsPipe) dto: ChangeUserAccessDto,
   ): Promise<UserAccessResponse> {
-    return this.access.change(auth.principal, username, dto);
+    return this.access.change(auth.principal, username, dto, {
+      viaToken: auth.viaToken,
+    });
   }
 }

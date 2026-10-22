@@ -1122,20 +1122,19 @@ afterAll(() => api.teardown());
       session = root,
     ) => authed(api.http().patch(access(name)), session).send(body);
 
+    let rootId: string;
+    let holderId: string;
+
     beforeAll(async () => {
-      root = await loginAs(
-        api,
-        (await createUserWith(api, 'root', { isSuperuser: true }))._id,
-      );
-      holder = await loginAs(
-        api,
-        (
-          await createUserWith(api, 'holder', {
-            isStaff: true,
-            permissions: Object.keys(PERMISSION_CATALOG),
-          })
-        )._id,
-      );
+      rootId = (await createUserWith(api, 'root', { isSuperuser: true }))._id;
+      root = await loginAs(api, rootId);
+      holderId = (
+        await createUserWith(api, 'holder', {
+          isStaff: true,
+          permissions: Object.keys(PERMISSION_CATALOG),
+        })
+      )._id;
+      holder = await loginAs(api, holderId);
     });
 
     it('lets a non-superuser holding every other permission read but never grant', async () => {
@@ -1285,6 +1284,116 @@ afterAll(() => api.teardown());
           { $set: { isSuperuser: true, isActive: true } },
         );
       }
+    });
+
+    it("takes a superuser's API token and audits it as such; a staff token is refused like before", async () => {
+      const target = await createUserWith(api, 'scripted');
+      const bearer = async (id: string) => {
+        const { token, hash } = generateApiToken(id, TEST_ENV.TOKEN_SECRET);
+        await api.users.updateOne({ _id: id }, { apiTokenHash: hash });
+        return `Bearer ${token}`;
+      };
+      const viaToken = (token: string, body: Record<string, unknown>) =>
+        api
+          .http()
+          .patch(access('scripted'))
+          .set('Authorization', token)
+          .send(body);
+
+      const granted = await viaToken(await bearer(rootId), {
+        addPermissions: ['judge.ban_user'],
+        isStaff: true,
+      }).expect(200);
+      expect(dataOf<UserAccessResponse>(granted)).toMatchObject({
+        isStaff: true,
+        permissions: ['judge.ban_user'],
+      });
+      await change('scripted', {
+        removePermissions: ['judge.ban_user'],
+      }).expect(200);
+      const rows = await api.revisions
+        .find({ entityId: target._id, action: 'staff_set_access' })
+        .sort({ _id: 1 })
+        .lean();
+      expect(
+        rows.map(({ userId, comment, changes }) => ({
+          userId: String(userId),
+          comment,
+          fields: Object.keys(changes).sort(),
+        })),
+      ).toEqual([
+        {
+          userId: rootId,
+          comment: 'via API token',
+          fields: ['isStaff', 'permissions'],
+        },
+        { userId: rootId, comment: '', fields: ['permissions'] },
+      ]);
+
+      const refused = await viaToken(await bearer(holderId), {
+        addPermissions: ['judge.ban_user'],
+      })
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      expect(refused.body).toMatchObject({
+        error: { message: 'This endpoint requires a browser session' },
+      });
+      expect(await api.users.findById(target._id).lean()).toMatchObject({
+        permissions: [],
+      });
+    });
+
+    it("keeps every other session-only route closed to a superuser's token, and the access change closed while impersonating", async () => {
+      const victim = await createUserWith(api, 'victim');
+      const unchanged = async () => {
+        const row = (await api.users.findById(victim._id).lean())!;
+        return {
+          display: row.usernameDisplayOverride,
+          password: row.password,
+          permissions: row.permissions,
+        };
+      };
+      const before = await unchanged();
+      const { token, hash } = generateApiToken(rootId, TEST_ENV.TOKEN_SECRET);
+      await api.users.updateOne({ _id: rootId }, { apiTokenHash: hash });
+      const user = `${ADMIN}/users/victim`;
+      for (const request of [
+        api.http().patch(`${user}/profile`).send({ displayName: 'Owned' }),
+        api.http().post(`${user}/password`).send({
+          currentPassword: 'correct horse battery',
+          newPassword: 'fresh passphrase 1',
+        }),
+        api.http().get(access('victim')),
+        api.http().post(`${ADMIN}/groups`).send({ name: 'Scripted' }),
+      ])
+        await request
+          .set('Authorization', `Bearer ${token}`)
+          .expect(403)
+          .expect(errorCode('forbidden'));
+      expect(await unchanged()).toEqual(before);
+      expect(await api.groups.countDocuments({ name: 'Scripted' })).toBe(0);
+
+      const impersonator = await createUserWith(api, 'impersonator', {
+        isSuperuser: true,
+      });
+      const { id, session } = await api.sessions.create({
+        userId: rootId,
+        twoFaPassed: true,
+        passwordPwned: false,
+        impersonatorId: impersonator._id,
+      });
+      const impersonated = await api
+        .http()
+        .patch(access('victim'))
+        .set('Cookie', sessionCookie(id))
+        .set('X-CSRF-Token', session.csrf)
+        .send({ addPermissions: ['judge.ban_user'] })
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      expect(impersonated.body).toMatchObject({
+        error: { message: 'Not allowed while impersonating' },
+      });
+      expect(await unchanged()).toEqual(before);
     });
 
     it('never lets a superuser change their own access, and a demoted superuser loses it at once', async () => {
