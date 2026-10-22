@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { PROBLEM_CODE_PATTERN } from '@libs/database';
 import { ApiProperty } from '@nestjs/swagger';
 import {
@@ -42,6 +43,7 @@ export class BulkProblemsDto {
     (body: BulkProblemsDto) =>
       body.action === 'add-tag' || body.action === 'remove-tag',
   )
+  @LowercaseUuid()
   @IsUUID('7')
   tagId?: string;
 }

@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -16,7 +17,7 @@ const DEFAULT_PAGE_SIZE = 50;
 
 export class SimilarityPairListDto {
   /** Only pairs on this problem id. */
-  @IsOptional() @IsUUID() problemId?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID() problemId?: string;
   /** Engine family (`cpp`, `python`, ...). */
   @IsOptional() @IsString() language?: string;
   /** 0 to 1. */

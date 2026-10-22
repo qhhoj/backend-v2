@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -31,7 +32,7 @@ export class AuditQueryDto {
   @IsOptional() @IsTimestamp() to?: string;
 
   /** The `nextBefore` of the previous page: only changes older than that entry. */
-  @IsOptional() @IsUUID() before?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID() before?: string;
 
   /** Page size, 1-50; default 50. */
   @ApiPropertyOptional()

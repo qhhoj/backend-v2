@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { IsOptional, IsString, IsUUID, Length, Matches } from 'class-validator';
 import { COMMENT_MAX_LENGTH } from '@libs/community';
 
@@ -11,5 +12,5 @@ export class CommentBodyDto {
 
 export class NewCommentDto extends CommentBodyDto {
   /** A visible comment of the same page. */
-  @IsOptional() @IsUUID('7') parentId?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') parentId?: string;
 }

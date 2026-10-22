@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { CONTEST_PHASES } from '@libs/contests';
 import type { ContestPhase } from '@libs/contests';
 import { CONTEST_TAG_PATTERN } from '@libs/database';
@@ -52,7 +53,7 @@ export class ContestListQueryDto {
   /** Only contests carrying this tag slug. */
   @IsOptional() @Matches(CONTEST_TAG_PATTERN) tag?: string;
   /** Only contests of this organization id. */
-  @IsOptional() @IsUUID('7') organization?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') organization?: string;
   /** Only rated (true) or unrated (false) contests. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() rated?: boolean;
   /** true: only contests the viewer may edit (the admin screen's index); false: only the others. */

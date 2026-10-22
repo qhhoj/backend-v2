@@ -15,7 +15,7 @@ import {
   Min,
 } from 'class-validator';
 import { PROBLEM_SORT_OPTIONS } from '../problem-search';
-import { toArray } from '@libs/common';
+import { toArray, LowercaseUuid } from '@libs/common';
 import { toBoolean } from './transforms';
 
 export const PROBLEM_VISIBILITIES = ['public', 'private', 'all'] as const;
@@ -37,10 +37,11 @@ export class ProblemFilterQueryDto {
   // eslint-disable-next-line id-length -- the wire name, shared with the users list
   q?: string;
   /** Only problems in this problem group (id from `GET /problems/meta`). */
-  @IsOptional() @IsUUID('7') groupId?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') groupId?: string;
   /** Only problems having any of these problem types (ids from `GET /problems/meta`); repeat the parameter. */
   @IsOptional()
   @Transform(toArray)
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   typeIds?: string[];
   /** Only problems worth at least this many points. */
@@ -52,7 +53,7 @@ export class ProblemFilterQueryDto {
   /** `false`: only problems the viewer has not solved; `true`: only solved ones (an AC with every case point). Anonymous viewers have solved nothing. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() solved?: boolean;
   /** Only problems this user authored; viewers with `judge.edit_all_problem` also get the problems the user curates. */
-  @IsOptional() @IsUUID('7') authorId?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') authorId?: string;
   /** true: only suggested problems still awaiting review (a suggester set, not public, so pair it with `visibility=private` or `all`); false: only the rest. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() suggested?: boolean;
   /** true: only problems the viewer may edit (the admin screen's index, with `visibility=all`), whatever contest the viewer is in; false: only the others. */

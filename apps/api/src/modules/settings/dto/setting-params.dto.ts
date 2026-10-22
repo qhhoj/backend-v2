@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { IsString, IsUUID, Matches } from 'class-validator';
 
 export class SettingKeyParamDto {
@@ -7,5 +8,5 @@ export class SettingKeyParamDto {
 
 export class SettingRevisionParamDto extends SettingKeyParamDto {
   /** Id of the revision, from the revision list. */
-  @IsUUID('7') revisionId!: string;
+  @LowercaseUuid() @IsUUID('7') revisionId!: string;
 }

@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import {
   CONTEST_KEY_PATTERN,
   JUDGE_NAME_PATTERN,
@@ -38,12 +39,13 @@ export class SubmissionBatchFilterDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(MAX_BATCH_IDS)
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   ids?: string[];
   /** Lowest submission id (UUIDv7 ids sort by submission time). */
-  @IsOptional() @IsUUID('7') idFrom?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') idFrom?: string;
   /** Highest submission id. */
-  @IsOptional() @IsUUID('7') idTo?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') idTo?: string;
   /** Submitted at or after this time. */
   @IsOptional() @IsTimestamp() dateFrom?: string;
   /** Submitted before this time. */
@@ -52,6 +54,7 @@ export class SubmissionBatchFilterDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   languages?: string[];
   /** Only submissions with these verdicts. */

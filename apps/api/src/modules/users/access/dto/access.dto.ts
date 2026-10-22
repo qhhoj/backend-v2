@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { applyDecorators } from '@nestjs/common';
 import { Transform } from 'class-transformer';
 import { PartialType, PickType } from '@nestjs/swagger';
@@ -37,6 +38,7 @@ const RoleIds = () =>
     IsArray(),
     ArrayMaxSize(MAX_GROUPS),
     ArrayUnique(),
+    LowercaseUuid(),
     IsUUID('7', { each: true }),
   );
 
@@ -94,5 +96,5 @@ export class ChangeUserAccessDto {
 
 export class GroupIdParamDto {
   /** Id of the role. */
-  @IsUUID('7') id!: string;
+  @LowercaseUuid() @IsUUID('7') id!: string;
 }

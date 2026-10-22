@@ -588,6 +588,22 @@ afterAll(() => api.teardown());
       expect(await queuedFor()).toEqual([organization._id, organization._id]);
     });
 
+    it('refuses to kick a co-admin named by an uppercase id', async () => {
+      const { user: owner, session: ownerSession } = await person();
+      const { user: coAdmin } = await person();
+      const organization = await createOrganization(
+        api,
+        { adminIds: [owner._id, coAdmin._id] },
+        [coAdmin._id],
+      );
+      await post(organizationUrl(organization.slug, '/kick'), ownerSession, {
+        userId: coAdmin._id.toUpperCase(),
+      })
+        .expect(409)
+        .expect(issueCode('admin_not_kickable'));
+      expect(await membershipsOf(coAdmin._id)).toEqual([organization._id]);
+    });
+
     it('lets an administrator leave while another remains, giving up the rights in the history', async () => {
       const { user: owner, session: ownerSession } = await person();
       const { user: helper, session: helperSession } = await person();

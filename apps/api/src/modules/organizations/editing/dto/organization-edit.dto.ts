@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { ABOUT_MAX_LENGTH } from '@libs/community';
 import { ORGANIZATION_SLUG_PATTERN } from '@libs/database';
@@ -54,6 +55,7 @@ export class CreateOrganizationDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   adminIds?: string[];
   /** Staff fields (`judge.edit_all_organization`). */

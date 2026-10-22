@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsUUID, MaxLength } from 'class-validator';
 import { MAX_MARKDOWN_LENGTH } from '../../core/dto/limits';
@@ -12,6 +13,7 @@ export class PutEditorialDto {
   /** Ids of the editorial authors. */
   @ApiPropertyOptional()
   @IsOptional()
+  @LowercaseUuid()
   @IsUUID('7', { each: true })
   authors: string[] = [];
   /** Editorial markdown. */

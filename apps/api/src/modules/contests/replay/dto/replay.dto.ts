@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { ApiPropertyOptions } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
-import { OPAQUE_JSON_OBJECT } from '@libs/common';
+import { OPAQUE_JSON_OBJECT, LowercaseUuid } from '@libs/common';
 import { GHOST_GAPS } from '@libs/contests';
 import type { GhostGap, ReplayEvent } from '@libs/contests';
 
@@ -18,7 +18,7 @@ export class ReplayQueryDto {
   chunk: number = 0;
 
   /** The `buildId` chunk 0 returned; required for `chunk > 0`, so a reader never mixes builds. */
-  @IsOptional() @IsUUID() build?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID() build?: string;
 }
 
 /** `[seconds, participantIndex, problemIndex, cell, score, cumtime, tiebreaker]`: numbers around one cell object, whose members belong to the format (free-form here, never an empty `items`). */

@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { PartialType } from '@nestjs/swagger';
 import {
   PROBLEM_LIMITS,
@@ -33,7 +34,7 @@ import { IsTimestamp } from '../../core/dto/timestamp';
 
 export class LanguageLimitDto {
   /** Language id. */
-  @IsUUID('7') languageId!: string;
+  @LowercaseUuid() @IsUUID('7') languageId!: string;
   /** Time limit in seconds for this language. */
   @IsNumber()
   @Min(PROBLEM_LIMITS.timeLimit.min)
@@ -83,11 +84,14 @@ export class CreateProblemDto {
   /** Whether partial scores are given. */
   @IsOptional() @IsBoolean() partial?: boolean;
   /** Problem type ids, at least one (ids from `GET /problems/meta`). */
-  @ArrayMinSize(1) @IsUUID('7', { each: true }) typeIds!: string[];
+  @ArrayMinSize(1)
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  typeIds!: string[];
   /** Problem group id. */
-  @IsUUID('7') groupId!: string;
+  @LowercaseUuid() @IsUUID('7') groupId!: string;
   /** License id; null for none. Needs `judge.edit_all_problem`. */
-  @IsOptional() @IsUUID('7') licenseId?: string | null;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') licenseId?: string | null;
   /** Who may read submitted sources: `F` follow the site setting, `A` everyone who sees the problem, `S` users who solved it, `O` only the owner, testers and editors. */
   @ApiSubmissionSourceVisibility(false)
   @IsOptional()
@@ -106,7 +110,10 @@ export class CreateProblemDto {
   /** Whether checker feedback is shown to submitters. Needs `judge.edit_all_problem`. */
   @IsOptional() @IsBoolean() allowViewFeedback?: boolean;
   /** Users who can see the problem while it is private. */
-  @IsOptional() @IsUUID('7', { each: true }) testers?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  testers?: string[];
   /** Per-language limits overriding the defaults; each language at most once. */
   @IsOptional()
   @ValidateNested({ each: true })
@@ -119,15 +126,30 @@ export class CreateProblemDto {
   /** Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`. */
   @IsOptional() @IsBoolean() isFullMarkup?: boolean;
   /** Author user ids. This field and the ones below up to `date` need `judge.edit_all_problem` (the organization fields only on create, see `organizations`). */
-  @IsOptional() @IsUUID('7', { each: true }) authors?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  authors?: string[];
   /** Curator user ids; curators can edit the problem. */
-  @IsOptional() @IsUUID('7', { each: true }) curators?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  curators?: string[];
   /** User ids that may not submit to the problem. */
-  @IsOptional() @IsUUID('7', { each: true }) bannedUsers?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  bannedUsers?: string[];
   /** Ids of languages solutions may use; defaults to the languages flagged for new problems. */
-  @IsOptional() @IsUUID('7', { each: true }) allowedLanguages?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  allowedLanguages?: string[];
   /** Ids of the organizations the problem is private to (with `isOrganizationPrivate`). On create it needs `judge.edit_all_problem`; on update the organization rules of `PATCH /problems/{code}` apply instead. */
-  @IsOptional() @IsUUID('7', { each: true }) organizations?: string[];
+  @IsOptional()
+  @LowercaseUuid()
+  @IsUUID('7', { each: true })
+  organizations?: string[];
   /** Whether only members of `organizations` can see the problem. Gated like `organizations`. */
   @IsOptional() @IsBoolean() isOrganizationPrivate?: boolean;
   /** Image URL used for link previews, up to 150 characters. */

@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import {
   IsOptional,
   IsString,
@@ -23,8 +24,8 @@ export class RegisterDto {
   @IsString() @MinLength(1) @MaxLength(4096) password!: string;
 
   /** An open, listed organization the new account joins. */
-  @IsOptional() @IsUUID('7') organizationId?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') organizationId?: string;
 
   /** The account's default programming language; C++17 when omitted. */
-  @IsOptional() @IsUUID('7') languageId?: string;
+  @IsOptional() @LowercaseUuid() @IsUUID('7') languageId?: string;
 }

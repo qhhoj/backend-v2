@@ -1,5 +1,6 @@
+import { LowercaseUuid } from '@libs/common';
 import { IsUUID } from 'class-validator';
 
 export class KickDto {
-  @IsUUID('7') userId!: string;
+  @LowercaseUuid() @IsUUID('7') userId!: string;
 }

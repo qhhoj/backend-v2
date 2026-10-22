@@ -50,3 +50,4 @@ export * from './openapi/api-file-response';
 export * from './openapi/opaque-json-object';
 export * from './openapi/api-file-upload';
 export * from './util/to-array';
+export * from './util/lowercase-uuid';

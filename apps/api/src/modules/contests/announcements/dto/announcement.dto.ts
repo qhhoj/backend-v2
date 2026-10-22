@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ANNOUNCEMENT_TITLE_MAX } from '@libs/database';
 import { MAX_MARKDOWN_LENGTH } from '../../../problems/core/dto/limits';
@@ -54,5 +55,5 @@ export class AnnouncementIdParamDto {
   /** Key of the contest. */
   @IsString() key!: string;
   /** Id of the announcement. */
-  @IsUUID('7') id!: string;
+  @LowercaseUuid() @IsUUID('7') id!: string;
 }
