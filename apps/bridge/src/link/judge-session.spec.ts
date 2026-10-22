@@ -98,6 +98,8 @@ describe('JudgeSession', () => {
   let call: FakeCall;
   let session: JudgeSession;
   let outcome: WriteOutcome;
+  /** Submissions whose run the dispatcher holds an api abort for. */
+  let abortsRequested: Set<string>;
   const calls: Record<string, unknown[][]> = {};
   const record =
     (name: string, result: unknown = undefined) =>
@@ -118,6 +120,8 @@ describe('JudgeSession', () => {
     slotsRefused: record('slotsRefused'),
     judgeLost: record('judgeLost'),
     isStopped: () => false,
+    isAbortRequested: (ref: AssignmentRef) =>
+      abortsRequested.has(ref.submissionId),
   };
   const runs = {
     accepted: record('accepted', () => outcome),
@@ -153,6 +157,7 @@ describe('JudgeSession', () => {
     jest.useFakeTimers({ doNotFake: ['setImmediate'] });
     for (const key of Object.keys(calls)) delete calls[key];
     outcome = 'applied';
+    abortsRequested = new Set();
     call = new FakeCall();
     session = new JudgeSession(
       call as unknown as SessionCall,
@@ -472,6 +477,32 @@ describe('JudgeSession', () => {
       [session, graded, { retried: false }],
       [session, retried, { retried: true }],
     ]);
+  });
+
+  it('ends a RETRY that crosses the user’s abort as AB: no requeue, no retry ban (an aborted run is never graded)', async () => {
+    const ref = run(newId());
+    await holding(ref);
+    abortsRequested.add(ref.submissionId);
+    await receive(
+      JudgeMessage.fromPartial({
+        body: {
+          $case: 'final',
+          final: {
+            ref,
+            seq: 3,
+            outcome: Outcome.OUTCOME_RETRY,
+            log: 'no data',
+          },
+        },
+      }),
+    );
+    expect(calls.final).toEqual([
+      [expect.anything(), expect.objectContaining({ kind: 'aborted' })],
+    ]);
+    expect(call.bodies('ack')).toEqual([
+      { $case: 'ack', ack: { ref, seq: 3 } },
+    ]);
+    expect(calls.runEnded).toEqual([[session, ref, { retried: false }]]);
   });
 
   it('acks a Final resent after it was stored, without freeing the slot twice or aborting (conformance 37)', async () => {

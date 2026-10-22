@@ -397,13 +397,14 @@ export class JudgeSession implements DispatchTarget {
       this.services.dispatch.runStarted(this, handled.ref, caseCount);
   }
 
-  /** The Final is acked only after its write and graded job; the slot is then free. A RETRY frees it with a ban on this judge for the row until the next resync tick. A winding run's Final writes nothing and frees its slot; a stale Final (the row moved on) ends the run too; a Final resent for a run that already ended is re-acked. */
+  /** The Final is acked only after its write and graded job; the slot is then free. A RETRY frees it with a ban on this judge for the row until the next resync tick, unless the user aborted the run (`honourAbort`). A winding run's Final writes nothing and frees its slot; a stale Final (the row moved on) ends the run too; a Final resent for a run that already ended is re-acked. */
   private async onFinal(final: Final): Promise<void> {
-    const report = finalReportOf(final);
+    const received = finalReportOf(final);
     const ref = refOf(final.ref);
     if (this.winding.has(windingKey(ref))) return this.windingFinal(ref);
     if (this.ended.has(windingKey(ref)))
-      return this.replayedFinal(ref, seqOf(final.seq), report);
+      return this.replayedFinal(ref, seqOf(final.seq), received);
+    const report = this.honourAbort(ref, received);
     const handled = await this.handleRun(final, (key) =>
       this.services.runs.final(key, report),
     );
@@ -415,6 +416,19 @@ export class JudgeSession implements DispatchTarget {
         retried: report.kind === 'retry' && handled.outcome === 'applied',
       });
     }
+  }
+
+  /** A RETRY that crosses the user's abort ends the run AB, as the abort would have: requeued, it would be graded on another judge. */
+  private honourAbort(ref: AssignmentRef, report: FinalReport): FinalReport {
+    if (
+      report.kind !== 'retry' ||
+      !this.services.dispatch.isAbortRequested(ref)
+    )
+      return report;
+    this.logger.warn(
+      `Judge ${this.name} answered RETRY for submission ${ref.submissionId} gen ${ref.generation} after its abort; ended as aborted: ${loggableText(report.log)}`,
+    );
+    return { ...report, kind: 'aborted' };
   }
 
   /** The judge resent the Final of a run it already got an ack for (it may not have seen the ack): the write finds it stored, the ack goes out again; the slot was freed the first time. Anything else is treated as an unheld ref (`applied` cannot happen: the stored Final already advanced `judgeSeq` past this seq's filter). */

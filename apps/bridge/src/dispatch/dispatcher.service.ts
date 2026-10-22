@@ -188,6 +188,11 @@ export class DispatcherService {
     await this.offerWork(judge);
   }
 
+  /** Whether the api aborted this held run: its judge's Final RETRY then ends it AB instead of requeuing it. */
+  isAbortRequested(ref: AssignmentRef): boolean {
+    return this.abortsRequested.has(windingKey(ref));
+  }
+
   /** An Assign not accepted in time: that run alone is aborted and released (QU, no requeue spent) and goes to whoever is free; the judge's other slots are untouched. Its own slot stays taken until the judge's `Final{ABORTED}` for it (`winding`). */
   async acceptTimedOut(
     judge: DispatchTarget,
