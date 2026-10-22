@@ -17,6 +17,7 @@ install_host() { PATH="$bin:$PATH" QHHOJ_INSTALL_ROOT="$root" bash "$here/instal
 
 fresh; install_host >/dev/null || fail "install"
 for f in usr/local/sbin/qhhoj-deploy usr/local/sbin/qhhoj-backup usr/local/sbin/qhhoj-backup-restore-test \
+  usr/local/sbin/qhhoj-backup-lib.sh usr/local/sbin/qhhoj-pull-serve \
   etc/systemd/system/qhhoj-backup.service etc/systemd/system/qhhoj-backup.timer etc/containers/systemd/qhhoj-api.container \
   etc/containers/systemd/qhhoj-worker.container etc/containers/systemd/qhhoj-bridge.container \
   etc/systemd/system/qhhoj.target etc/sudoers.d/qhhoj-deploy etc/nginx/snippets/qhhoj-gate.conf var/www/qhhoj-maintenance/maintenance.html; do

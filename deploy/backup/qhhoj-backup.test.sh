@@ -9,6 +9,7 @@ real_restic="$(command -v restic)" || { echo "qhhoj-backup.test: restic is not i
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 bin="$work/bin" calls="$work/calls" out="$work/out"
 export RESTIC_PASSWORD='test pass' RESTIC_CACHE_DIR="$work/cache" QHHOJ_BACKUP_ENV="$work/backup.env" PATH="$bin:$PATH"
+export STATE_DIRECTORY="$work/state"
 fail() { echo "FAIL: $*" >&2; cat "$out" "$calls" >&2 2>/dev/null || true; exit 1; }
 
 mkdir -p "$bin" "$work/data/problem-data/p1" "$work/data/media"
@@ -42,7 +43,7 @@ HEALTHCHECK_URL=https://hc.example/ping/abc
 EOF
   printf '%s\n' "$@" >> "$QHHOJ_BACKUP_ENV"
 }
-fresh() { rm -rf "$work/local" "$work/offsite" "$work/mongodump-config"; : > "$calls"; for r in local offsite; do restic init -q -r "$work/$r"; done; }
+fresh() { rm -rf "$work/local" "$work/offsite" "$work/mongodump-config" "$STATE_DIRECTORY"; : > "$calls"; for r in local offsite; do restic init -q -r "$work/$r"; done; }
 backup() { TMPDIR="$work" bash "$here/qhhoj-backup" > "$out" 2>&1; }
 count() { restic -r "$work/$1" snapshots --json --tag "$2" | grep -o '"id"' | wc -l; }
 latest_id() { restic -r "$work/$1" snapshots --json --tag "$2" --latest 1 | grep -o '"id":"[0-9a-f]*"'; }
@@ -79,17 +80,38 @@ files_before="$(latest_id offsite qhhoj-files)"
 grep -q 'failed: local database,offsite database' "$out" || fail "the failed steps are named"
 grep -qx 'curl https://hc.example/ping/abc/fail' "$calls" || fail "failure ping"
 
-# A partial snapshot that cannot be forgotten keeps retention off its repository: it would age out a good night.
+# A partial snapshot that cannot be forgotten keeps retention off its repository (it would age out a good night) until a
+# later run forgets it.
+stranded="$STATE_DIRECTORY/stranded-snapshots"
 fresh; config; backup || fail "night before the stranded snapshot"
 STUB_DUMP_FAIL=1 STUB_FORGET_FAIL=1 backup && fail "a failed mongodump must fail the run"
 [ "$(count local qhhoj-db)" = 2 ] || fail "the partial snapshot stays when its forget fails"
 grep -q 'retention skipped for' "$out" || fail "the skipped retention is logged"
 grep -q 'failed: local database,local retention' "$out" || fail "the skipped retention fails its step"
+partial="$(cut -f2 "$stranded")"
+[ "$(cut -f1 "$stranded")" = "$work/local" ] && [ -n "$partial" ] || fail "the stranded snapshot is remembered with its repository"
+STUB_NIGHT=3 STUB_FORGET_FAIL=1 backup && fail "retention stays off while the stranded snapshot cannot be forgotten"
+grep -q 'failed: local retention' "$out" && [ "$(count local qhhoj-db)" = 3 ] || fail "a good night still saves its snapshot"
+STUB_NIGHT=4 backup || fail "the night the stranded snapshot can be forgotten again"
+[ ! -e "$stranded" ] || fail "the forgotten snapshot leaves the list"
+grep -q "forgot the partial snapshot $partial" "$out" || fail "the late forget is logged"
+restic -r "$work/local" snapshots --json | grep -c "\"id\":\"$partial" >/dev/null && fail "the stranded snapshot is gone"
+[ "$(archive local)" = archive-4 ] && grep -q "Applying Policy" "$out" || fail "retention ran again and kept the newest night"
+# A stranded snapshot someone already forgot by hand no longer blocks retention.
+STUB_DUMP_FAIL=1 STUB_FORGET_FAIL=1 backup && fail "another failed night"
+restic -q -r "$work/local" forget "$(cut -f2 "$stranded")"
+backup || fail "a stranded snapshot forgotten by hand"
+[ ! -e "$stranded" ] || fail "a snapshot forgotten by hand leaves the list"
+
+# The sampled check runs about weekly: on the first run, not again the next night.
+fresh; config
+backup && grep -q 'restic check\|no errors were found' "$out" || fail "first run checks the repository"
+backup && ! grep -q 'no errors were found' "$out" || fail "the next night skips the check"
 
 # The free-space floor refuses the local backup (the site and the judge share the disk).
 fresh; config "LOCAL_MIN_FREE_GB=999999999"; backup && fail "below the floor must fail"
 [ "$(count local qhhoj-db)" = 0 ] || fail "no local snapshot below the floor"
-grep -q 'local backup refused' "$out" || fail "the refusal is logged"
+grep -q 'backup refused' "$out" || fail "the refusal is logged"
 
 # MONGO_OPLOG=0: a plain dump, not tagged oplog.
 fresh; config MONGO_OPLOG=0; backup || fail "plain dump run"

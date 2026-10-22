@@ -25,6 +25,9 @@ MemoryHigh=1536M
 MemoryMax=2G
 CacheDirectory=qhhoj-backup
 CacheDirectoryMode=0700
+# The partial snapshots still to forget and the last check time (qhhoj-backup-lib.sh).
+StateDirectory=qhhoj-backup
+StateDirectoryMode=0700
 RuntimeDirectory=qhhoj-backup
 RuntimeDirectoryMode=0700
 UMask=0077

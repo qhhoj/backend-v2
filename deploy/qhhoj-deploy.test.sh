@@ -13,7 +13,7 @@ fresh() {
   mkdir -p "$root/etc/nginx/conf.d"; echo "root /var/www/qhhoj/current;" > "$root/etc/nginx/conf.d/qhhoj.conf"
   : > "$calls"
   # shellcheck disable=SC2016 # stub bodies are expanded when the stub runs
-  stub podman '[ "${1:-}" = login ] && { cat > "$QHHOJ_DEPLOY_ROOT/login.stdin"; touch "$3"; }; [ "${1:-}" = image ] && [ "${2:-}" = exists ] && [ -n "${STUB_IMAGE_MISSING:-}" ] && exit 1; true'
+  stub podman '[ "${1:-}" = login ] && { cat > "$QHHOJ_DEPLOY_ROOT/login.stdin"; touch "$3"; }; [ "${1:-}" = image ] && [ "${2:-}" = exists ] && [ -n "${STUB_IMAGE_MISSING:-}" ] && exit 1; [ "${1:-}" = image ] && [ "${2:-}" = ls ] && printf "%s\n" ${STUB_IMAGES:-}; true'
   # shellcheck disable=SC2016
   stub systemctl '[ "$1" = restart ] && [ -e "$QHHOJ_DEPLOY_ROOT/restart_fail" ] && { rm -f "$QHHOJ_DEPLOY_ROOT/restart_fail"; exit 1; }; true'
   stub sleep
@@ -254,5 +254,22 @@ set +e; STUB_HEALTH=fail deploy frontend v2.3.0 >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 1 ] && [ "$(readlink "$www/current")" = releases/v2.2.0 ] || fail "unhealthy release must flip back"
 deploy rollback frontend >/dev/null || fail "rollback after carrying assets"
 [ "$(readlink "$www/current")" = releases/v2.1.0 ] && [ -f "$www/releases/v2.1.0/assets/Page-a.js" ] || fail "rollback target serves its assets"
+
+# a good deploy keeps only the live image and the rollback target, and removes nothing but qhhoj backend tags
+fresh; deploy backend v2.1.0 >/dev/null; deploy backend v2.2.0 >/dev/null; : > "$calls"
+STUB_IMAGES="v2.1.0 v2.2.0 v2.3.0 sha-0123456789ab current <none>" deploy backend v2.3.0 >/dev/null || fail "third deploy"
+grep -q "podman image ls --format {{.Tag}} ghcr.io/qhhoj/backend-v2$" "$calls" || fail "only the qhhoj backend image is listed"
+[ "$(grep '^podman rmi' "$calls" | sort)" = "$(printf '%s\n' 'podman rmi ghcr.io/qhhoj/backend-v2:sha-0123456789ab' 'podman rmi ghcr.io/qhhoj/backend-v2:v2.1.0')" ] \
+  || fail "prune removes exactly the tags older than the rollback target: $(grep '^podman rmi' "$calls")"
+deploy rollback backend >/dev/null || fail "rollback after the prune"
+grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.2.0 ghcr.io/qhhoj/backend-v2:current" "$calls" || fail "rollback lands on the kept image"
+: > "$calls"; set +e; STUB_IMAGES="v2.1.0 v2.2.0 v2.4.0" STUB_HEALTH=fail deploy backend v2.4.0 >/dev/null 2>&1; set -e
+grep -q '^podman rmi' "$calls" && fail "a failed deploy prunes nothing"
+
+# a good frontend deploy keeps the live release and the rollback target only
+fresh_frontend
+for v in v2.1.0 v2.2.0 v2.3.0; do tarball "$v"; deploy frontend "$v" >/dev/null || fail "frontend $v"; done
+[ "$(ls "$www/releases")" = "$(printf 'v2.2.0\nv2.3.0')" ] || fail "releases kept: $(ls "$www/releases" | tr '\n' ' ')"
+deploy rollback frontend >/dev/null && [ "$(readlink "$www/current")" = releases/v2.2.0 ] || fail "rollback lands on the kept release"
 
 echo "qhhoj-deploy backend ok"

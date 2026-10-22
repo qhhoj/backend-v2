@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# qhhoj-pull (the owner's laptop, systemd --user, qhhoj-pull.timer): pulls the QHHOJ host's database and data roots
+# into a restic repository on this machine. The host holds no credential for this machine; this machine logs in as
+# qhhoj-pull, whose one key may only run qhhoj-pull-serve there (a dump, or a read-only rsync).
+#   database: ssh <host> dump | restic backup --stdin (tags qhhoj-db, oplog); a failed dump forgets its partial snapshot
+#   files:    rsync --delete of problem-data, media, contest-data, user-data into MIRROR, then restic backup MIRROR
+#             (tag qhhoj-files): restic keeps what a later night deleted
+#   then retention (14 daily, 8 weekly, 12 monthly), prune, and an about weekly sampled check.
+# Settings: ~/.config/qhhoj-backup/pull.env (deploy/backup/pull/pull.env.example). Install and restore: RUNBOOK "Backups".
+# Exit: 0 ok, 1 a step failed, 64 bad configuration, 75 the host is unreachable (nothing changed; the unit retries).
+set -euo pipefail
+
+lib="$(dirname "$(readlink -f "$0")")/qhhoj-backup-lib.sh" # installed beside it; in the repository one level up
+[ -r "$lib" ] || lib="$(dirname "$lib")/../qhhoj-backup-lib.sh"
+# shellcheck source=deploy/backup/qhhoj-backup-lib.sh
+. "$lib"
+
+ENV_FILE="${QHHOJ_PULL_ENV:-$HOME/.config/qhhoj-backup/pull.env}"
+# shellcheck disable=SC2034 # KEEP is read by qhhoj-backup-lib.sh
+KEEP=(--keep-daily 14 --keep-weekly 8 --keep-monthly 12)
+DATA_DIRS=(problem-data media contest-data user-data)
+SSH_UNREACHABLE=255 # ssh's own failure: no connection (or a lost one) rather than a failed remote command
+RSYNC_VANISHED=24   # files deleted on the host during the transfer: normal for live data
+STALE_AFTER_MIN=$((36 * 60)) # an unreachable host alerts only when the last good pull is older (a wake often precedes the network)
+EX_CONFIG=64
+EX_UNREACHABLE=75
+
+log() { echo "qhhoj-pull: $*"; }
+die() { echo "qhhoj-pull: $*" >&2; exit "$EX_CONFIG"; }
+
+load_config() {
+  [ -r "$ENV_FILE" ] || die "cannot read $ENV_FILE (template: deploy/backup/pull/pull.env.example)"
+  set -a
+  # shellcheck source=/dev/null
+  . "$ENV_FILE"
+  set +a
+  [ -n "${SERVER:-}" ] || die "SERVER is not set"
+  [ -r "${RESTIC_PASSWORD_FILE:-}" ] || die "RESTIC_PASSWORD_FILE is not set or not readable"
+  SSH_USER="${SSH_USER:-qhhoj-pull}"
+  SSH_KEY="${SSH_KEY:-$HOME/.ssh/qhhoj-pull}"
+  [ -r "$SSH_KEY" ] || die "cannot read the ssh key $SSH_KEY"
+  [[ $SSH_KEY != *"'"* ]] || die "SSH_KEY must not contain a single quote" # rsync -e quoting
+  REPO="${REPO:-$HOME/qhhoj-backups/restic}"
+  MIRROR="${MIRROR:-$HOME/qhhoj-backups/mirror}"
+  MIN_FREE_GB="${MIN_FREE_GB:-20}"
+  STATE_DIR="${STATE_DIRECTORY:-${XDG_STATE_HOME:-$HOME/.local/state}/qhhoj-pull}"
+  # A dead link (the laptop slept, Wi-Fi dropped) ends the run within about 90 s instead of stalling it.
+  SSH=(ssh -i "$SSH_KEY" -l "$SSH_USER" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20
+    -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
+}
+
+notify() { # message: best-effort desktop notification (no session bus while nobody is logged in)
+  command -v notify-send > /dev/null || return 0
+  DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus}" \
+    timeout 10 notify-send -u critical -a qhhoj-pull "QHHOJ backup pull failed" "$1" > /dev/null 2>&1 || true
+}
+
+remote_dump() { "${SSH[@]}" "$SERVER" dump; }
+
+rsync_shell() { printf "'%s' " "${SSH[@]}"; } # the ssh command as one rsync -e string (single-quoted words)
+
+pull_files() { # mirror the data roots (only MIRROR is ever deleted from), then one snapshot of MIRROR
+  local sources=() dir rc=0
+  for dir in "${DATA_DIRS[@]}"; do sources+=("$SERVER:$dir"); done
+  mkdir -p "$MIRROR"
+  rsync -az --delete --info=stats1 -e "$(rsync_shell)" "${sources[@]}" "$MIRROR/" || rc=$?
+  if [ "$rc" -ne 0 ] && [ "$rc" -ne "$RSYNC_VANISHED" ]; then
+    log "rsync failed (exit $rc): no files snapshot tonight; MIRROR may be part-updated, the next run completes it"
+    return 1
+  fi
+  restic -r "$REPO" backup --tag "$FILES_TAG" "$MIRROR" || return 1
+  log "files snapshot of $MIRROR saved to $REPO"
+}
+
+report() { # a failed step fails the run (systemd marks the unit failed) and raises a desktop notification
+  if [ "${#FAILED[@]}" -eq 0 ]; then touch "$STATE_DIR/last-success"; log "done"; return 0; fi
+  log "failed: $(failed_steps)"
+  notify "failed: $(failed_steps). journalctl --user -u qhhoj-pull"
+  exit 1
+}
+
+unreachable() { # the first ssh could not connect: change nothing; notify only once the last good pull is old
+  log "cannot reach $SERVER (offline, just woken, or the host is down): nothing pulled, the repository is unchanged"
+  if [ -z "$(find "$STATE_DIR/last-success" -mmin "-$STALE_AFTER_MIN" 2> /dev/null)" ]; then
+    notify "cannot reach $SERVER, and the last good pull is over $((STALE_AFTER_MIN / 60)) h old"
+  fi
+  exit "$EX_UNREACHABLE"
+}
+
+main() {
+  load_config
+  export RESTIC_PASSWORD_FILE
+  WORK="$(mktemp -d "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/qhhoj-pull.XXXXXX")"
+  trap 'rm -rf "$WORK"' EXIT
+  mkdir -p "$STATE_DIR"
+  space_ok "$REPO" "$MIN_FREE_GB" MIN_FREE_GB || { FAILED+=("disk space"); report; }
+  unlock_stale "$REPO"
+  run_step database db_snapshot "$REPO" remote_dump
+  [ "$DUMP_RC" != "$SSH_UNREACHABLE" ] || unreachable
+  run_step files pull_files
+  run_step retention maintain "$REPO"
+  report
+}
+
+main "$@"

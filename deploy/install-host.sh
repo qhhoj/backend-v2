@@ -46,6 +46,9 @@ install_files() {
   install -m 644 "$here/quadlet/qhhoj.target" "$ROOT/etc/systemd/system/qhhoj.target"
   # Backups: the timer is enabled by hand once /etc/qhhoj/backup.env and the repositories exist (RUNBOOK "Backups").
   install -m 755 "$here/backup/qhhoj-backup" "$ROOT/usr/local/sbin/qhhoj-backup"
+  install -m 644 "$here/backup/qhhoj-backup-lib.sh" "$ROOT/usr/local/sbin/qhhoj-backup-lib.sh" # sourced by the backup scripts
+  # The laptop's pull copy: the forced command of the qhhoj-pull key; idle until that user exists (RUNBOOK "Pull copy").
+  install -m 755 "$here/backup/pull/qhhoj-pull-serve" "$ROOT/usr/local/sbin/qhhoj-pull-serve"
   install -m 755 "$here/backup/restore-test.sh" "$ROOT/usr/local/sbin/qhhoj-backup-restore-test"
   install -m 644 "$here/backup/qhhoj-backup.service" "$here/backup/qhhoj-backup.timer" "$ROOT/etc/systemd/system/"
   visudo -cf "$here/sudoers.qhhoj-deploy" >/dev/null || die "sudoers file does not parse"

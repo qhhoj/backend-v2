@@ -1,0 +1,13 @@
+# qhhoj-pull.timer (systemd --user): starts qhhoj-pull.service at 04:30 Vietnam time, an hour after the host's own
+# backup; a night missed while the laptop slept or was off runs at the next wake or login (Persistent; with
+# `loginctl enable-linger` the user manager runs without a login session).
+[Unit]
+Description=QHHOJ backup pull at 04:30 Asia/Ho_Chi_Minh
+
+[Timer]
+OnCalendar=*-*-* 04:30:00 Asia/Ho_Chi_Minh
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
