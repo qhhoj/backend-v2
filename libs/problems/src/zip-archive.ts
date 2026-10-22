@@ -5,6 +5,7 @@ import { pipeline, Readable as ReadableStream, Transform } from 'node:stream';
 import type { Readable } from 'node:stream';
 import yauzl from 'yauzl';
 import type { Entry, ZipFile } from 'yauzl';
+import { hasDotSegment } from './file-names';
 
 export const ZIP_LIMITS = {
   maxEntries: 25_000,
@@ -430,10 +431,11 @@ export class ZipArchive {
   }
 }
 
+/** The files a case may name: an entry with a dot-leading part is accepted in the archive but left out, since the judge cannot open it. */
 export async function listZipEntries(path: string): Promise<string[]> {
   const zip = await ZipArchive.open(path);
   try {
-    return zip.names();
+    return zip.names().filter((name) => !hasDotSegment(name));
   } finally {
     await zip.close();
   }

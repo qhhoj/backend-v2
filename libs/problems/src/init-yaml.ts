@@ -1,7 +1,7 @@
 import type { JsonObject, ProblemData, ProblemTestCase } from '@libs/database';
 import { CUSTOM_CHECKER_TYPES } from '@libs/database';
 import { checkerHeadersOf, runsInteractiveChecker } from '@libs/judging';
-import { extensionOf } from './file-names';
+import { extensionOf, hasDotSegment } from './file-names';
 import { ProblemDataError } from './problem-data.error';
 import { emitYaml } from './yaml-emit';
 
@@ -229,20 +229,33 @@ function closeBatch(grouping: Grouping, batch: Batch): void {
   grouping.openBatch = null;
 }
 
+/** A case file the judge can open: in the archive, and no dot file or dot folder. */
+function assertCaseFile(
+  role: 'Input' | 'Output',
+  name: string,
+  {
+    index,
+    archiveEntries,
+  }: { index: number; archiveEntries: ReadonlySet<string> },
+): void {
+  if (hasDotSegment(name))
+    throw new ProblemDataError(
+      `${role} file for case ${index} must not start with a dot or be in a dot folder: ${name}`,
+    );
+  if (!archiveEntries.has(name))
+    throw new ProblemDataError(
+      `${role} file for case ${index} does not exist: ${name}`,
+    );
+}
+
 /** Without a generator every case names files that must be in the archive. */
 function assertCaseFiles(
   testCase: ProblemTestCase,
   index: number,
   archiveEntries: ReadonlySet<string>,
 ): void {
-  if (!archiveEntries.has(testCase.input))
-    throw new ProblemDataError(
-      `Input file for case ${index} does not exist: ${testCase.input}`,
-    );
-  if (!archiveEntries.has(testCase.output))
-    throw new ProblemDataError(
-      `Output file for case ${index} does not exist: ${testCase.output}`,
-    );
+  assertCaseFile('Input', testCase.input, { index, archiveEntries });
+  assertCaseFile('Output', testCase.output, { index, archiveEntries });
 }
 
 /** A `C` row: inside a batch it loses its points and takes the batch's pretest flag; outside one it must carry points. */

@@ -14,6 +14,7 @@ import type {
   Grader,
   JsonObject,
 } from '@libs/database';
+import { JUDGE_MAX_OUTPUT_LIMIT } from '@libs/problems';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -50,6 +51,9 @@ const JsonArgs = () =>
 /** `update()` runs no schema validators, so counts must be proven safe integers here. */
 const NullableCount = () =>
   applyDecorators(IsOptional(), IsInt(), Min(0), Max(Number.MAX_SAFE_INTEGER));
+/** judge-v2 refuses a larger `output_limit_length` at judge time. */
+const OutputLimit = () =>
+  applyDecorators(IsOptional(), IsInt(), Min(0), Max(JUDGE_MAX_OUTPUT_LIMIT));
 const FileName = () =>
   applyDecorators(IsString(), MaxLength(100), Matches(NO_NUL));
 
@@ -89,9 +93,9 @@ export class TestCaseDto {
   @ApiPropertyOptional()
   @NullableCount()
   outputPrefix: number | null = null;
-  /** Largest output accepted, in bytes (`output_limit_length`); null for the default. */
+  /** Largest output accepted, in bytes (`output_limit_length`), at most 64 MiB; null for the default. */
   @ApiPropertyOptional()
-  @NullableCount()
+  @OutputLimit()
   outputLimit: number | null = null;
 }
 
@@ -113,9 +117,9 @@ export class PutProblemDataDto {
   @ApiPropertyOptional()
   @NullableCount()
   outputPrefix: number | null = null;
-  /** Largest output accepted, in bytes (`output_limit_length`); null for the default. */
+  /** Largest output accepted, in bytes (`output_limit_length`), at most 64 MiB; null for the default. */
   @ApiPropertyOptional()
-  @NullableCount()
+  @OutputLimit()
   outputLimit: number | null = null;
   /** Judge `unicode` flag: output is read as Unicode text. */
   @ApiPropertyOptional()

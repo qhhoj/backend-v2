@@ -10958,7 +10958,7 @@
           },
           "outputLimit": {
             "default": null,
-            "description": "Largest output accepted, in bytes (`output_limit_length`); null for the default.",
+            "description": "Largest output accepted, in bytes (`output_limit_length`), at most 64 MiB; null for the default.",
             "nullable": true,
             "type": "number"
           },
@@ -14960,7 +14960,7 @@
           },
           "outputLimit": {
             "default": null,
-            "description": "Largest output accepted, in bytes (`output_limit_length`); null for the default.",
+            "description": "Largest output accepted, in bytes (`output_limit_length`), at most 64 MiB; null for the default.",
             "nullable": true,
             "type": "number"
           },

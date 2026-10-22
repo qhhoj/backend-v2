@@ -153,6 +153,24 @@ describe('compileInitYaml', () => {
       [plain(1, { checker: 'bridged' as never })],
     ],
   ])('rejects: %s', (message, cases) => failsWith({ cases }, message));
+  it('refuses case files the judge cannot open: a dot file or a file in a dot folder', () => {
+    const dotted = new Set([
+      '.tests/1.in',
+      '.tests/1.out',
+      'a/.b/2.in',
+      '2.out',
+    ]);
+    failsWith(
+      { cases: [plain(1, { input: '.tests/1.in', output: '.tests/1.out' })] },
+      'Input file for case 1 must not start with a dot or be in a dot folder: .tests/1.in',
+      dotted,
+    );
+    failsWith(
+      { cases: [plain(1, { input: '2.out', output: 'a/.b/2.in' })] },
+      'Output file for case 1 must not start with a dot or be in a dot folder: a/.b/2.in',
+      dotted,
+    );
+  });
   it('closes an open batch at the end and counts its points', () =>
     expect(
       init({ cases: [testCase({ type: 'S', points: 5 }), plain(1)] }),

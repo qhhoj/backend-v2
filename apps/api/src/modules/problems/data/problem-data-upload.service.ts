@@ -3,7 +3,7 @@ import type { FastifyRequest } from 'fastify';
 import { rm, stat } from 'node:fs/promises';
 import type { AuthContext } from '@libs/auth';
 import { RateLimitService, writeFileAtomically } from '@libs/common';
-import { DATA_FILE_KINDS } from '@libs/database';
+import { dataFileNamesOf } from '@libs/database';
 import type { DataFileKind, ProblemData } from '@libs/database';
 import {
   extensionOf,
@@ -116,7 +116,11 @@ export class ProblemDataUploadService {
             staged,
           );
           await this.dataFiles.commitUpload(problem.code, staged, name);
-          await this.removeReplaced(problem.code, previous.archive, name);
+          await this.store.removeUnreferenced(
+            problem,
+            previous.archive,
+            written.stored,
+          );
           await this.store.finishDataWrite(problem, version);
           return written;
         }),
@@ -191,7 +195,11 @@ export class ProblemDataUploadService {
           version,
         );
         await this.dataFiles.commitUpload(problem.code, staged, name);
-        await this.removeReplaced(problem.code, previous[kind], name);
+        await this.store.removeUnreferenced(
+          problem,
+          previous[kind],
+          written.stored,
+        );
         await this.store.finishDataWrite(problem, version);
         return written;
       },
@@ -228,17 +236,13 @@ export class ProblemDataUploadService {
     );
   }
 
-  /** A name already used by another kind is refused, so one upload never overwrites a sibling's file. */
+  /** A name already used by another kind or by a Polygon helper header is refused, so one upload never overwrites a sibling's file. */
   private assertNameFree(
     previous: ProblemData,
     kind: DataFileKind,
     name: string,
   ): void {
-    if (
-      DATA_FILE_KINDS.some(
-        (other) => other !== kind && previous[other] === name,
-      )
-    )
+    if (dataFileNamesOf({ ...previous, [kind]: null }).includes(name))
       throw rejectFile(
         `The name ${name} is already used by another data file.`,
         'data_file_name_taken',
@@ -253,14 +257,5 @@ export class ProblemDataUploadService {
         ? rejectFile(error.message, error.code)
         : error;
     }
-  }
-
-  private async removeReplaced(
-    code: string,
-    previousName: string | null,
-    name: string,
-  ): Promise<void> {
-    if (previousName && previousName !== name)
-      await this.dataFiles.removeFile(code, previousName);
   }
 }

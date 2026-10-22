@@ -1,12 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, invalidField, isDocumentTooLarge } from '@libs/common';
-import { emptyProblemData } from '@libs/database';
+import { dataFileNamesOf, emptyProblemData } from '@libs/database';
 import type { Problem, ProblemData } from '@libs/database';
 import {
   compileInitYaml,
   dataChanges,
   INIT_FILE,
+  judgeRefusal,
   listZipEntries,
   ProblemDataError,
   ProblemDataFilesService,
@@ -124,7 +125,7 @@ export class ProblemDataStore {
   /**
    * Compiles, then persists with a compare-and-set on `version` and on the code the files are written under, and only then writes or removes init.yml, so Mongo stays authoritative.
    * A 409 means another writer won, or the problem was renamed in between; either way nothing was written. A staged upload that already moved with a renamed directory is left to the hourly stale-upload sweep.
-   * A configuration or archive problem becomes `feedback`, never an error.
+   * A configuration or archive problem becomes `feedback`, never an error; a setting the judge refuses (`judgeRefusal`) is a 400 before anything is written.
    * Residual window: two sequential winners can still write init.yml out of order (A persists, B persists, B writes, A writes).
    */
   async compileAndStore(
@@ -133,6 +134,8 @@ export class ProblemDataStore {
     version: number,
     archivePath?: string,
   ): Promise<{ stored: ProblemData; archiveFiles: string[] }> {
+    const refusal = judgeRefusal(data);
+    if (refusal) throw invalidField(refusal.field, refusal.message);
     const { stored, yaml, archiveFiles } = await this.compile(
       problem,
       data,
@@ -160,6 +163,16 @@ export class ProblemDataStore {
     if (yaml === null) await this.dataFiles.removeInit(problem.code);
     else await this.dataFiles.writeInit(problem.code, yaml);
     return { stored, archiveFiles };
+  }
+
+  /** Drops a file the stored data stopped naming; a name another field still uses (a Polygon helper header, say) is kept. */
+  async removeUnreferenced(
+    problem: ProblemDocument,
+    name: string | null,
+    stored: ProblemData,
+  ): Promise<void> {
+    if (name && !dataFileNamesOf(stored).includes(name))
+      await this.dataFiles.removeFile(problem.code, name);
   }
 
   /** `archivePath` overrides where the archive is read: a staged upload is compiled before it takes its final name. */
