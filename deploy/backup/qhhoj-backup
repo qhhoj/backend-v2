@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# qhhoj-backup (root): the nightly restic backup, run by qhhoj-backup.timer. Installed to /usr/local/sbin.
+#   LOCAL_REPO   (default /backup/restic): the database only; the shared disk cannot hold the data roots twice.
+#   OFFSITE_REPO (optional, any restic backend): the database and DATA_PATHS.
+# Settings and secrets: /etc/qhhoj/backup.env (deploy/backup/backup.env.example). Install and restore: RUNBOOK "Backups".
+# Exit: 0 ok, 1 a step failed (the other steps still ran), 64 bad configuration.
+set -euo pipefail
+
+ENV_FILE="${QHHOJ_BACKUP_ENV:-/etc/qhhoj/backup.env}"
+DB_TAG=qhhoj-db
+FILES_TAG=qhhoj-files
+OPLOG_TAG=oplog # the archive holds the oplog: restore it with --oplogReplay
+ARCHIVE_NAME=qhhoj-mongo.archive
+KEEP=(--keep-daily 7 --keep-weekly 4 --keep-monthly 6)
+CHECK_WEEKDAY=7 # Sundays `restic check` also reads a sample of the stored data
+CHECK_SUBSET=5%
+EX_CONFIG=64
+FAILED=()
+
+log() { echo "qhhoj-backup: $*"; }
+die() { echo "qhhoj-backup: $*" >&2; exit "$EX_CONFIG"; }
+
+load_config() {
+  [ -r "$ENV_FILE" ] || die "cannot read $ENV_FILE (template: deploy/backup/backup.env.example)"
+  set -a
+  # shellcheck source=/dev/null
+  . "$ENV_FILE"
+  set +a
+  [ -n "${RESTIC_PASSWORD:-}" ] || die "RESTIC_PASSWORD is not set"
+  [ -n "${MONGO_BACKUP_URL:-}" ] || die "MONGO_BACKUP_URL is not set"
+  [ -n "${MONGO_BACKUP_PASSWORD:-}" ] || die "MONGO_BACKUP_PASSWORD is not set"
+  export -n MONGO_BACKUP_URL MONGO_BACKUP_PASSWORD # only mongodump's config reads them
+  LOCAL_REPO="${LOCAL_REPO:-/backup/restic}"
+  OFFSITE_REPO="${OFFSITE_REPO:-}"
+  MONGO_OPLOG="${MONGO_OPLOG:-1}"
+  LOCAL_MIN_FREE_GB="${LOCAL_MIN_FREE_GB:-3}"
+  DATA_PATHS="${DATA_PATHS:-/srv/qhhoj/problem-data /srv/qhhoj/media /srv/qhhoj/contest-data /srv/qhhoj/user-data}"
+  HEALTHCHECK_URL="${HEALTHCHECK_URL:-}"
+  export RESTIC_CACHE_DIR="${RESTIC_CACHE_DIR:-${CACHE_DIRECTORY:-/var/cache/qhhoj-backup}}"
+}
+
+ping_health() { # start | success | fail [message]: healthchecks.io-style ping; a failed ping never fails the backup
+  [ -n "$HEALTHCHECK_URL" ] || return 0
+  local url="$HEALTHCHECK_URL"
+  case "$1" in start) url+=/start ;; fail) url+=/fail ;; esac
+  curl -fsS -m 10 --retry 3 -o /dev/null --data-raw "${2:-}" "$url" || log "health check ping ($1) failed"
+}
+
+free_kib() { # free KiB on the filesystem that holds $1 (its nearest existing parent before `restic init`)
+  local dir="$1"
+  while [ ! -e "$dir" ]; do dir="$(dirname "$dir")"; done
+  df -Pk "$dir" | awk 'NR == 2 { print $4 }'
+}
+
+check_local_space() { # the site and the judge share this disk: refuse below the floor
+  local free floor=$((LOCAL_MIN_FREE_GB * 1024 * 1024))
+  free="$(free_kib "$LOCAL_REPO")"
+  [ "$free" -ge "$floor" ] && return 0
+  log "only $((free / 1024)) MiB free for $LOCAL_REPO, below LOCAL_MIN_FREE_GB=$LOCAL_MIN_FREE_GB: local backup refused"
+  return 1
+}
+
+mongodump_config() { # YAML for mongodump --config: the password stays out of argv and of mongodump's error messages
+  local q="'" qq="''"
+  printf "uri: '%s'\npassword: '%s'\n" "${MONGO_BACKUP_URL//$q/$qq}" "${MONGO_BACKUP_PASSWORD//$q/$qq}"
+}
+
+summary_value() { # json-file key: one scalar of restic's backup summary (no jq on the host)
+  { grep '"message_type":"summary"' "$1" | tail -n 1 | grep -o "\"$2\":\"\{0,1\}[0-9a-f]*" | sed 's/.*:"\{0,1\}//'; } || true
+}
+
+db_snapshot() { # repo: stream one mongodump into a new snapshot; a failed dump forgets the snapshot it fed
+  local repo="$1" json="$WORK/backup.json" dump_rc restic_rc id
+  local dump=(--archive) tags=(--tag "$DB_TAG")
+  if [ "$MONGO_OPLOG" = 1 ]; then dump+=(--oplog); tags+=(--tag "$OPLOG_TAG"); fi
+  set +e
+  mongodump --config <(mongodump_config) "${dump[@]}" \
+    | restic -r "$repo" backup --stdin --stdin-filename "$ARCHIVE_NAME" "${tags[@]}" --json > "$json"
+  dump_rc=${PIPESTATUS[0]} restic_rc=${PIPESTATUS[1]}
+  set -e
+  id="$(summary_value "$json" snapshot_id)"
+  if [ "$dump_rc" -ne 0 ]; then
+    log "mongodump failed (exit $dump_rc) for $repo"
+    [ -z "$id" ] || restic -r "$repo" forget "$id" || log "could not forget the partial snapshot $id in $repo: forget it by hand"
+    return 1
+  fi
+  [ "$restic_rc" -eq 0 ] || { log "restic backup failed (exit $restic_rc) for $repo"; return 1; }
+  log "database snapshot $id saved to $repo ($(summary_value "$json" data_added) new bytes)"
+}
+
+files_snapshot() { # repo: one snapshot of DATA_PATHS
+  local repo="$1" paths path
+  read -ra paths <<< "$DATA_PATHS"
+  for path in "${paths[@]}"; do
+    [ -d "$path" ] || { log "data path $path is missing"; return 1; }
+  done
+  restic -r "$repo" backup --tag "$FILES_TAG" --one-file-system --exclude-caches "${paths[@]}" || return 1
+  log "files snapshot saved to $repo"
+}
+
+maintain() { # repo: retention per tag, prune, and the weekly integrity check
+  local repo="$1" tag
+  for tag in "$DB_TAG" "$FILES_TAG"; do
+    restic -r "$repo" forget --tag "$tag" --group-by host "${KEEP[@]}" || return 1
+  done
+  restic -r "$repo" prune || return 1
+  [ "$(date +%u)" = "$CHECK_WEEKDAY" ] || return 0
+  restic -r "$repo" check --read-data-subset "$CHECK_SUBSET"
+}
+
+unlock_stale() { restic -r "$1" unlock >/dev/null 2>&1 || true; } # removes only the stale locks of a crashed run
+
+local_db_snapshot() { check_local_space && db_snapshot "$LOCAL_REPO"; }
+
+run_step() { # name command...: a failed step is recorded and the next step still runs
+  local name="$1"; shift
+  "$@" || FAILED+=("$name")
+}
+
+report() { # a failed step fails the run (systemd marks the unit failed) and pings /fail
+  if [ "${#FAILED[@]}" -eq 0 ]; then ping_health success; log "done"; return 0; fi
+  local list; list="$(IFS=,; echo "${FAILED[*]}")"
+  log "failed: $list"
+  ping_health fail "failed: $list"
+  exit 1
+}
+
+main() {
+  load_config
+  WORK="$(mktemp -d "${RUNTIME_DIRECTORY:-${TMPDIR:-/tmp}}/qhhoj-backup.XXXXXX")"
+  trap 'rm -rf "$WORK"' EXIT
+  ping_health start
+  unlock_stale "$LOCAL_REPO"
+  run_step "local database" local_db_snapshot
+  run_step "local retention" maintain "$LOCAL_REPO"
+  if [ -n "$OFFSITE_REPO" ]; then
+    unlock_stale "$OFFSITE_REPO"
+    run_step "offsite database" db_snapshot "$OFFSITE_REPO"
+    run_step "offsite files" files_snapshot "$OFFSITE_REPO"
+    run_step "offsite retention" maintain "$OFFSITE_REPO"
+  else
+    log "OFFSITE_REPO is not set: only the database is backed up; DATA_PATHS (problem data, media, contest and user data) are NOT"
+  fi
+  report
+}
+
+main "$@"

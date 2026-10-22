@@ -1,0 +1,35 @@
+# qhhoj-backup.service: one run of /usr/local/sbin/qhhoj-backup, started by qhhoj-backup.timer (RUNBOOK "Backups").
+# The site and the local judge share this host, so the run is capped: CPUQuota and MemoryMax are the hard limits;
+# Nice and the batch CPU policy yield to everything else; IOSchedulingClass=idle and IOWeight act only under the BFQ
+# I/O scheduler (cat /sys/block/*/queue/scheduler). A failed run leaves the unit failed (systemctl --failed).
+[Unit]
+Description=QHHOJ nightly backup (restic)
+After=network-online.target mongod.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/qhhoj-backup
+Nice=19
+CPUSchedulingPolicy=batch
+IOSchedulingClass=idle
+IOWeight=10
+CPUQuota=100%
+# Go (restic, mongodump) starts one thread per host CPU; under the quota more threads only queue.
+Environment=GOMAXPROCS=2
+MemoryHigh=1536M
+MemoryMax=2G
+CacheDirectory=qhhoj-backup
+CacheDirectoryMode=0700
+RuntimeDirectory=qhhoj-backup
+RuntimeDirectoryMode=0700
+UMask=0077
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadOnlyPaths=/srv/qhhoj
+NoNewPrivileges=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+LockPersonality=yes

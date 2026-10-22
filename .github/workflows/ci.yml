@@ -99,8 +99,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - run: sudo apt-get install -y shellcheck
-      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/install-host.sh deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh
+      # restic: deploy/backup/qhhoj-backup.test.sh runs the backup script against real (temp-dir) repositories.
+      - run: sudo apt-get install -y shellcheck restic
+      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/install-host.sh deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh deploy/backup/qhhoj-backup deploy/backup/*.sh
       - name: Run script tests
         run: |
           shopt -s nullglob

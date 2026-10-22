@@ -44,6 +44,10 @@ install_files() {
   install -m 755 "$here/qhhoj-deploy" "$ROOT/usr/local/sbin/qhhoj-deploy"
   install -m 644 "$here"/quadlet/*.container "$ROOT/etc/containers/systemd/"
   install -m 644 "$here/quadlet/qhhoj.target" "$ROOT/etc/systemd/system/qhhoj.target"
+  # Backups: the timer is enabled by hand once /etc/qhhoj/backup.env and the repositories exist (RUNBOOK "Backups").
+  install -m 755 "$here/backup/qhhoj-backup" "$ROOT/usr/local/sbin/qhhoj-backup"
+  install -m 755 "$here/backup/restore-test.sh" "$ROOT/usr/local/sbin/qhhoj-backup-restore-test"
+  install -m 644 "$here/backup/qhhoj-backup.service" "$here/backup/qhhoj-backup.timer" "$ROOT/etc/systemd/system/"
   visudo -cf "$here/sudoers.qhhoj-deploy" >/dev/null || die "sudoers file does not parse"
   install -m 440 "$here/sudoers.qhhoj-deploy" "$ROOT/etc/sudoers.d/qhhoj-deploy"
   install -m 644 "$here/nginx/security-headers.conf" "$ROOT/etc/nginx/snippets/qhhoj-security-headers.conf"

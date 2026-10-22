@@ -1,12 +1,12 @@
 # Production runbook
 
-Files: `nginx/qhhoj.conf`, `nginx/security-headers.conf`, `nginx/qhhoj-gate.conf`, `quadlet/*`, `qhhoj-deploy`, `ci/*`, `env.production.example`, `judge/*`.
+Files: `nginx/qhhoj.conf`, `nginx/security-headers.conf`, `nginx/qhhoj-gate.conf`, `quadlet/*`, `qhhoj-deploy`, `ci/*`, `env.production.example`, `judge/*`, `backup/*`.
 Layout: image `ghcr.io/qhhoj/backend-v2` run by rootful podman quadlets (`/etc/containers/systemd/`, host network, uid/gid 987); frontend under `/var/www/qhhoj/releases/<version>` with `current`; data `/srv/qhhoj`; env `/etc/qhhoj/env`; nginx, MongoDB and Redis native.
 This host is the shared live old-site box (`160.22.123.77`), v2 goes in place; judge-v2 runs on a separate machine. Never stop, restart or reconfigure anything on it that is not QHHOJ's.
 
 ## Prerequisites
 
-- podman >= 4.9 (Ubuntu 24.04 package; installed beside Docker, host network only), nginx >= 1.25.1 (older: `listen 443 ssl http2;`), MongoDB 8 as a replica set `rs0` with auth, Redis >= 7, `mongosh`, `mongodb-database-tools`, `rsync`, `openssl`. The worker toolchain (Node, pandoc, Chromium) is in the image; about 2 GB per PDF job plus 2 GiB for similarity.
+- podman >= 4.9 (Ubuntu 24.04 package; installed beside Docker, host network only), nginx >= 1.25.1 (older: `listen 443 ssl http2;`), MongoDB 8 as a replica set `rs0` with auth, Redis >= 7, `mongosh`, `mongodb-database-tools`, `rsync`, `openssl`, `restic` (Backups). The worker toolchain (Node, pandoc, Chromium) is in the image; about 2 GB per PDF job plus 2 GiB for similarity.
 - Disk: `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT` as separate directories under `/srv/qhhoj` owned by uid/gid 987 (none under `MEDIA_ROOT`).
 - TLS certificate for the site host; firewall: 80/443 public; `PORT` (3000) closed to everything but loopback (the api also binds 127.0.0.1 via `LISTEN_HOST`); `JUDGE_BRIDGE_PORT` from judge hosts only.
 
@@ -80,12 +80,47 @@ Per judge machine, against the review stack (`qhhoj.target` running, bridge on 9
 
 Purged tombstones keep their old `polygonLink`; clear them so the unique index is not blocked by them: `db.problems.updateMany({ purgedAt: { $exists: true }, 'polygonLink.problemId': { $exists: true } }, { $set: { polygonLink: null } })`. The index build fails (and is logged) if two live problems share a `polygonLink.problemId`: find them with an aggregation on that field and unlink one. After the new index exists, drop the old one: `db.problems.dropIndex('polygonLink.problemId_1')`.
 
-## Backup
+## Backups
 
-- Secrets: keep `/etc/qhhoj/env` (at least `ENCRYPTION_KEY`, `TOKEN_SECRET`) in an offline secret store, separate from the dumps; encrypted settings and 2FA secrets in a dump are useless without the same `ENCRYPTION_KEY`.
-- Mongo: `mongodump --uri "$MONGO_URL" --gzip --archive=/backup/qhhoj-$(date +%F).gz` nightly (no `--oplog`: not point-in-time, acceptable nightly); restore with `mongorestore --gzip --archive=... --drop`. Test a restore once.
-- Data roots: restic (or dated snapshots, not a `--delete` mirror) of `MEDIA_ROOT` and `PROBLEM_DATA_ROOT` nightly, right after the mongodump; `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT` and `USER_DATA_ROOT` are regenerable and need no backup.
-- Redis holds no durable state (queue truth is Mongo); no backup needed.
+`backup/`: `qhhoj-backup` (installed to `/usr/local/sbin`), run nightly at 03:30 Asia/Ho_Chi_Minh by `qhhoj-backup.timer`; `restore-test.sh` (installed as `qhhoj-backup-restore-test`); `backup.env.example`. restic: encrypted, deduplicated, incremental, zstd-compressed (repository format 2). No daemon: a oneshot unit capped at one CPU and 2 GiB, at idle priority, because the site and the local judge share the host.
+
+- LOCAL repository (`LOCAL_REPO`, `/backup/restic`): the database only. The disk cannot hold a second copy of `problem-data`; a run is refused (and fails) when its filesystem has less than `LOCAL_MIN_FREE_GB` (3) free.
+- OFFSITE repository (`OFFSITE_REPO`, any restic backend: `s3:`, `b2:`, `sftp:`, `rclone:`): the database and `DATA_PATHS` (`problem-data`, `media`, `contest-data`, `user-data`). Unset, the files have no backup and every run says so in the journal.
+- The database is one `mongodump --archive --oplog` (point in time, uncompressed so restic deduplicates night to night) streamed into `restic backup --stdin`, tagged `qhhoj-db` (+ `oplog`); a failed dump fails the run and its partial snapshot is forgotten. Files are tagged `qhhoj-files`. `pdf-cache` is a cache; Redis holds no durable state (queue truth is Mongo).
+- Retention per repository and tag: 7 daily, 4 weekly, 6 monthly, pruned nightly; on Sundays `restic check --read-data-subset 5%`.
+- Failure: the unit ends `failed` (`systemctl --failed`, `journalctl -u qhhoj-backup`); with `HEALTHCHECK_URL` set (healthchecks.io or alike) it is pinged at start, success and `/fail`, and a missed night alerts too.
+- Secrets: keep `/etc/qhhoj/env` (at least `ENCRYPTION_KEY`, `TOKEN_SECRET`) and `RESTIC_PASSWORD` in an offline secret store, separate from the backups: encrypted settings and 2FA secrets in a dump are useless without the same `ENCRYPTION_KEY`, and no snapshot opens without `RESTIC_PASSWORD`.
+
+### Install (once, as root)
+
+1. `apt install restic` (Ubuntu 24.04: 0.16.4).
+2. A read-only backup user. The built-in role `backup` reads every database and the oplog, which `--oplog` needs (the app user `qhhoj` cannot): `mongosh "mongodb://admin@127.0.0.1:27017/?authSource=admin&replicaSet=rs0"` (password in `/root/qhhoj-secrets/mongo.env`), then `db.getSiblingDB('admin').createUser({ user: 'qhhoj-backup', pwd: passwordPrompt(), roles: [{ role: 'backup', db: 'admin' }] })`; add its password to `/root/qhhoj-secrets/mongo.env`.
+3. Files: re-run `install-host.sh` from a fresh copy of `deploy/`, or only `install -m 755 backup/qhhoj-backup /usr/local/sbin/qhhoj-backup && install -m 755 backup/restore-test.sh /usr/local/sbin/qhhoj-backup-restore-test && install -m 644 backup/qhhoj-backup.service backup/qhhoj-backup.timer /etc/systemd/system/ && systemctl daemon-reload`.
+4. `install -m 600 -o root -g root backup/backup.env.example /etc/qhhoj/backup.env` and fill it: `RESTIC_PASSWORD` (`openssl rand -base64 32`), `MONGO_BACKUP_PASSWORD`, `OFFSITE_REPO` and its backend credentials.
+5. `set -a; . /etc/qhhoj/backup.env; set +a; restic init -r "$LOCAL_REPO"`, and `restic init -r "$OFFSITE_REPO"` when set.
+6. First run by hand: `systemctl start qhhoj-backup.service` (it blocks until done; the first offsite run uploads all of `problem-data`), then `journalctl -u qhhoj-backup -n 50` ends with `qhhoj-backup: done`.
+7. `qhhoj-backup-restore-test` (and `qhhoj-backup-restore-test offsite`) ends with `restore-test: ok`.
+8. `systemctl enable --now qhhoj-backup.timer`; `systemctl list-timers qhhoj-backup.timer` shows the next 03:30 run.
+
+### Check and list
+
+- Monthly, right after a night's run: `qhhoj-backup-restore-test [local|offsite]` restores the newest database snapshot into a throwaway `mongod` (port `RESTORE_TEST_PORT`, under `RESTORE_TEST_DIR`, 0.25 GiB cache, removed afterwards) and compares each collection's count with the live database (`RESTORE_TEST_TOLERANCE_PCT`, at least 10 documents; a missing collection fails).
+- Snapshots: `set -a; . /etc/qhhoj/backup.env; set +a; restic -r "$LOCAL_REPO" snapshots --tag qhhoj-db` (offsite: `-r "$OFFSITE_REPO"`, `--tag qhhoj-files` for files); `restic -r ... ls <id>` lists a files snapshot.
+
+### Restore the database
+
+Always into a scratch `mongod` first, then copy only the `qhhoj` database into the live one (the archive is the whole instance, admin users included, and `mongorestore` refuses namespace filters with `--oplogReplay`). With the env loaded as above:
+
+1. Scratch: `install -d -m 700 /backup/restore/db && mongod --dbpath /backup/restore/db --port 27999 --bind_ip 127.0.0.1 --wiredTigerCacheSizeGB 0.5 --fork --logpath /backup/restore/mongod.log`.
+2. `restic -r "$LOCAL_REPO" dump --tag qhhoj-db latest /qhhoj-mongo.archive | mongorestore --port 27999 --archive --drop --oplogReplay` (a snapshot id instead of `--tag qhhoj-db latest` for an older night; no `--oplogReplay` for a snapshot without the `oplog` tag).
+3. Check it in `mongosh --port 27999 qhhoj` (counts, the newest submission).
+4. `systemctl stop qhhoj.target`, then `mongodump --port 27999 --db qhhoj --archive | mongorestore --config <(printf "uri: '%s'\n" "$(sed -n 's/^MONGO_URL=//p' /etc/qhhoj/env)") --archive --drop --nsInclude 'qhhoj.*'` (the app user; the URL stays out of argv), `systemctl start qhhoj.target`.
+5. `mongod --dbpath /backup/restore/db --shutdown && rm -rf /backup/restore`.
+
+### Restore files (offsite)
+
+- Part of a tree, e.g. one problem: `restic -r "$OFFSITE_REPO" restore latest --tag qhhoj-files --target /backup/restore-files --include /srv/qhhoj/problem-data/<code>`, check it, then `rsync -a --chown=987:987 /backup/restore-files/srv/qhhoj/problem-data/<code>/ /srv/qhhoj/problem-data/<code>/` and remove `/backup/restore-files`.
+- A whole tree goes back in place (the disk has no room for a second copy of `problem-data`): `restic -r "$OFFSITE_REPO" restore latest --tag qhhoj-files --target / --include /srv/qhhoj/problem-data`. It overwrites the files the snapshot has and leaves newer ones; owners and modes come back as saved (987, 2750).
 
 ## Rollback
 
