@@ -39,7 +39,25 @@ export function pythonRound(value: number, digits: number): number {
   return Number(lastDigit) % 2 === 0 ? Number(towardZero) : rounded;
 }
 
-/** Legacy `on_grading_end`: time and memory are the largest over cases; plain cases add their points and totals; a batch adds its smallest points and its largest total; sums are rounded to one decimal. */
+/** Within float noise of the total counts as every point earned. */
+const FULL_EPSILON = 1e-9;
+
+/** Sums to one decimal like legacy, except that only every point earned reaches the total: a near miss (9.96 of 10) stays a tenth below it, and a full sum takes the rounded total exactly. */
+function roundedSums(
+  points: number,
+  total: number,
+): Pick<CaseTotals, 'casePoints' | 'caseTotal'> {
+  const caseTotal = pythonRound(total, 1);
+  if (points >= total - FULL_EPSILON)
+    return { casePoints: caseTotal, caseTotal };
+  const tenthBelowTotal = Math.max(0, Math.round(caseTotal * 10) - 1) / 10;
+  return {
+    casePoints: Math.min(pythonRound(points, 1), tenthBelowTotal),
+    caseTotal,
+  };
+}
+
+/** Legacy `on_grading_end`: time and memory are the largest over cases; plain cases add their points and totals; a batch adds its smallest points and its largest total; sums are rounded by `roundedSums`. */
 export function gradeCases(cases: readonly GradableCase[]): CaseTotals {
   let time = 0;
   let memory = 0;
@@ -75,15 +93,14 @@ export function gradeCases(cases: readonly GradableCase[]): CaseTotals {
     time,
     memory,
     result: CASE_SEVERITY[severity],
-    casePoints: pythonRound(points, 1),
-    caseTotal: pythonRound(total, 1),
+    ...roundedSums(points, total),
   };
 }
 
 /** Decimals a submission's points (and an ioi16 cell) keep: legacy `round(…, 3)`. */
 export const POINTS_DECIMALS = 3;
 
-/** Legacy: `round(casePoints / caseTotal × problem.points, 3)`, and 0 for a non-partial problem unless that is exactly full marks. 2b's rescore uses this too. */
+/** Legacy: `round(casePoints / caseTotal × problem.points, 3)`, and 0 for a non-partial problem unless the cases earned their whole total (as `IS_SOLVED`; the 3-decimal rounding alone may reach full marks). 2b's rescore uses this too. */
 export function submissionPoints(
   casePoints: number,
   caseTotal: number,
@@ -94,5 +111,5 @@ export function submissionPoints(
     caseTotal > 0
       ? pythonRound((casePoints / caseTotal) * problemPoints, POINTS_DECIMALS)
       : 0;
-  return isPartial || points === problemPoints ? points : 0;
+  return isPartial || casePoints >= caseTotal ? points : 0;
 }

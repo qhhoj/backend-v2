@@ -80,6 +80,30 @@ describe('gradeCases', () => {
       casePoints: 0.2,
       caseTotal: 0.8,
     }));
+  it('keeps a near miss a tenth below the total instead of rounding it up to full', () => {
+    const nineFull = Array.from({ length: 9 }, () => plain(1, 1));
+    expect(gradeCases([...nineFull, plain(0.96, 1)])).toMatchObject({
+      result: 'AC',
+      casePoints: 9.9,
+      caseTotal: 10,
+    });
+    expect(
+      gradeCases([...nineFull, plain(0.96, 1, { status: 'WA' })]),
+    ).toMatchObject({ result: 'WA', casePoints: 9.9, caseTotal: 10 });
+  });
+  it('keeps a near miss below a fractional total that rounds down', () =>
+    expect(gradeCases([plain(9.91, 9.92)])).toMatchObject({
+      casePoints: 9.8,
+      caseTotal: 9.9,
+    }));
+  it('gives full marks to every point earned despite float noise or a fractional total', () => {
+    const tenths = Array.from({ length: 100 }, () => plain(0.1, 0.1));
+    expect(gradeCases(tenths)).toMatchObject({ casePoints: 10, caseTotal: 10 });
+    expect(gradeCases([plain(9.96, 9.96)])).toMatchObject({
+      casePoints: 10,
+      caseTotal: 10,
+    });
+  });
   it('grades a submission without cases as SC with nothing earned (legacy)', () =>
     expect(gradeCases([])).toEqual({
       time: 0,
@@ -101,6 +125,20 @@ describe('gradeCases', () => {
       expect(casePoints).toBeLessThanOrEqual(caseTotal);
     }
   });
+  it('reaches the total exactly when every point was earned, for fractional points too', () => {
+    for (let seed = 1; seed <= 500; seed += 1) {
+      const cases = Array.from({ length: (seed % 9) + 1 }, (_unused, index) => {
+        const batch = index % 3 === 0 ? null : (index % 2) + 1;
+        // Cases of one batch share a total, so earning each case's total earns the batch's.
+        const total = (((seed * ((batch ?? index + 2) + 7)) % 97) + 1) / 7;
+        const earned = (seed * (index + 1)) % 11 === 0 ? 0.999 : 1;
+        return plain(total * earned, total, { batch });
+      });
+      const everyPoint = cases.every(({ points, total }) => points === total);
+      const { casePoints, caseTotal } = gradeCases(cases);
+      expect(casePoints >= caseTotal).toBe(everyPoint);
+    }
+  });
 });
 
 describe('submissionPoints', () => {
@@ -109,6 +147,14 @@ describe('submissionPoints', () => {
   it('keeps a full non-partial result and zeroes anything less', () => {
     expect(submissionPoints(7, 7, 100, false)).toBe(100);
     expect(submissionPoints(6.9, 7, 100, false)).toBe(0);
+  });
+  it('zeroes a non-partial result that only rounds to full marks', () =>
+    expect(submissionPoints(999.9, 1000, 1, false)).toBe(0));
+  it('scores a near miss of 10 one-point cases below full marks', () => {
+    const nineFull = Array.from({ length: 9 }, () => plain(1, 1));
+    const { casePoints, caseTotal } = gradeCases([...nineFull, plain(0.96, 1)]);
+    expect(submissionPoints(casePoints, caseTotal, 1500, false)).toBe(0);
+    expect(submissionPoints(casePoints, caseTotal, 1500, true)).toBe(1485);
   });
   it('is zero without any total', () => {
     expect(submissionPoints(0, 0, 100, true)).toBe(0);

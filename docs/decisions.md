@@ -191,6 +191,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Org PP and member counts are recomputed by the `organization-points` job (coalesced per organization), queued by membership changes and by user-points recomputes that move a member's PP — one writer, like user points.
 - Rescore is queue-driven (`problem-rescore`), not an in-process event — the worker cannot reach the API's `ProblemEvents`; writes filter on the case totals read, so a rejudge that finished meanwhile keeps its points.
 - Rescore uses `submissionPoints` (round after the ratio times points, as at grading end) — legacy rounded the ratio first; one rounding rule everywhere.
+- Case sums are still rounded to one decimal, but only every point earned reaches the total: a near miss is capped a tenth below it, and a non-partial problem pays only when `casePoints >= caseTotal` (as `IS_SOLVED`) — legacy `round(…, 1)` stored 9.96/10 (an AC with a 0.96 checker score, or a WA at 24/25 lines) as 10/10: full points, and solved for the AC.
 - `viewerStatus` is computed per page with one aggregate, not cached — no cache invalidation to get wrong.
 - Events are Redis pub/sub carrying ids and status only, published by whoever writes the status, fire-and-forget and skipped while Redis is not ready — a Redis problem never fails a write; streams are never the source of truth.
 - Status changes the bridge makes without a judge (start, resync) publish `queued` — open pages stay correct.
