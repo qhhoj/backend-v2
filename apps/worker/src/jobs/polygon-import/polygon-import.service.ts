@@ -3,7 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { createReadStream } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
-import { StorageService, writeFileAtomically } from '@libs/common';
+import { AppError, StorageService, writeFileAtomically } from '@libs/common';
 import {
   dataFileNamesOf,
   emptyProblemData,
@@ -125,6 +125,37 @@ interface ImportContext {
   local: LocalSettings | null;
   tracker: ImportTracker;
 }
+
+/** What `commitWithData` needs beside the job: the read package, its staged files, and where the import goes. */
+interface CommitInput {
+  read: ReadPackage;
+  staged: StagedFile[];
+  target: ImportTarget;
+  tracker: ImportTracker;
+}
+
+/** The committed import and, when a data step failed after the commit, why it needs attention. */
+interface WrittenImport {
+  applied: AppliedImport;
+  attention: PolygonImportResult['attention'];
+}
+
+/** How long an import waits for an API data write that holds the problem's data lock; a test may shorten it. */
+export const IMPORT_DATA_LOCK = { waitSeconds: 60 };
+
+/** `withDataWrite` refused the lock: another data change held it for the whole wait. */
+const isLockBusy = (error: unknown): boolean =>
+  error instanceof AppError &&
+  error.status === 409 &&
+  (error.extra?.issues as Array<{ code: string }> | undefined)?.some(
+    (issue) => issue.code === 'busy',
+  ) === true;
+
+const dataLockBusyError = () =>
+  new PolygonImportError(
+    "another change to this problem's data is in progress, try again",
+    'problem_changed',
+  );
 
 /** `params.step` names the step that failed, as the message does. */
 const needsAttention = (
@@ -325,7 +356,7 @@ export class PolygonImportService {
   }
 
   /**
-   * Parse, render and compile everything that can fail without touching the database; then stage the data files, run the transaction, and only after it committed give the files their final names and write init.yml.
+   * Parse, render and compile everything that can fail without touching the database; then stage the data files, and under the data lock run the transaction and only after it committed give the files their final names and write init.yml.
    * Before the commit a failure removes the images and staged files it saved; after it, Mongo is authoritative and nothing it references is removed.
    */
   private async importPackage(
@@ -349,11 +380,13 @@ export class PolygonImportService {
         : repackTests(pkg, read.tests);
       staged.push(...(await this.stageFiles(job.code, testsArchive, read)));
       tracker.enter('saving');
-      const applied = await this.repository.apply(job, read.imported, target);
-      committed = true;
-      tracker.enter('finishing');
-      const attention = await this.afterCommit(job, applied, staged, read);
-      return resultOf(job, applied, read, attention);
+      const written = await this.commitWithData(
+        job,
+        { read, staged, target, tracker },
+        () => (committed = true),
+      );
+      const attention = await this.afterDataWrite(job, written, read);
+      return resultOf(job, written.applied, read, attention);
     } catch (error) {
       if (!committed) await this.undo(job, savedImages, staged);
       throw error;
@@ -484,25 +517,72 @@ export class PolygonImportService {
     return statements;
   }
 
-  /** Rescore, then the file steps; a failure here leaves the problem imported, so it is logged with its cause and comes back as `attention` (the job completes: an import that needs a repair, never "Import failed"). */
-  private async afterCommit(
+  /**
+   * The data lock is taken before the transaction and held until the stamp, so no API data write lands between the commit and the files: one that holds the lock is waited for (`IMPORT_DATA_LOCK`), and one still holding it fails the import before anything changed.
+   * The data steps run under the judge's writing marker, ending with the stamp; a failure after the commit comes back as `attention`.
+   */
+  private async commitWithData(
     job: PolygonImportJob,
-    applied: AppliedImport,
-    staged: StagedFile[],
-    read: ReadPackage,
+    { read, staged, target, tracker }: CommitInput,
+    onCommitted: () => void,
+  ): Promise<WrittenImport> {
+    const write = async (): Promise<WrittenImport> => {
+      const applied = await this.repository.apply(job, read.imported, target);
+      onCommitted();
+      tracker.enter('finishing');
+      const attention = await this.attentionOnFailure(job.code, async () => {
+        await this.runSteps(
+          job.code,
+          this.dataSteps(job.code, applied, staged, read),
+        );
+        await this.recordDataBytes(applied.problemId, job.code);
+      });
+      return { applied, attention };
+    };
+    try {
+      return await this.dataFiles.withDataWrite(job.code, write, {
+        waitSeconds: IMPORT_DATA_LOCK.waitSeconds,
+      });
+    } catch (error) {
+      throw isLockBusy(error) ? dataLockBusyError() : error;
+    }
+  }
+
+  /** Rescore, then (when the data files are in place) the cached PDFs are dropped and the checker and interactor are compiled on a judge. */
+  private async afterDataWrite(
+    job: PolygonImportJob,
+    { applied, attention }: WrittenImport,
+    read: Pick<ReadPackage, 'imported'>,
   ): Promise<PolygonImportResult['attention']> {
     // Points, partial and the cases may all have changed; a create has no submissions yet. Never throws: the import stands.
     if (job.mode === 'update')
       await notifyRescore(this.rescoreQueue, applied.problemId, this.logger);
+    if (attention) return attention;
+    return this.attentionOnFailure(job.code, async () => {
+      await this.runSteps(job.code, [
+        ['dropping the cached PDFs', () => this.dropPdfs(job.code)],
+      ]);
+      await this.sourceChecks.checkAfterImport(
+        applied.problemId,
+        read.imported,
+      );
+    });
+  }
+
+  /** A failure after the commit leaves the problem imported, so it is logged with its cause and comes back as `attention` (the job completes: an import that needs a repair, never "Import failed"). */
+  private async attentionOnFailure(
+    code: string,
+    work: () => Promise<void>,
+  ): Promise<PolygonImportResult['attention']> {
     try {
-      await this.finish(job.code, applied, staged, read);
+      await work();
       return undefined;
     } catch (error) {
       // `runSteps` logged its own failures with their cause.
       if (error instanceof PolygonImportError)
         return needsAttention(error.message, error.params);
       this.logger.error(
-        `Polygon import of ${job.code}: committed, but the data write failed`,
+        `Polygon import of ${code}: committed, but the data write failed`,
         error instanceof Error ? error.stack : String(error),
       );
       return needsAttention(
@@ -510,23 +590,6 @@ export class PolygonImportService {
         { step: 'writing its data files' },
       );
     }
-  }
-
-  /** The data steps run under the judge's writing marker, ending with the stamp; then the checker and interactor are compiled on a judge. */
-  private async finish(
-    code: string,
-    applied: AppliedImport,
-    staged: StagedFile[],
-    read: Pick<ReadPackage, 'yaml' | 'imported'>,
-  ): Promise<void> {
-    await this.dataFiles.withDataWrite(code, async () => {
-      await this.runSteps(code, this.dataSteps(code, applied, staged, read));
-      await this.recordDataBytes(applied.problemId, code);
-    });
-    await this.runSteps(code, [
-      ['dropping the cached PDFs', () => this.dropPdfs(code)],
-    ]);
-    await this.sourceChecks.checkAfterImport(applied.problemId, read.imported);
   }
 
   /** Measured under the data lock, after the files are in place. The import stands when measuring fails: the backfill and the next data write fix the number. */

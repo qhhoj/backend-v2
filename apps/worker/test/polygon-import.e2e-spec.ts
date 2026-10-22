@@ -26,6 +26,7 @@ import { PNG } from '@libs/problems/testing';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import { PolygonImportProcessor } from '../src/jobs/polygon-import/polygon-import.processor';
 import { PolygonImportRepository } from '../src/jobs/polygon-import/polygon-import.repository';
+import { IMPORT_DATA_LOCK } from '../src/jobs/polygon-import/polygon-import.service';
 import { seedGraded, seedUser } from './effects-fixtures';
 import { buildPolygonPackage, properties } from './polygon-fixtures';
 import type { PolygonFixture } from './polygon-fixtures';
@@ -887,6 +888,76 @@ describe('PolygonImportProcessor', () => {
       expect(imported).toBe(1);
     },
   );
+
+  describe('while an API data write holds the data lock', () => {
+    const stampOf = (code: string) =>
+      readFileSync(join(dataDirectory(code), '.data-version'), 'utf8');
+    /** Holds the problem's data lock, as an API upload does, until `release` is called. */
+    const holdDataLock = async (code: string) => {
+      const dataFiles = worker.module.get(ProblemDataFilesService);
+      let release!: () => void;
+      let entered!: () => void;
+      const holding = new Promise<void>((resolve) => (entered = resolve));
+      const held = dataFiles.withDataWrite(code, () => {
+        entered();
+        return new Promise<void>((resolve) => (release = resolve));
+      });
+      await holding;
+      return { dataFiles, held, release: () => release() };
+    };
+
+    beforeAll(async () => {
+      await processor.process(job({ code: 'locked' }));
+    });
+    afterAll(async () => {
+      await worker.problems.deleteOne({ code: 'locked' });
+      rmSync(dataDirectory('locked'), { recursive: true, force: true });
+    });
+
+    it('waits for the lock, then commits and stamps the data it wrote', async () => {
+      const { dataFiles, held, release } = await holdDataLock('locked');
+      const withDataWrite = dataFiles.withDataWrite.bind(dataFiles);
+      // The import reaches the lock while it is held; it is released 300 ms later.
+      const reached = jest
+        .spyOn(dataFiles, 'withDataWrite')
+        .mockImplementationOnce((...args) => {
+          setTimeout(release, 300);
+          return withDataWrite(...args);
+        });
+      const result = await processor.process(bareUpdate({ code: 'locked' }));
+      reached.mockRestore();
+      await held;
+      expect(result).not.toHaveProperty('attention');
+      const { dataVersion } = (await worker.problems.findOne({
+        code: 'locked',
+      }))!;
+      expect(dataVersion).toBe(2);
+      expect(stampOf('locked')).toBe('2\n');
+    });
+
+    it('fails before the commit when the lock stays held past the wait, changing nothing', async () => {
+      const before = (await worker.problems.findOne({ code: 'locked' }))!;
+      const filesBefore = readdirSync(dataDirectory('locked')).sort();
+      const shortWait = jest.replaceProperty(
+        IMPORT_DATA_LOCK,
+        'waitSeconds',
+        0.5,
+      );
+      const { held, release } = await holdDataLock('locked');
+      const importing = processor.process(bareUpdate({ code: 'locked' }));
+      await expect(importing).rejects.toThrow(
+        `${POLYGON_ERROR_PREFIX}another change to this problem's data is in progress, try again`,
+      );
+      release();
+      await held;
+      shortWait.restore();
+      expect(await worker.problems.findOne({ code: 'locked' })).toMatchObject({
+        dataVersion: before.dataVersion,
+      });
+      expect(readdirSync(dataDirectory('locked')).sort()).toEqual(filesBefore);
+      expect(stampOf('locked')).toBe(`${before.dataVersion}\n`);
+    });
+  });
 
   it('refuses an update of a mirror problem', async () => {
     await worker.problems.updateOne(

@@ -43,7 +43,8 @@ export class ProblemEditingController {
    * needs `judge.high_problem_timelimit` (400 `time_limit_too_high`). Writes a
    * revision, charges the organization's quota for organization-private problems
    * (403 `quota_exceeded`) and returns the new problem as `GET /problems/{code}`
-   * would. A taken or reserved code is 400 `code_taken`.
+   * would. A taken or reserved code is 400 `code_taken`; a code whose test
+   * data directory already exists is 400 `data_directory_taken`.
    */
   @RequirePermission('judge.add_problem')
   @Post()
@@ -156,8 +157,9 @@ export class ProblemEditingController {
    * data, translations, editorial, people and counters are not copied. The
    * caller becomes the only curator and the clone starts private. Charges the
    * organization's quota when the source is organization-private (403
-   * `quota_exceeded`); a taken code is 400 `code_taken`. Returns the new
-   * problem.
+   * `quota_exceeded`); a taken code is 400 `code_taken`, and a code whose
+   * test data directory already exists is 400 `data_directory_taken`. Returns
+   * the new problem.
    */
   @RequirePermission('judge.clone_problem')
   @Post(':code/clone')

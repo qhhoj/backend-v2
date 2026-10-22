@@ -2,13 +2,17 @@ import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '@libs/auth';
 import { BASE_STATEMENT_LANGUAGE, uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
-import { fieldDiff } from '@libs/problems';
+import { fieldDiff, ProblemDataFilesService } from '@libs/problems';
 import { chargedOrganization } from '../../organizations/quota/quota-charge';
 import { QuotaService } from '../../organizations/quota/quota.service';
 import { CloneProblemDto } from './dto/clone.dto';
 import { ProblemDetailResponse } from '../core/dto/problem-detail.response';
 import { ProblemEditPolicyService } from './problem-edit-policy.service';
-import { withCodeTaken, withoutRenderedHtml } from './problem-edit-fields';
+import {
+  assertNoDataDirectory,
+  withCodeTaken,
+  withoutRenderedHtml,
+} from './problem-edit-fields';
 import { ProblemsRepository } from '../core/problems.repository';
 import { ProblemsService } from '../core/problems.service';
 import { RevisionsRepository } from '../core/revisions.repository';
@@ -82,6 +86,7 @@ export class ProblemCloneService {
     private readonly problems: ProblemsService,
     private readonly policy: ProblemEditPolicyService,
     private readonly quota: QuotaService,
+    private readonly dataFiles: ProblemDataFilesService,
   ) {}
 
   async clone(
@@ -90,6 +95,7 @@ export class ProblemCloneService {
     dto: CloneProblemDto,
   ): Promise<ProblemDetailResponse> {
     const source = await this.policy.editableProblem(auth.principal, code);
+    await assertNoDataDirectory(this.dataFiles, dto.code);
     const copied = Object.fromEntries(
       Object.entries(source.toJSON()).filter(([field]) =>
         CLONE_COPIED_FIELDS.includes(field),
