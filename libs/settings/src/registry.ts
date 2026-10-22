@@ -9,6 +9,7 @@ import {
   optionalTextType,
   optionalUrlType,
   optionalUuidType,
+  originOf,
   smtpUrlType,
   timeZoneType,
   webhooksType,
@@ -23,6 +24,8 @@ export interface SettingDefinition<Value> {
   secret: boolean | readonly string[];
   /** The value was stored unsealed before it became a whole-value secret: a stored string that does not open is that plain value (the next write seals it), and old revision rows are redacted when read. */
   storedPlainBefore?: true;
+  /** Secrets that are credentials for this URL setting: a write that moves the URL to another origin (or empties it) resets them in the same transaction, so a credential never follows the URL to a host it was not entered for. */
+  originBoundSecrets?: readonly string[];
   /** How a PATCH combines with the stored value; absent: the patch replaces it. Method syntax keeps definitions assignable to `SettingDefinition<unknown>`. */
   combine?(current: Value, patch: unknown): unknown;
 }
@@ -197,14 +200,15 @@ export const SETTINGS = {
     type: optionalServiceUrlType,
     default: '',
     description:
-      'Base URL of the PCD VJudge API that judges external (mirror) problems on remote OJs; empty: external judging is off.',
+      'Base URL of the PCD VJudge API that judges external (mirror) problems on remote OJs; empty: external judging is off. Moving it to another origin clears externalJudge.apiToken.',
     secret: false,
+    originBoundSecrets: ['externalJudge.apiToken'],
   }),
   'externalJudge.apiToken': define({
     type: optionalTextType(500),
     default: '',
     description:
-      'Bearer token for externalJudge.baseUrl; empty: external judging is off.',
+      'Bearer token for externalJudge.baseUrl (set the URL first: changing its origin clears the token); empty: external judging is off.',
     secret: true,
   }),
   'externalJudge.maxInFlight': define({
@@ -264,3 +268,13 @@ export const SETTING_KEYS = Object.keys(SETTINGS) as SettingKey[];
 
 export const definitionOf = (key: string): SettingDefinition<unknown> | null =>
   Object.hasOwn(SETTINGS, key) ? SETTINGS[key as SettingKey] : null;
+
+/** The secrets a write of `key` from `before` to `next` must reset: its `originBoundSecrets` when the URL moved to another origin. */
+export const secretsUnboundBy = (
+  key: string,
+  before: unknown,
+  next: unknown,
+): SettingKey[] =>
+  originOf(before) === originOf(next)
+    ? []
+    : ((definitionOf(key)?.originBoundSecrets ?? []) as SettingKey[]);

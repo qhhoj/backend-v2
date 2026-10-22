@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -133,6 +134,34 @@ describe('settings', () => {
       clientId: 'new-id',
       clientSecret: 'new-secret',
     });
+  });
+
+  it('clears the external judge token when its base URL moves to another origin', async () => {
+    const actor = randomUUID();
+    const tokenRevisions = () =>
+      revisions.find({ key: 'externalJudge.apiToken' }).sort({ _id: -1 });
+    await settings.set('externalJudge.baseUrl', 'https://pcd.test/base', null);
+    await settings.set('externalJudge.apiToken', 'tok-1', null);
+    await settings.set('externalJudge.baseUrl', 'https://pcd.test/v2', actor);
+    expect(settings.get('externalJudge.apiToken')).toBe('tok-1');
+
+    await settings.set('externalJudge.baseUrl', 'https://other.test/v2', actor);
+    expect(settings.get('externalJudge.apiToken')).toBe('');
+    const [cleared] = await tokenRevisions().lean();
+    expect(cleared).toMatchObject({
+      before: { set: true },
+      after: { set: false },
+      changedFields: ['value'],
+    });
+    expect(String(cleared.actor)).toBe(actor);
+    // a URL change that finds the token empty writes no token revision
+    const count = await tokenRevisions().countDocuments();
+    await settings.set('externalJudge.baseUrl', 'https://third.test', actor);
+    expect(await tokenRevisions().countDocuments()).toBe(count);
+
+    await settings.set('externalJudge.apiToken', 'tok-2', null);
+    await settings.set('externalJudge.baseUrl', '', actor);
+    expect(settings.get('externalJudge.apiToken')).toBe('');
   });
 
   it('writes nothing for an invalid patch', async () => {

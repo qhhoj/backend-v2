@@ -5,6 +5,7 @@ import {
   ArrayUnique,
   IsBoolean,
   IsInt,
+  IsNotIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -16,6 +17,9 @@ import {
 
 export const MAX_MAPPED_LANGUAGES = 200;
 const MAX_TEXT = 100;
+/** The OJ and problem id are URL path segments on the external judge: a dot segment would resolve to another API path. */
+const DOT_SEGMENTS = ['.', '..'];
+const NOT_DOT_SEGMENT = { message: 'Must not be "." or "..".' };
 
 export class ExternalLanguageDto {
   /** Site language id. */
@@ -30,9 +34,15 @@ export class PutExternalJudgeDto {
   /** Whether the problem is judged by the external judge. */
   @IsBoolean() isActive!: boolean;
   /** The external judge's OJ id (`CodeForces`, `QOJ`, ...). */
-  @IsString() @Length(1, MAX_TEXT) oj!: string;
+  @IsString()
+  @Length(1, MAX_TEXT)
+  @IsNotIn(DOT_SEGMENTS, NOT_DOT_SEGMENT)
+  oj!: string;
   /** The problem id on that OJ. */
-  @IsString() @Length(1, MAX_TEXT) problemId!: string;
+  @IsString()
+  @Length(1, MAX_TEXT)
+  @IsNotIn(DOT_SEGMENTS, NOT_DOT_SEGMENT)
+  problemId!: string;
   /** The remote title from a verify; stamps the link as verified. */
   @IsOptional() @IsString() @MaxLength(MAX_TEXT * 3) title?: string;
   /** Site languages and the remote language each is sent as; at most one entry per site language. */
@@ -57,6 +67,12 @@ export class ExternalJudgeSearchDto {
 }
 
 export class ExternalJudgeVerifyDto {
-  @IsString() @Length(1, MAX_TEXT) oj!: string;
-  @IsString() @Length(1, MAX_TEXT) problemId!: string;
+  @IsString()
+  @Length(1, MAX_TEXT)
+  @IsNotIn(DOT_SEGMENTS, NOT_DOT_SEGMENT)
+  oj!: string;
+  @IsString()
+  @Length(1, MAX_TEXT)
+  @IsNotIn(DOT_SEGMENTS, NOT_DOT_SEGMENT)
+  problemId!: string;
 }

@@ -171,4 +171,9 @@ export class ExternalJudgeClient {
   }
 }
 
-const segment = (value: string): string => encodeURIComponent(value);
+/** One escaped path segment; `.` and `..` are refused, as `new URL` would resolve them to another API path (no problem or run has such an id). */
+function segment(value: string): string {
+  if (value === '.' || value === '..')
+    throw new ExternalJudgeError('external_judge_not_found');
+  return encodeURIComponent(value);
+}

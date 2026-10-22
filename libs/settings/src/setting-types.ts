@@ -174,6 +174,12 @@ export const optionalServiceUrlType: SettingType<string> = {
   },
 };
 
+/** The origin of a stored URL setting; null for an empty or unparsable one. */
+export const originOf = (value: unknown): string | null =>
+  typeof value === 'string' && URL.canParse(value)
+    ? new URL(value).origin
+    : null;
+
 export const smtpUrlType: SettingType<string> = {
   parse: (raw) =>
     typeof raw === 'string' &&
