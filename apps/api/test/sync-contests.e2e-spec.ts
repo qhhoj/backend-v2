@@ -114,6 +114,55 @@ afterAll(() => api.teardown());
       );
     });
 
+    it("keeps the per-problem settings an organiser set through a changing PUT, and drops a removed problem's row", async () => {
+      const { bearer } = await makeClient();
+      const key = newKey();
+      const body = payload();
+      await put(bearer, key, body).expect(200);
+      await api.contests.updateOne(
+        { key },
+        {
+          $set: {
+            'problems.0.isPretested': true,
+            'problems.0.maxSubmissions': 3,
+            'problems.0.outputPrefixOverride': 1024,
+            'problems.1.maxSubmissions': 7,
+          },
+        },
+      );
+      const settingsOf = async () =>
+        (await api.contests.findOne({ key }).lean())!.problems.map(
+          ({ isPretested, maxSubmissions, outputPrefixOverride }) => ({
+            isPretested,
+            maxSubmissions,
+            outputPrefixOverride,
+          }),
+        );
+      const first = {
+        isPretested: true,
+        maxSubmissions: 3,
+        outputPrefixOverride: 1024,
+      };
+
+      expect(
+        dataOf<Upsert>(await put(bearer, key, body).expect(200)).action,
+      ).toBe('unchanged');
+      const renamed = { ...body, name: 'Renamed' };
+      expect(
+        dataOf<Upsert>(await put(bearer, key, renamed).expect(200)).action,
+      ).toBe('updated');
+      expect(await settingsOf()).toEqual([
+        first,
+        { isPretested: false, maxSubmissions: 7, outputPrefixOverride: null },
+      ]);
+
+      const onlyFirst = { ...renamed, problems: [body.problems[0]] };
+      expect(
+        dataOf<Upsert>(await put(bearer, key, onlyFirst).expect(200)).action,
+      ).toBe('updated');
+      expect(await settingsOf()).toEqual([first]);
+    });
+
     it('answers 409 conflict with an issue when a parallel create of the same key wins', async () => {
       const { bearer } = await makeClient();
       const key = newKey();

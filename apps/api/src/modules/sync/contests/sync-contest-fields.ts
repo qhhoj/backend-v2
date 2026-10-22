@@ -1,14 +1,37 @@
 import { unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
-import type { Contest } from '@libs/database';
+import type { Contest, ContestProblem } from '@libs/database';
 import type { UpdateContestDto } from '../../contests/editing/dto/contest-edit.dto';
 import type { SyncContestDto } from './dto/sync-contest.dto';
 
-/** The request as the contest edit service's DTO, every field explicit: a PUT replaces, so an omitted optional field returns to its default and an identical resend compares equal. */
+/** Per-problem settings sync does not carry; people set them in the editor. */
+type PeopleSetProblemFields = Pick<
+  ContestProblem,
+  'isPretested' | 'outputPrefixOverride' | 'maxSubmissions'
+>;
+
+/** The stored rows' people-set settings, by problem id. */
+const peopleSetFieldsOf = (
+  stored: readonly ContestProblem[],
+): Map<string, PeopleSetProblemFields> =>
+  new Map(
+    stored.map((row) => [
+      uuidStr(row.problem),
+      {
+        isPretested: row.isPretested,
+        outputPrefixOverride: row.outputPrefixOverride,
+        maxSubmissions: row.maxSubmissions,
+      },
+    ]),
+  );
+
+/** The request as the contest edit service's DTO, every synced field explicit: a PUT replaces, so an omitted optional field returns to its default and an identical resend compares equal. A problem still in the contest keeps the settings people set on it (`storedProblems`). */
 export function toEditDto(
   dto: SyncContestDto,
   problemIds: ReadonlyMap<string, string>,
+  storedProblems: readonly ContestProblem[] = [],
 ): UpdateContestDto {
+  const peopleSet = peopleSetFieldsOf(storedProblems);
   return {
     name: dto.name,
     description: dto.description ?? '',
@@ -18,11 +41,15 @@ export function toEditDto(
     frozenLastMinutes: dto.frozenLastMinutes ?? 0,
     formatName: dto.formatName ?? 'default',
     formatConfig: dto.formatConfig ?? {},
-    problems: dto.problems.map((entry) => ({
-      problem: problemIds.get(entry.code)!,
-      points: entry.points,
-      partial: entry.partial ?? true,
-    })),
+    problems: dto.problems.map((entry) => {
+      const problem = problemIds.get(entry.code)!;
+      return {
+        problem,
+        points: entry.points,
+        partial: entry.partial ?? true,
+        ...peopleSet.get(problem),
+      };
+    }),
   };
 }
 
