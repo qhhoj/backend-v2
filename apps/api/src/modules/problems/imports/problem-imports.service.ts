@@ -197,6 +197,7 @@ export class ProblemImportsService {
     const options = requestedOptions(principal, query);
     if (query.mode === 'update') {
       const problem = await this.importableProblem(principal, query.code);
+      this.assertPeopleGates(principal, query, problem.toJSON());
       return {
         ...options,
         curators: uniqueIfAny(query.curators),
@@ -205,6 +206,10 @@ export class ProblemImportsService {
       };
     }
     const organizationId = await this.creationTarget(principal, query);
+    this.assertPeopleGates(principal, query, {
+      authors: [],
+      curators: [principal.userId],
+    });
     if (await this.isCodeTaken(query.code)) throw codeTakenError();
     const metered = meteredOrganizationOf(principal, organizationId);
     return {
@@ -214,6 +219,21 @@ export class ProblemImportsService {
       curators: unique([...(query.curators ?? []), principal.userId]),
       isFullMarkup: false,
     };
+  }
+
+  /** Authors and curators are staff fields (`judge.edit_all_problem`), as in the editor: without it a request may only repeat their `current` value (the stored problem, or a new problem's requester-only curators). */
+  private assertPeopleGates(
+    principal: AuthContext['principal'],
+    query: PolygonImportQueryDto,
+    current: Record<string, unknown>,
+  ): void {
+    const people = {
+      authors: uniqueIfAny(query.authors),
+      curators: uniqueIfAny(query.curators),
+    };
+    this.policy.assertFieldGates(principal, people, people, {
+      baseline: current,
+    });
   }
 
   /** Who may create, as `POST /problems` or `POST /organizations/{slug}/problems`: the organization's id (its rights and code prefix checked), or null for a site problem (`judge.add_problem`). */

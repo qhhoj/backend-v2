@@ -83,8 +83,8 @@ afterAll(() => api.teardown());
     beforeAll(() => api.reset());
     let catalog: Catalog;
     let importer: TestSession, plain: TestSession, admin: TestSession;
-    let creator: TestSession, otherImporter: TestSession;
-    let importerId: string, creatorId: string;
+    let creator: TestSession, otherImporter: TestSession, staff: TestSession;
+    let importerId: string, creatorId: string, staffId: string;
     let queue: Queue<PolygonImportJob>;
 
     beforeAll(async () => {
@@ -110,6 +110,16 @@ afterAll(() => api.teardown());
           })
         )._id,
       );
+      staffId = (
+        await createUserWith(api, 'staff', {
+          permissions: [
+            'judge.add_problem',
+            'judge.edit_own_problem',
+            'judge.edit_all_problem',
+          ],
+        })
+      )._id;
+      staff = await loginAs(api, staffId);
       plain = await loginAs(api, (await createUserWith(api, 'plain'))._id);
       admin = await loginAs(
         api,
@@ -218,14 +228,25 @@ afterAll(() => api.teardown());
     it('adds the requester to the given curators once', async () => {
       const jobId = jobIdOf(
         await upload(
-          `code=cur1&curators=${importerId}&curators=${creatorId}`,
-          creator,
+          `code=cur1&curators=${importerId}&curators=${staffId}`,
+          staff,
         ).expect(202),
       );
       expect((await queue.getJob(jobId))?.data.curators).toEqual([
         importerId,
-        creatorId,
+        staffId,
       ]);
+    });
+    it('lets a create without judge.edit_all_problem name only the requester as curator, and no author', async () => {
+      const before = storedPackages().length;
+      await upload(`code=cur2&curators=${creatorId}`, creator).expect(202);
+      await upload(`code=cur3&curators=${importerId}`, creator)
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      await upload(`code=cur4&authors=${importerId}`, creator)
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      expect(storedPackages()).toHaveLength(before + 1);
     });
     it("puts the requester's testcase limit in the job: 300, or 9999 with judge.create_mass_testcases", async () => {
       const massImporter = await loginAs(
@@ -314,7 +335,7 @@ afterAll(() => api.teardown());
       ).toHaveProperty('typeIds');
       expect(
         fieldsOf(
-          await upload(`code=x1&authors=${UNKNOWN_ID}`, creator).expect(400),
+          await upload(`code=x1&authors=${UNKNOWN_ID}`, staff).expect(400),
         ),
       ).toHaveProperty('authors');
       expect(storedPackages()).toHaveLength(before);
@@ -473,6 +494,32 @@ afterAll(() => api.teardown());
       });
       for (const key of ['authors', 'curators', 'groupId', 'typeIds'])
         expect(data).not.toHaveProperty(key);
+    });
+    it('refuses an update that changes the authors or curators without judge.edit_all_problem, storing nothing', async () => {
+      const before = storedPackages().length;
+      await upload(`code=mine&mode=update&curators=${creatorId}`, importer)
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      await upload(`code=mine&mode=update&authors=${creatorId}`, importer)
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      expect(storedPackages()).toHaveLength(before);
+      await upload(
+        `code=mine&mode=update&authors=${importerId}`,
+        importer,
+      ).expect(202);
+    });
+    it('lets judge.edit_all_problem replace the authors and curators of an update', async () => {
+      const jobId = jobIdOf(
+        await upload(
+          `code=mine&mode=update&authors=${creatorId}&curators=${creatorId}`,
+          staff,
+        ).expect(202),
+      );
+      expect((await queue.getJob(jobId))?.data).toMatchObject({
+        authors: [creatorId],
+        curators: [creatorId],
+      });
     });
     it('refuses a package without problem.xml or a non-zip and removes the file', async () => {
       const before = storedPackages().length;
