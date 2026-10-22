@@ -17,6 +17,10 @@ const waitFor = async (check: () => boolean, timeoutMs = 20000) => {
     if (Date.now() > end) throw new Error('timeout');
 };
 
+type SnapshotLoader = {
+  loadAll: (model: Model<Group>) => Promise<Group[]>;
+};
+
 describe('GroupsQuerier', () => {
   const permissionsOf = (ids: string[]) =>
     querier.groupsOf(ids).flatMap((group) => group.permissions);
@@ -63,6 +67,27 @@ describe('GroupsQuerier', () => {
       'judge.edit_own_problem',
       'judge.clone_problem',
     ]);
+  });
+
+  it('keeps a revocation the stream applied while a resync was loading', async () => {
+    const { _id } = await groups.create({
+      name: 'Setter',
+      permissions: ['judge.edit_own_problem', 'judge.clone_problem'],
+    });
+    await waitFor(() => permissionsOf([_id]).length === 2);
+    const loader = querier as unknown as SnapshotLoader;
+    const readSnapshot = loader.loadAll.bind(querier);
+    const revokeMidLoad = jest
+      .spyOn(loader, 'loadAll')
+      .mockImplementationOnce(async (model) => {
+        const snapshot = await readSnapshot(model);
+        await groups.updateOne({ _id }, { $set: { permissions: [] } });
+        await waitFor(() => permissionsOf([_id]).length === 0);
+        return snapshot;
+      });
+    await querier.resync();
+    revokeMidLoad.mockRestore();
+    expect(permissionsOf([_id])).toEqual([]);
   });
 
   it('keeps serving and recovers after resync', async () => {

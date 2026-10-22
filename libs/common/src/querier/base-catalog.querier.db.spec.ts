@@ -30,10 +30,11 @@ const languageNamed = (key: string) => ({
   extension: 'txt',
 });
 
-/** Runs `afterLoad` right after each snapshot load: the window in which a write must not be lost. */
+/** Runs `duringLoad` between reading a snapshot and installing it, and `afterLoad` right after each resync. */
 @Injectable()
 class WindowedQuerier extends BaseCatalogQuerier<Language> {
   afterLoad: () => Promise<void> = async () => {};
+  duringLoad: () => Promise<void> = async () => {};
 
   constructor(
     @InjectModel(Language.name) model: Model<Language>,
@@ -49,6 +50,12 @@ class WindowedQuerier extends BaseCatalogQuerier<Language> {
   async resync() {
     await super.resync();
     await this.afterLoad();
+  }
+
+  protected async loadAll<Doc>(model: Model<Doc>): Promise<Doc[]> {
+    const snapshot = await super.loadAll(model);
+    await this.duringLoad();
+    return snapshot;
   }
 }
 
@@ -90,6 +97,37 @@ describe('BaseCatalogQuerier', () => {
     const downtime = await languages.create(languageNamed('WHILE_DOWN'));
     await waitFor(() => querier.has(downtime._id));
     expect(watch.mock.calls.length).toBeGreaterThan(1);
+  });
+  /** Resyncs with `write` made after the snapshot is read, waiting until the stream has applied it to the live state. */
+  const resyncAroundWrite = async (
+    write: () => Promise<unknown>,
+    applied: () => boolean,
+  ) => {
+    querier.duringLoad = async () => {
+      querier.duringLoad = async () => {};
+      await write();
+      await waitFor(applied);
+    };
+    await querier.resync();
+  };
+
+  it('keeps a change the stream applied while a resync was loading', async () => {
+    const { _id } = await languages.create(languageNamed('BEFORE'));
+    await waitFor(() => querier.has(_id));
+    await resyncAroundWrite(
+      () => languages.updateOne({ _id }, { $set: { name: 'AFTER' } }),
+      () => querier.byId(_id)?.name === 'AFTER',
+    );
+    expect(querier.byId(_id)?.name).toBe('AFTER');
+  });
+  it('keeps a delete the stream applied while a resync was loading', async () => {
+    const { _id } = await languages.create(languageNamed('MID_LOAD'));
+    await waitFor(() => querier.has(_id));
+    await resyncAroundWrite(
+      () => languages.deleteOne({ _id }),
+      () => !querier.has(_id),
+    );
+    expect(querier.has(_id)).toBe(false);
   });
   it('drops a row from memory when its document is deleted', async () => {
     const doomed = await languages.create(languageNamed('DOOMED'));
