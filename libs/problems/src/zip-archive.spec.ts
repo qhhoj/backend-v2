@@ -364,6 +364,21 @@ describe('ZipArchive', () => {
     };
   };
 
+  it('lists no entry the judge cannot open as a case file, but accepts the archive', async () => {
+    const path = join(directory, 'dotted.zip');
+    writeFileSync(
+      path,
+      buildZip([
+        { name: '.tests/1.in', content: '1' },
+        { name: '__MACOSX/._1.in', content: 'x' },
+        { name: 'tests/.hidden/2.in', content: '2' },
+        { name: '.DS_Store', content: 'x' },
+        { name: 'tests/1.in', content: '1' },
+      ]),
+    );
+    await expect(listZipEntries(path)).resolves.toEqual(['tests/1.in']);
+  });
+
   it('opens from disk and has closed the file by the time any open, listing or close settles', async () => {
     const good = join(directory, 'good.zip');
     writeFileSync(good, buildZip([{ name: 'a', content: 'x' }]));

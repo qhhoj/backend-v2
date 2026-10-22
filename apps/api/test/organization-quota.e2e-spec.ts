@@ -732,7 +732,7 @@ describe('problem data quota', () => {
     expect(await dataBytesOf(problem._id)).toBe(directoryBytes(problem.code));
     const afterArchive = directoryBytes(problem.code);
     await authed(
-      api.http().post(`${PROBLEMS}/${problem.code}/data/files/generator`),
+      api.http().post(`${PROBLEMS}/${problem.code}/data/files/customGrader`),
       author,
     )
       .attach('file', Buffer.alloc(300, 'x'), {
@@ -744,7 +744,7 @@ describe('problem data quota', () => {
     expect(afterSource).toBe(directoryBytes(problem.code));
     expect(afterSource).toBeGreaterThanOrEqual(afterArchive + 300);
     await authed(
-      api.http().delete(`${PROBLEMS}/${problem.code}/data/files/generator`),
+      api.http().delete(`${PROBLEMS}/${problem.code}/data/files/customGrader`),
       author,
     ).expect(200);
     expect(await dataBytesOf(problem._id)).toBe(directoryBytes(problem.code));

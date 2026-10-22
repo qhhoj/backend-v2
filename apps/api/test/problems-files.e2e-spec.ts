@@ -1626,6 +1626,111 @@ afterAll(() => api.teardown());
         },
       });
     });
+    it('refuses a generator, which the judge does not run, and stores nothing', async () => {
+      const refused = await upload(
+        `${PROBLEMS}/sum/data/files/generator`,
+        editor,
+        Buffer.from('int main(){}'),
+        'gen.cpp',
+      ).expect(400);
+      expect(fieldsOf(refused)).toHaveProperty('generator');
+      expect(existsSync(join(directory, 'gen.cpp'))).toBe(false);
+      const data = dataOf(
+        await authed(api.http().get(`${PROBLEMS}/sum/data`), editor).expect(
+          200,
+        ),
+      );
+      expect(data.generator).toBeNull();
+      expect(
+        readdirSync(directory).filter(
+          (name) => name.startsWith('.') && name !== '.data-version',
+        ),
+      ).toEqual([]);
+    });
+    it('refuses other writes while a stored generator remains, until it is deleted', async () => {
+      await api.problems.updateOne(
+        { code: 'sum' },
+        { $set: { 'data.generator': 'gen.cpp' } },
+      );
+      writeFileSync(join(directory, 'gen.cpp'), 'old');
+      const put = () =>
+        authed(api.http().put(`${PROBLEMS}/sum/data`), editor).send({
+          checker: 'bridged',
+          checkerArgs: { type: 'themis' },
+          grader: 'standard',
+          cases: [{ type: 'C', input: '1.in', output: '1.out', points: 1 }],
+        });
+      expect(fieldsOf(await put().expect(400))).toHaveProperty('generator');
+      await authed(
+        api.http().delete(`${PROBLEMS}/sum/data/files/generator`),
+        editor,
+      ).expect(200);
+      expect(existsSync(join(directory, 'gen.cpp'))).toBe(false);
+      expect(dataOf(await put().expect(200)).feedback).toBe('');
+    });
+    it('deletes a stored generator even beside other refused settings, which a PUT then corrects', async () => {
+      await api.problems.updateOne(
+        { code: 'sum' },
+        {
+          $set: {
+            'data.generator': 'gen.cpp',
+            'data.nobigmath': true,
+            'data.outputLimit': 100_000_000,
+          },
+        },
+      );
+      writeFileSync(join(directory, 'gen.cpp'), 'old');
+      const deleted = dataOf(
+        await authed(
+          api.http().delete(`${PROBLEMS}/sum/data/files/generator`),
+          editor,
+        ).expect(200),
+      );
+      expect(deleted.generator).toBeNull();
+      expect(existsSync(join(directory, 'gen.cpp'))).toBe(false);
+      const corrected = dataOf(
+        await authed(api.http().put(`${PROBLEMS}/sum/data`), editor)
+          .send({
+            checker: 'bridged',
+            checkerArgs: { type: 'themis' },
+            grader: 'standard',
+            cases: [{ type: 'C', input: '1.in', output: '1.out', points: 1 }],
+          })
+          .expect(200),
+      );
+      expect(corrected).toMatchObject({ nobigmath: false, outputLimit: null });
+    });
+    it('keeps a Polygon helper header: no upload takes its name and no delete removes it', async () => {
+      await api.problems.updateOne(
+        { code: 'sum' },
+        { $set: { 'data.helperHeaders': ['testlib.h'] } },
+      );
+      writeFileSync(join(directory, 'testlib.h'), 'helper');
+      const header = `${PROBLEMS}/sum/data/files/customHeader`;
+      const taken = await upload(
+        header,
+        editor,
+        Buffer.from('mine'),
+        'testlib.h',
+      ).expect(400);
+      expect(codeOf(taken)).toBe('data_file_name_taken');
+      expect(readFileSync(join(directory, 'testlib.h'), 'utf8')).toBe('helper');
+      // a configuration stored before the check, sharing the name
+      await api.problems.updateOne(
+        { code: 'sum' },
+        { $set: { 'data.customHeader': 'testlib.h' } },
+      );
+      const data = dataOf(
+        await authed(api.http().delete(header), editor).expect(200),
+      );
+      expect(data.customHeader).toBeNull();
+      expect(readFileSync(join(directory, 'testlib.h'), 'utf8')).toBe('helper');
+      await api.problems.updateOne(
+        { code: 'sum' },
+        { $set: { 'data.helperHeaders': [] } },
+      );
+      rmSync(join(directory, 'testlib.h'));
+    });
     describe('lost races never leave disk and Mongo disagreeing', () => {
       const storedData = async () =>
         dataOf(
@@ -1724,15 +1829,15 @@ afterAll(() => api.teardown());
         ).toEqual([]);
       });
       it('keeps the old source when a same-name re-upload loses the CAS', async () => {
-        const url = `${PROBLEMS}/sum/data/files/generator`;
-        await upload(url, editor, Buffer.from('v1'), 'gen.cpp').expect(201);
+        const url = `${PROBLEMS}/sum/data/files/customGrader`;
+        await upload(url, editor, Buffer.from('v1'), 'grader.cpp').expect(201);
         const spy = loseNextUpdate();
-        await upload(url, editor, Buffer.from('v2'), 'gen.cpp').expect(409);
+        await upload(url, editor, Buffer.from('v2'), 'grader.cpp').expect(409);
         spy.mockRestore();
-        expect(readFileSync(join(directory, 'gen.cpp'), 'utf8')).toBe('v1');
+        expect(readFileSync(join(directory, 'grader.cpp'), 'utf8')).toBe('v1');
       });
       it('lets exactly one of two concurrent same-name source uploads win with its own content', async () => {
-        const url = `${PROBLEMS}/sum/data/files/generator`;
+        const url = `${PROBLEMS}/sum/data/files/customGrader`;
         await upload(url, editor, Buffer.from('old'), 'first.cpp').expect(201);
         const repository = api.app.get(ProblemsRepository);
         const original = repository.findByCodeWithData.bind(repository);
@@ -1748,13 +1853,13 @@ afterAll(() => api.teardown());
             return problem;
           });
         const [first, second] = await Promise.all([
-          upload(url, editor, Buffer.from('first'), 'gen2.cpp'),
-          upload(url, editor, Buffer.from('second'), 'gen2.cpp'),
+          upload(url, editor, Buffer.from('first'), 'grader2.cpp'),
+          upload(url, editor, Buffer.from('second'), 'grader2.cpp'),
         ]);
         spy.mockRestore();
         expect([first.status, second.status].sort()).toEqual([201, 409]);
-        expect((await storedData()).generator).toBe('gen2.cpp');
-        expect(readFileSync(join(directory, 'gen2.cpp'), 'utf8')).toBe(
+        expect((await storedData()).customGrader).toBe('grader2.cpp');
+        expect(readFileSync(join(directory, 'grader2.cpp'), 'utf8')).toBe(
           first.status === 201 ? 'first' : 'second',
         );
         expect(existsSync(join(directory, 'first.cpp'))).toBe(false);

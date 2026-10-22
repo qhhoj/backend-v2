@@ -1,12 +1,19 @@
-import { judgeRefusal } from './judge-refusals';
+import { JUDGE_MAX_OUTPUT_LIMIT, judgeRefusal } from './judge-refusals';
 import type { JudgedSettings } from './judge-refusals';
 
-const plain = { type: 'C' as const, checker: '' as const, checkerArgs: null };
+const plain = {
+  type: 'C' as const,
+  checker: '' as const,
+  checkerArgs: null,
+  outputLimit: null,
+};
 const base: JudgedSettings = {
   checker: 'floats',
   checkerArgs: { precision: 6 },
   grader: 'standard',
+  generator: null,
   nobigmath: false,
+  outputLimit: null,
   cases: [plain, plain],
 };
 const withCases = (...cases: JudgedSettings['cases']): JudgedSettings => ({
@@ -63,6 +70,38 @@ describe('judgeRefusal', () => {
     const standard = { ...plain, checker: 'standard' as const };
     expect(
       judgeRefusal({ ...withCases(plain, standard), grader: 'interactive' }),
+    ).toBeNull();
+  });
+
+  it('refuses a generator, which the judge does not run', () => {
+    const refusal = judgeRefusal({ ...base, generator: 'gen.cpp' });
+    expect(refusal?.field).toBe('generator');
+    expect(refusal?.message).toMatch(/generator/);
+  });
+
+  it('refuses an output limit above 64 MiB, problem-wide or on any row', () => {
+    const tooLarge = JUDGE_MAX_OUTPUT_LIMIT + 1;
+    expect(JUDGE_MAX_OUTPUT_LIMIT).toBe(64 * 1024 * 1024);
+    expect(judgeRefusal({ ...base, outputLimit: tooLarge })?.field).toBe(
+      'outputLimit',
+    );
+    const start = { ...plain, type: 'S' as const, outputLimit: tooLarge };
+    expect(judgeRefusal(withCases(plain, start, plain))?.message).toMatch(
+      /Case #2/,
+    );
+    expect(
+      judgeRefusal(withCases(plain, { ...plain, outputLimit: tooLarge }))
+        ?.field,
+    ).toBe('cases.1.outputLimit');
+  });
+
+  it('accepts an output limit of exactly 64 MiB', () => {
+    const limit = JUDGE_MAX_OUTPUT_LIMIT;
+    expect(
+      judgeRefusal({
+        ...withCases({ ...plain, outputLimit: limit }),
+        outputLimit: limit,
+      }),
     ).toBeNull();
   });
 });

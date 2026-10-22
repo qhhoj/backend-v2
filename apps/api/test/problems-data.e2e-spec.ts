@@ -231,6 +231,27 @@ afterAll(() => api.teardown());
         cases: unknown[] = [plainCase(1)],
       ) => fieldsOf(await put('sum', editor, config(cases, extra)).expect(400));
       expect(await refused({ nobigmath: true })).toHaveProperty('nobigmath');
+      const overLimit = 64 * 1024 * 1024 + 1;
+      expect(await refused({ outputLimit: overLimit })).toHaveProperty(
+        'outputLimit',
+      );
+      expect(
+        await refused({}, [{ ...plainCase(1), outputLimit: overLimit }]),
+      ).toHaveProperty(['cases.0.outputLimit']);
+      expect(
+        await refused({}, [
+          { type: 'S', points: 1, outputLimit: overLimit },
+          { ...plainCase(1), points: null },
+        ]),
+      ).toHaveProperty(['cases.0.outputLimit']);
+      const atLimit = 64 * 1024 * 1024;
+      await put(
+        'sum',
+        editor,
+        config([{ ...plainCase(1), outputLimit: atLimit }], {
+          outputLimit: atLimit,
+        }),
+      ).expect(200);
       expect(
         await refused({}, [
           plainCase(1),

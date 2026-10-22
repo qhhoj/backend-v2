@@ -4,7 +4,6 @@ import { AppError, invalidField } from '@libs/common';
 import type { DataFileKind } from '@libs/database';
 import {
   checkerArgsProblem,
-  judgeRefusal,
   graderArgsProblem,
   ProblemDataFilesService,
 } from '@libs/problems';
@@ -51,19 +50,19 @@ export class ProblemDataService {
       );
     this.assertArgsSize(dto);
     this.assertArgsFit(dto);
-    const refusal = judgeRefusal(dto);
-    if (refusal) throw invalidField(refusal.field, refusal.message);
     const { data: previous, version } = await this.store.loadData(problem);
+    const data = {
+      ...previous,
+      ...dto,
+      cases: dto.cases.map((row) => ({ ...row })),
+    };
+    this.store.assertJudgeAccepts(data);
     const { stored, archiveFiles } = await this.store.withDataWrite(
       problem,
       async () => {
         const written = await this.store.compileAndStore(
           problem,
-          {
-            ...previous,
-            ...dto,
-            cases: dto.cases.map((row) => ({ ...row })),
-          },
+          data,
           version,
         );
         await this.store.finishDataWrite(problem, version);
@@ -92,7 +91,7 @@ export class ProblemDataService {
     return yaml;
   }
 
-  /** Clears the field and recompiles first (Mongo stays authoritative), then drops the file. */
+  /** Clears the field and recompiles first (Mongo stays authoritative), then drops the file unless another field still names it. */
   async deleteFile(
     auth: AuthContext,
     code: string,
@@ -108,8 +107,11 @@ export class ProblemDataService {
           { ...previous, [kind]: null },
           version,
         );
-        const name = previous[kind];
-        if (name) await this.dataFiles.removeFile(problem.code, name);
+        await this.store.removeUnreferenced(
+          problem,
+          previous[kind],
+          written.stored,
+        );
         await this.store.finishDataWrite(problem, version);
         return written;
       },
