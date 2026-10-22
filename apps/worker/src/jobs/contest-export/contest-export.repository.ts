@@ -30,8 +30,12 @@ export interface ExportContest {
   timeLimit: number | null;
   frozenLastMinutes: number;
   formatName: ContestFormatName;
-  /** Problem id to code. */
-  codes: Map<string, string>;
+}
+
+interface ExportProblem {
+  code: string;
+  /** Deleted since the contest. */
+  deleted: boolean;
 }
 
 interface SubmissionDetail {
@@ -56,15 +60,15 @@ function toExportRow(
   names: {
     username: string | undefined;
     language: { name: string; extension: string } | undefined;
+    problem: ExportProblem | undefined;
   },
-  deletedProblems: ReadonlySet<string>,
 ): ExportRow {
   const start = participationStart(contest, participation);
   return {
     submissionId: uuidStr(row._id),
     participationId: uuidStr(participation._id),
     username: names.username ?? uuidStr(participation.user),
-    problem: contest.codes.get(uuidStr(row.problem)) ?? 'problem',
+    problem: names.problem?.code ?? 'problem',
     language: names.language?.name ?? '',
     submittedAt: detail.date,
     contestSeconds: (detail.date.getTime() - start.getTime()) / 1000,
@@ -73,7 +77,7 @@ function toExportRow(
     points: row.points,
     isDisqualified: participation.isDisqualified,
     extension: names.language?.extension ?? 'txt',
-    hasSource: !deletedProblems.has(uuidStr(row.problem)),
+    hasSource: !names.problem?.deleted,
   };
 }
 
@@ -102,16 +106,10 @@ export class ContestExportRepository {
         timeLimit: 1,
         frozenLastMinutes: 1,
         formatName: 1,
-        problems: 1,
       })
       .lean()
       .exec();
     if (!contest) return null;
-    const ids = contest.problems.map((entry) => uuidStr(entry.problem));
-    const rows = await this.problems
-      .find({ _id: { $in: ids } }, { code: 1 })
-      .lean()
-      .exec();
     return {
       _id: uuidStr(contest._id),
       startTime: contest.startTime,
@@ -119,7 +117,6 @@ export class ContestExportRepository {
       timeLimit: contest.timeLimit,
       frozenLastMinutes: contest.frozenLastMinutes,
       formatName: contest.formatName,
-      codes: new Map(rows.map((row) => [uuidStr(row._id), row.code])),
     };
   }
 
@@ -137,14 +134,14 @@ export class ContestExportRepository {
     const details = await this.submissionDetails(
       contestRows.map((row) => uuidStr(row._id)),
     );
-    const [usernames, languages, deletedProblems] = await Promise.all([
+    const [usernames, languages, problems] = await Promise.all([
       this.usernames([
         ...new Set([...live.values()].map((row) => uuidStr(row.user))),
       ]),
       this.languageRows([
         ...new Set([...details.values()].map((row) => row.language)),
       ]),
-      this.deletedProblems([
+      this.problemsOf([
         ...new Set(contestRows.map((row) => uuidStr(row.problem))),
       ]),
     ]);
@@ -159,8 +156,8 @@ export class ContestExportRepository {
           {
             username: usernames.get(uuidStr(participation.user)),
             language: languages.get(detail.language),
+            problem: problems.get(uuidStr(row.problem)),
           },
-          deletedProblems,
         );
       })
       .sort(
@@ -228,13 +225,18 @@ export class ContestExportRepository {
     return found;
   }
 
-  /** Problems of the exported submissions deleted since the contest, including ones taken out of the contest first (the delete requires it). */
-  private async deletedProblems(ids: string[]): Promise<Set<string>> {
+  /** Every problem of the exported submissions, also ones taken out of the contest or deleted since (the delete requires taking it out first). */
+  private async problemsOf(ids: string[]): Promise<Map<string, ExportProblem>> {
     const rows = await this.problems
-      .find({ _id: { $in: ids }, deletedAt: { $ne: null } }, { _id: 1 })
+      .find({ _id: { $in: ids } }, { code: 1, deletedAt: 1 })
       .lean()
       .exec();
-    return new Set(rows.map((row) => uuidStr(row._id)));
+    return new Map(
+      rows.map((row) => [
+        uuidStr(row._id),
+        { code: row.code, deleted: row.deletedAt != null },
+      ]),
+    );
   }
 
   private async usernames(ids: string[]): Promise<Map<string, string>> {

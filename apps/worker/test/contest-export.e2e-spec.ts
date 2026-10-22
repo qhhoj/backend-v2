@@ -177,6 +177,29 @@ describe('contest export', () => {
       expect(rows.some((line) => line.startsWith(submission._id))).toBe(true);
   });
 
+  it('names a problem taken out of the contest by its code, in the CSV and in the source path', async () => {
+    const dropped = await seedProblem(worker, { code: 'dropped' });
+    contest = await seedContest(worker, {
+      problems: [entry(sum, 0), entry(dropped, 1)],
+    });
+    const alice = await joinAs('alice');
+    const submission = await submit(
+      alice,
+      { result: 'AC', points: 100 },
+      'int r() {}',
+      dropped,
+    );
+    await worker.contests.updateOne(
+      { _id: contest._id },
+      { $pull: { problems: { problem: dropped._id } } },
+    );
+    await service.prepare({ contestId: contest._id });
+    const files = await readZip(zipPath());
+    expect(files[`sources/dropped/${submission._id}.cpp`]).toBe('int r() {}');
+    const [row] = await csvRows();
+    expect(row.split(',')[3]).toBe('dropped');
+  });
+
   it('counts a windowed participation from its own start in contest_seconds', async () => {
     const windowed = await seedContest(worker, {
       problems: [entry(sum, 0)],
