@@ -61,7 +61,11 @@ export class SyncContestsService {
       throw invalidField('key', 'This key is reserved.', 'key_reserved');
     const existing = await this.ownership.find(client, key);
     const acting = await this.actsAs.principalOf(client);
-    const dto = toEditDto(body, await this.problemIds(uniqueCodes(body)));
+    const dto = toEditDto(
+      body,
+      await this.problemIds(uniqueCodes(body)),
+      existing?.problems,
+    );
     const fields = await this.editFields.toFields(acting, dto, existing);
     const action = actionFor(existing, fields, new Date());
     if (!dryRun && action !== 'unchanged')

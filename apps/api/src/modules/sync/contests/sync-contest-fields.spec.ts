@@ -36,6 +36,39 @@ describe('toEditDto', () => {
       ],
     });
   });
+  it("keeps each remaining problem's settings people set, matched by problem id, and only those", () => {
+    const stored = [
+      {
+        problem: 'id-b',
+        points: 10,
+        partial: true,
+        isPretested: true,
+        order: 0,
+        outputPrefixOverride: 64,
+        maxSubmissions: 3,
+      },
+      {
+        problem: 'id-gone',
+        points: 10,
+        partial: true,
+        isPretested: true,
+        order: 1,
+        outputPrefixOverride: null,
+        maxSubmissions: 5,
+      },
+    ];
+    expect(toEditDto(body, ids, stored).problems).toEqual([
+      { problem: 'id-a', points: 100, partial: true },
+      {
+        problem: 'id-b',
+        points: 50,
+        partial: false,
+        isPretested: true,
+        outputPrefixOverride: 64,
+        maxSubmissions: 3,
+      },
+    ]);
+  });
 });
 
 describe('comparableOf', () => {
