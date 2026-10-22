@@ -5,6 +5,7 @@ import type { Model } from 'mongoose';
 import { REDIS } from '@libs/common';
 import {
   AllowBeforeTwoFactor,
+  AllowSuperuserToken,
   AllowPwnedPassword,
   type AuthContext,
   COOKIE_REFRESH_MS,
@@ -57,6 +58,12 @@ class GuardedController {
     return 'before two-factor';
   }
   @SessionOnly() @Post('session-only') sessionOnly() {
+    return 'managed';
+  }
+  @SessionOnly()
+  @AllowSuperuserToken()
+  @Post('session-or-superuser-token')
+  sessionOrSuperuserToken() {
     return 'managed';
   }
   @RequirePermission('judge.edit_all_problem') @Get('editor') editor() {
@@ -271,6 +278,31 @@ describe('AuthGuard', () => {
     await api
       .http()
       .post('/guarded/session-only')
+      .set('Cookie', sessionCookie(id))
+      .set('X-CSRF-Token', session.csrf)
+      .expect(201);
+  });
+  it('admits only a superuser API token on a session-only route that opts in', async () => {
+    const optedIn = () =>
+      api.http().post('/guarded/session-or-superuser-token');
+    const superuserToken = await useApiToken(await createSuperuser('sudo'));
+    await optedIn()
+      .set('Authorization', superuserToken)
+      .expect(201, { data: 'managed' });
+    await api
+      .http()
+      .post('/guarded/session-only')
+      .set('Authorization', superuserToken)
+      .expect(403)
+      .expect(errorMessage('This endpoint requires a browser session'));
+    const plainToken = await useApiToken();
+    await optedIn()
+      .set('Authorization', plainToken)
+      .expect(403)
+      .expect(errorCode('forbidden'))
+      .expect(errorMessage('This endpoint requires a browser session'));
+    const { id, session } = await login();
+    await optedIn()
       .set('Cookie', sessionCookie(id))
       .set('X-CSRF-Token', session.csrf)
       .expect(201);
