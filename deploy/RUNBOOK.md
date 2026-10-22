@@ -87,8 +87,9 @@ Purged tombstones keep their old `polygonLink`; clear them so the unique index i
 - LOCAL repository (`LOCAL_REPO`, `/backup/restic`): the database only. The disk cannot hold a second copy of `problem-data`; a run is refused (and fails) when its filesystem has less than `LOCAL_MIN_FREE_GB` (3) free.
 - OFFSITE repository (`OFFSITE_REPO`, any restic backend: `s3:`, `b2:`, `sftp:`, `rclone:`): the database and `DATA_PATHS` (`problem-data`, `media`, `contest-data`, `user-data`). Unset, the files have no backup and every run says so in the journal.
 - The database is one `mongodump --archive --oplog` (point in time, uncompressed so restic deduplicates night to night) streamed into `restic backup --stdin`, tagged `qhhoj-db` (+ `oplog`); a failed dump fails the run and its partial snapshot is forgotten. Files are tagged `qhhoj-files`. `pdf-cache` is a cache; Redis holds no durable state (queue truth is Mongo).
-- Retention per repository and tag: 7 daily, 4 weekly, 6 monthly, pruned nightly; on Sundays `restic check --read-data-subset 5%`.
-- Failure: the unit ends `failed` (`systemctl --failed`, `journalctl -u qhhoj-backup`); with `HEALTHCHECK_URL` set (healthchecks.io or alike) it is pinged at start, success and `/fail`, and a missed night alerts too.
+- Retention per repository and tag: 7 daily, 4 weekly, 6 monthly, pruned nightly, skipped for a repository that still holds a failed night's partial snapshot; on Sundays `restic check --read-data-subset 5%` (offsite: about 1 GB downloaded a week, mind the backend's egress price).
+- Failure: the unit ends `failed` (`systemctl --failed`, `journalctl -u qhhoj-backup`), a run still going after 12 h (`TimeoutStartSec`, a stalled backend) too; with `HEALTHCHECK_URL` set (healthchecks.io or alike) it is pinged at start, success and `/fail`, and a missed night alerts too.
+- Env in a subshell: the commands below load `/etc/qhhoj/backup.env` inside `( ... )` or a child shell, so `RESTIC_PASSWORD`, `MONGO_BACKUP_PASSWORD` and the backend keys do not stay exported in the root session.
 - Secrets: keep `/etc/qhhoj/env` (at least `ENCRYPTION_KEY`, `TOKEN_SECRET`) and `RESTIC_PASSWORD` in an offline secret store, separate from the backups: encrypted settings and 2FA secrets in a dump are useless without the same `ENCRYPTION_KEY`, and no snapshot opens without `RESTIC_PASSWORD`.
 
 ### Install (once, as root)
@@ -97,7 +98,7 @@ Purged tombstones keep their old `polygonLink`; clear them so the unique index i
 2. A read-only backup user. The built-in role `backup` reads every database and the oplog, which `--oplog` needs (the app user `qhhoj` cannot): `mongosh "mongodb://admin@127.0.0.1:27017/?authSource=admin&replicaSet=rs0"` (password in `/root/qhhoj-secrets/mongo.env`), then `db.getSiblingDB('admin').createUser({ user: 'qhhoj-backup', pwd: passwordPrompt(), roles: [{ role: 'backup', db: 'admin' }] })`; add its password to `/root/qhhoj-secrets/mongo.env`.
 3. Files: re-run `install-host.sh` from a fresh copy of `deploy/`, or only `install -m 755 backup/qhhoj-backup /usr/local/sbin/qhhoj-backup && install -m 755 backup/restore-test.sh /usr/local/sbin/qhhoj-backup-restore-test && install -m 644 backup/qhhoj-backup.service backup/qhhoj-backup.timer /etc/systemd/system/ && systemctl daemon-reload`.
 4. `install -m 600 -o root -g root backup/backup.env.example /etc/qhhoj/backup.env` and fill it: `RESTIC_PASSWORD` (`openssl rand -base64 32`), `MONGO_BACKUP_PASSWORD`, `OFFSITE_REPO` and its backend credentials. An `sftp:` repository: `ssh` once as root to the target to accept its host key (the unit sees `/root` read-only and cannot write `known_hosts`).
-5. `set -a; . /etc/qhhoj/backup.env; set +a; restic init -r "$LOCAL_REPO"`, and `restic init -r "$OFFSITE_REPO"` when set.
+5. `( set -a; . /etc/qhhoj/backup.env; set +a; restic init -r "$LOCAL_REPO" && if [ -n "$OFFSITE_REPO" ]; then restic init -r "$OFFSITE_REPO"; fi )` (both scripts refuse a secret still at `CHANGE`).
 6. First run by hand: `systemctl start qhhoj-backup.service` (it blocks until done; the first offsite run uploads all of `problem-data`), then `journalctl -u qhhoj-backup -n 50` ends with `qhhoj-backup: done`.
 7. `qhhoj-backup-restore-test` (and `qhhoj-backup-restore-test offsite`) ends with `restore-test: ok`.
 8. `systemctl enable --now qhhoj-backup.timer`; `systemctl list-timers qhhoj-backup.timer` shows the next 03:30 run.
@@ -105,19 +106,22 @@ Purged tombstones keep their old `polygonLink`; clear them so the unique index i
 ### Check and list
 
 - Monthly, right after a night's run: `qhhoj-backup-restore-test [local|offsite]` restores the newest database snapshot into a throwaway `mongod` (port `RESTORE_TEST_PORT`, under `RESTORE_TEST_DIR`, 0.25 GiB cache, removed afterwards; refused unless the archive's size plus `RESTORE_TEST_MIN_FREE_GB` (1) is free) and compares each collection's count with the live database (`RESTORE_TEST_TOLERANCE_PCT`, at least 10 documents; a missing collection fails).
-- Snapshots: `set -a; . /etc/qhhoj/backup.env; set +a; restic -r "$LOCAL_REPO" snapshots --tag qhhoj-db` (offsite: `-r "$OFFSITE_REPO"`, `--tag qhhoj-files` for files); `restic -r ... ls <id>` lists a files snapshot.
+- Snapshots: `( set -a; . /etc/qhhoj/backup.env; set +a; restic -r "$LOCAL_REPO" snapshots --tag qhhoj-db )` (offsite: `-r "$OFFSITE_REPO"`, `--tag qhhoj-files` for files); `restic -r ... ls <id>` lists a files snapshot.
+- The throwaway `mongod` (here and in Restore) runs without auth on `127.0.0.1` with a full copy of the database, `admin.system.users` included, while it is up: any local user of this shared host can read it then. Keep those runs short and attended.
 
 ### Restore the database
 
-Always into a scratch `mongod` first, then copy only the `qhhoj` database into the live one (the archive is the whole instance, admin users included, and `mongorestore` refuses namespace filters with `--oplogReplay`). With the env loaded as above:
+Always into a scratch `mongod` first, then copy only the `qhhoj` database into the live one (the archive is the whole instance, admin users included, and `mongorestore` refuses namespace filters with `--oplogReplay`). Run the steps in a child shell that holds the env and `exit` it after step 5: `bash -c 'set -a; . /etc/qhhoj/backup.env; set +a; exec bash -i'`.
 
 1. Scratch: `install -d -m 700 /backup/restore/db && mongod --dbpath /backup/restore/db --port 27999 --bind_ip 127.0.0.1 --wiredTigerCacheSizeGB 0.5 --fork --logpath /backup/restore/mongod.log`.
 2. `restic -r "$LOCAL_REPO" dump --tag qhhoj-db latest /qhhoj-mongo.archive | mongorestore --port 27999 --archive --drop --oplogReplay` (a snapshot id instead of `--tag qhhoj-db latest` for an older night; no `--oplogReplay` for a snapshot without the `oplog` tag).
 3. Check it in `mongosh --port 27999 qhhoj` (counts, the newest submission).
-4. `systemctl stop qhhoj.target`, then `mongodump --port 27999 --db qhhoj --archive | mongorestore --config <(printf "uri: '%s'\n" "$(sed -n 's/^MONGO_URL=//p' /etc/qhhoj/env)") --archive --drop --nsInclude 'qhhoj.*'` (the app user; the URL stays out of argv), `systemctl start qhhoj.target`.
+4. `systemctl stop qhhoj.target`, then `mongodump --port 27999 --db qhhoj --archive | mongorestore --config <(printf "uri: '%s'\n" "$(sed -n 's/^MONGO_URL=//p' /etc/qhhoj/env)") --archive --drop --nsInclude 'qhhoj.*'` (the app user; the URL stays out of argv, but a failed connection prints it, password included, to the terminal), `systemctl start qhhoj.target`.
 5. `mongod --dbpath /backup/restore/db --shutdown && rm -rf /backup/restore`.
 
 ### Restore files (offsite)
+
+In the env child shell from Restore the database (`exit` it when done).
 
 - Part of a tree, e.g. one problem: `restic -r "$OFFSITE_REPO" restore latest --tag qhhoj-files --target /backup/restore-files --include /srv/qhhoj/problem-data/<code>`, check it, then `rsync -a --chown=987:987 /backup/restore-files/srv/qhhoj/problem-data/<code>/ /srv/qhhoj/problem-data/<code>/` and remove `/backup/restore-files`.
 - A whole tree goes back in place (the disk has no room for a second copy of `problem-data`): `restic -r "$OFFSITE_REPO" restore latest --tag qhhoj-files --target / --include /srv/qhhoj/problem-data`. It overwrites the files the snapshot has and leaves newer ones; owners and modes come back as saved (987, 2750).

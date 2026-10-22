@@ -13,10 +13,16 @@ OPLOG_TAG=oplog
 ARCHIVE_NAME=qhhoj-mongo.archive
 MIN_SLACK=10
 EX_CONFIG=64
+PLACEHOLDER=CHANGE # backup.env.example's value for every secret
 
 log() { echo "restore-test: $*"; }
 die() { echo "restore-test: $*" >&2; exit "$EX_CONFIG"; }
 fail() { echo "restore-test: FAIL: $*" >&2; exit 1; }
+
+require() { # name: a setting that must be set and no longer the example's placeholder
+  [ -n "${!1:-}" ] || die "$1 is not set"
+  [ "${!1}" != "$PLACEHOLDER" ] || die "$1 is still the placeholder $PLACEHOLDER from backup.env.example"
+}
 
 load_config() {
   [ -r "$ENV_FILE" ] || die "cannot read $ENV_FILE"
@@ -24,9 +30,9 @@ load_config() {
   # shellcheck source=/dev/null
   . "$ENV_FILE"
   set +a
-  [ -n "${RESTIC_PASSWORD:-}" ] || die "RESTIC_PASSWORD is not set"
-  [ -n "${MONGO_BACKUP_URL:-}" ] || die "MONGO_BACKUP_URL is not set"
-  [ -n "${MONGO_BACKUP_PASSWORD:-}" ] || die "MONGO_BACKUP_PASSWORD is not set"
+  require RESTIC_PASSWORD
+  require MONGO_BACKUP_URL
+  require MONGO_BACKUP_PASSWORD
   export -n MONGO_BACKUP_URL MONGO_BACKUP_PASSWORD
   MONGO_DB="${MONGO_DB:-qhhoj}"
   SCRATCH_PARENT="${RESTORE_TEST_DIR:-/backup/restore-test}"

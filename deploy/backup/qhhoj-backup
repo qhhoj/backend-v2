@@ -15,10 +15,17 @@ KEEP=(--keep-daily 7 --keep-weekly 4 --keep-monthly 6)
 CHECK_WEEKDAY=7 # Sundays `restic check` also reads a sample of the stored data
 CHECK_SUBSET=5%
 EX_CONFIG=64
+PLACEHOLDER=CHANGE # backup.env.example's value for every secret
 FAILED=()
+declare -A STRANDED=() # repo -> a partial snapshot that could not be forgotten: retention skips that repo
 
 log() { echo "qhhoj-backup: $*"; }
 die() { echo "qhhoj-backup: $*" >&2; exit "$EX_CONFIG"; }
+
+require() { # name: a setting that must be set and no longer the example's placeholder
+  [ -n "${!1:-}" ] || die "$1 is not set"
+  [ "${!1}" != "$PLACEHOLDER" ] || die "$1 is still the placeholder $PLACEHOLDER from backup.env.example"
+}
 
 load_config() {
   [ -r "$ENV_FILE" ] || die "cannot read $ENV_FILE (template: deploy/backup/backup.env.example)"
@@ -26,9 +33,9 @@ load_config() {
   # shellcheck source=/dev/null
   . "$ENV_FILE"
   set +a
-  [ -n "${RESTIC_PASSWORD:-}" ] || die "RESTIC_PASSWORD is not set"
-  [ -n "${MONGO_BACKUP_URL:-}" ] || die "MONGO_BACKUP_URL is not set"
-  [ -n "${MONGO_BACKUP_PASSWORD:-}" ] || die "MONGO_BACKUP_PASSWORD is not set"
+  require RESTIC_PASSWORD
+  require MONGO_BACKUP_URL
+  require MONGO_BACKUP_PASSWORD
   export -n MONGO_BACKUP_URL MONGO_BACKUP_PASSWORD # only mongodump's config reads them
   LOCAL_REPO="${LOCAL_REPO:-/backup/restic}"
   OFFSITE_REPO="${OFFSITE_REPO:-}"
@@ -69,9 +76,18 @@ summary_value() { # json-file key: one scalar of restic's backup summary (no jq 
   { grep '"message_type":"summary"' "$1" | tail -n 1 | grep -o "\"$2\":\"\{0,1\}[0-9a-f]*" | sed 's/.*:"\{0,1\}//'; } || true
 }
 
+forget_partial() { # repo id: drop the snapshot a failed dump fed; if that fails, keep retention off the repo tonight
+  local repo="$1" id="$2"
+  [ -n "$id" ] || return 0
+  restic -r "$repo" forget "$id" && return 0
+  log "could not forget the partial snapshot $id in $repo: forget it by hand (restic -r <repo> forget $id)"
+  STRANDED[$repo]="$id"
+}
+
 db_snapshot() { # repo: stream one mongodump into a new snapshot; a failed dump forgets the snapshot it fed
   local repo="$1" json="$WORK/backup.json" dump_rc restic_rc id
-  local dump=(--archive) tags=(--tag "$DB_TAG")
+  # One collection at a time keeps the archive's layout stable night to night (restic deduplicates more) and mongod calm.
+  local dump=(--archive --numParallelCollections=1) tags=(--tag "$DB_TAG")
   if [ "$MONGO_OPLOG" = 1 ]; then dump+=(--oplog); tags+=(--tag "$OPLOG_TAG"); fi
   set +e
   mongodump --config <(mongodump_config) "${dump[@]}" \
@@ -81,7 +97,7 @@ db_snapshot() { # repo: stream one mongodump into a new snapshot; a failed dump 
   id="$(summary_value "$json" snapshot_id)"
   if [ "$dump_rc" -ne 0 ]; then
     log "mongodump failed (exit $dump_rc) for $repo"
-    [ -z "$id" ] || restic -r "$repo" forget "$id" || log "could not forget the partial snapshot $id in $repo: forget it by hand"
+    forget_partial "$repo" "$id"
     return 1
   fi
   [ "$restic_rc" -eq 0 ] || { log "restic backup failed (exit $restic_rc) for $repo"; return 1; }
@@ -100,6 +116,10 @@ files_snapshot() { # repo: one snapshot of DATA_PATHS
 
 maintain() { # repo: retention per tag, prune, and the weekly integrity check
   local repo="$1" tag
+  if [ -n "${STRANDED[$repo]:-}" ]; then # the partial snapshot would count as the newest daily and age out a good one
+    log "retention skipped for $repo: the partial snapshot ${STRANDED[$repo]} is still there"
+    return 1
+  fi
   for tag in "$DB_TAG" "$FILES_TAG"; do
     restic -r "$repo" forget --tag "$tag" --group-by host "${KEEP[@]}" || return 1
   done

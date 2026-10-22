@@ -5,7 +5,7 @@
 set -euo pipefail
 # grep -c, not grep -q, after restic: -q exits at the first match and pipefail turns restic's SIGPIPE into a failure.
 here="$(cd "$(dirname "$0")" && pwd)"
-command -v restic >/dev/null || { echo "qhhoj-backup.test: restic is not installed" >&2; exit 1; }
+real_restic="$(command -v restic)" || { echo "qhhoj-backup.test: restic is not installed" >&2; exit 1; }
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 bin="$work/bin" calls="$work/calls" out="$work/out"
 export RESTIC_PASSWORD='test pass' RESTIC_CACHE_DIR="$work/cache" QHHOJ_BACKUP_ENV="$work/backup.env" PATH="$bin:$PATH"
@@ -23,7 +23,13 @@ printf 'archive-%s' "\${STUB_NIGHT:-1}"
 EOF
 # shellcheck disable=SC2016 # $* belongs to the stub
 printf '#!/usr/bin/env bash\necho "curl ${*: -1}" >> "%s"\n' "$calls" > "$bin/curl"
-chmod +x "$bin/mongodump" "$bin/curl"
+# restic wrapper: with STUB_FORGET_FAIL, `restic -r <repo> forget <id>` (one snapshot, as for a partial dump) fails.
+cat > "$bin/restic" <<EOF
+#!/usr/bin/env bash
+if [ -n "\${STUB_FORGET_FAIL:-}" ] && [ "\$#" = 4 ] && [ "\$3" = forget ]; then exit 1; fi
+exec "$real_restic" "\$@"
+EOF
+chmod +x "$bin/mongodump" "$bin/curl" "$bin/restic"
 
 config() { # [extra lines]: a fresh env file
   cat > "$QHHOJ_BACKUP_ENV" <<EOF
@@ -49,6 +55,7 @@ fresh; config; backup || fail "local-only run"
 restic -r "$work/local" snapshots --json --tag qhhoj-db,oplog | grep -c '"id"' >/dev/null || fail "oplog dump tagged oplog"
 grep -q 'are NOT' "$out" || fail "a run without OFFSITE_REPO says the files are not backed up"
 grep -q 'mongodump .*--oplog' "$calls" || fail "point-in-time dump by default"
+grep -q 'mongodump .*--numParallelCollections=1' "$calls" || fail "one collection at a time keeps the archive deduplicable"
 grep -q 's3cret' "$calls" && fail "the password must not be in mongodump's argv"
 grep -qx "password: 's3cret it''s'" "$work/mongodump-config" || fail "the password reaches mongodump through its config file"
 grep -qx 'curl https://hc.example/ping/abc/start' "$calls" && grep -qx 'curl https://hc.example/ping/abc' "$calls" \
@@ -72,6 +79,13 @@ files_before="$(latest_id offsite qhhoj-files)"
 grep -q 'failed: local database,offsite database' "$out" || fail "the failed steps are named"
 grep -qx 'curl https://hc.example/ping/abc/fail' "$calls" || fail "failure ping"
 
+# A partial snapshot that cannot be forgotten keeps retention off its repository: it would age out a good night.
+fresh; config; backup || fail "night before the stranded snapshot"
+STUB_DUMP_FAIL=1 STUB_FORGET_FAIL=1 backup && fail "a failed mongodump must fail the run"
+[ "$(count local qhhoj-db)" = 2 ] || fail "the partial snapshot stays when its forget fails"
+grep -q 'retention skipped for' "$out" || fail "the skipped retention is logged"
+grep -q 'failed: local database,local retention' "$out" || fail "the skipped retention fails its step"
+
 # The free-space floor refuses the local backup (the site and the judge share the disk).
 fresh; config "LOCAL_MIN_FREE_GB=999999999"; backup && fail "below the floor must fail"
 [ "$(count local qhhoj-db)" = 0 ] || fail "no local snapshot below the floor"
@@ -87,4 +101,10 @@ rm "$QHHOJ_BACKUP_ENV"; set +e; backup; rc=$?; set -e
 [ "$rc" = 64 ] || fail "missing env file exits 64, got $rc"
 config; sed -i '/^MONGO_BACKUP_PASSWORD=/d' "$QHHOJ_BACKUP_ENV"; set +e; backup; rc=$?; set -e
 [ "$rc" = 64 ] || fail "missing MONGO_BACKUP_PASSWORD exits 64, got $rc"
+# The example's placeholder password would encrypt the repository with a published secret.
+config RESTIC_PASSWORD=CHANGE; set +e; backup; rc=$?; set -e
+[ "$rc" = 64 ] || fail "placeholder RESTIC_PASSWORD exits 64, got $rc"
+grep -q 'placeholder' "$out" || fail "the placeholder refusal is logged"
+set +e; bash "$here/restore-test.sh" > "$out" 2>&1; rc=$?; set -e
+[ "$rc" = 64 ] || fail "restore-test refuses a placeholder RESTIC_PASSWORD with 64, got $rc"
 echo "qhhoj-backup ok"
