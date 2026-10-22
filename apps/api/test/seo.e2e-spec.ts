@@ -81,6 +81,15 @@ describe('sitemap and link previews', () => {
     expect(posts).toHaveLength(1);
   });
 
+  it('lists a post published after the API started', async () => {
+    const post = await createPost(api, { publishOn: new Date() });
+    try {
+      expect(await sitemap('posts')).toContain(`/blog/${post._id}<`);
+    } finally {
+      await api.blogPosts.deleteOne({ _id: post._id });
+    }
+  });
+
   it('indexes every kind and answers 404 past the last page', async () => {
     const index = await text('/api/internal/seo/sitemap.xml');
     for (const kind of ['pages', 'problems', 'contests', 'posts', 'users'])

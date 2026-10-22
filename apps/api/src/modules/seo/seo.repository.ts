@@ -28,17 +28,18 @@ export interface Lister {
   page(page: number): Promise<UrlSource[]>;
 }
 
+/** `filter` is rebuilt on every query, so a time-based filter sees the current time. */
 const lister = <T>(
   model: Model<T>,
-  filter: FilterQuery<T>,
+  filter: () => FilterQuery<T>,
   field: string,
   toPath: (value: string) => string,
 ): Lister => ({
-  count: () => model.countDocuments(filter).exec(),
+  count: () => model.countDocuments(filter()).exec(),
   page: async (page) =>
     (
       await model
-        .find(filter, { [field]: 1 })
+        .find(filter(), { [field]: 1 })
         .sort({ _id: 1 })
         .skip((page - 1) * SITEMAP_PAGE_SIZE)
         .limit(SITEMAP_PAGE_SIZE)
@@ -68,23 +69,28 @@ export class SeoRepository {
   ) {
     this.problems = lister(
       problemModel,
-      this.problemFilter(),
+      () => this.problemFilter(),
       'code',
       encoded('/problems'),
     );
     this.contests = lister(
       contestModel,
-      ContestAccess.visibleFilter(null),
+      () => ContestAccess.visibleFilter(null),
       'key',
       encoded('/contests'),
     );
     this.posts = lister(
       postModel,
-      BlogAccess.publishedPersonalFilter(new Date()),
+      () => BlogAccess.publishedPersonalFilter(new Date()),
       '_id',
       encoded('/blog'),
     );
-    this.users = lister(userModel, LISTED_USERS, 'username', encoded('/users'));
+    this.users = lister(
+      userModel,
+      () => LISTED_USERS,
+      'username',
+      encoded('/users'),
+    );
   }
 
   private problemFilter(): FilterQuery<Problem> {
