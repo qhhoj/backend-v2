@@ -1668,6 +1668,38 @@ afterAll(() => api.teardown());
       expect(existsSync(join(directory, 'gen.cpp'))).toBe(false);
       expect(dataOf(await put().expect(200)).feedback).toBe('');
     });
+    it('deletes a stored generator even beside other refused settings, which a PUT then corrects', async () => {
+      await api.problems.updateOne(
+        { code: 'sum' },
+        {
+          $set: {
+            'data.generator': 'gen.cpp',
+            'data.nobigmath': true,
+            'data.outputLimit': 100_000_000,
+          },
+        },
+      );
+      writeFileSync(join(directory, 'gen.cpp'), 'old');
+      const deleted = dataOf(
+        await authed(
+          api.http().delete(`${PROBLEMS}/sum/data/files/generator`),
+          editor,
+        ).expect(200),
+      );
+      expect(deleted.generator).toBeNull();
+      expect(existsSync(join(directory, 'gen.cpp'))).toBe(false);
+      const corrected = dataOf(
+        await authed(api.http().put(`${PROBLEMS}/sum/data`), editor)
+          .send({
+            checker: 'bridged',
+            checkerArgs: { type: 'themis' },
+            grader: 'standard',
+            cases: [{ type: 'C', input: '1.in', output: '1.out', points: 1 }],
+          })
+          .expect(200),
+      );
+      expect(corrected).toMatchObject({ nobigmath: false, outputLimit: null });
+    });
     it('keeps a Polygon helper header: no upload takes its name and no delete removes it', async () => {
       await api.problems.updateOne(
         { code: 'sum' },

@@ -92,6 +92,8 @@ export class ProblemDataUploadService {
     const { staged, name } = upload;
     const { data: previous, version } = await this.store.loadData(problem);
     this.assertNameFree(previous, 'archive', name);
+    const data = { ...previous, archive: name };
+    this.store.assertJudgeAccepts(data);
     const bytes = (await stat(staged)).size;
     const organizationId = this.storage.organizationOf(auth.principal, problem);
     // Deliberately outside the lock: the storage cap is a soft meter. Two parallel uploads to different problems of one organization can both pass and overshoot once; `dataBytes` is re-measured from disk on every write, so the next check sees the true total.
@@ -111,7 +113,7 @@ export class ProblemDataUploadService {
         this.store.withDataWrite(problem, async () => {
           const written = await this.store.compileAndStore(
             problem,
-            { ...previous, archive: name },
+            data,
             version,
             staged,
           );
@@ -181,6 +183,8 @@ export class ProblemDataUploadService {
     const { kind, name, staged, bytes } = upload;
     const { data: previous, version } = await this.store.loadData(problem);
     this.assertNameFree(previous, kind, name);
+    const data = { ...previous, [kind]: name };
+    this.store.assertJudgeAccepts(data);
     const organizationId = this.storage.organizationOf(auth.principal, problem);
     await this.assertStorageFits(organizationId, problem, {
       bytes,
@@ -191,7 +195,7 @@ export class ProblemDataUploadService {
       async () => {
         const written = await this.store.compileAndStore(
           problem,
-          { ...previous, [kind]: name },
+          data,
           version,
         );
         await this.dataFiles.commitUpload(problem.code, staged, name);

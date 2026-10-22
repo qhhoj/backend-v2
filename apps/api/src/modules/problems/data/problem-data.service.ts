@@ -51,16 +51,18 @@ export class ProblemDataService {
     this.assertArgsSize(dto);
     this.assertArgsFit(dto);
     const { data: previous, version } = await this.store.loadData(problem);
+    const data = {
+      ...previous,
+      ...dto,
+      cases: dto.cases.map((row) => ({ ...row })),
+    };
+    this.store.assertJudgeAccepts(data);
     const { stored, archiveFiles } = await this.store.withDataWrite(
       problem,
       async () => {
         const written = await this.store.compileAndStore(
           problem,
-          {
-            ...previous,
-            ...dto,
-            cases: dto.cases.map((row) => ({ ...row })),
-          },
+          data,
           version,
         );
         await this.store.finishDataWrite(problem, version);
