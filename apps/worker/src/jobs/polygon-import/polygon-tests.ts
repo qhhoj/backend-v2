@@ -1,5 +1,6 @@
 import { EMPTY_TEST_CASE, PROBLEM_LIMITS } from '@libs/database';
 import type { JsonObject, ProblemTestCase } from '@libs/database';
+import { pointsArePercent } from './polygon-assets';
 import { PolygonImportError } from './polygon-import.error';
 import { shown } from './polygon-package';
 import { childOf, childrenOf, childText, descendant } from '@libs/problems';
@@ -303,17 +304,15 @@ function scaleToIntegerPoints(
   };
 }
 
-/** A testlib checker's `quitp(x)` is x points of the test, which the judge reads against the rescaled points. testlib's std:: checkers never award partial points and the percent flag makes x relative, so only a custom checker without it is refused. */
+/** A testlib checker's or interactor's `quitp(x)` is x points of the test, which the judge reads against the rescaled points. testlib's std:: checkers never award partial points and the percent flag makes x relative, so only a custom checker or an interactor without it is refused. */
 function refuseRescaledCheckerPoints(root: XmlElement): void {
   const checker = descendant(root, 'checker');
-  const percent =
-    descendant(root, 'judging')?.attributes[
-      'treat-points-from-checker-as-percent'
-    ] === 'true';
-  if (!checker || percent || checker.attributes.name?.startsWith('std::'))
-    return;
+  const customChecker =
+    checker && !checker.attributes.name?.startsWith('std::');
+  const readsPoints = customChecker || descendant(root, 'interactor');
+  if (!readsPoints || pointsArePercent(root)) return;
   throw new PolygonImportError(
-    'fractional points with a custom checker: QHHOJ scales points to integers, so partial points from the checker would be misread; use integer points or enable "treat points from checker as percent"',
+    'fractional points with a custom checker or an interactor: QHHOJ scales points to integers, so partial points from them would be misread; use integer points or enable "treat points from checker as percent"',
   );
 }
 

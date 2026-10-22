@@ -11,6 +11,7 @@ const assets = (overrides: Partial<PolygonAssets> = {}): PolygonAssets => ({
   checkerSource: 'files/check.cpp',
   polygonChecker: 'std::wcmp.cpp',
   interactorSource: null,
+  graderArgs: null,
   ...overrides,
 });
 const plan = (overrides: Partial<TestPlan> = {}): TestPlan =>

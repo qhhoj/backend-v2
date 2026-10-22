@@ -1,7 +1,10 @@
 import { parse } from 'yaml';
 import { EMPTY_TEST_CASE, emptyProblemData } from '@libs/database';
 import type { ProblemData, ProblemTestCase } from '@libs/database';
-import { requiredJudgeFeatures } from '@libs/judging';
+import {
+  INTERACTOR_PERCENT_FEATURE,
+  requiredJudgeFeatures,
+} from '@libs/judging';
 import { compileInitYaml } from './init-yaml';
 import { ProblemDataError } from './problem-data.error';
 
@@ -305,7 +308,58 @@ describe('compileInitYaml', () => {
       const legacy = { ...polygonInteractive, interactiveChecker: false };
       expect(init(legacy).interactive).not.toHaveProperty('checker');
     });
+    it("reads the interactor's points as a percentage only when its grader args say so", () => {
+      const percent = {
+        ...polygonInteractive,
+        graderArgs: { treat_checker_points_as_percentage: true },
+      };
+      expect(init(percent).interactive).toMatchObject({
+        treat_checker_points_as_percentage: true,
+      });
+      expect(init(polygonInteractive).interactive).not.toHaveProperty(
+        'treat_checker_points_as_percentage',
+      );
+    });
   });
+  it.each<[string, Partial<ProblemData>]>([
+    ['interactive', { grader: 'interactive', customGrader: 'i.cpp' }],
+    [
+      'interactive, percent',
+      {
+        grader: 'interactive',
+        customGrader: 'i.cpp',
+        graderArgs: { treat_checker_points_as_percentage: true },
+      },
+    ],
+    [
+      'interactive, percent off',
+      {
+        grader: 'interactive',
+        customGrader: 'i.cpp',
+        graderArgs: { treat_checker_points_as_percentage: false },
+      },
+    ],
+    [
+      'interactive with checker, percent',
+      {
+        grader: 'interactive',
+        customGrader: 'i.cpp',
+        interactiveChecker: true,
+        graderArgs: { treat_checker_points_as_percentage: true },
+      },
+    ],
+  ])(
+    'asks for a judge that reads interactor percentages exactly when init.yml sets one: %s',
+    (_label, overrides) => {
+      const interactive = init({ ...overrides, cases: [plain(1)] })
+        .interactive as Record<string, unknown>;
+      expect(
+        requiredJudgeFeatures(data(overrides)).includes(
+          INTERACTOR_PERCENT_FEATURE,
+        ),
+      ).toBe('treat_checker_points_as_percentage' in interactive);
+    },
+  );
   it.each<[string, Partial<ProblemData>]>([
     ['standard', {}],
     ['bridged, no headers', { checker: 'bridged', customChecker: 'c.cpp' }],

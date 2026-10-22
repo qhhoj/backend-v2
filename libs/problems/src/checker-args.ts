@@ -81,7 +81,7 @@ const GRADER_RULES: Record<Grader, Record<string, Rule>> = {
     io_output_file: (value) =>
       typeof value === 'string' ? null : 'must be text',
   },
-  interactive: {},
+  interactive: { treat_checker_points_as_percentage: bool },
   signature: { allow_main: bool },
   output_only: {},
 };

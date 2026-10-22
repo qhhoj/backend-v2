@@ -23,6 +23,7 @@ const bridged = (
   checkerSource: 'files/check.cpp',
   polygonChecker,
   interactorSource: null,
+  graderArgs: null,
 });
 
 describe('parseAssets', () => {
@@ -54,6 +55,7 @@ describe('parseAssets', () => {
       checkerSource: null,
       polygonChecker: 'std::hcmp.cpp',
       interactorSource: null,
+      graderArgs: null,
     }));
 
   it('uses a custom C++ checker as bridged testlib, honouring percent points', () => {
@@ -101,6 +103,27 @@ describe('parseAssets', () => {
     expect(() =>
       assets({ ...oneTest, interactor: 'files/interactor.java' }),
     ).toThrow(new PolygonImportError('interactor must use C++'));
+  });
+
+  it("reads the interactor's points as a percentage when the package does, whatever the checker", () => {
+    const interactive = (name: string, percent: boolean) =>
+      assets({
+        ...oneTest,
+        interactor: 'files/interactor.cpp',
+        checker: { name, path: 'files/check.cpp' },
+        judging: { percent },
+      }).graderArgs;
+    const percentArgs = { treat_checker_points_as_percentage: true };
+    expect(interactive('std::wcmp.cpp', true)).toEqual(percentArgs);
+    expect(interactive('std::hcmp.cpp', true)).toEqual(percentArgs);
+    expect(interactive('std::wcmp.cpp', false)).toBeNull();
+    expect(
+      assets({
+        ...oneTest,
+        checker: { path: 'files/check.cpp' },
+        judging: { percent: true },
+      }).graderArgs,
+    ).toBeNull();
   });
 
   it('produces a custom checker the init.yml compiler accepts, with a type from the known list', () => {

@@ -1,6 +1,10 @@
 import type { JsonObject, ProblemData, ProblemTestCase } from '@libs/database';
 import { CUSTOM_CHECKER_TYPES } from '@libs/database';
-import { checkerHeadersOf, runsInteractiveChecker } from '@libs/judging';
+import {
+  checkerHeadersOf,
+  interactorPointsArePercent,
+  runsInteractiveChecker,
+} from '@libs/judging';
 import { extensionOf, hasDotSegment } from './file-names';
 import { ProblemDataError } from './problem-data.error';
 import { emitYaml } from './yaml-emit';
@@ -132,7 +136,7 @@ function plainBoxFileName(name: string): string {
   return name;
 }
 
-/** The judge compiles the listed headers beside the interactor, so its `#include "testlib.h"` finds the package's own copy first. A Polygon interactive problem also names the problem checker, which reads what the interactor wrote once it accepts. */
+/** The judge compiles the listed headers beside the interactor, so its `#include "testlib.h"` finds the package's own copy first. A Polygon interactive problem also names the problem checker, which reads what the interactor wrote once it accepts, and may read the interactor's points as a percentage. */
 function interactiveSpec(data: ProblemData): InitCase {
   const interactor = requireSource(
     data.customGrader,
@@ -144,6 +148,9 @@ function interactiveSpec(data: ProblemData): InitCase {
     type: 'testlib',
     lang: 'CPP17',
     ...(runsInteractiveChecker(data) ? { checker: problemChecker(data) } : {}),
+    ...(interactorPointsArePercent(data)
+      ? { treat_checker_points_as_percentage: true }
+      : {}),
   };
 }
 

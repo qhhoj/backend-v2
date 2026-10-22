@@ -10,7 +10,11 @@ import {
   newId,
   STATEMENT_LANGUAGES,
 } from '@libs/database';
-import type { ProblemData, SyncedSettingFingerprints } from '@libs/database';
+import type {
+  JsonObject,
+  ProblemData,
+  SyncedSettingFingerprints,
+} from '@libs/database';
 import { notifyRescore, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
 import type { ProblemRescoreJob } from '@libs/judging';
 import {
@@ -180,6 +184,12 @@ const helperHeaders = (
     ? helperHeadersOf(root, pkg)
     : [];
 
+/** Grader arguments from the tests (file io) and from the assets (interactor points); null when neither has any. */
+const joinArgs = (
+  first: JsonObject | null,
+  second: JsonObject | null,
+): JsonObject | null => (first || second ? { ...first, ...second } : null);
+
 const dataOf = (
   assets: PolygonAssets,
   plan: TestPlan,
@@ -194,7 +204,7 @@ const dataOf = (
   customGrader: assets.interactorSource ? INTERACTOR_FILE : null,
   helperHeaders: [...sources.helperHeaders.keys()],
   interactiveChecker: Boolean(assets.interactorSource),
-  graderArgs: plan.graderArgs,
+  graderArgs: joinArgs(plan.graderArgs, assets.graderArgs),
   cases: plan.cases,
 });
 

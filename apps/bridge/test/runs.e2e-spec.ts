@@ -2,7 +2,11 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { emptyProblemData, newId, SUBMISSION_PRIORITY } from '@libs/database';
-import { INTERACTIVE_CHECKER_FEATURE, requeueUpdate } from '@libs/judging';
+import {
+  INTERACTIVE_CHECKER_FEATURE,
+  INTERACTOR_PERCENT_FEATURE,
+  requeueUpdate,
+} from '@libs/judging';
 import type { Problem } from '@libs/database';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import { seedCatalog, seedProblem, seedSubmission } from './fixtures';
@@ -169,7 +173,7 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
     });
   });
 
-  it("asks for the judge features its (root's) data needs: a Polygon interactive checker, or checker headers", async () => {
+  it("asks for the judge features its (root's) data needs: a Polygon interactive checker, checker headers, or interactor percentages", async () => {
     const interactive = await seedProblem(bridge, catalog, {
       code: nextCode(),
       data: {
@@ -203,6 +207,15 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
         customChecker: 'checker.cpp',
       },
     });
+    const percent = await seedProblem(bridge, catalog, {
+      code: nextCode(),
+      data: {
+        ...emptyProblemData(),
+        grader: 'interactive',
+        customGrader: 'interactor.cpp',
+        graderArgs: { treat_checker_points_as_percentage: true },
+      },
+    });
     const featuresOf = async (problem: { _id: string }) => {
       const submission = await seedSubmission(bridge, catalog, {
         problem: problem._id,
@@ -216,6 +229,7 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
     expect(await featuresOf(mirror)).toEqual([INTERACTIVE_CHECKER_FEATURE]);
     expect(await featuresOf(headers)).toEqual([INTERACTIVE_CHECKER_FEATURE]);
     expect(await featuresOf(legacy)).toEqual([]);
+    expect(await featuresOf(percent)).toEqual([INTERACTOR_PERCENT_FEATURE]);
   });
 
   it('raises a memory limit under 1 MiB to 1024 KiB, so isolate never gets --cg-mem=0', async () => {
