@@ -606,6 +606,22 @@ describe('DispatcherService', () => {
       ]);
     });
 
+    it('reports an api abort of the held run until the run ends, and never for another generation', async () => {
+      const judge = await online(new Target('j1'));
+      const submission = entry();
+      await queue(submission);
+      const ref = { submissionId: submission.id, generation: 1 };
+      expect(dispatcher.isAbortRequested(ref)).toBe(false);
+      dispatcher.abort(submission.id);
+      expect(dispatcher.isAbortRequested(ref)).toBe(true);
+      expect(dispatcher.isAbortRequested({ ...ref, generation: 2 })).toBe(
+        false,
+      );
+      await dispatcher.runEnded(judge, ref, { retried: false });
+      expect(dispatcher.isAbortRequested(ref)).toBe(false);
+      expect(dispatcher.queuedIds()).toEqual([]);
+    });
+
     it('keeps the mark of a run another live session holds, so its holder still honours the abort', async () => {
       const dead = await online(new Target('j1'));
       const submission = entry();
