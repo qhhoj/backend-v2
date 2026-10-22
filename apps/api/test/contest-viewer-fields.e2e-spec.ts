@@ -411,6 +411,25 @@ describe('contest viewer fields', () => {
       ).toEqual([2, 0]);
     });
 
+    it('counts no solver of a 0-point problem, whose every cell is worth 0', async () => {
+      const [first] = problems;
+      const contest = await createContest(api, {
+        name: 'solvers_zero',
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+        problems: [contestProblem(first._id, 0, { points: 0 })],
+      });
+      const wrong = { [first._id]: { time: 60, points: 0 } };
+      await joinParticipation(api, contest._id, users.alice._id, {
+        formatData: wrong,
+        frozenFormatData: wrong,
+      });
+      expect((await detail(contest.key)).problems![0].solverCount).toBe(0);
+      expect(
+        (await ranking(contest.key, 'alice')).problems[0].acceptedCount,
+      ).toBe(0);
+    });
+
     it('counts frozen cells for non-editors during a freeze and live ones for editors', async () => {
       const [first] = problems;
       const contest = await createContest(api, {

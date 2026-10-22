@@ -1,4 +1,4 @@
-import { problemSummaries } from './first-solves';
+import { isSolvedCell, problemSummaries } from './first-solves';
 import type { SolveRow } from './first-solves';
 
 const problems = [{ problemId: 'P', points: 100 }];
@@ -97,6 +97,17 @@ describe('problemSummaries edge cases', () => {
     expect(summary([live('c', 3), live('a', 3), live('b', 7)]).firstSolve).toBe(
       'c',
     );
+  });
+
+  it('counts no solver of a 0-point problem, whose every cell is worth 0', () => {
+    expect(isSolvedCell({ points: 0, time: 5 }, 0)).toBe(false);
+    expect(
+      problemSummaries(
+        { name: 'ultimate', config: {} },
+        [{ problemId: 'P', points: 0 }],
+        [live('wrong', 5, 0)],
+      ).get('P'),
+    ).toEqual({ firstSolve: null, acceptedCount: 0 });
   });
 
   it('shows ioi times only with cumtime or lastScoreAltering', () => {

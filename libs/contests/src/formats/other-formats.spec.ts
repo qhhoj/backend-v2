@@ -1,3 +1,4 @@
+import { isSolvedCell } from '../first-solves';
 import { finalSubmissionFormat } from './final-submission';
 import { FormatConfigError } from './format';
 import { batchMinima, dataPoints, ioi16Format } from './ioi16';
@@ -6,7 +7,7 @@ import { at, context, row } from './scoring-fixtures';
 import { ultimateFormat } from './ultimate';
 
 describe('ioi16 (legacy IOIContestFormat, "IOI")', () => {
-  it('pools cases outside batches under 0 and keeps each batch minimum', () =>
+  it('keeps each batch minimum and each case outside batches on its own', () =>
     expect(
       batchMinima([
         { batch: 1, points: 10 },
@@ -14,8 +15,9 @@ describe('ioi16 (legacy IOIContestFormat, "IOI")', () => {
         { batch: null, points: 2 },
         { batch: null, points: 3 },
         { batch: 2, points: 7 },
+        { batch: 0, points: 5 },
       ]),
-    ).toEqual({ '0': 2, '1': 4, '2': 7 }));
+    ).toEqual({ '1': 4, 'case-2': 2, 'case-3': 3, '2': 7, 'case-5': 5 }));
 
   it('sums plain cases outside batches and batch starts, ignoring cases inside batches', () =>
     expect(
@@ -81,6 +83,89 @@ describe('ioi16 (legacy IOIContestFormat, "IOI")', () => {
       X: { points: 0, time: 0 },
       N: { points: 0, time: 0 },
     });
+  });
+});
+
+describe('ioi16 cells from the judged cases and the problem data', () => {
+  type DataCase = { type: 'C' | 'S' | 'E'; points: number | null };
+  type JudgedCase = { points: number; batch: number | null };
+  const plainCases = (points: number[]): JudgedCase[] =>
+    points.map((earned) => ({ points: earned, batch: null }));
+  const cellOf = (
+    data: DataCase[],
+    judged: JudgedCase[],
+    pointsPrecision = 3,
+  ): number => {
+    const problems = [
+      { problemId: 'P', points: 100, dataPoints: dataPoints(data) },
+    ];
+    const score = ioi16Format.score(
+      [row('P', 5, 0, { batchPoints: batchMinima(judged) })],
+      { cumtime: false },
+      context({ problems, pointsPrecision }),
+    );
+    return score.formatData.P.points as number;
+  };
+  const fivePlain: DataCase[] = Array.from({ length: 5 }, () => ({
+    type: 'C',
+    points: 20,
+  }));
+
+  it('credits each plain case on its own: 5 cases of 20 score 100 when all pass, 80 when one fails', () => {
+    expect(cellOf(fivePlain, plainCases([20, 20, 20, 20, 20]))).toBe(100);
+    expect(cellOf(fivePlain, plainCases([20, 0, 20, 20, 20]))).toBe(80);
+  });
+
+  it('adds plain cases to batch minima: 10 + 10 plain and an 80-point batch', () => {
+    const data: DataCase[] = [
+      { type: 'C', points: 10 },
+      { type: 'C', points: 10 },
+      { type: 'S', points: 80 },
+      { type: 'C', points: null },
+      { type: 'C', points: null },
+      { type: 'E', points: null },
+    ];
+    const judged = (first: number, batchSecond: number): JudgedCase[] => [
+      ...plainCases([first, 10]),
+      { points: 80, batch: 1 },
+      { points: batchSecond, batch: 1 },
+    ];
+    expect(cellOf(data, judged(10, 80))).toBe(100);
+    expect(cellOf(data, judged(0, 80))).toBe(90);
+    expect(cellOf(data, judged(10, 0))).toBe(20);
+  });
+
+  it('stores a full cell as exactly the contest points, so it counts as solved (batches of 3 and 6)', () => {
+    const data: DataCase[] = [
+      { type: 'S', points: 3 },
+      { type: 'C', points: null },
+      { type: 'E', points: null },
+      { type: 'S', points: 6 },
+      { type: 'C', points: null },
+      { type: 'E', points: null },
+    ];
+    const cell = cellOf(data, [
+      { points: 3, batch: 1 },
+      { points: 6, batch: 2 },
+    ]);
+    expect(cell).toBe(100);
+    expect(isSolvedCell({ points: cell }, 100)).toBe(true);
+  });
+
+  it('never rounds a partial cell up to full points, even with no decimals shown', () => {
+    const data: DataCase[] = [
+      { type: 'S', points: 199 },
+      { type: 'C', points: null },
+      { type: 'E', points: null },
+      { type: 'C', points: 1 },
+    ];
+    const cell = cellOf(
+      data,
+      [{ points: 199, batch: 1 }, ...plainCases([0])],
+      0,
+    );
+    expect(cell).toBe(99.5);
+    expect(isSolvedCell({ points: cell }, 100)).toBe(false);
   });
 });
 

@@ -15,11 +15,11 @@ export interface SolveRow {
   cells: Record<string, ProblemCell>;
 }
 
-/** The one definition of "solved": a cell worth the problem's full points (the ranking's `acceptedCount` rule). */
+/** The one definition of "solved": a cell worth the problem's full points (the ranking's `acceptedCount` rule); nothing solves a 0-point problem. */
 export const isSolvedCell = (
   cell: ProblemCell | null | undefined,
   points: number,
-): boolean => cell?.points === points;
+): boolean => points > 0 && cell?.points === points;
 
 /** Legacy `get_first_solves_and_total_ac`, one helper for every format: a cell worth the problem's full points is accepted; the first solve is the live row with the strictly smallest solve time, so a tie goes to the row ranked first. */
 export function problemSummaries(

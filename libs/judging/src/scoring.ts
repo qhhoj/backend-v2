@@ -80,6 +80,9 @@ export function gradeCases(cases: readonly GradableCase[]): CaseTotals {
   };
 }
 
+/** Decimals a submission's points (and an ioi16 cell) keep: legacy `round(…, 3)`. */
+export const POINTS_DECIMALS = 3;
+
 /** Legacy: `round(casePoints / caseTotal × problem.points, 3)`, and 0 for a non-partial problem unless that is exactly full marks. 2b's rescore uses this too. */
 export function submissionPoints(
   casePoints: number,
@@ -89,7 +92,7 @@ export function submissionPoints(
 ): number {
   const points =
     caseTotal > 0
-      ? pythonRound((casePoints / caseTotal) * problemPoints, 3)
+      ? pythonRound((casePoints / caseTotal) * problemPoints, POINTS_DECIMALS)
       : 0;
   return isPartial || points === problemPoints ? points : 0;
 }
