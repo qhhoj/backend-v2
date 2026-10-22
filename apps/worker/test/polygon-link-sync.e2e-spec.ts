@@ -597,6 +597,32 @@ describe('Polygon link, sync and auto-sync', () => {
       expect(init.interactive?.checker).toMatchObject({ name: 'bridged' });
     });
 
+    it("takes the package's interactor percent flag on a sync of an interactive problem linked without it", async () => {
+      const interactive = (percent: boolean) =>
+        buildPolygonPackage(
+          fixtureNamed('Sum', 1000, {
+            interactor: 'files/interactor.cpp',
+            judging: { percent },
+          }),
+        );
+      polygon.reply('problem.package', { zip: interactive(false) });
+      expect((await runJob(linkJob('ip_sync', 10))).error).toBeNull();
+      const { dataVersion } = await problemOf('ip_sync');
+      polygon.reply('problem.package', { zip: interactive(true) });
+      const { error, result } = await runJob(
+        syncJob('ip_sync', { packageId: 11, revision: 11 }, dataVersion),
+        once,
+      );
+      expect(error).toBeNull();
+      expect(result?.localEdits).toEqual({
+        kept: [],
+        updated: ['checker', 'grader'],
+      });
+      expect((await problemOf('ip_sync')).data!.graderArgs).toEqual({
+        treat_checker_points_as_percentage: true,
+      });
+    });
+
     it('keeps the headers a kept interactor compiles with when the package drops one, and leaves the checker unedited', async () => {
       const withHeaders = (...names: string[]) =>
         buildPolygonPackage(

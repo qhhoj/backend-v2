@@ -17,6 +17,8 @@ export interface PolygonAssets {
   /** The package's checker as Polygon names it (`std::wcmp.cpp`), or its source path; null when it has none. */
   polygonChecker: string | null;
   interactorSource: string | null;
+  /** The interactive grader's arguments: the percent flag for the interactor's points; null otherwise. */
+  graderArgs: JsonObject | null;
 }
 
 type CheckerAssets = Pick<
@@ -36,6 +38,12 @@ const STANDARD_CHECKER: CheckerAssets = {
   checkerArgs: null,
   checkerSource: null,
 };
+/** Polygon's problem-wide "treat points from checker as percent": a testlib `quitp(x)` is x% of the test, for the checker and the interactor alike. */
+export const pointsArePercent = (root: XmlElement): boolean =>
+  descendant(root, 'judging')?.attributes[
+    'treat-points-from-checker-as-percent'
+  ] === 'true';
+
 /** Polygon checkers are testlib programs; typed so a rename of the known custom checker types fails to compile. */
 const POLYGON_CHECKER_TYPE: CustomCheckerType = 'testlib';
 
@@ -63,10 +71,7 @@ function parseChecker(root: XmlElement, checker: XmlElement): CheckerAssets {
       'checker_unsupported',
     );
   if (checker.attributes.name === STANDARD_EQUIVALENT) return STANDARD_CHECKER;
-  const percent =
-    descendant(root, 'judging')?.attributes[
-      'treat-points-from-checker-as-percent'
-    ] === 'true';
+  const percent = pointsArePercent(root);
   return {
     checker: 'bridged',
     checkerArgs: {
@@ -91,5 +96,9 @@ export function parseAssets(root: XmlElement): PolygonAssets {
     interactorSource: interactor
       ? sourcePath(interactor, 'interactor', 'interactor must use C++')
       : null,
+    graderArgs:
+      interactor && pointsArePercent(root)
+        ? { treat_checker_points_as_percentage: true }
+        : null,
   };
 }

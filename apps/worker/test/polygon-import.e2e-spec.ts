@@ -527,6 +527,31 @@ describe('PolygonImportProcessor', () => {
     });
   });
 
+  it("reads the interactor's points as a percentage when the package does", async () => {
+    await processor.process(
+      bareUpdate(
+        {},
+        buildPolygonPackage({
+          ...fixture,
+          checker: { name: 'std::hcmp.cpp', path: 'files/check.cpp' },
+          interactor: 'files/interactor.cpp',
+          judging: { percent: true },
+        }),
+      ),
+    );
+    const problem = await worker.problems
+      .findOne({ code: 'sum' })
+      .select('+data');
+    expect(problem!.data!.graderArgs).toEqual({
+      treat_checker_points_as_percentage: true,
+    });
+    expect(
+      parse(readFileSync(join(dataDirectory('sum'), 'init.yml'), 'utf8')),
+    ).toMatchObject({
+      interactive: { treat_checker_points_as_percentage: true },
+    });
+  });
+
   it('drops data files the new configuration no longer uses', async () => {
     writeFileSync(join(dataDirectory('sum'), 'old-generator.cpp'), '//');
     await worker.problems.updateOne(

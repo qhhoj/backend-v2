@@ -109,7 +109,7 @@ export class PutProblemDataDto {
   checkerArgs: JsonObject | null = null;
   /** Grader: `standard`, `interactive`, `signature` or `output_only`. */
   @IsIn(GRADERS) grader!: Grader;
-  /** Arguments of the grader; null for none. standard: `io_method` (`standard`/`file`), `io_input_file`, `io_output_file`; signature: `allow_main`. Others take none; anything else is 400. */
+  /** Arguments of the grader; null for none. standard: `io_method` (`standard`/`file`), `io_input_file`, `io_output_file`; interactive: `treat_checker_points_as_percentage` (the interactor's points); signature: `allow_main`. Others take none; anything else is 400. */
   @ApiPropertyOptional()
   @JsonArgs()
   graderArgs: JsonObject | null = null;

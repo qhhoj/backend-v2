@@ -349,6 +349,18 @@ describe('planTests', () => {
     ).toEqual(['C2:01.inp', 'C3:02.inp']);
   });
 
+  it('refuses rescaled fractional points for an interactor that reads them as absolute, even beside a std:: checker', () => {
+    const fractional = {
+      tests: [test(2.5), test(2.5), test(5)],
+      checker: { name: 'std::wcmp.cpp', path: 'files/check.cpp' },
+      interactor: 'files/interactor.cpp',
+    };
+    expect(() => plan(fractional)).toThrow(/or an interactor/);
+    expect(
+      rows(plan({ ...fractional, judging: { percent: true } }).cases),
+    ).toEqual(['C1:01.inp', 'C1:02.inp', 'C2:03.inp']);
+  });
+
   it('reads file io from judging and rejects a testset without tests', () => {
     expect(
       plan({

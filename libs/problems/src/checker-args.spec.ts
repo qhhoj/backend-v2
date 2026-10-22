@@ -76,6 +76,24 @@ describe('graderArgsProblem', () => {
     expect(graderArgsProblem('signature', { allow_main: true })).toBeNull();
   });
 
+  it("lets the interactive grader read the interactor's points as a percentage", () => {
+    expect(
+      graderArgsProblem('interactive', {
+        treat_checker_points_as_percentage: true,
+      }),
+    ).toBeNull();
+    expect(
+      graderArgsProblem('interactive', {
+        treat_checker_points_as_percentage: 'yes',
+      }),
+    ).toMatch(/true or false/);
+    expect(
+      graderArgsProblem('standard', {
+        treat_checker_points_as_percentage: true,
+      }),
+    ).toMatch(/does not take/);
+  });
+
   it('refuses file I/O on a grader that ignores it, and a bad method', () => {
     expect(graderArgsProblem('interactive', { io_method: 'file' })).toMatch(
       /does not take/,

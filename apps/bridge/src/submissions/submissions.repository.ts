@@ -33,6 +33,7 @@ export const MAX_REQUEUES = 1;
 /** The problem data fields `requiredJudgeFeatures` reads (`data` is not selected by default). */
 const JUDGED_DATA_PROJECTION = {
   'data.grader': 1,
+  'data.graderArgs': 1,
   'data.checker': 1,
   'data.helperHeaders': 1,
   'data.interactiveChecker': 1,
