@@ -16,7 +16,8 @@ fresh() {
 install_host() { PATH="$bin:$PATH" QHHOJ_INSTALL_ROOT="$root" bash "$here/install-host.sh"; }
 
 fresh; install_host >/dev/null || fail "install"
-for f in usr/local/sbin/qhhoj-deploy etc/containers/systemd/qhhoj-api.container \
+for f in usr/local/sbin/qhhoj-deploy usr/local/sbin/qhhoj-backup usr/local/sbin/qhhoj-backup-restore-test \
+  etc/systemd/system/qhhoj-backup.service etc/systemd/system/qhhoj-backup.timer etc/containers/systemd/qhhoj-api.container \
   etc/containers/systemd/qhhoj-worker.container etc/containers/systemd/qhhoj-bridge.container \
   etc/systemd/system/qhhoj.target etc/sudoers.d/qhhoj-deploy etc/nginx/snippets/qhhoj-gate.conf var/www/qhhoj-maintenance/maintenance.html; do
   [ -f "$root/$f" ] || fail "missing $f"
@@ -34,6 +35,7 @@ grep -q "chown root:root $root/var/lib/qhhoj-deploy\$" "$calls" || fail "state d
 grep -q "groupadd -g 987 qhhoj" "$calls" && grep -q "useradd -u 987" "$calls" || fail "qhhoj 987"
 grep -q "systemctl daemon-reload" "$calls" && grep -q "systemctl enable qhhoj.target" "$calls" || fail "systemd"
 grep -q "systemctl start" "$calls" && fail "must not start services"
+grep -q "systemctl enable .*qhhoj-backup" "$calls" && fail "the backup timer waits for its env file and repositories"
 
 echo "# edited" > "$root/etc/nginx/snippets/qhhoj-gate.conf"; install_host >/dev/null
 grep -q edited "$root/etc/nginx/snippets/qhhoj-gate.conf" || fail "gate snippet is kept on re-install"

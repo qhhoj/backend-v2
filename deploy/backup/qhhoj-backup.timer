@@ -1,0 +1,12 @@
+# qhhoj-backup.timer: starts qhhoj-backup.service nightly at 03:30 Vietnam time; a run missed while the host was down
+# starts at the next boot (Persistent).
+[Unit]
+Description=QHHOJ nightly backup at 03:30 Asia/Ho_Chi_Minh
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Ho_Chi_Minh
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
