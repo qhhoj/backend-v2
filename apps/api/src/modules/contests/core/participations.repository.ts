@@ -390,7 +390,15 @@ export class ParticipationsRepository {
     const sums = Object.fromEntries(
       problems.map(({ problemId, points }, index) => [
         `problem${index}`,
-        { $sum: { $cond: [{ $eq: [pointsOf(problemId), points] }, 1, 0] } },
+        {
+          $sum: {
+            $cond: [
+              { $and: [points > 0, { $eq: [pointsOf(problemId), points] }] },
+              1,
+              0,
+            ],
+          },
+        },
       ]),
     );
     const [row] = await this.participations

@@ -69,6 +69,15 @@ describe('balloonItems', () => {
     ]);
   });
 
+  it('gives no balloon for a 0-point problem', () =>
+    expect(
+      balloonItems(
+        ICPC,
+        [{ problemId: 'a', points: 0 }],
+        [row('ann', { a: { time: 600, points: 0, tries: 1 } })],
+      ),
+    ).toEqual([]));
+
   it('puts a solve with no known time after the timed ones', () => {
     const items = balloonItems({ name: 'ioi16', config: {} }, PROBLEMS, [
       row('ann', { a: { points: 100 } }),

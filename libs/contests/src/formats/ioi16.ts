@@ -1,3 +1,4 @@
+import { POINTS_DECIMALS, pythonRound } from '@libs/judging';
 import type { ContestFormat, ProblemCell, ScoringRow } from './format';
 import {
   parseKnownConfig,
@@ -12,13 +13,14 @@ export interface Ioi16Config {
   cumtime: boolean;
 }
 
-/** Legacy `get_best_subtask_point` for one submission: per batch the smallest case points; cases outside batches pool under `'0'`. */
+/** Legacy `get_best_subtask_point` for one submission: per batch the smallest case points. Each case outside batches (batch null or 0) is its own key (`case-<index>`), not pooled under one minimum as legacy did: `dataPoints` counts every plain case. */
 export function batchMinima(
   cases: readonly { points: number; batch: number | null }[],
 ): Record<string, number> {
   const minima: Record<string, number> = {};
-  for (const testCase of cases) {
-    const key = String(testCase.batch ?? 0);
+  for (const [index, testCase] of cases.entries()) {
+    const batch = testCase.batch ?? 0;
+    const key = batch > 0 ? String(batch) : `case-${index}`;
     minima[key] =
       key in minima ? Math.min(minima[key], testCase.points) : testCase.points;
   }
@@ -63,9 +65,10 @@ export const ioi16Format: ContestFormat<Ioi16Config> = {
       const scale = problem?.dataPoints
         ? problem.points / problem.dataPoints
         : 0;
-      const points = Object.values(best).reduce(
-        (sum, batch) => sum + batch * scale,
-        0,
+      // Rounded as a submission's points are, so a full cell is exactly the problem's points ("solved").
+      const points = pythonRound(
+        Object.values(best).reduce((sum, batch) => sum + batch * scale, 0),
+        POINTS_DECIMALS,
       );
       formatData[problemId] = { points, time: 0 };
       score += points;
