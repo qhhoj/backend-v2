@@ -8,7 +8,8 @@ import { createUser, errorCode, setupApiTest } from './setup';
 import { getQueueToken } from '@nestjs/bullmq';
 import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
 import type { Queue } from 'bullmq';
-import { createUserWith } from './problem-fixtures';
+import { ActivationService } from '../src/modules/auth/registration/activation.service';
+import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { ApiTest } from './setup';
 
 let api: ApiTest;
@@ -355,6 +356,44 @@ describe('registration extras', () => {
         await resend(email).expect(204);
       await new Promise((resolve) => setTimeout(resolve, 200));
       expect(api.mailer.sent).toHaveLength(0);
+    });
+
+    it('neither mails nor activates an account staff deactivated before its first login', async () => {
+      await register().expect(204);
+      const key = activationKeyFrom(api.mailer.sent[0].text);
+      await api
+        .http()
+        .post(`${AUTH}/activate`)
+        .send({ token: key })
+        .expect(204);
+      const staff = await createUserWith(api, 'pending', {
+        permissions: ['judge.change_profile', 'auth.change_user'],
+      });
+      await authed(
+        api.http().patch('/api/internal/admin/users/newbie/profile'),
+        await loginAs(api, staff._id),
+      )
+        .send({ isActive: false })
+        .expect(200);
+      api.mailer.sent.length = 0;
+      await resend('newbie@example.com').expect(204);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(api.mailer.sent).toHaveLength(0);
+      const user = (await api.users.findOne({ username: 'newbie' }))!;
+      const planted = await api.app
+        .get(ActivationService)
+        .createKey(uuidStr(user._id));
+      await api
+        .http()
+        .post(`${AUTH}/activate`)
+        .send({ token: planted })
+        .expect(400)
+        .expect(errorCode('invalid_token'));
+      const after = (await api.users.findById(user._id).lean())!;
+      expect([after.isActive, after.deactivatedAt]).toEqual([
+        false,
+        user.deactivatedAt,
+      ]);
     });
   });
 });

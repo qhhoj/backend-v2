@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { optionalPrincipal } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { CONTEST_EVENTS_CHANNEL, parseContestEvent } from '@libs/contests';
@@ -45,25 +46,25 @@ export class ContestStreamsService implements EventChannel {
 
   /** Caps first (the contest cap, then IP/user/total), then visibility (404), then the stream. Nothing is sent until an event: the page fetches the list itself on (re)connect. */
   async openContest(
-    auth: AuthContext | null,
+    auth: AuthContext | undefined,
     key: string,
     request: FastifyRequest,
     reply: FastifyReply,
   ): Promise<void> {
     if (this.open >= this.limits.contestTotal)
       throw new AppError('rate_limited', 429, 'Too many open event streams');
+    const principal = optionalPrincipal(auth);
+    // A session short of its 2FA or password gate still counts against its user's cap.
     const release = this.hub.reserve(
       request.ip,
       auth?.principal.userId ?? null,
     );
     try {
-      const contest = await this.contestViewers.visibleContest(
-        auth?.principal ?? null,
-        key,
-      );
+      const contest = await this.contestViewers.visibleContest(principal, key);
       const entry = this.hub.open(reply, release, {
         channel: this,
-        auth,
+        // A session short of its 2FA or password gates watches as a visitor.
+        auth: principal ? auth! : null,
         contestId: contest._id,
       });
       const listeners =

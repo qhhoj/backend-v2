@@ -190,6 +190,18 @@ describe('contest announcements', () => {
     expect((await open(contest.key)).status).toBe(429);
   });
 
+  it('treats a session short of its 2FA as anonymous when opening a stream', async () => {
+    const hidden = await createContest(api, {
+      isVisible: false,
+      authors: [users.editor._id],
+    });
+    sessions.pendingEditor = await loginAs(api, users.editor._id, {
+      twoFaPassed: false,
+    });
+    expect((await open(hidden.key, 'editor')).status).toBe(200);
+    expect((await open(hidden.key, 'pendingEditor')).status).toBe(404);
+  });
+
   it('stores without pushing when pushAnnouncements is off', async () => {
     const contest = await createContest(api, { authors: [users.editor._id] });
     const client = await open(contest.key);
