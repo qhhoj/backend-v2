@@ -316,6 +316,31 @@ afterAll(() => api.teardown());
         ]);
         expect(second.meta).toEqual({ page: 2, pageSize: 2, total: 5 });
       });
+
+      it('ranks a row without a time (an overridden compile error) after every timed row of equal points', async () => {
+        const problem = await problemWith('bestnull');
+        const seed = (user: string, fields: Partial<Submission>) =>
+          seedSubmission(api, {
+            user,
+            problem: problem._id,
+            language: catalog.languages.cpp,
+            points: 100,
+            memory: 50,
+            ...fields,
+          });
+        await seed(ids.owner, { time: null, memory: null });
+        const ownerTimed = await seed(ids.owner, { time: 0.05 });
+        await seed(ids.other, { time: 0.01 });
+        await seed(ids.tester, { time: null, memory: null });
+
+        const page = await best('anonymous', 'bestnull');
+        expect(page.data.map((row) => row.user.username)).toEqual([
+          'other',
+          'owner',
+          'tester',
+        ]);
+        expect(page.data[1].id).toBe(ownerTimed._id);
+      });
     });
 
     describe('GET /submissions/:id', () => {

@@ -40,7 +40,7 @@ import type { OverriddenScore } from './score-override';
 const editsProblem = (principal: Principal, problem: Problem): boolean =>
   ProblemAccess.canEdit(principal, ProblemAccess.accessView(problem));
 
-/** What a score override writes and logs. The row will read as graded, so `shownError` would show an internal error's message to everyone: the message moves off the row into the revision, which only staff read. */
+/** What a score override writes and logs. The row will read as graded, so `shownError` would show an internal error's message to everyone: the message moves off the row into the revision, which only staff read. A run that did not grade every case (IE, AB) loses its cases, or batch scoring (ioi16) would credit a batch it stopped inside. */
 const overrideWrites = (
   submission: Submission,
   score: OverriddenScore,
@@ -52,6 +52,7 @@ const overrideWrites = (
       ...score,
       ...(lockedAfter && { lockedAfter }),
       ...(internalError !== null && { error: null }),
+      ...(submission.status !== 'D' && { cases: [] }),
     },
     changes: {
       result: { before: submission.result, after: score.result },
@@ -175,7 +176,7 @@ export class SubmissionActionsService {
     );
   }
 
-  /** Legacy submission admin's score fields (`judge.change_submission` on an editable problem), once judging is over. The row reads as graded with the given verdict and points; the case results stay as judged. `lock` also locks it so a rejudge cannot discard the override. Logged as a `submission` revision with the comment. */
+  /** Legacy submission admin's score fields (`judge.change_submission` on an editable problem), once judging is over. The row reads as graded with the given verdict and points; the case results stay as judged, except a run's that stopped partway (IE, AB), which are cleared. `lock` also locks it so a rejudge cannot discard the override. Logged as a `submission` revision with the comment. */
   async overrideScore(
     principal: Principal,
     id: string,

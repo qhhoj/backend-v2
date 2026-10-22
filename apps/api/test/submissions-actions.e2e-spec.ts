@@ -5,7 +5,7 @@ import type { SubmissionGradedJob } from '@libs/judging';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { Revision } from '@libs/database';
-import type { Submission } from '@libs/database';
+import type { Submission, SubmissionCase } from '@libs/database';
 import {
   createContest,
   hoursFromNow,
@@ -364,6 +364,43 @@ describe('submission actions', () => {
         caseTotal: 1600,
         lockedAfter: expect.any(Date) as Date,
       });
+    });
+
+    it('clears the cases of a run that stopped partway (IE, AB), so batch scoring credits none of them; a graded run keeps its cases', async () => {
+      const acCase = (position: number): SubmissionCase => ({
+        position,
+        status: 'AC',
+        time: 0.1,
+        memory: 1,
+        points: 2,
+        total: 2,
+        batch: 1,
+        feedback: '',
+        extendedFeedback: '',
+        output: '',
+      });
+      const partialRun = [acCase(1), acCase(2), acCase(3)];
+      for (const status of ['IE', 'AB'] as const) {
+        const stopped = await seed({
+          status,
+          result: status,
+          points: 0,
+          cases: partialRun,
+        });
+        await override('scorer', stopped, { result: 'WA', points: 0 }).expect(
+          204,
+        );
+        expect(await row(stopped)).toMatchObject({
+          status: 'D',
+          result: 'WA',
+          cases: [],
+        });
+      }
+      const graded = await seed({ result: 'WA', points: 0, cases: partialRun });
+      await override('scorer', graded, { result: 'AC', points: 1000 }).expect(
+        204,
+      );
+      expect((await row(graded)).cases).toHaveLength(3);
     });
 
     it('refuses scores the problem cannot give, unfinished rows and callers without the permission or edit rights', async () => {
