@@ -332,6 +332,24 @@ describe('PolygonImportProcessor', () => {
     });
   });
 
+  it('appends the main solution to the editorial only when the job asks for it, on create and on update', async () => {
+    const editorialOf = async (code: string) =>
+      (await worker.problems.findOne({ code }))!.solution!;
+    await processor.process(job({ code: 'nosol', appendMainSolution: false }));
+    const without = await editorialOf('nosol');
+    expect(without.content).toContain('Add.');
+    expect(without.content).not.toContain('int main()');
+    expect(without.contentHtml).not.toContain('int main()');
+    await processor.process(
+      bareUpdate({ code: 'nosol', appendMainSolution: true }),
+    );
+    expect((await editorialOf('nosol')).content).toContain('int main() {}');
+    await processor.process(
+      bareUpdate({ code: 'nosol', appendMainSolution: false }),
+    );
+    expect((await editorialOf('nosol')).content).not.toContain('int main()');
+  });
+
   it("creates a problem private to the job's organization, and a site problem without one", async () => {
     const organizationId = newId();
     await processor.process(job({ code: 'org_sum', organizationId }));

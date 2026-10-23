@@ -41,7 +41,8 @@ export class ProblemImportsController {
    * switches. A create with `organization` (a slug) makes the problem private
    * to that organization under the rules of
    * `POST /organizations/{slug}/problems` instead of `judge.add_problem`: its
-   * rights (404 unknown organization, 403 `forbidden`), the code prefix (400
+   * rights (404 unknown organization, 403 `forbidden`), authors and curators
+   * from its administrators only (else `judge.edit_all_problem`), the code prefix (400
    * `organization_code_prefix`), its credits (spent when the job is queued,
    * kept if the job fails later) and its storage. The package
    * is checked, then imported by a background job; the answer is 202 with a

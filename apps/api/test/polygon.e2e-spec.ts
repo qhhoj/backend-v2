@@ -594,6 +594,25 @@ describe('Polygon routes', () => {
       expect(job?.data[field as keyof typeof job.data]).toBeUndefined();
   });
 
+  it('queues the main-solution switch as sent, off when omitted', async () => {
+    const queued = async (code: string, extra: object) => {
+      sharedProblems();
+      const response = await post(`${POLYGON}/import`, {
+        link: SUM_LINK,
+        code,
+        ...SUM_LANGUAGES,
+        ...extra,
+      }).expect(202);
+      const { jobId } = dataOf<{ jobId: string }>(response);
+      return (await queue.getJob(jobId))?.data.appendMainSolution;
+    };
+    expect(await queued('sol_off', { appendMainSolution: false })).toBe(false);
+    expect(await queued('sol_omitted', {})).toBe(false);
+    expect(await queued('sol_on', { appendMainSolution: true })).toBe(true);
+    // Give the three imports back: the importer's hourly budget is shared by the later tests.
+    await redis.del(`rate:import:user:${importerId}`);
+  });
+
   it('checks the link again on import and queues nothing for a wrong token', async () => {
     sharedProblems();
     await post(`${POLYGON}/import`, {
@@ -1308,6 +1327,30 @@ describe('Polygon routes', () => {
         code: 'thptpoly_sum',
         mode: 'create',
         organizationId,
+      });
+    });
+
+    it('imports into the organization with the administrator as author', async () => {
+      sharedProblems();
+      const response = await post(
+        `${POLYGON}/import`,
+        {
+          link: SUM_LINK,
+          code: 'thptpoly_authored',
+          organization: 'thpt-poly',
+          ...SUM_LANGUAGES,
+          points: 800,
+          typeIds: [catalog.types.uncategorized],
+          authors: [teacherId],
+        },
+        teacher,
+      ).expect(202);
+      const job = await queue.getJob(dataOf<{ jobId: string }>(response).jobId);
+      expect(job?.data).toMatchObject({
+        code: 'thptpoly_authored',
+        organizationId,
+        authors: [teacherId],
+        curators: [teacherId],
       });
     });
 

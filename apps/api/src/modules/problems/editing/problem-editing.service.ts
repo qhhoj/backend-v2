@@ -123,7 +123,7 @@ export class ProblemEditingService {
       fields.organizations = [organization.id];
       fields.isOrganizationPrivate = true;
     }
-    this.policy.assertCreateGates(principal, dto, fields, organization?.id);
+    this.policy.assertCreateGates(principal, dto, fields, organization);
     await this.policy.assertReferences(dto);
     await assertNoDataDirectory(this.dataFiles, dto.code);
     // Validation is done: spend now, refund if the insert fails (a taken code included).

@@ -14,7 +14,9 @@ import type {
 } from './dto/problem-edit.dto';
 import { LanguagesQuerier } from '../catalog/languages.querier';
 import { LicensesQuerier } from '../catalog/licenses.querier';
+import type { CreationTarget } from '../../organizations/creation/organization-creation-rights.service';
 import { comparable } from './problem-edit-fields';
+import { organizationPeopleWaiver } from './organization-people';
 import { ProblemAccess } from '../core/problem-access';
 import { ProblemGroupsQuerier } from '../catalog/problem-groups.querier';
 import { ProblemTypesQuerier } from '../catalog/problem-types.querier';
@@ -133,21 +135,26 @@ export class ProblemEditPolicyService {
     return problem;
   }
 
-  /** On an organization create the server sets the organization fields, so they are part of the baseline and open no gate. */
+  /** On an organization create the server sets the organization fields, so they are part of the baseline and open no gate; its administrators may be named as authors and curators (`organizationPeopleWaiver`). */
   assertCreateGates(
     principal: Principal,
     dto: CreateProblemDto,
     fields: Partial<Problem>,
-    organizationId: string | null = null,
+    organization: CreationTarget | null = null,
   ): void {
-    const baseline = organizationId
+    const baseline = organization
       ? {
           ...CREATE_BASELINE,
-          organizations: [organizationId],
+          organizations: [organization.id],
           isOrganizationPrivate: true,
         }
       : CREATE_BASELINE;
-    const waived = organizationId ? MEMBERS_ONLY_VISIBILITY : [];
+    const waived = organization
+      ? [
+          ...MEMBERS_ONLY_VISIBILITY,
+          ...organizationPeopleWaiver(principal, organization, fields),
+        ]
+      : [];
     this.assertFieldGates(principal, dto, fields, { baseline, waived });
   }
 

@@ -34,6 +34,8 @@ describe('creating problems and contests for an organization', () => {
   const sessions: Record<string, TestSession> = {};
   let teacherId: string;
   let outsiderId: string;
+  let bareAdminId: string;
+  let memberId: string;
 
   const person = async (
     name: string,
@@ -80,8 +82,8 @@ describe('creating problems and contests for an organization', () => {
     await api.reset();
     catalog = await seedCatalog(api);
     teacherId = await person('teacher', { permissions: ORG_ADMIN_RIGHTS });
-    const bareAdminId = await person('bareadmin');
-    const memberId = await person('member', { permissions: ORG_ADMIN_RIGHTS });
+    bareAdminId = await person('bareadmin');
+    memberId = await person('member', { permissions: ORG_ADMIN_RIGHTS });
     outsiderId = await person('outsider', { permissions: ORG_ADMIN_RIGHTS });
     await person('editsall', {
       permissions: [...ORG_ADMIN_RIGHTS, 'judge.edit_all_organization'],
@@ -186,13 +188,39 @@ describe('creating problems and contests for an organization', () => {
       expect(editorOf(detail).canPublishToMembers).toBe(true);
     });
 
-    it('keeps the other staff gates on an organization create', async () => {
+    it("lets an organization create name the organization's administrators as authors and curators", async () => {
       await createProblemAs(
         'teacher',
         'thpt-demo',
-        problemBody('thptdemo_authors', { authors: [teacherId] }),
-      ).expect(403);
+        problemBody('thptdemo_authors', {
+          authors: [teacherId, bareAdminId],
+          curators: [bareAdminId],
+        }),
+      ).expect(201);
+      const stored = await storedProblem('thptdemo_authors');
+      expect(stored?.authors.map(uuidStr)).toEqual([teacherId, bareAdminId]);
+      expect(stored?.curators.map(uuidStr).sort()).toEqual(
+        [teacherId, bareAdminId].sort(),
+      );
     });
+
+    it.each([
+      ['a member as author', () => ({ authors: [teacherId, memberId] })],
+      ['an outsider as curator', () => ({ curators: [outsiderId] })],
+      ['another staff field', () => ({ summary: 'Tóm tắt' })],
+    ])(
+      'keeps the staff gate for %s on an organization create',
+      async (_what, extra) => {
+        await createProblemAs(
+          'teacher',
+          'thpt-demo',
+          problemBody('thptdemo_gated', extra()),
+        )
+          .expect(403)
+          .expect(errorCode('forbidden'));
+        expect(await storedProblem('thptdemo_gated')).toBeNull();
+      },
+    );
 
     it('checks the prefix when an organization problem is renamed, and lets unrelated edits through', async () => {
       await api.problems.updateOne(
