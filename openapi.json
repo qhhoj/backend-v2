@@ -8728,6 +8728,11 @@
             "description": "Skip cases worth zero points.",
             "type": "boolean"
           },
+          "importTutorial": {
+            "default": true,
+            "description": "Import the package statement's tutorial as the editorial.",
+            "type": "boolean"
+          },
           "link": {
             "description": "The problem page address, `https://polygon.codeforces.com/p…/owner/name`.",
             "maxLength": 300,
@@ -8795,6 +8800,10 @@
           "ignoreZeroPointCases": {
             "type": "boolean"
           },
+          "importTutorial": {
+            "description": "Whether the package statement's tutorial becomes the editorial.",
+            "type": "boolean"
+          },
           "mainStatementLanguage": {
             "nullable": true,
             "type": "string"
@@ -8822,6 +8831,7 @@
           "ignoreZeroPointBatches",
           "ignoreZeroPointCases",
           "appendMainSolution",
+          "importTutorial",
           "maxCases"
         ],
         "type": "object"
@@ -16239,6 +16249,9 @@
             "type": "boolean"
           },
           "ignoreZeroPointCases": {
+            "type": "boolean"
+          },
+          "importTutorial": {
             "type": "boolean"
           },
           "mainStatementLanguage": {
@@ -34152,6 +34165,16 @@
             }
           },
           {
+            "description": "Import the package statement's tutorial as the editorial.",
+            "in": "query",
+            "name": "importTutorial",
+            "required": false,
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          {
             "description": "Slug of the organization a created problem belongs to: private to it, code with its prefix, charged to its quota; needs the rights of `POST /organizations/{slug}/problems` instead of `judge.add_problem`. Ignored by `update`.",
             "in": "query",
             "name": "organization",
@@ -36687,7 +36710,7 @@
     },
     "/api/internal/problems/{code}/polygon/sync": {
       "post": {
-        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. Queues the import job in sync mode on the newest READY package:\nstatement, tutorial and tests are overwritten; code, points, group, types,\nauthors, curators and allowed languages are kept. The time and memory\nlimits, partial scoring, checker (type, arguments, source) and grader\nsettings come from the package too, except each one edited on QHHOJ since\nthe last import, which is kept unless the body sets\n`overwriteLocalEdits`; the job's `result.localEdits` lists what was kept\nand what was updated. The link's statement options are checked against\nPolygon's working copy, which may be newer than the package synced: a\nlanguage not in the package yet can be set to `skip`.\nThe result is recorded on the link. Answers 202 with a `jobId` to poll at\n`GET /problems/imports/{jobId}`; the id is one per problem and package, so\nwhile a sync of that package (manual or automatic) is queued or running\nthe answer is that job, and nothing is spent. Every sync takes the link's\ntestcase limit, whoever starts it. The worker checks the package against the\nstorage of the organization an organization-private problem is charged to\n(the package size minus the test data it replaces). Counts towards the 10 imports an hour per\nuser. Errors: 403 `forbidden`, 404 `polygon_not_linked`, 409\n`polygon_package_not_ready`, 409 `polygon_sync_queued` (an\n`overwriteLocalEdits` sync while one keeping them is queued or running),\n409 `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
+        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. Queues the import job in sync mode on the newest READY package:\nstatement, tutorial (unless the link's `importTutorial` is false: the\neditorial then stays as it is) and tests are overwritten; code, points, group, types,\nauthors, curators and allowed languages are kept. The time and memory\nlimits, partial scoring, checker (type, arguments, source) and grader\nsettings come from the package too, except each one edited on QHHOJ since\nthe last import, which is kept unless the body sets\n`overwriteLocalEdits`; the job's `result.localEdits` lists what was kept\nand what was updated. The link's statement options are checked against\nPolygon's working copy, which may be newer than the package synced: a\nlanguage not in the package yet can be set to `skip`.\nThe result is recorded on the link. Answers 202 with a `jobId` to poll at\n`GET /problems/imports/{jobId}`; the id is one per problem and package, so\nwhile a sync of that package (manual or automatic) is queued or running\nthe answer is that job, and nothing is spent. Every sync takes the link's\ntestcase limit, whoever starts it. The worker checks the package against the\nstorage of the organization an organization-private problem is charged to\n(the package size minus the test data it replaces). Counts towards the 10 imports an hour per\nuser. Errors: 403 `forbidden`, 404 `polygon_not_linked`, 409\n`polygon_package_not_ready`, 409 `polygon_sync_queued` (an\n`overwriteLocalEdits` sync while one keeping them is queued or running),\n409 `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
         "operationId": "ProblemPolygonLinkController_sync",
         "parameters": [
           {

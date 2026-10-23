@@ -350,6 +350,58 @@ describe('PolygonImportProcessor', () => {
     expect((await editorialOf('nosol')).content).not.toContain('int main()');
   });
 
+  it('leaves the tutorial out of a new problem, keeping only the appended solution when asked', async () => {
+    const editorialOf = async (code: string) =>
+      (await worker.problems.findOne({ code }))!.solution;
+    await processor.process(
+      job({ code: 'notut', importTutorial: false, appendMainSolution: false }),
+    );
+    expect(await editorialOf('notut')).toBeFalsy();
+    await processor.process(
+      job({
+        code: 'notut_sol',
+        importTutorial: false,
+        appendMainSolution: true,
+      }),
+    );
+    const onlyCode = (await editorialOf('notut_sol'))!;
+    expect(onlyCode.content).toContain('int main() {}');
+    expect(onlyCode.content).not.toContain('Add.');
+  });
+
+  it.each([true, false])(
+    'keeps a hand-written editorial untouched on an update that does not import the tutorial (appendMainSolution=%s)',
+    async (appendMainSolution) => {
+      const code = `keep_${appendMainSolution}`;
+      await processor.process(job({ code }));
+      const publishOn = new Date('2026-01-02T03:04:05.000Z');
+      await worker.problems.updateOne(
+        { code },
+        {
+          $set: {
+            solution: {
+              content: 'My own words.',
+              contentHtml: '<p>My own words.</p>',
+              isPublic: true,
+              publishOn,
+              authors: [],
+            },
+          },
+        },
+      );
+      await processor.process(
+        bareUpdate({ code, importTutorial: false, appendMainSolution }),
+      );
+      const kept = (await worker.problems.findOne({ code }))!.solution!;
+      expect(kept).toMatchObject({
+        content: 'My own words.',
+        contentHtml: '<p>My own words.</p>',
+        isPublic: true,
+        publishOn,
+      });
+    },
+  );
+
   it("creates a problem private to the job's organization, and a site problem without one", async () => {
     const organizationId = newId();
     await processor.process(job({ code: 'org_sum', organizationId }));

@@ -351,5 +351,6 @@ const requestedOptions = (
   ignoreZeroPointBatches: query.ignoreZeroPointBatches,
   ignoreZeroPointCases: query.ignoreZeroPointCases,
   appendMainSolution: query.appendMainSolution,
+  importTutorial: query.importTutorial,
   maxCases: maxTestcasesFor(principal),
 });

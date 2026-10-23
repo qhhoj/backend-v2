@@ -53,6 +53,7 @@ export function newLink(
       ignoreZeroPointBatches: job.ignoreZeroPointBatches,
       ignoreZeroPointCases: job.ignoreZeroPointCases,
       appendMainSolution: job.appendMainSolution,
+      importTutorial: job.importTutorial !== false,
       maxCases: job.maxCases,
     },
   };

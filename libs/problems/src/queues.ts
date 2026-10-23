@@ -75,6 +75,8 @@ export interface PolygonImportJob {
   ignoreZeroPointBatches: boolean;
   ignoreZeroPointCases: boolean;
   appendMainSolution: boolean;
+  /** Whether the package statement's tutorial becomes the editorial; absent (a job queued before the option) means true. */
+  importTutorial?: boolean;
   /** The requester's testcase limit: 300, or 9999 with `judge.create_mass_testcases`. */
   maxCases: number;
   /** The problem's `dataVersion` when the import was queued (update only); the worker refuses if it moved since. */

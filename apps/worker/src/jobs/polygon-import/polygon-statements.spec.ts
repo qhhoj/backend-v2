@@ -250,6 +250,76 @@ describe('polygon statements', () => {
     ).rejects.toThrow('statement not found');
     await none.close();
   });
+  it.each([
+    { importTutorial: true, append: false, editorial: 'Add them.' },
+    { importTutorial: false, append: false, editorial: '' },
+    {
+      importTutorial: true,
+      append: true,
+      editorial:
+        'Add them.\n\n<blockquote class="spoiler">\n```cpp\nint main() {}\n```\n</blockquote>\n',
+    },
+    {
+      importTutorial: false,
+      append: true,
+      editorial:
+        '<blockquote class="spoiler">\n```cpp\nint main() {}\n```\n</blockquote>\n',
+    },
+  ])(
+    'builds the editorial for importTutorial=$importTutorial, appendMainSolution=$append',
+    async ({ importTutorial, append, editorial }) => {
+      const pkg = await openPackage({
+        tests: [{ input: '1', answer: '1' }],
+        statements: [
+          {
+            language: 'english',
+            name: 'Sum',
+            properties: properties({ tutorial: 'Add them.' }),
+          },
+        ],
+      });
+      const statements = await parseStatements(await pkg.problemXml(), {
+        pkg,
+        job: job({ importTutorial }),
+        texToMarkdown: identity,
+        saveImage: () => Promise.resolve(''),
+      });
+      const result = append
+        ? withMainSolution(statements.tutorial, 'int main() {}', 'cpp.g++17')
+        : statements.tutorial;
+      expect(result).toBe(editorial);
+      await pkg.close();
+    },
+  );
+  it('does not ask for a tutorial language when the tutorial is not imported', async () => {
+    const pkg = await openPackage({
+      tests: [{ input: '1', answer: '1' }],
+      statements: [
+        {
+          language: 'english',
+          name: 'Sum',
+          properties: properties({ tutorial: 'A.' }),
+        },
+        {
+          language: 'vietnamese',
+          name: 'Tong',
+          properties: properties({ tutorial: 'B.' }),
+        },
+      ],
+    });
+    const result = await parseStatements(await pkg.problemXml(), {
+      pkg,
+      job: job({
+        mainStatementLanguage: 'english',
+        statementLanguages: { vietnamese: 'vi' },
+        importTutorial: false,
+      }),
+      texToMarkdown: identity,
+      saveImage: () => Promise.resolve(''),
+    });
+    expect(result.tutorial).toBe('');
+    await pkg.close();
+  });
   it('appends the main solution as a spoiler with the language fence', () => {
     expect(withMainSolution('Tutorial.\n', 'int main() {}', 'cpp.g++17')).toBe(
       'Tutorial.\n\n<blockquote class="spoiler">\n```cpp\nint main() {}\n```\n</blockquote>\n',
