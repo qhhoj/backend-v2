@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.34.12
+
+### Patch Changes
+
+- f41c48f: Organization problem creates (`POST /organizations/{slug}/problems` and imports with `organization`) accept authors and curators from the organization's administrators without `judge.edit_all_problem`.
+
 ## 2.34.11
 
 ### Patch Changes
