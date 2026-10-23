@@ -1778,6 +1778,44 @@ afterAll(() => api.teardown());
       );
       rmSync(join(directory, 'testlib.h'));
     });
+    it('compiles the uploaded header beside a bridged checker on a standard grader', async () => {
+      const files = `${PROBLEMS}/sum/data/files`;
+      const checkerFiles = () =>
+        (
+          parse(readFileSync(join(directory, 'init.yml'), 'utf8')) as {
+            checker: { args: { files: unknown } };
+          }
+        ).checker.args.files;
+      await upload(
+        `${files}/customChecker`,
+        editor,
+        Buffer.from('#include "graph.h"\nint main(){}'),
+        'chk.cpp',
+      ).expect(201);
+      await authed(api.http().put(`${PROBLEMS}/sum/data`), editor)
+        .send({
+          checker: 'bridged',
+          grader: 'standard',
+          cases: [{ type: 'C', input: '1.in', output: '1.out', points: 1 }],
+        })
+        .expect(200);
+      expect(checkerFiles()).toBe('chk.cpp');
+      const withHeader = dataOf(
+        await upload(
+          `${files}/customHeader`,
+          editor,
+          Buffer.from('int f();'),
+          'graph.h',
+        ).expect(201),
+      );
+      expect(withHeader.feedback).toBe('');
+      expect(checkerFiles()).toEqual(['chk.cpp', 'graph.h']);
+      await authed(api.http().delete(`${files}/customHeader`), editor).expect(
+        200,
+      );
+      expect(checkerFiles()).toBe('chk.cpp');
+      expect(existsSync(join(directory, 'graph.h'))).toBe(false);
+    });
     describe('lost races never leave disk and Mongo disagreeing', () => {
       const storedData = async () =>
         dataOf(

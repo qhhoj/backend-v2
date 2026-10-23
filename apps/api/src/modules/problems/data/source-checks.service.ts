@@ -14,6 +14,9 @@ import { ProblemsRepository } from '../core/problems.repository';
 
 const isChecked = (kind: DataFileKind): kind is CheckedSourceKind =>
   kind === 'customChecker' || kind === 'customGrader';
+/** The uploaded header compiles beside the checker, so changing it re-checks the checker. */
+const checkedKindOf = (kind: DataFileKind): DataFileKind =>
+  kind === 'customHeader' ? 'customChecker' : kind;
 
 /** Only an interactor compiles on its own; a signature grader needs the contestant's code, so it is not checked. */
 const compilesAlone = (kind: CheckedSourceKind, data: ProblemData): boolean =>
@@ -28,12 +31,13 @@ export class SourceChecksService {
     private readonly queue: Queue<SourceCheckJob>,
   ) {}
 
-  /** After `kind` was uploaded as `data[kind]` (or removed): a fresh `pending` check is queued, or the old state dropped. */
+  /** After `changed` was uploaded as `data[changed]` (or removed): a fresh `pending` check of it (of the checker, for a header) is queued, or the old state dropped. */
   async afterFileChange(
     problemId: string,
-    kind: DataFileKind,
+    changed: DataFileKind,
     data: ProblemData,
   ): Promise<void> {
+    const kind = checkedKindOf(changed);
     if (!isChecked(kind)) return;
     const file = data[kind];
     if (!file || !compilesAlone(kind, data))

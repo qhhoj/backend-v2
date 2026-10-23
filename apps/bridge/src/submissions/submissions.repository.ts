@@ -35,6 +35,7 @@ const JUDGED_DATA_PROJECTION = {
   'data.grader': 1,
   'data.graderArgs': 1,
   'data.checker': 1,
+  'data.customHeader': 1,
   'data.helperHeaders': 1,
   'data.interactiveChecker': 1,
 } as const;

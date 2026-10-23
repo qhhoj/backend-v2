@@ -1,4 +1,9 @@
-import { checkOf, compileCheckPlan, MAX_LOG_CHARS } from './source-check-plan';
+import {
+  checkOf,
+  compileCheckPlan,
+  headersOf,
+  MAX_LOG_CHARS,
+} from './source-check-plan';
 
 const failure = (stage: string, kind: string, detail = '') => ({
   kind: 'failed' as const,
@@ -65,5 +70,28 @@ describe('checkOf', () => {
     });
     for (const kind of ['timeout', 'no-judge', 'cancelled'] as const)
       expect(checkOf({ kind }, 'chk.cpp', now).status).toBe('unavailable');
+  });
+});
+
+describe('headersOf', () => {
+  const stored = { customHeader: 'graph.h', helperHeaders: ['testlib.h'] };
+
+  it('bundles a checker with the package headers and the uploaded header', () => {
+    expect(headersOf('customChecker', stored)).toEqual([
+      'testlib.h',
+      'graph.h',
+    ]);
+    expect(headersOf('customChecker', { customHeader: 'graph.h' })).toEqual([
+      'graph.h',
+    ]);
+  });
+
+  it('bundles an interactor with the package headers only', () => {
+    expect(headersOf('customGrader', stored)).toEqual(['testlib.h']);
+  });
+
+  it('bundles nothing for a problem without headers', () => {
+    expect(headersOf('customChecker')).toEqual([]);
+    expect(headersOf('customChecker', { customHeader: null })).toEqual([]);
   });
 });

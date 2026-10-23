@@ -70,7 +70,7 @@ function integerOrNull(value: number | null, label: string): number | null {
 const filesOf = (source: string, headers: string[]): string | string[] =>
   headers.length ? [source, ...headers] : source;
 
-/** Legacy `make_checker` for the problem-wide checker; the custom checker always carries `files` (its uploaded source, then any Polygon headers) with a `type` the editor may choose (default testlib); `files` and `lang` always come from the uploaded source. */
+/** Legacy `make_checker` for the problem-wide checker; the custom checker always carries `files` (its uploaded source, then any Polygon headers and the uploaded header) with a `type` the editor may choose (default testlib); `files` and `lang` always come from the uploaded source. */
 function problemChecker(
   data: ProblemData,
 ): string | { name: string; args: JsonObject } {

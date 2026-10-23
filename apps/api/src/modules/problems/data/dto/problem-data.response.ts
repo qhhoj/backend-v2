@@ -66,7 +66,7 @@ export class ProblemDataResponse {
   customChecker!: string | null;
   /** Name of the uploaded grader source; null when none. */
   customGrader!: string | null;
-  /** Name of the uploaded header file; null when none. */
+  /** Name of the uploaded header file: the signature grader's, and compiled beside a custom checker too; null when none. */
   customHeader!: string | null;
   /** Problem-wide checker. */
   checker!: Checker;

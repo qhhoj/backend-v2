@@ -8,7 +8,12 @@ export const INTERACTOR_PERCENT_FEATURE = 'interactive.percentage';
 /** The parts of a problem's data that decide what its init.yml asks of a judge. */
 export type JudgedData = Pick<
   ProblemData,
-  'grader' | 'graderArgs' | 'checker' | 'helperHeaders' | 'interactiveChecker'
+  | 'grader'
+  | 'graderArgs'
+  | 'checker'
+  | 'customHeader'
+  | 'helperHeaders'
+  | 'interactiveChecker'
 >;
 
 /** init.yml names an `interactive.checker`. */
@@ -20,9 +25,19 @@ export const interactorPointsArePercent = (data: JudgedData): boolean =>
   data.grader === 'interactive' &&
   data.graderArgs?.treat_checker_points_as_percentage === true;
 
+/** The headers stored beside an uploaded checker: a Polygon package's, then the problem's uploaded header (a signature grader's, or one uploaded for the checker alone). */
+export const customCheckerHeadersOf = (
+  data: Partial<Pick<JudgedData, 'customHeader' | 'helperHeaders'>>,
+): string[] => [
+  ...new Set([
+    ...(data.helperHeaders ?? []),
+    ...(data.customHeader ? [data.customHeader] : []),
+  ]),
+];
+
 /** The headers a bridged checker compiles with; init.yml then lists them after its source. */
 export const checkerHeadersOf = (data: JudgedData): string[] =>
-  data.checker === 'bridged' ? (data.helperHeaders ?? []) : [];
+  data.checker === 'bridged' ? customCheckerHeadersOf(data) : [];
 
 /** Hello features a judge needs to grade the problem; empty for every problem an older judge grades. */
 export function requiredJudgeFeatures(data: JudgedData): string[] {
