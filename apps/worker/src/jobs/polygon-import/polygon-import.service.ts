@@ -430,8 +430,7 @@ export class PolygonImportService {
     const { tutorial, ...statement } = await this.readStatements(
       root,
       pkg,
-      job,
-      options,
+      { job, options },
       savedImages,
     );
     const headers = helperHeaders(root, pkg, assets);
@@ -517,8 +516,7 @@ export class PolygonImportService {
   private async readStatements(
     root: XmlElement,
     pkg: PolygonPackage,
-    job: PolygonImportJob,
-    options: ImportOptions,
+    { job, options }: { job: PolygonImportJob; options: ImportOptions },
     savedImages: string[],
   ) {
     const statements = await parseStatements(root, {
