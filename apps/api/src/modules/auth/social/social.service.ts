@@ -24,7 +24,7 @@ import type { OAuthProvider, SocialIdentity } from './oauth-provider';
 /** Lifetime of OAuth state and pending signup, in Redis and in their browser cookies. */
 export const STATE_TTL_SECONDS = 600;
 const MAX_STATE_LENGTH = 128;
-const LOGIN_REFUSALS = ['banned', 'account_not_activated'];
+const LOGIN_REFUSALS = ['banned', 'account_not_activated', 'account_disabled'];
 const invalidToken = () =>
   new AppError('invalid_token', 400, 'Token is invalid or expired');
 

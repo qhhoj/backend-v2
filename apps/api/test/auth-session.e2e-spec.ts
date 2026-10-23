@@ -43,6 +43,11 @@ describe('auth session endpoints', () => {
       isActive: false,
     });
     await createUser(api.users, {
+      username: 'erin',
+      isActive: false,
+      deactivatedAt: new Date(),
+    });
+    await createUser(api.users, {
       username: 'tina',
       email: 'tina@example.com',
       isTotpEnabled: true,
@@ -226,6 +231,12 @@ describe('auth session endpoints', () => {
       .send({ username: 'dave', password: 'correct horse battery' })
       .expect(403)
       .expect(errorCode('account_not_activated'));
+    await api
+      .http()
+      .post(LOGIN)
+      .send({ username: 'erin', password: 'correct horse battery' })
+      .expect(403)
+      .expect(errorCode('account_disabled'));
   });
   it('logs out one session or all of them', async () => {
     const login = () =>

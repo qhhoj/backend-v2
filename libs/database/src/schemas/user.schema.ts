@@ -47,7 +47,7 @@ export class User {
   @Prop({ type: String, default: null }) about!: string | null;
   /** `about` rendered at save in the `user` style. */
   @Prop({ default: '' }) aboutHtml!: string;
-  @Prop({ default: 'America/Toronto' }) timezone!: string;
+  @Prop({ default: 'Asia/Ho_Chi_Minh' }) timezone!: string;
   @Prop({ type: UUID, default: null }) languageId!: string | null;
   @Prop({ default: 0 }) points!: number;
   @Prop({ default: 0 }) performancePoints!: number;
