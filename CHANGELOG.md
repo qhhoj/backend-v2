@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.34.11
+
+### Patch Changes
+
+- cb3505e: A bridged checker compiles with the problem's uploaded header (`customHeader`) beside it, so a checker that includes the signature grader's header, or one uploaded for it alone, no longer fails to compile.
+
 ## 2.34.10
 
 ### Patch Changes
