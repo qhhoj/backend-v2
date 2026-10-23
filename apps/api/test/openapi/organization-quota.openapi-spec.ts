@@ -125,10 +125,12 @@ describe('organization problem tags, archive and quota schemas', () => {
     );
     expect(schema('UpdateQuotaDto').properties).toMatchObject({
       quotaMonthlyCredits: { type: 'number', nullable: true },
+      quotaJudgingMs: { type: 'number', nullable: true },
       quotaStorageBytes: { type: 'number', nullable: true },
     });
     expect(schema('UsageQuotaResponse').properties).toMatchObject({
       monthlyCredits: { type: 'number', nullable: true },
+      judgingMs: { type: 'number', nullable: true },
       storageBytes: { type: 'number', nullable: true },
     });
     expect(

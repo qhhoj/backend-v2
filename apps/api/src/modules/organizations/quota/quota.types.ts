@@ -10,5 +10,7 @@ export interface QuotaSnapshot {
   enforcing: boolean;
   unlimited: boolean;
   credits: QuotaMeter;
+  /** Judging milliseconds this month. */
+  judging: QuotaMeter;
   storage: QuotaMeter;
 }

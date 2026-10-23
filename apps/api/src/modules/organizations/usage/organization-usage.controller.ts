@@ -22,9 +22,10 @@ export class OrganizationUsageController {
    *
    * @remarks
    * Requires `judge.edit_all_organization`. Returns one row per organization
-   * for the current month: credits used and their limit, storage used and its
-   * limit, and whether it is unlimited. Sort by `name` (default) or `credits`;
-   * paged with `page` and `pageSize`.
+   * for the current month: credits used and their limit, judging milliseconds
+   * used and their limit, storage used and its limit, and whether it is
+   * unlimited. Sort by `name` (default), `credits` or `judging`; paged with
+   * `page` and `pageSize`.
    */
   @RequirePermission('judge.edit_all_organization')
   @ApiPaginatedResponse(UsageOverviewRowResponse)
@@ -39,9 +40,11 @@ export class OrganizationUsageController {
    * Get the quota usage of an organization
    *
    * @remarks
-   * Organization administrators only. Returns the current month's credits and
-   * storage against the organization's limits, whether quotas are enforced,
-   * and the most recent credit entries with the users who spent them.
+   * Organization administrators only. Returns the current month's credits,
+   * judging milliseconds and storage against the organization's limits,
+   * whether quotas are enforced, the most recent credit entries with the users
+   * who spent them, and the five problems that used the most judging time this
+   * month.
    */
   @Get(':slug/usage')
   one(
@@ -56,9 +59,10 @@ export class OrganizationUsageController {
    *
    * @remarks
    * Requires `judge.edit_all_organization`. Sets the monthly credits cap, the
-   * storage cap in bytes, or the unlimited flag; `null` clears a cap so the
-   * site default applies again, and omitted fields stay as they are. The
-   * change is logged. Returns the updated usage.
+   * monthly judging cap in milliseconds, the storage cap in bytes, or the
+   * unlimited flag; `null` clears a cap so the site default applies again,
+   * and omitted fields stay as they are. The change is logged. Returns the
+   * updated usage.
    */
   @RequirePermission('judge.edit_all_organization')
   @Patch(':slug/quota')
@@ -68,6 +72,7 @@ export class OrganizationUsageController {
     @Body(
       new RefuseNullFieldsPipe([
         'quotaMonthlyCredits',
+        'quotaJudgingMs',
         'quotaStorageBytes',
         'quotaUnlimited',
       ]),

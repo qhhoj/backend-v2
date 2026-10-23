@@ -8212,6 +8212,14 @@
             "description": "Whether limits are enforced by refusing actions.",
             "type": "boolean"
           },
+          "judging": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/QuotaMeterResponse"
+              }
+            ],
+            "description": "Judging milliseconds used this month (site time zone) against the limit."
+          },
           "month": {
             "description": "`YYYY-MM` in the site time zone.",
             "type": "string"
@@ -8247,6 +8255,13 @@
             ],
             "description": "Problem data storage in bytes against the limit."
           },
+          "topProblems": {
+            "description": "Up to five problems that used the most judging time this month, heaviest first.",
+            "items": {
+              "$ref": "#/components/schemas/UsageTopProblemResponse"
+            },
+            "type": "array"
+          },
           "unlimited": {
             "description": "Promotion: the limits below are reported but not applied, and the meters are never near or over.",
             "type": "boolean"
@@ -8258,15 +8273,18 @@
           "enforcing",
           "unlimited",
           "credits",
+          "judging",
           "storage",
           "quota",
-          "recent"
+          "recent",
+          "topProblems"
         ],
         "type": "object"
       },
       "OrganizationUsageSort": {
         "enum": [
           "credits",
+          "judging",
           "name"
         ],
         "type": "string"
@@ -11119,7 +11137,7 @@
             "type": "number"
           },
           "used": {
-            "description": "Amount used: credits for the credit meter, bytes for the storage meter.",
+            "description": "Amount used: credits for the credit meter, milliseconds for the judging\nmeter, bytes for the storage meter.",
             "type": "number"
           }
         },
@@ -12364,6 +12382,7 @@
           "quota.cost.contest",
           "quota.cost.dataPer10MiB",
           "quota.cost.problem",
+          "quota.defaultJudgingMs",
           "quota.defaultMonthlyCredits",
           "quota.defaultStorageBytes",
           "quota.enforce",
@@ -16595,6 +16614,13 @@
       },
       "UpdateQuotaDto": {
         "properties": {
+          "quotaJudgingMs": {
+            "description": "Judging milliseconds per month, 0 to 36000000000 (10000 h); null clears\nthe cap so the site default applies.",
+            "maximum": 36000000000,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
           "quotaMonthlyCredits": {
             "description": "Credits per month, 0 to 1000000; null clears the cap so the site default\napplies.",
             "maximum": 1000000,
@@ -16829,6 +16855,14 @@
             "description": "Credits used this month.",
             "type": "number"
           },
+          "judgingLimit": {
+            "description": "Judging milliseconds allowed per month.",
+            "type": "number"
+          },
+          "judgingUsed": {
+            "description": "Judging milliseconds used this month.",
+            "type": "number"
+          },
           "month": {
             "description": "Month of the figures, YYYY-MM.",
             "type": "string"
@@ -16860,6 +16894,8 @@
           "month",
           "creditsUsed",
           "creditsLimit",
+          "judgingUsed",
+          "judgingLimit",
           "storageUsed",
           "storageLimit",
           "unlimited"
@@ -16868,6 +16904,11 @@
       },
       "UsageQuotaResponse": {
         "properties": {
+          "judgingMs": {
+            "description": "Staff-set judging milliseconds per month; null for the site default.",
+            "nullable": true,
+            "type": "number"
+          },
           "monthlyCredits": {
             "description": "Staff-set monthly credits; null for the site default.",
             "nullable": true,
@@ -16881,7 +16922,35 @@
         },
         "required": [
           "monthlyCredits",
+          "judgingMs",
           "storageBytes"
+        ],
+        "type": "object"
+      },
+      "UsageTopProblemResponse": {
+        "properties": {
+          "code": {
+            "description": "Code of the problem.",
+            "type": "string"
+          },
+          "ms": {
+            "description": "Judging milliseconds charged this month.",
+            "type": "number"
+          },
+          "name": {
+            "description": "Name of the problem.",
+            "type": "string"
+          },
+          "runs": {
+            "description": "Grading runs charged this month.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "ms",
+          "runs"
         ],
         "type": "object"
       },
@@ -30635,11 +30704,11 @@
     },
     "/api/internal/organizations/usage": {
       "get": {
-        "description": "Requires `judge.edit_all_organization`. Returns one row per organization\nfor the current month: credits used and their limit, storage used and its\nlimit, and whether it is unlimited. Sort by `name` (default) or `credits`;\npaged with `page` and `pageSize`.",
+        "description": "Requires `judge.edit_all_organization`. Returns one row per organization\nfor the current month: credits used and their limit, judging milliseconds\nused and their limit, storage used and its limit, and whether it is\nunlimited. Sort by `name` (default), `credits` or `judging`; paged with\n`page` and `pageSize`.",
         "operationId": "OrganizationUsageController_overview",
         "parameters": [
           {
-            "description": "Order of the rows: by name or by credits used.",
+            "description": "Order of the rows: by name, by credits used or by judging time used.",
             "in": "query",
             "name": "sort",
             "required": false,
@@ -32047,7 +32116,7 @@
     },
     "/api/internal/organizations/{slug}/quota": {
       "patch": {
-        "description": "Requires `judge.edit_all_organization`. Sets the monthly credits cap, the\nstorage cap in bytes, or the unlimited flag; `null` clears a cap so the\nsite default applies again, and omitted fields stay as they are. The\nchange is logged. Returns the updated usage.",
+        "description": "Requires `judge.edit_all_organization`. Sets the monthly credits cap, the\nmonthly judging cap in milliseconds, the storage cap in bytes, or the\nunlimited flag; `null` clears a cap so the site default applies again,\nand omitted fields stay as they are. The change is logged. Returns the\nupdated usage.",
         "operationId": "OrganizationUsageController_updateQuota",
         "parameters": [
           {
@@ -32697,7 +32766,7 @@
     },
     "/api/internal/organizations/{slug}/usage": {
       "get": {
-        "description": "Organization administrators only. Returns the current month's credits and\nstorage against the organization's limits, whether quotas are enforced,\nand the most recent credit entries with the users who spent them.",
+        "description": "Organization administrators only. Returns the current month's credits,\njudging milliseconds and storage against the organization's limits,\nwhether quotas are enforced, the most recent credit entries with the users\nwho spent them, and the five problems that used the most judging time this\nmonth.",
         "operationId": "OrganizationUsageController_one",
         "parameters": [
           {

@@ -21,7 +21,9 @@ import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { REDIS } from '@libs/common';
 import {
+  newId,
   OrganizationCreditEntry,
+  OrganizationJudgingCharge,
   OrganizationUsage,
   uuidStr,
 } from '@libs/database';
@@ -157,8 +159,19 @@ afterAll(() => api.teardown());
   interface Usage {
     organization: { slug: string };
     credits: Meter;
+    judging: Meter;
     storage: Meter;
-    quota: { monthlyCredits: number | null; storageBytes: number | null };
+    quota: {
+      monthlyCredits: number | null;
+      judgingMs: number | null;
+      storageBytes: number | null;
+    };
+    topProblems: Array<{
+      code: string;
+      name: string;
+      ms: number;
+      runs: number;
+    }>;
     recent: Array<{
       reason: string;
       amount: number;
@@ -236,7 +249,11 @@ afterAll(() => api.teardown());
         isNearLimit: true,
         isOver: false,
       });
-      expect(body.quota).toEqual({ monthlyCredits: 100, storageBytes: 1000 });
+      expect(body.quota).toEqual({
+        monthlyCredits: 100,
+        judgingMs: null,
+        storageBytes: 1000,
+      });
       expect(body.recent.map((item) => [item.reason, item.amount])).toEqual([
         ['refund', -10],
         ['problem', 10],
@@ -244,7 +261,7 @@ afterAll(() => api.teardown());
     });
 
     it.each(['enforce', 'warn'])(
-      'reports both meters full and over at limit 0 with nothing used (%s mode)',
+      'reports every meter full and over at limit 0 with nothing used (%s mode)',
       async (mode) => {
         await api.setSetting('quota.enforce', mode);
         const redis = api.app.get<Redis>(REDIS);
@@ -252,6 +269,7 @@ afterAll(() => api.teardown());
         else await redis.del(QUOTA_BACKFILL_DONE_KEY);
         const world = await seedOrganizationWorld(api, {
           quotaMonthlyCredits: 0,
+          quotaJudgingMs: 0,
           quotaStorageBytes: 0,
         });
         const body = dataOf<Usage>(
@@ -262,6 +280,7 @@ afterAll(() => api.teardown());
         );
         const full = { used: 0, limit: 0, isNearLimit: true, isOver: true };
         expect(body.credits).toEqual(full);
+        expect(body.judging).toEqual(full);
         expect(body.storage).toEqual(full);
       },
     );
@@ -330,6 +349,147 @@ afterAll(() => api.teardown());
       expect(reset.credits.limit).toBe(200);
       expect(reset.storage.limit).toBe(2048);
       await patch({ quotaMonthlyCredits: -1 }, session).expect(400);
+    });
+
+    describe('judging time', () => {
+      let charges: Model<OrganizationJudgingCharge>;
+      const charge = (
+        organization: string,
+        ms: number,
+        extra: Partial<OrganizationJudgingCharge> = {},
+      ) =>
+        charges.create({
+          organization,
+          month,
+          submission: newId(),
+          generation: 1,
+          problem: newId(),
+          user: newId(),
+          status: 'D',
+          ms,
+          ...extra,
+        });
+
+      beforeAll(() => {
+        charges = api.app.get(getModelToken(OrganizationJudgingCharge.name));
+      });
+
+      it("meters the month's charges and lists the five problems that used the most", async () => {
+        const world = await seedOrganizationWorld(api, {
+          quotaJudgingMs: 40_000,
+        });
+        const organization = world.organization._id;
+        const problems: Array<{ _id: string; code: string; name: string }> = [];
+        for (let index = 0; index < 6; index += 1) {
+          counter += 1;
+          problems.push(
+            await createProblem(api, catalog, {
+              code: `judged${counter}`,
+              isOrganizationPrivate: true,
+              organizations: [organization],
+            }),
+          );
+        }
+        const runs: Array<[number, number]> = [
+          [0, 1000],
+          [1, 6000],
+          [2, 3000],
+          [3, 1500],
+          [3, 500],
+          [4, 5000],
+          [5, 4000],
+        ];
+        for (const [index, ms] of runs)
+          await charge(organization, ms, { problem: problems[index]._id });
+        // a problem that no longer exists counts but takes no row of the table
+        await charge(organization, 9000);
+        // another month and another organization are not this meter's
+        await charge(organization, 50_000, { month: '2000-01' });
+        await charge((await createOrganization(api))._id, 50_000);
+
+        const body = dataOf<Usage>(
+          await get(
+            usageUrl(world.organization.slug),
+            world.admin.session,
+          ).expect(200),
+        );
+        expect(body.judging).toEqual({
+          used: 30_000,
+          limit: 40_000,
+          isNearLimit: false,
+          isOver: false,
+        });
+        expect(body.quota.judgingMs).toBe(40_000);
+        const entry = (index: number, ms: number, count = 1) => ({
+          code: problems[index].code,
+          name: problems[index].name,
+          ms,
+          runs: count,
+        });
+        expect(body.topProblems).toEqual([
+          entry(1, 6000),
+          entry(4, 5000),
+          entry(5, 4000),
+          entry(2, 3000),
+          entry(3, 2000, 2),
+        ]);
+      });
+
+      it('sorts the staff overview by judging time used, heaviest first', async () => {
+        const [idle, busy, middling] = [
+          await createOrganization(api),
+          await createOrganization(api, { quotaJudgingMs: 9000 }),
+          await createOrganization(api),
+        ];
+        await charge(busy._id, 4000);
+        await charge(busy._id, 3000);
+        await charge(middling._id, 2000);
+        const session = await staff();
+        const rows = dataOf<
+          Array<{ slug: string; judgingUsed: number; judgingLimit: number }>
+        >(
+          await get(
+            '/api/internal/organizations/usage?sort=judging&pageSize=100',
+            session,
+          ).expect(200),
+        );
+        const slugs = [idle.slug, busy.slug, middling.slug];
+        expect(
+          rows
+            .filter((row) => slugs.includes(row.slug))
+            .map((row) => [row.slug, row.judgingUsed, row.judgingLimit]),
+        ).toEqual([
+          [busy.slug, 7000, 9000],
+          [middling.slug, 2000, 36_000_000],
+          [idle.slug, 0, 36_000_000],
+        ]);
+      });
+
+      it('lets staff set the judging cap, and null falls back to the site setting', async () => {
+        const world = await seedOrganizationWorld(api);
+        const path = `/api/internal/organizations/${world.organization.slug}/quota`;
+        const session = await staff();
+        const patch = (body: object) =>
+          authed(api.http().patch(path), session).send(body);
+        await api.setSetting('quota.defaultJudgingMs', 7_200_000);
+        try {
+          const changed = dataOf<Usage>(
+            await patch({ quotaJudgingMs: 3_600_000 }).expect(200),
+          );
+          expect(changed.judging.limit).toBe(3_600_000);
+          expect(changed.quota.judgingMs).toBe(3_600_000);
+          const reset = dataOf<Usage>(
+            await patch({ quotaJudgingMs: null }).expect(200),
+          );
+          expect(reset.judging.limit).toBe(7_200_000);
+          expect(reset.quota.judgingMs).toBeNull();
+          await patch({ quotaJudgingMs: -1 }).expect(400);
+          await patch({ quotaJudgingMs: 36_000_000_001 }).expect(400);
+          await patch({ quotaJudgingMs: 1.5 }).expect(400);
+        } finally {
+          await api.setSetting('quota.defaultJudgingMs', 36_000_000);
+        }
+      });
     });
   });
 }

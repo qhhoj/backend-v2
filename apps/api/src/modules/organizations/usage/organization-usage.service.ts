@@ -18,8 +18,12 @@ import type {
 import { OrganizationUsageRepository } from './organization-usage.repository';
 import type { QuotaChanges } from './organization-usage.repository';
 
+/** Rows of the usage response's "most judging time" table. */
+const TOP_PROBLEMS = 5;
+
 const quotaOf = (organization: OrganizationDocument) => ({
   quotaMonthlyCredits: organization.quotaMonthlyCredits ?? null,
+  quotaJudgingMs: organization.quotaJudgingMs ?? null,
   quotaStorageBytes: organization.quotaStorageBytes ?? null,
   quotaUnlimited: organization.quotaUnlimited ?? false,
 });
@@ -28,6 +32,9 @@ const quotaOf = (organization: OrganizationDocument) => ({
 const changesOf = (dto: UpdateQuotaDto): QuotaChanges => ({
   ...(dto.quotaMonthlyCredits !== undefined && {
     quotaMonthlyCredits: dto.quotaMonthlyCredits,
+  }),
+  ...(dto.quotaJudgingMs !== undefined && {
+    quotaJudgingMs: dto.quotaJudgingMs,
   }),
   ...(dto.quotaStorageBytes !== undefined && {
     quotaStorageBytes: dto.quotaStorageBytes,
@@ -95,6 +102,8 @@ export class OrganizationUsageService {
           month,
           creditsUsed: row.creditsUsed,
           creditsLimit: limits.credits,
+          judgingUsed: row.judgingUsed,
+          judgingLimit: limits.judgingMs,
           storageUsed: bytes.get(row.id) ?? 0,
           storageLimit: limits.storageBytes,
           unlimited: limits.unlimited,
@@ -107,9 +116,15 @@ export class OrganizationUsageService {
   private async respond(
     organization: OrganizationDocument,
   ): Promise<OrganizationUsageResponse> {
-    const [snapshot, recent] = await Promise.all([
-      this.quota.snapshot(organization._id),
+    const now = new Date();
+    const [snapshot, recent, topProblems] = await Promise.all([
+      this.quota.snapshot(organization._id, now),
       this.repository.recentEntries(organization._id),
+      this.ledger.topProblems(
+        organization._id,
+        this.ledger.monthKeyOf(now),
+        TOP_PROBLEMS,
+      ),
     ]);
     const caps = quotaOf(organization);
     return {
@@ -118,12 +133,15 @@ export class OrganizationUsageService {
       enforcing: snapshot.enforcing,
       unlimited: snapshot.unlimited,
       credits: snapshot.credits,
+      judging: snapshot.judging,
       storage: snapshot.storage,
       quota: {
         monthlyCredits: caps.quotaMonthlyCredits,
+        judgingMs: caps.quotaJudgingMs,
         storageBytes: caps.quotaStorageBytes,
       },
       recent: await this.entriesOf(recent),
+      topProblems,
     };
   }
 

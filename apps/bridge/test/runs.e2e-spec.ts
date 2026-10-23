@@ -139,8 +139,14 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
     const finalOnly = await pinned();
     await bridge.submissions.updateOne(
       { _id: rejudged },
+      { $set: { judgedDate: new Date() } },
+    );
+    await bridge.submissions.updateOne(
+      { _id: rejudged },
       requeueUpdate(SUBMISSION_PRIORITY.rejudge),
     );
+    // the judging meter's stale-run rule relies on every requeue forgetting grading-begin
+    expect((await stored(rejudged)).judgedDate).toBeNull();
     await bridge.submissions.updateOne(
       { _id: finalOnly },
       requeueUpdate(SUBMISSION_PRIORITY.batchRejudge, { keepsPin: true }),

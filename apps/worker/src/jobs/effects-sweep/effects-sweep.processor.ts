@@ -9,7 +9,7 @@ import { Logger } from '@nestjs/common';
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
 import type { Model } from 'mongoose';
-import { Submission } from '@libs/database';
+import { OrganizationJudgingCharge, Submission } from '@libs/database';
 import {
   EFFECTS_SWEEP_JOB,
   EFFECTS_SWEEP_QUEUE,
@@ -34,6 +34,8 @@ export class EffectsSweepProcessor
     @InjectQueue(EFFECTS_SWEEP_QUEUE) private readonly queue: Queue,
     @InjectModel(Submission.name)
     private readonly submissions: Model<Submission>,
+    @InjectModel(OrganizationJudgingCharge.name)
+    private readonly judgingCharges: Model<OrganizationJudgingCharge>,
   ) {
     super();
   }
@@ -41,7 +43,7 @@ export class EffectsSweepProcessor
   /**
    * One schedule for every worker process (the upsert is idempotent). BullMQ adds the next run when the current one starts, so a slow sweep would overlap it on another process; global concurrency 1 makes the next one wait (no Redis lock).
    * BullMQ queues a first sweep when the schedule is created or its slot has passed, so a first boot or a restart after a missed slot sweeps at once; a warm restart within the interval does not. A finished row whose graded job was lost is found by its `effectsDueAt`, whatever its dates; the window (watermark less the overlap) recomputes the users and problems touched meanwhile.
-   * The window reads are index-bound.
+   * The window reads are index-bound; a repair charges judging time, which relies on the charges' unique index, so both are built before the first sweep.
    */
   async onApplicationBootstrap(): Promise<void> {
     await this.queue.setGlobalConcurrency(1);
@@ -53,7 +55,9 @@ export class EffectsSweepProcessor
         opts: { removeOnComplete: true, removeOnFail: 100 },
       },
     );
-    await startAfterIndexes(this.worker, this.submissions);
+    await startAfterIndexes(this.worker, this.submissions, [
+      this.judgingCharges,
+    ]);
   }
 
   process(): Promise<SweepResult> {

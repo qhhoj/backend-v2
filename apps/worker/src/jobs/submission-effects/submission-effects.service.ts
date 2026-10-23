@@ -23,6 +23,7 @@ import type { ContestReplayJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { acceptanceRate, userPoints } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
+import { JudgingCharges } from '@libs/problems';
 import { ContestResultsRepository } from './contest-results.repository';
 import type { ScoringContest } from './contest-results.repository';
 import { SubmissionEffectsRepository } from './submission-effects.repository';
@@ -35,6 +36,7 @@ export class SubmissionEffectsService {
   constructor(
     private readonly repository: SubmissionEffectsRepository,
     private readonly contestResults: ContestResultsRepository,
+    private readonly judgingCharges: JudgingCharges,
     @Inject(REDIS) private readonly redis: Redis,
     @InjectQueue(ORGANIZATION_POINTS_QUEUE)
     private readonly organizationPoints: Queue<OrganizationPointsJob>,
@@ -42,10 +44,11 @@ export class SubmissionEffectsService {
     private readonly replayQueue: Queue<ContestReplayJob>,
   ) {}
 
-  /** The graded job (and the sweep's repair of one that was lost): the effects, then the row's `effectsDueAt` is cleared, but only the stamp read before them, so a run that finished meanwhile keeps its own. */
+  /** The graded job (and the sweep's repair of one that was lost): the effects, then the run's judging time is charged (once per grading attempt, also for a deleted problem; after the effects, so billing never holds back a score), then the row's `effectsDueAt` is cleared, but only the stamp read before them, so a run that finished meanwhile keeps its own and a failed charge is repaired by the sweep. */
   async apply(job: SubmissionGradedJob): Promise<void> {
     const due = await this.repository.effectsDueAt(job.submissionId);
     await this.applyEffects(job);
+    await this.judgingCharges.chargeRun(job);
     if (due) await this.repository.clearEffectsDue(job.submissionId, due);
   }
 

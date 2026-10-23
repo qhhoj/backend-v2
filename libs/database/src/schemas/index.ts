@@ -55,6 +55,10 @@ import {
   OrganizationCreditEntrySchema,
 } from './organization-credit-entry.schema';
 import {
+  OrganizationJudgingCharge,
+  OrganizationJudgingChargeSchema,
+} from './organization-judging-charge.schema';
+import {
   OrganizationProblemTag,
   OrganizationProblemTagSchema,
 } from './organization-problem-tag.schema';
@@ -145,6 +149,7 @@ export * from './license.schema';
 export * from './misc-config.schema';
 export * from './notification.schema';
 export * from './organization-credit-entry.schema';
+export * from './organization-judging-charge.schema';
 export * from './organization-problem-tag.schema';
 export * from './tag-color';
 export * from './organization-problem.schema';
@@ -219,6 +224,10 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: OrganizationProblem.name, schema: OrganizationProblemSchema },
   { name: OrganizationUsage.name, schema: OrganizationUsageSchema },
   { name: OrganizationCreditEntry.name, schema: OrganizationCreditEntrySchema },
+  {
+    name: OrganizationJudgingCharge.name,
+    schema: OrganizationJudgingChargeSchema,
+  },
   { name: OrganizationRequest.name, schema: OrganizationRequestSchema },
   { name: Organization.name, schema: OrganizationSchema },
   { name: PolygonSyncRun.name, schema: PolygonSyncRunSchema },

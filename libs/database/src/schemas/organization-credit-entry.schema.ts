@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongooseSchema } from 'mongoose';
 import { baseSchemaOptions, IdProp } from '../schema';
+import { LEDGER_RETENTION_SECONDS } from './organization-judging-charge.schema';
 import { USAGE_MONTH_PATTERN } from './organization-usage.schema';
 
 const UUID = MongooseSchema.Types.UUID;
@@ -12,8 +13,6 @@ export const CREDIT_REASONS = [
   'refund',
 ] as const;
 export type CreditReason = (typeof CREDIT_REASONS)[number];
-/** 13 months: a full year plus the current one. */
-export const LEDGER_RETENTION_SECONDS = 396 * 86_400;
 
 /** Append-only record of every spend; a refund is a negative `amount`. The nightly audit compares its sums with `organizationUsage`. */
 @Schema({ ...baseSchemaOptions, collection: 'organizationCreditEntries' })

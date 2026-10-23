@@ -9,13 +9,16 @@ interface OverviewRow {
   slug: string;
   name: string;
   creditsUsed: number;
+  judgingUsed: number;
   quotaMonthlyCredits: number | null;
+  quotaJudgingMs: number | null;
   quotaStorageBytes: number | null;
   quotaUnlimited: boolean;
 }
 
 export interface QuotaChanges {
   quotaMonthlyCredits?: number | null;
+  quotaJudgingMs?: number | null;
   quotaStorageBytes?: number | null;
   quotaUnlimited?: boolean;
 }
@@ -31,10 +34,24 @@ interface OverviewQuery {
 /** Typed on purpose: a ternary of two object literals is not a valid `$sort` for the compiler. */
 const OVERVIEW_SORTS: Record<UsageSort, Record<string, 1 | -1>> = {
   credits: { creditsUsed: -1, name: 1 },
+  judging: { judgingUsed: -1, name: 1 },
   name: { name: 1 },
 };
 
-/** Every live organization with its credits used in `month` (0 without a usage row), one sorted page. */
+/** The organization's judging charges of `month`, summed (absent with none). */
+const judgingLookup = (month: string): PipelineStage.Lookup => ({
+  $lookup: {
+    from: 'organizationJudgingCharges',
+    let: { id: '$_id' },
+    pipeline: [
+      { $match: { month, $expr: { $eq: ['$organization', '$$id'] } } },
+      { $group: { _id: null, ms: { $sum: '$ms' } } },
+    ],
+    as: 'judging',
+  },
+});
+
+/** Every live organization with its credits (0 without a usage row) and judging time used in `month`, one sorted page. */
 function overviewPipeline(
   month: string,
   query: OverviewQuery,
@@ -51,9 +68,11 @@ function overviewPipeline(
         as: 'usage',
       },
     },
+    judgingLookup(month),
     {
       $addFields: {
         creditsUsed: { $ifNull: [{ $first: '$usage.creditsUsed' }, 0] },
+        judgingUsed: { $ifNull: [{ $first: '$judging.ms' }, 0] },
       },
     },
     { $sort: OVERVIEW_SORTS[query.sort] },
@@ -64,7 +83,9 @@ function overviewPipeline(
         slug: 1,
         name: 1,
         creditsUsed: 1,
+        judgingUsed: 1,
         quotaMonthlyCredits: 1,
+        quotaJudgingMs: 1,
         quotaStorageBytes: 1,
         quotaUnlimited: 1,
       },
@@ -96,7 +117,7 @@ export class OrganizationUsageRepository {
       .exec();
   }
 
-  /** One page of organizations with this month's credits, sorted by name or by credits used (heaviest first). */
+  /** One page of organizations with this month's credits and judging time, sorted by name or by either one used (heaviest first). */
   async overview(
     month: string,
     query: OverviewQuery,
