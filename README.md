@@ -62,13 +62,13 @@ Dev and end-to-end data: `NODE_ENV=development npm run seed:e2e` creates `e2e_ad
 
 ```
 npm test               # every spec (needs Redis; the api e2e flushes its db)
-npm run test:unit      # pure and static specs only, no services (what CI runs)
-npm run test:db        # *.db.spec.ts and *.e2e-spec.ts (needs Redis; local only)
+npm run test:unit      # pure and static specs only, no services (CI job `test`)
+npm run test:db        # *.db.spec.ts and *.e2e-spec.ts (needs Redis; CI job `db`)
 npm run lint
 npm run typecheck
 ```
 
-- CI starts no MongoDB or Redis: it runs `test:unit` and the static `test:openapi`. Specs that need services are named `*.db.spec.ts` or `*.e2e-spec.ts` and run locally (CONTRIBUTING.md, Testing). `test:db` runs in band; `npx jest -c test/jest/db.config.js --maxWorkers=2` is safe: each worker has its own Redis db and Mongo databases.
+- CI runs `test:unit`, the static `test:openapi` and, in the `db` job (Redis container with 100 databases, cached mongod binary), `test:db`. Specs that need services are named `*.db.spec.ts` or `*.e2e-spec.ts` (CONTRIBUTING.md, Testing). `test:db` runs in band; `npx jest -c test/jest/db.config.js --maxWorkers=2` is safe: each worker has its own Redis db and Mongo databases.
 - `TEST_REDIS_URL` picks the db (default `redis://127.0.0.1:6379/15`); use another db to run two checkouts side by side, e.g. `TEST_REDIS_URL=redis://127.0.0.1:6379/12 npm test`. Each jest worker uses the next db up (db + `JEST_WORKER_ID - 1`), so the base db plus `--maxWorkers` must fit the server (16 dbs by default).
 - MongoDB is in-memory (`mongodb-memory-server`): one replica set per jest run (`test/jest/global-setup.js`); `startMongo()` gives each caller databases of its own on it and drops them on `stop()`.
 

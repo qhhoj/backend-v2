@@ -1,5 +1,5 @@
 /**
- * Specs that need MongoDB or Redis (`*.db.spec.ts`, `*.e2e-spec.ts`): local only, never in CI. One in-memory replica
+ * Specs that need MongoDB or Redis (`*.db.spec.ts`, `*.e2e-spec.ts`): run by the CI `db` job and locally. One in-memory replica
  * set per run (global-setup.js); Redis from TEST_REDIS_URL. The OpenAPI e2e specs have openapi-db.config.js.
  */
 const shared = require('./shared');
