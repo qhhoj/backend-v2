@@ -49,7 +49,7 @@ grant_pull_read() { # the laptop pull's read ACL on the owner-only trees (RUNBOO
 }
 
 install_files() {
-  install -d "$ROOT/usr/local/sbin" "$ROOT/etc/containers/systemd" "$ROOT/etc/systemd/system" "$ROOT/etc/sudoers.d" "$ROOT/etc/nginx/snippets"
+  install -d "$ROOT/usr/local/sbin" "$ROOT/etc/containers/systemd" "$ROOT/etc/systemd/system" "$ROOT/etc/sudoers.d" "$ROOT/etc/nginx/snippets" "$ROOT/etc/nginx/conf.d"
   install -m 755 "$here/qhhoj-deploy" "$ROOT/usr/local/sbin/qhhoj-deploy"
   install -m 644 "$here"/quadlet/*.container "$ROOT/etc/containers/systemd/"
   install -m 644 "$here/quadlet/qhhoj.target" "$ROOT/etc/systemd/system/qhhoj.target"
@@ -64,6 +64,7 @@ install_files() {
   install -m 440 "$here/sudoers.qhhoj-deploy" "$ROOT/etc/sudoers.d/qhhoj-deploy"
   install -m 644 "$here/nginx/security-headers.conf" "$ROOT/etc/nginx/snippets/qhhoj-security-headers.conf"
   [ -f "$ROOT/etc/nginx/snippets/qhhoj-gate.conf" ] || install -m 644 "$here/nginx/qhhoj-gate.conf" "$ROOT/etc/nginx/snippets/qhhoj-gate.conf"
+  install -m 644 "$here/nginx/cloudflare-origin.conf" "$ROOT/etc/nginx/conf.d/qhhoj-cloudflare-origin.conf"
   install -m 644 "$here/nginx/maintenance.html" "$ROOT/var/www/qhhoj-maintenance/maintenance.html"
 }
 
