@@ -31,7 +31,6 @@
     "judge-proto:check": "bash scripts/judge-proto/check.sh",
     "judge:v2:up": "bash scripts/judge/judge-v2-up.sh",
     "seed:e2e": "TS_NODE_TRANSPILE_ONLY=true ts-node -r tsconfig-paths/register apps/api/src/seed/main.ts",
-    "seed:parity": "TS_NODE_TRANSPILE_ONLY=true ts-node -r tsconfig-paths/register apps/api/src/seed/main-parity.ts",
     "stack:up": "bash scripts/fullstack/up.sh",
     "stack:down": "bash scripts/fullstack/down.sh",
     "changeset": "changeset",

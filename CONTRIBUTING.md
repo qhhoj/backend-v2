@@ -338,7 +338,6 @@ user-activity/
 
 - `npm run stack:up` starts the gRPC fake judge (`apps/bridge/test/fake-judge-cli.ts`, `STACK_JUDGE=fake`): AC unless the source holds `FAKE_JUDGE_SOURCE_WA`; `hold-ack`, `hold-begin`, `hold-end` files in `FULLSTACK_CONTROL_DIR` hold a stage (release `hold-ack` within 20 s or the bridge reassigns the run). `STACK_JUDGE=none` starts no judge.
 - `npm run judge:v2:up` starts judge-v2 (`qhhoj-judge`, built from `../judge-v2` or `JUDGE_V2_BIN`) against a `STACK_JUDGE=none npm run stack:up` stack: the seeded judge `e2e-judge`, loopback without TLS, `PROBLEM_DATA_ROOT` read directly, and the J7 hold files in `FULLSTACK_CONTROL_DIR`. It needs isolate 2.x with `isolate.service` running. `npm run stack:down` stops it. The real-backend journeys (J1-J8) pass against it.
-- The parity run against the DMOJ judge (`scripts/judge/parity/README.md`) is kept as a recipe; the DMOJ dev judge itself was removed after it.
 
 ## Effects and realtime
 
