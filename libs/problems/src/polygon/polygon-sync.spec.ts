@@ -84,6 +84,7 @@ describe('syncJobOf', () => {
       ignoreZeroPointBatches: true,
       ignoreZeroPointCases: false,
       appendMainSolution: true,
+      importTutorial: true,
       maxCases: 300,
       expectedDataVersion: 7,
       polygon: {

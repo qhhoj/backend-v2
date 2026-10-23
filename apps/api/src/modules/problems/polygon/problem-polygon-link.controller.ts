@@ -65,7 +65,8 @@ export class ProblemPolygonLinkController {
    * @remarks
    * Needs `judge.sync_polygon_problem` and write access to the problem's test
    * data. Queues the import job in sync mode on the newest READY package:
-   * statement, tutorial and tests are overwritten; code, points, group, types,
+   * statement, tutorial (unless the link's `importTutorial` is false: the
+   * editorial then stays as it is) and tests are overwritten; code, points, group, types,
    * authors, curators and allowed languages are kept. The time and memory
    * limits, partial scoring, checker (type, arguments, source) and grader
    * settings come from the package too, except each one edited on QHHOJ since

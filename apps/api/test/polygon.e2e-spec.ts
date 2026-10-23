@@ -1090,6 +1090,10 @@ describe('Polygon routes', () => {
             before: true,
             after: false,
           },
+          'polygonLink.options.importTutorial': {
+            before: true,
+            after: false,
+          },
         },
       ]);
 

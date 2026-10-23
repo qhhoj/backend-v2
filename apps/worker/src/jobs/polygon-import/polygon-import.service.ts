@@ -438,7 +438,7 @@ export class PolygonImportService {
       imported: {
         ...statement,
         ...settings.values,
-        solution: this.renderTutorial(tutorial),
+        ...this.editorialOf(tutorial, job),
         data: { ...settings.values.data, cases: compiled.cases },
         settings: settings.recorded,
         localEdits: settings.localEdits,
@@ -516,7 +516,9 @@ export class PolygonImportService {
       texToMarkdown: (tex) => this.pandoc.texToMarkdown(tex),
       saveImage: this.imageSaver(savedImages),
     });
-    if (job.appendMainSolution) {
+    const isEditorialKept =
+      job.importTutorial === false && job.mode === 'update';
+    if (job.appendMainSolution && !isEditorialKept) {
       const solution = await mainSolution(root, pkg);
       statements.tutorial = withMainSolution(
         statements.tutorial,
@@ -712,6 +714,15 @@ export class PolygonImportService {
         throw new PolygonImportError(`init.yml: ${error.message}`);
       throw error;
     }
+  }
+
+  /** `solution` of the imported problem. An update that does not import the tutorial leaves the editorial alone, whatever else is ticked; any other import writes what the statements and the appended solution made (nothing, for a new problem without either). */
+  private editorialOf(
+    tutorial: string,
+    job: PolygonImportJob,
+  ): Pick<ImportedProblem, 'solution'> {
+    if (job.importTutorial === false && job.mode === 'update') return {};
+    return { solution: this.renderTutorial(tutorial) };
   }
 
   /** The appended solution source is text `parseStatements` never saw, so the finished editorial gets the editor's limits and the sanitising `solution` style here. */

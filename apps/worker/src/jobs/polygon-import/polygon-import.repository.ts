@@ -50,7 +50,8 @@ export interface ImportedProblem {
   description: string;
   descriptionHtml: string;
   translations: ProblemTranslation[];
-  solution: { content: string; contentHtml: string } | null;
+  /** The editorial: null removes it, absent leaves the problem's own untouched (an update that does not import the tutorial). */
+  solution?: { content: string; contentHtml: string } | null;
   timeLimit: number;
   memoryLimit: number;
   partial: boolean;
@@ -153,7 +154,7 @@ interface WrittenProblem {
   dataVersion: number;
 }
 
-/** The imported statement, limits and data; a re-import with a tutorial keeps the editorial's publication state (it is never un-published), one without a tutorial removes the editorial. */
+/** The imported statement, limits and data; a re-import with a tutorial keeps the editorial's publication state (it is never un-published), one without a tutorial removes the editorial; an absent `solution` leaves it as it is. */
 function statementFields(
   imported: ImportedProblem,
   before: Problem | undefined,
