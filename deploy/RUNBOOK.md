@@ -2,7 +2,7 @@
 
 Files: `nginx/qhhoj.conf`, `nginx/security-headers.conf`, `nginx/qhhoj-gate.conf`, `quadlet/*`, `qhhoj-deploy`, `ci/*`, `env.production.example`, `judge/*`, `backup/*`.
 Layout: image `ghcr.io/qhhoj/backend-v2` run by rootful podman quadlets (`/etc/containers/systemd/`, host network, uid/gid 987); frontend under `/var/www/qhhoj/releases/<version>` with `current`; data `/srv/qhhoj`; env `/etc/qhhoj/env`; nginx, MongoDB and Redis native.
-This host is the shared live old-site box (`160.22.123.77`), v2 goes in place; judge-v2 runs on a separate machine. Never stop, restart or reconfigure anything on it that is not QHHOJ's.
+This host is the shared live old-site box (the production host), v2 goes in place; judge-v2 runs on a separate machine. Never stop, restart or reconfigure anything on it that is not QHHOJ's.
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ This host is the shared live old-site box (`160.22.123.77`), v2 goes in place; j
 
 ## In-place on the shared host
 
-One-time steps, already performed on `160.22.123.77`; repeat them on a rebuild.
+One-time steps, already performed on the production host; repeat them on a rebuild.
 
 1. Minecraft server stopped for good (2026-10-10): graceful `stop` in its `screen` session `minecraft-apio`; it had no autostart; files kept in `/root/minecraft-apio`. Also disabled as unused on this VM: `qhhoj.service` (the old failed `/root/start_qhhoj.sh`), ModemManager, udisks2, upower, multipathd, open-iscsi, thermald, gpu-manager, open-vm-tools, vgauth.
 2. podman 4.9.3 from the Ubuntu 24.04 packages, next to Docker. v2 containers use `--network host` only; Docker and its apps are untouched.
