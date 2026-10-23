@@ -81,10 +81,12 @@ export class AuthService {
   }
 
   assertLoginAllowed(user: UserDocument): void {
-    if (!user.isActive)
-      throw user.banReason !== null
-        ? new BannedError(user.banReason)
-        : new AppError('account_not_activated', 403, 'Account not activated');
+    if (user.isActive) return;
+    if (user.banReason !== null) throw new BannedError(user.banReason);
+    // Staff-deactivated accounts must not be told to check their e-mail for an activation link.
+    throw user.deactivatedAt !== null
+      ? new AppError('account_disabled', 403, 'Account disabled')
+      : new AppError('account_not_activated', 403, 'Account not activated');
   }
 
   /**
