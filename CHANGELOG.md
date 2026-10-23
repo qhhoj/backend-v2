@@ -1,5 +1,15 @@
 # qhhoj-backend
 
+## 2.35.0
+
+### Minor Changes
+
+- 127e4b4: A Polygon import or sync refuses a package whose `run-count` is not 1 (Polygon run-twice) with the import error `polygon_run_count_unsupported` (`{runCount}`), instead of importing it as a one-run problem that would be misjudged.
+
+### Patch Changes
+
+- ca67e70: Migration gate tooling: `scripts/judge/parity/gate-snapshot.mjs` exports a problem's submissions and verdicts from Mongo (read-only), `gate-compare.mjs` classifies two snapshots into unchanged, improved, worsened and other rows.
+
 ## 2.34.12
 
 ### Patch Changes
