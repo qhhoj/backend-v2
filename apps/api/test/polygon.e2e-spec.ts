@@ -1311,6 +1311,30 @@ describe('Polygon routes', () => {
       });
     });
 
+    it('imports into the organization with the administrator as author', async () => {
+      sharedProblems();
+      const response = await post(
+        `${POLYGON}/import`,
+        {
+          link: SUM_LINK,
+          code: 'thptpoly_authored',
+          organization: 'thpt-poly',
+          ...SUM_LANGUAGES,
+          points: 800,
+          typeIds: [catalog.types.uncategorized],
+          authors: [teacherId],
+        },
+        teacher,
+      ).expect(202);
+      const job = await queue.getJob(dataOf<{ jobId: string }>(response).jobId);
+      expect(job?.data).toMatchObject({
+        code: 'thptpoly_authored',
+        organizationId,
+        authors: [teacherId],
+        curators: [teacherId],
+      });
+    });
+
     it('may not turn on auto-sync without judge.sync_polygon_problem', async () => {
       sharedProblems();
       await post(

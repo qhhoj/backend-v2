@@ -25,6 +25,8 @@ export interface CreationTarget {
   id: string;
   /** What an organization problem's code must start with (`organizationCodePrefix`). */
   codePrefix: string;
+  /** The organization's administrators: who an organization problem create may name as its authors and curators. */
+  adminIds: string[];
 }
 
 /** Where the viewer may create one kind of object: site-wide, and for at least one administered organization. */
@@ -209,6 +211,7 @@ export class OrganizationCreationRights {
     return {
       id: uuidStr(organization._id),
       codePrefix: organizationCodePrefix(organization.slug),
+      adminIds: organization.adminIds.map(uuidStr),
     };
   }
 }

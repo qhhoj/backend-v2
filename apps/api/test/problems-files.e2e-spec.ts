@@ -358,14 +358,14 @@ afterAll(() => api.teardown());
         'judge.edit_own_problem',
       ];
       let teacher: TestSession, member: TestSession;
-      let teacherId: string, organizationId: string;
+      let teacherId: string, memberId: string, organizationId: string;
 
       beforeAll(async () => {
         teacherId = (
           await createUserWith(api, 'teacher', { permissions: TEACHER_RIGHTS })
         )._id;
         teacher = await loginAs(api, teacherId);
-        const memberId = (
+        memberId = (
           await createUserWith(api, 'member', { permissions: TEACHER_RIGHTS })
         )._id;
         member = await loginAs(api, memberId);
@@ -393,6 +393,43 @@ afterAll(() => api.teardown());
           organizationId,
           curators: [teacherId],
         });
+      });
+
+      it('lets an organization administrator name itself as author and curator of an organization import', async () => {
+        const jobId = jobIdOf(
+          await upload(
+            `code=thptdemo_auth&organization=thpt-demo&authors=${teacherId}&curators=${teacherId}`,
+            teacher,
+          ).expect(202),
+        );
+        expect((await queue.getJob(jobId))?.data).toMatchObject({
+          code: 'thptdemo_auth',
+          organizationId,
+          authors: [teacherId],
+          curators: [teacherId],
+        });
+      });
+
+      it('refuses an organization import naming a non-administrator as author or curator, storing nothing', async () => {
+        const before = storedPackages().length;
+        for (const people of [
+          `authors=${memberId}`,
+          `authors=${teacherId}&authors=${memberId}`,
+          `curators=${memberId}`,
+        ])
+          await upload(
+            `code=thptdemo_people&organization=thpt-demo&${people}`,
+            teacher,
+          )
+            .expect(403)
+            .expect(errorCode('forbidden'));
+        await upload(
+          `code=thptdemo_people&organization=thpt-demo&authors=${memberId}`,
+          member,
+        )
+          .expect(403)
+          .expect(errorCode('forbidden'));
+        expect(storedPackages()).toHaveLength(before);
       });
 
       it('still needs judge.add_problem for a site problem', async () => {

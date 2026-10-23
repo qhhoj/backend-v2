@@ -17,9 +17,11 @@ import {
 } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { OrganizationCreationRights } from '../../organizations/creation/organization-creation-rights.service';
+import type { CreationTarget } from '../../organizations/creation/organization-creation-rights.service';
 import { QuotaService } from '../../organizations/quota/quota.service';
 import { maxTestcasesFor } from '../core/dto/limits';
 import { assertOrganizationCodePrefix } from '../editing/organization-code-prefix';
+import { organizationPeopleWaiver } from '../editing/organization-people';
 import { ImportJobResponse } from './dto/import-job.response';
 import { importJobView } from './import-job-view';
 import {
@@ -205,12 +207,15 @@ export class ProblemImportsService {
         expectedDataVersion: problem.dataVersion ?? 0,
       };
     }
-    const organizationId = await this.creationTarget(principal, query);
-    this.assertPeopleGates(principal, query, {
-      authors: [],
-      curators: [principal.userId],
-    });
+    const target = await this.creationTarget(principal, query);
+    this.assertPeopleGates(
+      principal,
+      query,
+      { authors: [], curators: [principal.userId] },
+      target,
+    );
     if (await this.isCodeTaken(query.code)) throw codeTakenError();
+    const organizationId = target?.id ?? null;
     const metered = meteredOrganizationOf(principal, organizationId);
     return {
       ...options,
@@ -221,33 +226,38 @@ export class ProblemImportsService {
     };
   }
 
-  /** Authors and curators are staff fields (`judge.edit_all_problem`), as in the editor: without it a request may only repeat their `current` value (the stored problem, or a new problem's requester-only curators). */
+  /** Authors and curators are staff fields (`judge.edit_all_problem`), as in the editor: without it a request may only repeat their `current` value (the stored problem, or a new problem's requester-only curators), or, creating for an `organization`, name its administrators (`organizationPeopleWaiver`). */
   private assertPeopleGates(
     principal: AuthContext['principal'],
     query: PolygonImportQueryDto,
     current: Record<string, unknown>,
+    organization: CreationTarget | null = null,
   ): void {
     const people = {
       authors: uniqueIfAny(query.authors),
       curators: uniqueIfAny(query.curators),
     };
+    const waived = organization
+      ? organizationPeopleWaiver(principal, organization, people)
+      : [];
     this.policy.assertFieldGates(principal, people, people, {
       baseline: current,
+      waived,
     });
   }
 
-  /** Who may create, as `POST /problems` or `POST /organizations/{slug}/problems`: the organization's id (its rights and code prefix checked), or null for a site problem (`judge.add_problem`). */
+  /** Who may create, as `POST /problems` or `POST /organizations/{slug}/problems`: the organization (its rights and code prefix checked), or null for a site problem (`judge.add_problem`). */
   private async creationTarget(
     principal: AuthContext['principal'],
     query: PolygonImportQueryDto,
-  ): Promise<string | null> {
+  ): Promise<CreationTarget | null> {
     if (query.organization !== undefined) {
       const target = await this.rights.problemTarget(
         principal,
         query.organization,
       );
       assertOrganizationCodePrefix(principal, query.code, target.codePrefix);
-      return target.id;
+      return target;
     }
     if (!hasPermission(principal, 'judge.add_problem'))
       throw new AppError(

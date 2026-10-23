@@ -27,10 +27,12 @@ export class OrganizationProblemCreationController {
    * `isPublic` (members only) needs no extra permission. The code must start
    * with the organization prefix — the slug's lowercase letters and digits
    * followed by `_` — else 400 `organization_code_prefix` (superusers are
-   * exempt). Every other rule of `POST /problems` applies: the creator becomes
-   * a curator, staff fields stay gated, and the organization's quota is
-   * charged. 404 for an unknown organization, 403 `forbidden` without the
-   * rights.
+   * exempt). `authors` and `curators` may name the organization's
+   * administrators (and the creator) without `judge.edit_all_problem`; anyone
+   * else there is 403 `forbidden`. Every other rule of `POST /problems`
+   * applies: the creator becomes a curator, the other staff fields stay gated,
+   * and the organization's quota is charged. 404 for an unknown organization,
+   * 403 `forbidden` without the rights.
    */
   @Post(':slug/problems')
   async create(
