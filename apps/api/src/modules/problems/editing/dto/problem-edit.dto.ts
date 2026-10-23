@@ -140,8 +140,9 @@ export class CreateProblemDto {
   @LowercaseUuid()
   @IsUUID('7', { each: true })
   bannedUsers?: string[];
-  /** Ids of languages solutions may use; defaults to the languages flagged for new problems. */
+  /** Ids of languages solutions may use, at least one when given; defaults to the languages flagged for new problems. */
   @IsOptional()
+  @ArrayMinSize(1, { message: 'Chọn ít nhất 1 ngôn ngữ.' })
   @LowercaseUuid()
   @IsUUID('7', { each: true })
   allowedLanguages?: string[];

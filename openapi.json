@@ -4372,11 +4372,12 @@
             "type": "boolean"
           },
           "allowedLanguages": {
-            "description": "Ids of languages solutions may use; defaults to the languages flagged for new problems.",
+            "description": "Ids of languages solutions may use, at least one when given; defaults to the languages flagged for new problems.",
             "items": {
               "format": "uuid",
               "type": "string"
             },
+            "minItems": 1,
             "type": "array"
           },
           "authors": {
@@ -16323,11 +16324,12 @@
             "type": "boolean"
           },
           "allowedLanguages": {
-            "description": "Ids of languages solutions may use; defaults to the languages flagged for new problems.",
+            "description": "Ids of languages solutions may use, at least one when given; defaults to the languages flagged for new problems.",
             "items": {
               "format": "uuid",
               "type": "string"
             },
+            "minItems": 1,
             "type": "array"
           },
           "authors": {
