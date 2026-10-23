@@ -147,7 +147,7 @@ An organization's limit on the bytes of its problems' files.
 _Avoid_: Disk quota, credits
 
 **Quota month**:
-A calendar month in the site's time zone (Asia/Ho_Chi_Minh), over which Judging time adds up.
+A calendar month in the site's time zone (Vietnam time, UTC+7), over which Judging time adds up.
 _Avoid_: Billing period, UTC month
 
 **Unlimited organization**:
