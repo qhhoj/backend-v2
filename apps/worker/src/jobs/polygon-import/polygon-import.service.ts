@@ -295,6 +295,10 @@ function assertTestsShipped(
     throw new PolygonImportError('not full package', 'package_incomplete');
 }
 
+/** An update that does not import the tutorial leaves the problem's editorial as it is. */
+const keepsEditorial = (job: PolygonImportJob): boolean =>
+  job.importTutorial === false && job.mode === 'update';
+
 @Injectable()
 export class PolygonImportService {
   private readonly logger = new Logger(PolygonImportService.name);
@@ -516,9 +520,7 @@ export class PolygonImportService {
       texToMarkdown: (tex) => this.pandoc.texToMarkdown(tex),
       saveImage: this.imageSaver(savedImages),
     });
-    const isEditorialKept =
-      job.importTutorial === false && job.mode === 'update';
-    if (job.appendMainSolution && !isEditorialKept) {
+    if (job.appendMainSolution && !keepsEditorial(job)) {
       const solution = await mainSolution(root, pkg);
       statements.tutorial = withMainSolution(
         statements.tutorial,
@@ -721,7 +723,7 @@ export class PolygonImportService {
     tutorial: string,
     job: PolygonImportJob,
   ): Pick<ImportedProblem, 'solution'> {
-    if (job.importTutorial === false && job.mode === 'update') return {};
+    if (keepsEditorial(job)) return {};
     return { solution: this.renderTutorial(tutorial) };
   }
 

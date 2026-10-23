@@ -93,6 +93,10 @@ describe('statementOptionsRefusal', () => {
         tutorialLanguage: 'russian',
       }),
     ).toMatchObject({ code: 'tutorial_language_required' });
+    // An old link has no `importTutorial`: it counts as true.
+    expect(
+      statementOptionsRefusal(tutorials, { ...kept, tutorialLanguage: null }),
+    ).toMatchObject({ code: 'tutorial_language_required' });
     expect(
       statementOptionsRefusal(tutorials, {
         ...kept,
