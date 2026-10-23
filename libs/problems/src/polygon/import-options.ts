@@ -72,7 +72,9 @@ export function importOptionsOf(record: OptionsRecord): ImportOptions {
   return {
     mainStatementLanguage:
       record.mainStatementLanguage ?? defaults.mainStatementLanguage,
-    statementLanguages: record.statementLanguages ?? {},
+    statementLanguages: record.statementLanguages ?? {
+      ...defaults.statementLanguages,
+    },
     tutorialLanguage: record.tutorialLanguage ?? defaults.tutorialLanguage,
     ignoreZeroPointBatches:
       record.ignoreZeroPointBatches ?? defaults.ignoreZeroPointBatches,

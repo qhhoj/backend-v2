@@ -34,6 +34,7 @@ import {
 } from '@libs/problems';
 import type {
   ImportErrorParams,
+  ImportOptions,
   LocalEdits,
   PdfRenderJob,
   PolygonImportJob,
@@ -297,8 +298,10 @@ function assertTestsShipped(
 }
 
 /** An update that does not import the tutorial leaves the problem's editorial as it is. */
-const keepsEditorial = (job: PolygonImportJob): boolean =>
-  !importOptionsOf(job).importTutorial && job.mode === 'update';
+const keepsEditorial = (
+  job: PolygonImportJob,
+  options: ImportOptions,
+): boolean => !options.importTutorial && job.mode === 'update';
 
 @Injectable()
 export class PolygonImportService {
@@ -428,6 +431,7 @@ export class PolygonImportService {
       root,
       pkg,
       job,
+      options,
       savedImages,
     );
     const headers = helperHeaders(root, pkg, assets);
@@ -444,7 +448,7 @@ export class PolygonImportService {
       imported: {
         ...statement,
         ...settings.values,
-        ...this.editorialOf(tutorial, job),
+        ...this.editorialOf(tutorial, keepsEditorial(job, options)),
         data: { ...settings.values.data, cases: compiled.cases },
         settings: settings.recorded,
         localEdits: settings.localEdits,
@@ -514,6 +518,7 @@ export class PolygonImportService {
     root: XmlElement,
     pkg: PolygonPackage,
     job: PolygonImportJob,
+    options: ImportOptions,
     savedImages: string[],
   ) {
     const statements = await parseStatements(root, {
@@ -522,7 +527,7 @@ export class PolygonImportService {
       texToMarkdown: (tex) => this.pandoc.texToMarkdown(tex),
       saveImage: this.imageSaver(savedImages),
     });
-    if (importOptionsOf(job).appendMainSolution && !keepsEditorial(job)) {
+    if (options.appendMainSolution && !keepsEditorial(job, options)) {
       const solution = await mainSolution(root, pkg);
       statements.tutorial = withMainSolution(
         statements.tutorial,
@@ -723,9 +728,9 @@ export class PolygonImportService {
   /** `solution` of the imported problem. An update that does not import the tutorial leaves the editorial alone, whatever else is ticked; any other import writes what the statements and the appended solution made (nothing, for a new problem without either). */
   private editorialOf(
     tutorial: string,
-    job: PolygonImportJob,
+    keepsCurrent: boolean,
   ): Pick<ImportedProblem, 'solution'> {
-    if (keepsEditorial(job)) return {};
+    if (keepsCurrent) return {};
     return { solution: this.renderTutorial(tutorial) };
   }
 

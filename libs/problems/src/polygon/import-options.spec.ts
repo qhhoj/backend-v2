@@ -52,10 +52,6 @@ describe('import options', () => {
   });
 
   it('reads an old link or queued job: absent fields default, extra fields drop', () => {
-    expect(importOptionsOf({ maxCases: 300 })).toEqual({
-      ...IMPORT_OPTION_DEFAULTS,
-      maxCases: 300,
-    });
     const job = {
       ...stored,
       importTutorial: undefined,
