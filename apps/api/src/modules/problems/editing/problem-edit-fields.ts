@@ -1,6 +1,7 @@
 import { isDuplicateKey, unique, ValidationFailedError } from '@libs/common';
 import type { Problem } from '@libs/database';
 import type { ProblemDataFilesService } from '@libs/problems';
+import type { ProblemsRepository } from '../core/problems.repository';
 import type { UpdateProblemDto } from './dto/problem-edit.dto';
 
 /** The only field a request may set to null (it clears the license). */
@@ -88,4 +89,14 @@ export async function withCodeTaken<Result>(
   } catch (error) {
     throw isDuplicateKey(error, 'code') ? codeTakenError() : error;
   }
+}
+
+/** A live problem already has `code` (`code_taken`), or else its data directory is left on disk (`data_directory_taken`); the live problem is named first because its directory exists too. */
+export async function assertCodeAvailable(
+  repository: Pick<ProblemsRepository, 'idByCode'>,
+  dataFiles: Pick<ProblemDataFilesService, 'exists'>,
+  code: string,
+): Promise<void> {
+  if (await repository.idByCode(code)) throw codeTakenError();
+  await assertNoDataDirectory(dataFiles, code);
 }

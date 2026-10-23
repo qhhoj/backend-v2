@@ -19,7 +19,7 @@ import { assertOrganizationCodePrefix } from './organization-code-prefix';
 import { OrganizationProblemRules } from './organization-problem-rules.service';
 import { ProblemEditPolicyService } from './problem-edit-policy.service';
 import {
-  assertNoDataDirectory,
+  assertCodeAvailable,
   toFields,
   withCodeTaken,
   withoutRenderedHtml,
@@ -125,7 +125,7 @@ export class ProblemEditingService {
     }
     this.policy.assertCreateGates(principal, dto, fields, organization);
     await this.policy.assertReferences(dto);
-    await assertNoDataDirectory(this.dataFiles, dto.code);
+    await assertCodeAvailable(this.repository, this.dataFiles, dto.code);
     // Validation is done: spend now, refund if the insert fails (a taken code included).
     const problem = await this.quota.charged(
       chargedOrganization(principal, fields),
@@ -294,7 +294,7 @@ export class ProblemEditingService {
   ): Promise<void> {
     const newCode = fields.code;
     if (newCode !== undefined && newCode !== original.code)
-      await assertNoDataDirectory(this.dataFiles, newCode);
+      await assertCodeAvailable(this.repository, this.dataFiles, newCode);
   }
 
   private async recordRevisionAndEmitEvents(

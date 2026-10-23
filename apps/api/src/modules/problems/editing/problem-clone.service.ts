@@ -9,7 +9,7 @@ import { CloneProblemDto } from './dto/clone.dto';
 import { ProblemDetailResponse } from '../core/dto/problem-detail.response';
 import { ProblemEditPolicyService } from './problem-edit-policy.service';
 import {
-  assertNoDataDirectory,
+  assertCodeAvailable,
   withCodeTaken,
   withoutRenderedHtml,
 } from './problem-edit-fields';
@@ -95,7 +95,7 @@ export class ProblemCloneService {
     dto: CloneProblemDto,
   ): Promise<ProblemDetailResponse> {
     const source = await this.policy.editableProblem(auth.principal, code);
-    await assertNoDataDirectory(this.dataFiles, dto.code);
+    await assertCodeAvailable(this.repository, this.dataFiles, dto.code);
     const copied = Object.fromEntries(
       Object.entries(source.toJSON()).filter(([field]) =>
         CLONE_COPIED_FIELDS.includes(field),
