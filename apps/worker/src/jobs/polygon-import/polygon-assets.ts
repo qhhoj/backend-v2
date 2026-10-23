@@ -83,8 +83,23 @@ function parseChecker(root: XmlElement, checker: XmlElement): CheckerAssets {
   };
 }
 
-/** Legacy `parse_assets`, with Polygon's model for an interactor: the problem checker still decides each case, reading what the interactor wrote (init.yml `interactive.checker`). An hcmp checker maps to `standard` there too. The returned paths come from problem.xml and are resolved by `PolygonPackage`, never used directly. */
+/** Polygon's `<judging run-count>`: how many times the solution runs per test. Absent means one (packages from before the attribute). */
+const SINGLE_RUN = '1';
+
+/** A run-twice package would import as a one-run problem and be misjudged, so any count but one is refused. */
+function assertSingleRun(root: XmlElement): void {
+  const runCount = descendant(root, 'judging')?.attributes['run-count'];
+  if (runCount === undefined || runCount.trim() === SINGLE_RUN) return;
+  throw new PolygonImportError(
+    `the package runs the solution ${runCount} times per test; QHHOJ grades one run`,
+    'polygon_run_count_unsupported',
+    { runCount },
+  );
+}
+
+/** Legacy `parse_assets`, with Polygon's model for an interactor: the problem checker still decides each case, reading what the interactor wrote (init.yml `interactive.checker`). An hcmp checker maps to `standard` there too. The returned paths come from problem.xml and are resolved by `PolygonPackage`, never used directly. A package that runs the solution more than once per test is refused first (`assertSingleRun`). */
 export function parseAssets(root: XmlElement): PolygonAssets {
+  assertSingleRun(root);
   const checker = descendant(root, 'checker');
   if (!checker)
     throw new PolygonImportError('checker not found', 'checker_unsupported');
