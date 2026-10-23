@@ -1,7 +1,6 @@
-/** Options every jest config shares (jest.config.js, jest.db.config.js and the OpenAPI configs); not a config itself. */
+/** Options every jest config shares (jest.config.js, db.config.js and the OpenAPI configs); not a config itself. */
 module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
-  rootDir: '.',
   testPathIgnorePatterns: ['/node_modules/'],
   transform: {
     '^.+\\.(t|j)s$': ['ts-jest', { tsconfig: { allowJs: true } }],
