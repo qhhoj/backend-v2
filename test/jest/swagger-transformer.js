@@ -1,4 +1,4 @@
-/** Adapts the swagger CLI plugin to ts-jest's AST transformer interface (see jest.openapi.config.js). */
+/** Adapts the swagger CLI plugin to ts-jest's AST transformer interface (see openapi.config.js). */
 const swagger = require('@nestjs/swagger/plugin');
 
 module.exports = {

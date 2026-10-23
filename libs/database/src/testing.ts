@@ -4,7 +4,7 @@ import type { Db } from 'mongodb';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { SNAPSHOT_LOAD_COMMENT } from './snapshot-load';
 
-/** Set by `jest.global-setup.js`: the run's one replica set, with `__DB__` where the database name goes. */
+/** Set by `test/jest/global-setup.js`: the run's one replica set, with `__DB__` where the database name goes. */
 const SHARED_MONGO_URI = 'QHHOJ_TEST_MONGO_URI';
 
 export interface TestMongo {
