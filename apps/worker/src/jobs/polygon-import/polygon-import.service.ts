@@ -22,6 +22,7 @@ import {
   extensionOf,
   PDF_QUEUE,
   PdfCacheService,
+  importOptionsOf,
   pdfJobId,
   POLYGON_PACKAGE_MAX_BYTES,
   PolygonApiError,
@@ -297,7 +298,7 @@ function assertTestsShipped(
 
 /** An update that does not import the tutorial leaves the problem's editorial as it is. */
 const keepsEditorial = (job: PolygonImportJob): boolean =>
-  job.importTutorial === false && job.mode === 'update';
+  !importOptionsOf(job).importTutorial && job.mode === 'update';
 
 @Injectable()
 export class PolygonImportService {
@@ -420,7 +421,8 @@ export class PolygonImportService {
   ): Promise<ReadPackage> {
     const root = await pkg.problemXml();
     const assets = parseAssets(root);
-    const plan = planTests(root, job);
+    const options = importOptionsOf(job);
+    const plan = planTests(root, options);
     assertTestsShipped(pkg, plan, job);
     const { tutorial, ...statement } = await this.readStatements(
       root,
@@ -520,7 +522,7 @@ export class PolygonImportService {
       texToMarkdown: (tex) => this.pandoc.texToMarkdown(tex),
       saveImage: this.imageSaver(savedImages),
     });
-    if (job.appendMainSolution && !keepsEditorial(job)) {
+    if (importOptionsOf(job).appendMainSolution && !keepsEditorial(job)) {
       const solution = await mainSolution(root, pkg);
       statements.tutorial = withMainSolution(
         statements.tutorial,

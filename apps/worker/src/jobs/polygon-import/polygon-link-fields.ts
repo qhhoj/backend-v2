@@ -3,6 +3,7 @@ import type {
   SyncedSetting,
   SyncedSettingFingerprints,
 } from '@libs/database';
+import { importOptionsOf, linkWriteOf } from '@libs/problems';
 import type { PolygonImportJob, PolygonSource } from '@libs/problems';
 
 /** What a successful import learnt of the package beyond the job: the statement title it applied, the package's editable settings, and when. */
@@ -46,16 +47,7 @@ export function newLink(
     linkedAt: synced.now,
     linkedBy: job.requesterId,
     autoSync: source.autoSync,
-    options: {
-      mainStatementLanguage: job.mainStatementLanguage,
-      statementLanguages: job.statementLanguages,
-      tutorialLanguage: job.tutorialLanguage,
-      ignoreZeroPointBatches: job.ignoreZeroPointBatches,
-      ignoreZeroPointCases: job.ignoreZeroPointCases,
-      appendMainSolution: job.appendMainSolution,
-      importTutorial: job.importTutorial !== false,
-      maxCases: job.maxCases,
-    },
+    options: importOptionsOf(job),
   };
 }
 
@@ -65,9 +57,9 @@ export function linkChanges(
   synced: SyncedPackage,
 ): Record<string, unknown> {
   const source = job.polygon;
-  if (!source) return {};
-  if (source.purpose === 'link')
-    return { polygonLink: newLink(job, source, synced) };
+  const write = linkWriteOf(job);
+  if (!source || write === 'none') return {};
+  if (write === 'link') return { polygonLink: newLink(job, source, synced) };
   return Object.fromEntries(
     Object.entries(syncedFields(source, synced)).map(([field, value]) => [
       `polygonLink.${field}`,

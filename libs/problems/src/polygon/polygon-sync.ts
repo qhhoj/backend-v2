@@ -1,6 +1,7 @@
 import type { Permission } from '@libs/auth';
 import type { PolygonLink, PolygonSyncTrigger } from '@libs/database';
 import type { PolygonImportJob } from '../queues';
+import { jobOptionsOf } from './import-options';
 import type { LatestPackage, ReadyPackage } from './polygon-types';
 
 /** Syncing a linked problem (now or automatically) and changing its link, on top of write access to its test data; the api gates the routes with it and the worker re-checks it on every sync. */
@@ -44,7 +45,7 @@ export function syncJobOf(
     code: problem.code,
     mode: 'update',
     isFullMarkup: problem.isFullMarkup,
-    ...link.options,
+    ...jobOptionsOf({ from: 'link', stored: link.options }),
     expectedDataVersion: problem.dataVersion ?? 0,
     polygon: {
       problemId: link.problemId,

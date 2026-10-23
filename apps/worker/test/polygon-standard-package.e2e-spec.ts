@@ -103,6 +103,7 @@ describe('Polygon standard package import', () => {
       ignoreZeroPointBatches: false,
       ignoreZeroPointCases: false,
       appendMainSolution: false,
+      importTutorial: true,
       maxCases: 300,
       polygon: {
         problemId: POLYGON_ID,

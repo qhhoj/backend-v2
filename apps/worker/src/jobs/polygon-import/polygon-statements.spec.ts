@@ -37,6 +37,7 @@ const job = (overrides: Partial<PolygonImportJob> = {}): PolygonImportJob => ({
   ignoreZeroPointBatches: false,
   ignoreZeroPointCases: false,
   appendMainSolution: false,
+  importTutorial: true,
   maxCases: 300,
   ...overrides,
 });
