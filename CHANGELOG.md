@@ -1,5 +1,19 @@
 # qhhoj-backend
 
+## 2.36.0
+
+### Minor Changes
+
+- ebd34d1: Organization judging-time meter (measure only, nothing is refused): the worker charges each finished grading attempt of an organization problem once, in `organizationJudgingCharges` (CPU ms of the stored cases, solution plus `juryTime`), to the problem's first listed organization in the site time-zone month. `GET /organizations/:slug/usage` adds `judging`, `topProblems` and `quota.judgingMs`; the staff overview adds `judgingUsed`/`judgingLimit` and sort `judging`; `PATCH /organizations/:slug/quota` accepts `quotaJudgingMs` (null = setting `quota.defaultJudgingMs`, 10 h). Credit fields are unchanged.
+- a5b9518: Polygon and zip imports take `importTutorial` (default true), independent of `appendMainSolution`. False imports no tutorial: a new problem gets no editorial (or only the main-solution block), and an update, re-import or sync leaves the problem's editorial untouched. The Polygon link stores it with its options (`PATCH /problems/{code}/polygon`), so a sync keeps the choice; links and jobs made before it behave as true.
+
+### Patch Changes
+
+- bc82544: nginx: refuse requests that did not come through Cloudflare (per server block, loopback and ACME allowed).
+- cd57ffc: Move the Jest configs, global setup and helpers into `test/jest/`; the root keeps `jest.config.js`.
+- b858dd5: Remove the DMOJ parity recipe (submit-all, compare, parity seed): its reference judge no longer exists.
+- 587dbd4: Keep the origin host address out of the repo: docs and examples use `<production-host>`, since the site sits behind Cloudflare.
+
 ## 2.35.1
 
 ### Patch Changes
