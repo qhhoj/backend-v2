@@ -1,5 +1,12 @@
 # qhhoj-backend
 
+## 2.35.1
+
+### Patch Changes
+
+- 59846ed: New accounts default to the `Asia/Ho_Chi_Minh` time zone (was `America/Toronto`); existing accounts keep theirs. Logging in to an account that staff deactivated answers 403 `account_disabled` instead of `account_not_activated`.
+- ba7c116: Creating, cloning or renaming a problem to a code that a live problem uses answers `code_taken` instead of `data_directory_taken`. A problem edit refuses an empty `allowedLanguages` list ("Chọn ít nhất 1 ngôn ngữ.").
+
 ## 2.35.0
 
 ### Minor Changes
