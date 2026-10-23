@@ -24,6 +24,8 @@ export const POLYGON_IMPORT_ERROR_CODES = [
   /** `{languages}`: several tutorials and no (or an unknown) tutorial language. */
   'tutorial_language_required',
   'checker_unsupported',
+  /** `{runCount}`: the package runs the solution more than once per test (Polygon run-twice); QHHOJ grades one run, so the import is refused rather than misjudged. */
+  'polygon_run_count_unsupported',
   'generation_failed',
   'generation_no_judge',
   'generation_timeout',

@@ -19,7 +19,13 @@ export interface PolygonFixture {
   interactor?: string | null;
   /** `<resources>` files, each also put in the package unless `omitEntries` drops it. */
   resources?: Array<{ path: string; type?: string; content?: string }>;
-  judging?: { inputFile?: string; outputFile?: string; percent?: boolean };
+  judging?: {
+    inputFile?: string;
+    outputFile?: string;
+    percent?: boolean;
+    /** Polygon's `run-count`; omitted = no attribute (packages from before Polygon wrote it). */
+    runCount?: string;
+  };
   timeLimitMs?: number;
   memoryLimitBytes?: number;
   statements?: Array<{
@@ -94,7 +100,7 @@ const groupsXml = (fixture: PolygonFixture): string =>
     )
     .join('');
 const judgingAttributes = ({ judging }: PolygonFixture): string =>
-  `${attribute('input-file', judging?.inputFile ?? '')}${attribute('output-file', judging?.outputFile ?? '')}${attribute('treat-points-from-checker-as-percent', judging?.percent ? 'true' : 'false')}`;
+  `${attribute('input-file', judging?.inputFile ?? '')}${attribute('output-file', judging?.outputFile ?? '')}${attribute('run-count', judging?.runCount)}${attribute('treat-points-from-checker-as-percent', judging?.percent ? 'true' : 'false')}`;
 
 export function buildProblemXml(fixture: PolygonFixture): string {
   const groups = groupsXml(fixture);

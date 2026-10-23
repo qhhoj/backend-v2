@@ -144,4 +144,54 @@ describe('parseAssets', () => {
     expect(compiled.yaml).toContain('checker.cpp');
     expect(compiled.yaml).toContain('testlib');
   });
+
+  const refusalOf = (
+    fixture: Parameters<typeof buildProblemXml>[0],
+  ): unknown => {
+    try {
+      assets(fixture);
+    } catch (error: unknown) {
+      return error;
+    }
+    throw new Error('the package was accepted');
+  };
+
+  it('imports a package that runs the solution once, or does not say', () => {
+    for (const runCount of [undefined, '1', ' 1 ']) {
+      expect(assets({ ...oneTest, judging: { runCount } }).grader).toBe(
+        'standard',
+      );
+      expect(
+        assets({
+          ...oneTest,
+          interactor: 'files/interactor.cpp',
+          judging: { runCount },
+        }).grader,
+      ).toBe('interactive');
+    }
+  });
+
+  it.each(['2', '3', '0', '01', 'two', ''])(
+    'refuses run-count %j, with or without an interactor, naming the count',
+    (runCount) => {
+      for (const interactor of [null, 'files/interactor.cpp']) {
+        const refusal = refusalOf({
+          ...oneTest,
+          interactor,
+          judging: { runCount },
+        });
+        expect(refusal).toBeInstanceOf(PolygonImportError);
+        expect(refusal).toMatchObject({
+          code: 'polygon_run_count_unsupported',
+          params: { runCount },
+        });
+      }
+    },
+  );
+
+  it('refuses the run count before looking at the checker', () => {
+    expect(
+      refusalOf({ ...oneTest, checker: null, judging: { runCount: '2' } }),
+    ).toMatchObject({ code: 'polygon_run_count_unsupported' });
+  });
 });
