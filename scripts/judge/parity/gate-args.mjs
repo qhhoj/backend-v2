@@ -1,3 +1,5 @@
+import { chmodSync, writeFileSync } from 'node:fs';
+
 /** `--name value` pairs of a command line; anything else is an error. */
 export function parseArguments(argv) {
   const values = {};
@@ -8,4 +10,10 @@ export function parseArguments(argv) {
     values[argv[i].slice(2)] = argv[i + 1];
   }
   return values;
+}
+
+/** The file may hold source: `mode` applies only on creation, so tighten an existing file too. */
+export function writePrivate(path, text) {
+  writeFileSync(path, text, { mode: 0o600 });
+  chmodSync(path, 0o600);
 }

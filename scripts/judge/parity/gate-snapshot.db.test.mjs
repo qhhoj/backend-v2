@@ -1,7 +1,7 @@
 // Needs a local mongod via mongodb-memory-server (CI does not run it). run: node --test scripts/judge/parity/gate-snapshot.db.test.mjs
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -97,4 +97,29 @@ test('snapshot then compare end to end: a rejudged WA to AC is improved, exit 0'
   const gone = spawnSync('node', [script, '--control', join(dir, 'a.json'), '--candidate', join(dir, 'c.json')]);
   assert.equal(gone.status, 2);
   assert.match(gone.stdout.toString(), /missing from candidate/);
+});
+
+test('compare exits 2 on a slowdown that is otherwise unchanged', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-'));
+  const rows = (time) => [{ id: 'x', language: 'CPP17', result: 'AC', points: 10, casePoints: 10, caseTotal: 10, cases: [{ position: 1, status: 'AC', time, points: 10 }] }];
+  writeFileSync(join(dir, 'a.json'), JSON.stringify({ rows: rows(1) }));
+  writeFileSync(join(dir, 'b.json'), JSON.stringify({ rows: rows(19) }));
+  const script = new URL('./gate-compare.mjs', import.meta.url).pathname;
+  const run = spawnSync('node', [script, '--control', join(dir, 'a.json'), '--candidate', join(dir, 'b.json')]);
+  assert.equal(run.status, 2);
+  assert.match(run.stdout.toString(), /SLOWDOWNS/);
+});
+
+test('an existing world-readable output file ends at 0600 (snapshot and compare json)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-'));
+  const out = join(dir, 'snap.json');
+  const report = join(dir, 'report.json');
+  for (const file of [out, report]) { writeFileSync(file, 'old'); chmodSync(file, 0o644); }
+  const env = { ...process.env, QHHOJ_MONGO_URL: server.getUri() + 'gate' };
+  const snap = spawnSync('node', [new URL('./gate-snapshot.mjs', import.meta.url).pathname, '--problem', 'Demo', '--out', out], { env });
+  assert.equal(snap.status, 0, snap.stderr.toString());
+  assert.equal(statSync(out).mode & 0o777, 0o600);
+  const run = spawnSync('node', [new URL('./gate-compare.mjs', import.meta.url).pathname, '--control', out, '--candidate', out, '--json', report]);
+  assert.equal(run.status, 0, run.stderr.toString());
+  assert.equal(statSync(report).mode & 0o777, 0o600);
 });

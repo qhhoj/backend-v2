@@ -111,3 +111,19 @@ test('preExisting compares the control pass with the stored rows', () => {
   assert.deepEqual(report.worsened.map((r) => r.id), ['a']);
   assert.equal(report.unchanged, 1);
 });
+
+test('a slowdown needs both the factor and the seconds, with an unchanged status', () => {
+  const timed = (time, status = 'AC') => row({ cases: [aCase({ time, status })] });
+  const slowed = (from, to) => classify([timed(from)], [timed(to)]).slowdowns.length;
+  assert.equal(slowed(1, 19), 1);
+  assert.equal(slowed(1, 2), 1); // exactly x2 and exactly >= 0.2 s
+  assert.equal(slowed(1, 1.99), 0); // below x2
+  assert.equal(slowed(0.1, 0.29), 0); // x2.9 but under 0.2 s
+  assert.equal(slowed(0.1, 0.3), 1); // x3 and 0.2 s
+  assert.equal(slowed(2, 1), 0);
+  assert.equal(classify([timed(1)], [timed(5, 'WA')]).slowdowns.length, 0);
+  const lenient = classify([timed(1)], [timed(3)], { slowdownFactor: 4 });
+  assert.equal(lenient.slowdowns.length, 0);
+  const strict = classify([timed(1)], [timed(1.3)], { slowdownFactor: 1.2, slowdownSeconds: 0.3 });
+  assert.equal(strict.slowdowns.length, 1);
+});

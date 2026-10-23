@@ -13,13 +13,14 @@ Comparer tests: `node --test scripts/judge/parity/*.test.mjs`.
 
 ## Migration gate: snapshot and compare
 
-Tooling for the rejudge-and-compare gate of a problem flip. Exports hold contestant source: keep them in a private directory, never in a repository. The tools are read-only on the database.
+Tooling for the rejudge-and-compare gate of a problem flip. Exports hold contestant source: keep them in a private directory, never in a repository. The tools are read-only on the database: give them a read-only Mongo role. The URL is taken from `QHHOJ_MONGO_URL` only (a flag would show in `ps`). Output files are set to mode 0600, also when they already existed.
 
 - Snapshot: `QHHOJ_MONGO_URL=mongodb://… node scripts/judge/parity/gate-snapshot.mjs --problem <code> --out <private>/stored.json` writes `{ exportedAt, problem, dataVersion, rows }`, one row per submission of the problem (all users, languages, results): `id, language` (key), `result, points, casePoints, caseTotal, judgedDataVersion, cases[]` (`position, status, time, memory, points, total`) and `source`. The user is not exported. It reads through a wrapper that exposes only `find` and `findOne`. Times are in seconds, as stored.
 - The control and candidate passes (local judge runs) write the same format; any two snapshots compare.
 - Compare: `node scripts/judge/parity/gate-compare.mjs --control control.json --candidate candidate.json [--stored stored.json] [--json report.json]`. The totals line is `unchanged, timing-only, improved, worsened, other, missing, tle-flips`. With `--stored`, the control pass is first compared with the stored snapshot: that is the pre-existing list.
 - A row is **improved** when its verdict or points only got better (more points; with equal points AC over any other verdict; every changed case likewise), **worsened** when any of them got worse, **other** for changes that are not ordered (WA to RTE with equal points, anything to or from CE/IE, points up with AC lost, a different case count or total), and **unchanged** otherwise. A row takes its worst field, so one worsened case outweighs better totals. A row only in one snapshot is listed as **missing**.
-- Improved rows are accepted without review; only worsened rows stop a flip. Exit code 1: a worsened row; 2: no worsened row but `other` or missing rows to decide; 0 otherwise.
+- Improved rows are accepted without review; only worsened rows stop a flip. Exit code 1: a worsened row; 2: no worsened row but `other`, missing or slowdown rows to decide; 0 otherwise.
+- A **slowdown** is a case with an unchanged status whose time grows by at least ×2 and 0.2 s (`slowdownFactor`, `slowdownSeconds`): time-limit headroom shrank. Flagged rows have their own section and need a decision, whatever their class.
 - Case times that move by more than 10 % and 20 ms (`classify` options `relative`, `absoluteSeconds`) with an unchanged status make a row timing-only (listed, not counted as changed). Rows where a TLE appears or vanishes are also listed under "TLE flips".
 - Worsened and other rows carry a proposal, never a decision: `exploit` when the source matches `pread|lseek|fseek|freopen|extern|/proc/self|_exit`, `read-catch` when it contains `catch`, `tle-flip`.
 

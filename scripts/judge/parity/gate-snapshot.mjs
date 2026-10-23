@@ -1,10 +1,9 @@
 // Read-only snapshot of one problem's submissions for the migration gate.
 //   QHHOJ_MONGO_URL=mongodb://... node gate-snapshot.mjs --problem <code> --out <file>
-// The URL comes from the environment (or --mongo-url), never from the repo. The export holds contestant
+// The URL comes from the environment only (no flag: argv shows in `ps`; use a read-only Mongo role), never from the repo. The export holds contestant
 // source: write it to a private directory, never into a repository.
-import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { parseArguments } from './gate-args.mjs';
+import { parseArguments, writePrivate } from './gate-args.mjs';
 import { MongoClient } from 'mongodb';
 
 const SOURCE_BATCH = 500;
@@ -94,7 +93,7 @@ export async function snapshotProblem(db, code, now = new Date()) {
 
 async function main() {
   const args = parseArguments(process.argv.slice(2));
-  const url = args['mongo-url'] ?? process.env.QHHOJ_MONGO_URL;
+  const url = process.env.QHHOJ_MONGO_URL;
   if (!url || !args.problem || !args.out) {
     throw new Error('usage: QHHOJ_MONGO_URL=... gate-snapshot.mjs --problem <code> --out <file>');
   }
@@ -102,7 +101,7 @@ async function main() {
   try {
     await client.connect();
     const snapshot = await snapshotProblem(readOnly(client.db()), args.problem);
-    writeFileSync(args.out, JSON.stringify(snapshot), { mode: 0o600 });
+    writePrivate(args.out, JSON.stringify(snapshot));
     console.log(`${snapshot.rows.length} submissions of ${snapshot.problem} (dataVersion ${snapshot.dataVersion}) -> ${args.out}`);
   } finally {
     await client.close();

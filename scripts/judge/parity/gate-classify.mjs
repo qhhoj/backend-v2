@@ -2,9 +2,12 @@
 // (see gate-snapshot.mjs). `classify(control, candidate)` sorts every submission into
 // unchanged / improved / worsened / other, so only worsened rows stop a flip.
 
+/** Tolerance for float comparisons (points, seconds). */
 const POINT_EPSILON = 1e-9;
 /** Times are seconds (as stored). A case time differs when it moves by more than both thresholds. */
 export const DEFAULT_NOISE = { relative: 0.1, absoluteSeconds: 0.02 };
+/** A case slows down when its time grows by at least this factor and these seconds, status unchanged. */
+export const DEFAULT_SLOWDOWN = { slowdownFactor: 2, slowdownSeconds: 0.2 };
 /** Verdicts that mean "the run did not grade the code": a change to or from them is never an improvement. */
 const UNGRADED = new Set(['CE', 'IE', null, undefined]);
 /** Tokens of the exploit audit; the tool proposes, the operator decides. */
@@ -93,6 +96,18 @@ function timingChanges(before, after, noise) {
   });
 }
 
+/** Cases with the same status that got markedly slower: time-limit headroom shrank. */
+function slowdownCases(before, after, limits) {
+  const afterByPosition = new Map(after.map((c) => [c.position, c]));
+  return before.filter((testCase) => {
+    const other = afterByPosition.get(testCase.position);
+    if (!other || other.status !== testCase.status) return false;
+    const was = testCase.time ?? 0;
+    const now = other.time ?? 0;
+    return now >= was * limits.slowdownFactor - POINT_EPSILON && now - was >= limits.slowdownSeconds - POINT_EPSILON;
+  });
+}
+
 const isTle = (status) => status === 'TLE';
 
 const flipsTle = (before, after) =>
@@ -144,7 +159,9 @@ function compareTotals(before, after) {
 }
 
 /** One submission present on both sides. */
-export function classifyRow(before, after, noise = DEFAULT_NOISE) {
+export function classifyRow(before, after, options = {}) {
+  const noise = { ...DEFAULT_NOISE, ...options };
+  const limits = { ...DEFAULT_SLOWDOWN, ...options };
   const totals = compareTotals(before, after);
   const cases = compareCases(before.cases ?? [], after.cases ?? []);
   const direction = worst([...totals.directions, cases.direction]);
@@ -160,6 +177,7 @@ export function classifyRow(before, after, noise = DEFAULT_NOISE) {
     class: direction,
     fields: [...totals.fields, ...cases.fields],
     timingCases: timing.map((c) => c.position),
+    slowdownCases: slowdownCases(before.cases ?? [], after.cases ?? [], limits).map((c) => c.position),
     tleFlip,
     hints,
     suggestion: direction === 'unchanged' ? null : suggestion(hints, tleFlip),
@@ -171,19 +189,20 @@ const byId = (rows) => new Map(rows.map((row) => [row.id, row]));
 /**
  * Compares two snapshots' rows (`control` is the reference). Returns:
  * improved/worsened/other (row reports), unchanged (count), timingOnly (rows unchanged but for case times),
+ * slowdowns (rows with a case at least slowdownFactor times and slowdownSeconds slower, also listed in their class),
  * tleFlips (rows where a TLE appeared or vanished, also listed in their class), missing (a row on one side only).
  */
 export function classify(control, candidate, options = {}) {
-  const noise = { ...DEFAULT_NOISE, ...options };
   const candidateById = byId(candidate);
-  const report = { improved: [], worsened: [], other: [], unchanged: 0, timingOnly: [], tleFlips: [], missing: [] };
+  const report = { improved: [], worsened: [], other: [], unchanged: 0, timingOnly: [], tleFlips: [], slowdowns: [], missing: [] };
   for (const before of control) {
     const after = candidateById.get(before.id);
     if (!after) {
       report.missing.push({ id: before.id, language: before.language, side: 'candidate' });
       continue;
     }
-    const row = classifyRow(before, after, noise);
+    const row = classifyRow(before, after, options);
+    if (row.slowdownCases.length > 0) report.slowdowns.push(row);
     if (row.tleFlip) report.tleFlips.push(row);
     if (row.class !== 'unchanged') report[row.class].push(row);
     else if (row.timingCases.length > 0) report.timingOnly.push(row);
