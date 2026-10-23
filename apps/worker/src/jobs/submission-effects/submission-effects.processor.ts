@@ -4,7 +4,7 @@ import { Logger } from '@nestjs/common';
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import type { Model } from 'mongoose';
-import { Submission } from '@libs/database';
+import { OrganizationJudgingCharge, Submission } from '@libs/database';
 import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { startAfterIndexes } from '../start-after-indexes';
@@ -26,13 +26,17 @@ export class SubmissionEffectsProcessor
     private readonly effects: SubmissionEffectsService,
     @InjectModel(Submission.name)
     private readonly submissions: Model<Submission>,
+    @InjectModel(OrganizationJudgingCharge.name)
+    private readonly judgingCharges: Model<OrganizationJudgingCharge>,
   ) {
     super();
   }
 
-  /** The stats count is hinted to a submissions index. */
+  /** The stats count is hinted to a submissions index; the judging charge is made idempotent by its unique index. */
   onApplicationBootstrap(): Promise<void> {
-    return startAfterIndexes(this.worker, this.submissions);
+    return startAfterIndexes(this.worker, this.submissions, [
+      this.judgingCharges,
+    ]);
   }
 
   process(job: Job<SubmissionGradedJob>): Promise<void> {

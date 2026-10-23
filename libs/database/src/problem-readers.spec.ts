@@ -128,13 +128,17 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     "a user's data export still lists their submissions with the problem code",
   ],
+  'libs/problems/src/quota/judging-charges.service.ts': [
+    'S',
+    'a run that finishes after its problem was deleted still used judging time, so it is charged to the owner',
+  ],
   'libs/problems/src/quota/organization-storage.ts': [
     'S',
     'the storage meter counts deleted-but-not-purged problems: their data is still on disk',
   ],
   'libs/problems/src/quota/quota-ledger.service.ts': [
     'S',
-    'reads only through organization-storage.ts for the storage meter, deleted problems included',
+    'the storage meter reads through organization-storage.ts, deleted problems included; the top judging problems name every charged problem, deleted ones too, since their time was used',
   ],
 };
 

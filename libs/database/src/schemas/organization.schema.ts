@@ -35,6 +35,8 @@ export class Organization {
     number | null;
   @Prop({ type: Number, default: null, min: 0 }) quotaMonthlyCredits!:
     number | null;
+  /** Judging milliseconds per month (site time zone). */
+  @Prop({ type: Number, default: null, min: 0 }) quotaJudgingMs!: number | null;
   /** Promotion: the limits are reported but never applied (usage is still metered). Set for every organization imported from the old site. */
   @Prop({ type: Boolean, default: false }) quotaUnlimited!: boolean;
   /** Soft delete by a superuser: the record stays (slug still reserved) but every read skips it. Absent while live, so `{deletedAt: null}` reads "live". */

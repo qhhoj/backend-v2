@@ -2,11 +2,11 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
-export const USAGE_SORTS = ['name', 'credits'] as const;
+export const USAGE_SORTS = ['name', 'credits', 'judging'] as const;
 export type UsageSort = (typeof USAGE_SORTS)[number];
 
 export class UsageOverviewQueryDto {
-  /** Order of the rows: by name or by credits used. */
+  /** Order of the rows: by name, by credits used or by judging time used. */
   @ApiPropertyOptional({
     enum: USAGE_SORTS,
     enumName: 'OrganizationUsageSort',
@@ -44,6 +44,16 @@ export class UpdateQuotaDto {
   @Min(0)
   @Max(1_000_000)
   quotaMonthlyCredits?: number | null;
+  /**
+   * Judging milliseconds per month, 0 to 36000000000 (10000 h); null clears
+   * the cap so the site default applies.
+   */
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(36_000_000_000)
+  quotaJudgingMs?: number | null;
   /**
    * Problem data storage in bytes, 0 to 1099511627776; null clears the cap.
    */

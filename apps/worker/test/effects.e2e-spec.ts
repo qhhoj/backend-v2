@@ -1,7 +1,10 @@
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { rankingCacheKeys } from '@libs/contests';
-import { newId, toUuid } from '@libs/database';
+import { newId, OrganizationJudgingCharge, toUuid } from '@libs/database';
+import type { Submission } from '@libs/database';
+import { getModelToken } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
 import { profileQueries } from '@libs/database/testing';
 import type { UUID } from 'mongodb';
 import { ContestResultsRepository } from '../src/jobs/submission-effects/contest-results.repository';
@@ -14,6 +17,7 @@ import {
   seedUser,
   insertGradedRows,
   seedGraded,
+  seedOrganization,
   problemFields,
 } from './effects-fixtures';
 import { setupWorkerTest } from './setup';
@@ -1252,6 +1256,78 @@ afterAll(() => worker.teardown());
         userCount: 9,
         acRate: 10,
       });
+    });
+  });
+}
+
+{
+  describe('judging charges of graded jobs', () => {
+    beforeAll(() => worker.reset());
+    let effects: SubmissionEffectsService;
+    let charges: Model<OrganizationJudgingCharge>;
+    const msChargedFor = async (submissionId: string) =>
+      (await charges.find({ submission: submissionId }).lean()).map(
+        (row) => row.ms,
+      );
+    /** A graded run of 0.5 s solution and 0.25 s checker on an organization problem. */
+    const seedOrganizationRun = async (fields: Partial<Submission> = {}) => {
+      const organization = await seedOrganization(worker);
+      const problem = await seedProblem(worker, {
+        isOrganizationPrivate: true,
+        organizations: [organization._id],
+      });
+      const user = await seedUser(worker);
+      return seedGraded(worker, user._id, problem._id, {
+        judgeGeneration: 1,
+        cases: [
+          { position: 1, status: 'AC', time: 0.5, juryTime: 0.25 },
+        ] as Submission['cases'],
+        ...fields,
+      });
+    };
+
+    beforeAll(() => {
+      effects = worker.module.get(SubmissionEffectsService);
+      charges = worker.module.get(
+        getModelToken(OrganizationJudgingCharge.name),
+      );
+    });
+
+    it('charges a queued graded job once, even when the job is applied again', async () => {
+      const queue = worker.module.get<Queue<SubmissionGradedJob>>(
+        getQueueToken(SUBMISSION_GRADED_QUEUE),
+      );
+      const submission = await seedOrganizationRun();
+      await enqueueGraded(queue, gradedJobOf(submission));
+      await waitUntil(
+        async () => (await msChargedFor(submission._id)).length > 0,
+      );
+      await effects.apply(gradedJobOf(submission));
+      expect(await msChargedFor(submission._id)).toEqual([750]);
+    });
+
+    it('charges a row the sweep repaired once, though its lost job turns up later', async () => {
+      const sweeps = worker.module.get(EffectsSweepService);
+      const now = Date.now();
+      await worker.module
+        .get<Redis>(REDIS)
+        .set(SWEEP_WATERMARK_KEY, String(now - 60_000));
+      const submission = await seedOrganizationRun({
+        effectsDueAt: new Date(now - 5 * 60_000),
+      });
+      expect((await sweeps.sweep(now)).repaired).toBeGreaterThanOrEqual(1);
+      await effects.apply(gradedJobOf(submission));
+      expect(await msChargedFor(submission._id)).toEqual([750]);
+    });
+
+    it('charges a run on a problem deleted meanwhile, whose other effects are skipped', async () => {
+      const submission = await seedOrganizationRun();
+      await worker.problems.updateOne(
+        { _id: submission.problem },
+        { $set: { deletedAt: new Date() } },
+      );
+      await effects.apply(gradedJobOf(submission));
+      expect(await msChargedFor(submission._id)).toEqual([750]);
     });
   });
 }

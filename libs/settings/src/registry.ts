@@ -105,6 +105,13 @@ export const SETTINGS = {
     description: 'Monthly credits of an organization with no staff-set limit.',
     secret: false,
   }),
+  'quota.defaultJudgingMs': define({
+    type: integerType(0, 36_000_000_000),
+    default: 36_000_000,
+    description:
+      'Judging CPU milliseconds per month of an organization with no staff-set limit (default 36000000 = 10 h).',
+    secret: false,
+  }),
   'quota.defaultStorageBytes': define({
     type: integerType(0, 1_099_511_627_776),
     default: 536_870_912,

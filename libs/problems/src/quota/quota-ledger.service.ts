@@ -2,19 +2,23 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
-import { AppError, monthKeyIn, REDIS } from '@libs/common';
+import { AppError, REDIS } from '@libs/common';
 import {
   Organization,
   OrganizationCreditEntry,
+  OrganizationJudgingCharge,
   OrganizationUsage,
   Problem,
+  toUuid,
 } from '@libs/database';
 import { SettingsService } from '@libs/settings';
 import { QUOTA_BACKFILL_DONE_KEY } from '../quota-queues';
 import { sumStoredBytesByOrganization } from './organization-storage';
+import { quotaMonthOf } from './quota-month';
 import type {
   EffectiveLimits,
   PricedCharge,
+  ProblemJudgingTime,
   QuotaRefusal,
   SpentCharge,
   UsageKey,
@@ -37,6 +41,8 @@ export class QuotaLedger {
     @InjectModel(OrganizationCreditEntry.name)
     private readonly ledger: Model<OrganizationCreditEntry>,
     @InjectModel(Problem.name) private readonly problems: Model<Problem>,
+    @InjectModel(OrganizationJudgingCharge.name)
+    private readonly judgingCharges: Model<OrganizationJudgingCharge>,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -49,13 +55,14 @@ export class QuotaLedger {
   }
 
   monthKeyOf(now: Date): string {
-    return monthKeyIn(this.settings.get('site.timeZone'), now);
+    return quotaMonthOf(this.settings, now);
   }
 
   /** The effective limits of an organization row: its own caps, else the site defaults. */
   limitsFrom(
     row: {
       quotaMonthlyCredits?: number | null;
+      quotaJudgingMs?: number | null;
       quotaStorageBytes?: number | null;
       quotaUnlimited?: boolean;
     } | null,
@@ -65,6 +72,8 @@ export class QuotaLedger {
       credits:
         row?.quotaMonthlyCredits ??
         this.settings.get('quota.defaultMonthlyCredits'),
+      judgingMs:
+        row?.quotaJudgingMs ?? this.settings.get('quota.defaultJudgingMs'),
       storageBytes:
         row?.quotaStorageBytes ??
         this.settings.get('quota.defaultStorageBytes'),
@@ -75,6 +84,7 @@ export class QuotaLedger {
     const row = await this.organizations
       .findById(organizationId, {
         quotaMonthlyCredits: 1,
+        quotaJudgingMs: 1,
         quotaStorageBytes: 1,
         quotaUnlimited: 1,
       })
@@ -155,6 +165,48 @@ export class QuotaLedger {
     organizationIds: readonly string[],
   ): Promise<Map<string, number>> {
     return sumStoredBytesByOrganization(this.problems, organizationIds);
+  }
+
+  /** The judging meter: the sum of the organization's judging charges in `month`. */
+  async usedJudgingMs(organizationId: string, month: string): Promise<number> {
+    const [sum] = await this.judgingCharges.aggregate<{ ms: number }>([
+      { $match: { organization: toUuid(organizationId), month } },
+      { $group: { _id: null, ms: { $sum: '$ms' } } },
+    ]);
+    return sum?.ms ?? 0;
+  }
+
+  /** The `limit` problems that used the most judging time of the organization in `month`, heaviest first; a problem that no longer exists is left out before the limit, so it takes no row. */
+  topProblems(
+    organizationId: string,
+    month: string,
+    limit: number,
+  ): Promise<ProblemJudgingTime[]> {
+    return this.judgingCharges.aggregate<ProblemJudgingTime>([
+      { $match: { organization: toUuid(organizationId), month } },
+      { $group: { _id: '$problem', ms: { $sum: '$ms' }, runs: { $sum: 1 } } },
+      {
+        $lookup: {
+          from: this.problems.collection.name,
+          localField: '_id',
+          foreignField: '_id',
+          pipeline: [{ $project: { code: 1, name: 1 } }],
+          as: 'problem',
+        },
+      },
+      { $unwind: '$problem' },
+      { $sort: { ms: -1, _id: 1 } },
+      { $limit: limit },
+      {
+        $project: {
+          _id: 0,
+          code: '$problem.code',
+          name: '$problem.name',
+          ms: 1,
+          runs: 1,
+        },
+      },
+    ]);
   }
 
   /** The storage meter: reads what the organization holds and checks that `addedBytes` (what this write adds; negative or zero always fits) stays within its limit. Enforce refuses with 403 `quota_exceeded`; warn logs. */

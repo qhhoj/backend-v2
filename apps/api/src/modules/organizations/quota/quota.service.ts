@@ -211,23 +211,26 @@ export class QuotaService implements OnApplicationBootstrap {
     });
   }
 
-  /** The organization's month: credits and storage against their limits. */
+  /** The organization's month: credits, judging time and storage against their limits. */
   async snapshot(
     organizationId: string,
     now = new Date(),
   ): Promise<QuotaSnapshot> {
     const month = this.ledger.monthKeyOf(now);
-    const [limits, creditsUsed, usedBytes, enforcing] = await Promise.all([
-      this.ledger.limitsOf(organizationId),
-      this.creditsUsed({ organizationId, month }),
-      this.ledger.usedStorageBytes(organizationId),
-      this.ledger.isEnforcing(),
-    ]);
+    const [limits, creditsUsed, judgingMs, usedBytes, enforcing] =
+      await Promise.all([
+        this.ledger.limitsOf(organizationId),
+        this.creditsUsed({ organizationId, month }),
+        this.ledger.usedJudgingMs(organizationId, month),
+        this.ledger.usedStorageBytes(organizationId),
+        this.ledger.isEnforcing(),
+      ]);
     return {
       month,
       enforcing,
       unlimited: limits.unlimited,
       credits: meterOf(creditsUsed, limits.credits, limits.unlimited),
+      judging: meterOf(judgingMs, limits.judgingMs, limits.unlimited),
       storage: meterOf(usedBytes, limits.storageBytes, limits.unlimited),
     };
   }

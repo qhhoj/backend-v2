@@ -11,7 +11,7 @@ export interface ChargeRequest {
   bytes?: number;
 }
 
-/** One organization's month of credits. */
+/** One organization's month (credits, judging time). */
 export interface UsageKey {
   organizationId: string;
   month: string;
@@ -25,6 +25,8 @@ export type SpentCharge = UsageKey & PricedCharge;
 /** `unlimited`: the limits are reported but never applied. */
 export interface EffectiveLimits {
   credits: number;
+  /** Judging milliseconds per month. */
+  judgingMs: number;
   storageBytes: number;
   unlimited: boolean;
 }
@@ -34,4 +36,14 @@ export interface QuotaRefusal {
   limit: number;
   used: number;
   needed: number;
+}
+
+/** One problem's judging time in an organization's month. */
+export interface ProblemJudgingTime {
+  code: string;
+  name: string;
+  /** Judging milliseconds charged. */
+  ms: number;
+  /** Grading attempts charged. */
+  runs: number;
 }

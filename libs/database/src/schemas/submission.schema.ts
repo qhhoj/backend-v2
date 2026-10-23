@@ -78,7 +78,10 @@ export class SubmissionCase {
   @Prop({ required: true }) position!: number;
   @Prop({ type: String, required: true, enum: CASE_STATUSES })
   status!: CaseStatus;
+  /** CPU seconds of the solution. */
   @Prop({ default: 0 }) time!: number;
+  /** CPU seconds of the problem's own programs on this case (custom checker, interactor); 0 for built-in checkers and from judges that do not report it. Absent on cases stored before it existed, which reads as 0. */
+  @Prop({ default: 0 }) juryTime?: number;
   @Prop({ default: 0 }) memory!: number;
   @Prop({ default: 0 }) points!: number;
   @Prop({ default: 0 }) total!: number;

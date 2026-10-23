@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
 import { CONTEST_REPLAY_QUEUE } from '@libs/contests';
 import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import { QuotaLedgerModule } from '@libs/problems';
 import { ContestResultsRepository } from './contest-results.repository';
 import { SubmissionEffectsProcessor } from './submission-effects.processor';
 import { SubmissionEffectsRepository } from './submission-effects.repository';
@@ -15,6 +16,7 @@ import { SubmissionEffectsService } from './submission-effects.service';
       { name: ORGANIZATION_POINTS_QUEUE },
       { name: CONTEST_REPLAY_QUEUE },
     ),
+    QuotaLedgerModule,
   ],
   providers: [
     SubmissionEffectsProcessor,
