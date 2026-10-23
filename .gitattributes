@@ -1,1 +1,2 @@
 openapi.json merge=binary
+docs/decisions.md merge=union
