@@ -269,6 +269,39 @@ describe('compileInitYaml', () => {
       init({ helperHeaders: ['testlib.h'], cases: [plain(1)] }).checker,
     ).toBe('standard');
   });
+  it('compiles the uploaded header beside the bridged checker, whatever the grader', () => {
+    const checker = {
+      checker: 'bridged' as const,
+      customChecker: 'grader_1.cpp',
+      customHeader: 'playlists.h',
+      cases: [plain(1)],
+    };
+    const signature = init({
+      ...checker,
+      grader: 'signature',
+      customGrader: 'grader.cpp',
+    });
+    expect(signature.checker).toEqual({
+      name: 'bridged',
+      args: {
+        files: ['grader_1.cpp', 'playlists.h'],
+        lang: 'CPP17',
+        type: 'testlib',
+      },
+    });
+    expect(signature.signature_grader).toEqual({
+      entry: 'grader.cpp',
+      header: 'playlists.h',
+    });
+    expect(
+      init({ ...checker, helperHeaders: ['testlib.h', 'playlists.h'] }).checker,
+    ).toMatchObject({
+      args: { files: ['grader_1.cpp', 'testlib.h', 'playlists.h'] },
+    });
+    expect(
+      init({ customHeader: 'playlists.h', cases: [plain(1)] }).checker,
+    ).toBe('standard');
+  });
   describe('an interactive problem', () => {
     const polygonInteractive: Partial<ProblemData> = {
       grader: 'interactive',
@@ -367,6 +400,11 @@ describe('compileInitYaml', () => {
       'bridged with headers',
       { checker: 'bridged', customChecker: 'c.cpp', helperHeaders: ['a.h'] },
     ],
+    [
+      'bridged with an uploaded header',
+      { checker: 'bridged', customChecker: 'c.cpp', customHeader: 'a.h' },
+    ],
+    ['uploaded header, standard checker', { customHeader: 'a.h' }],
     [
       'interactive, legacy',
       { grader: 'interactive', customGrader: 'i.cpp', helperHeaders: ['a.h'] },

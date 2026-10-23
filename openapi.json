@@ -9700,7 +9700,7 @@
             "type": "string"
           },
           "customHeader": {
-            "description": "Name of the uploaded header file; null when none.",
+            "description": "Name of the uploaded header file: the signature grader's, and compiled beside a custom checker too; null when none.",
             "nullable": true,
             "type": "string"
           },
@@ -10910,7 +10910,7 @@
             "type": "array"
           },
           "checker": {
-            "description": "Problem-wide checker: `standard`, `bridged` (the uploaded custom checker), `floats`, `floatsabs`, `floatsrel`, `identical`, `linecount`, `rstripped`, `sorted`, `unordered`, `easy` or `linematches`.",
+            "description": "Problem-wide checker: `standard`, `bridged` (the uploaded custom checker, compiled beside the uploaded header if any), `floats`, `floatsabs`, `floatsrel`, `identical`, `linecount`, `rstripped`, `sorted`, `unordered`, `easy` or `linematches`.",
             "enum": [
               "bridged",
               "easy",
@@ -35492,7 +35492,7 @@
         ]
       },
       "post": {
-        "description": "Needs edit rights; mirror problems are refused. `kind` is `generator`,\n`customChecker`, `customGrader` or `customHeader`; send one multipart `file`\nof up to 1 MiB whose extension fits the kind (400 `extension_not_allowed`).\nIt replaces the previous file of that kind and returns the new data\nconfiguration. Shares the upload budget of 30 per hour per user.",
+        "description": "Needs edit rights; mirror problems are refused. `kind` is `generator`,\n`customChecker`, `customGrader` or `customHeader`; send one multipart `file`\nof up to 1 MiB whose extension fits the kind (400 `extension_not_allowed`).\nIt replaces the previous file of that kind and returns the new data\nconfiguration. Shares the upload budget of 30 per hour per user. A\n`customHeader` is also compiled beside the custom checker, so a checker\nthat includes it works whatever the grader.",
         "operationId": "ProblemDataController_uploadSource",
         "parameters": [
           {

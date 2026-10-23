@@ -4,6 +4,8 @@ import { Problem } from '@libs/database';
 import type { SourceCheck } from '@libs/database';
 import type { SourceCheckJob } from '@libs/problems';
 import type { Model } from 'mongoose';
+import { headersOf } from './source-check-plan';
+import type { StoredHeaders } from './source-check-plan';
 
 /** Where a checked source lives and the headers stored beside it. */
 export interface CheckedSource {
@@ -26,12 +28,12 @@ export class SourceCheckRepository {
           deletedAt: null,
           [`data.${job.kind}`]: job.file,
         },
-        { code: 1, 'data.helperHeaders': 1 },
+        { code: 1, 'data.customHeader': 1, 'data.helperHeaders': 1 },
       )
-      .lean<{ code: string; data?: { helperHeaders?: string[] } }>()
+      .lean<{ code: string; data?: StoredHeaders }>()
       .exec();
     return row
-      ? { code: row.code, headers: row.data?.helperHeaders ?? [] }
+      ? { code: row.code, headers: headersOf(job.kind, row.data) }
       : null;
   }
 

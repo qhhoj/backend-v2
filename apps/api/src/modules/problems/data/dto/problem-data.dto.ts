@@ -101,7 +101,7 @@ export class TestCaseDto {
 
 /** The whole configuration at once (legacy form + formset); file names are set by the upload routes and kept as they are. */
 export class PutProblemDataDto {
-  /** Problem-wide checker: `standard`, `bridged` (the uploaded custom checker), `floats`, `floatsabs`, `floatsrel`, `identical`, `linecount`, `rstripped`, `sorted`, `unordered`, `easy` or `linematches`. */
+  /** Problem-wide checker: `standard`, `bridged` (the uploaded custom checker, compiled beside the uploaded header if any), `floats`, `floatsabs`, `floatsrel`, `identical`, `linecount`, `rstripped`, `sorted`, `unordered`, `easy` or `linematches`. */
   @IsIn(CHECKERS) checker!: Checker;
   /** Arguments of the checker; null for none. floats*: `precision` (0-20), `error_mode`; identical: `pe_allowed`; rstripped: `filter_new_line`; sorted: `split_on` (`lines`/`whitespace`); linematches: `point_distribution`, `filler_lines_required`; bridged: `type` (`testlib`, `themis`, `default`), `treat_checker_points_as_percentage` (testlib). Others take none; anything else is 400. */
   @ApiPropertyOptional()

@@ -132,7 +132,9 @@ export class ProblemDataController {
    * `customChecker`, `customGrader` or `customHeader`; send one multipart `file`
    * of up to 1 MiB whose extension fits the kind (400 `extension_not_allowed`).
    * It replaces the previous file of that kind and returns the new data
-   * configuration. Shares the upload budget of 30 per hour per user.
+   * configuration. Shares the upload budget of 30 per hour per user. A
+   * `customHeader` is also compiled beside the custom checker, so a checker
+   * that includes it works whatever the grader.
    */
   @ApiFileUpload()
   @Post(':code/data/files/:kind')

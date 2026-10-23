@@ -1,4 +1,5 @@
-import type { SourceCheck } from '@libs/database';
+import type { ProblemData, SourceCheck } from '@libs/database';
+import { customCheckerHeadersOf } from '@libs/judging';
 import type { GenerationPlan, ProgramLimits } from '@libs/judging';
 import { CHECKER_LANGUAGE_BY_EXTENSION, extensionOf } from '@libs/problems';
 import type { SourceCheckJob } from '@libs/problems';
@@ -19,6 +20,20 @@ export const MAX_LOG_CHARS = 8000;
 
 const ROLE = { customChecker: 'CHECKER', customGrader: 'INTERACTOR' } as const;
 const NAME = { customChecker: 'checker', customGrader: 'interactor' } as const;
+
+/** The header fields of a stored problem's data. */
+export type StoredHeaders = Partial<
+  Pick<ProblemData, 'customHeader' | 'helperHeaders'>
+>;
+
+/** The headers bundled beside the checked source: a checker compiles with the problem's uploaded header too (`customCheckerHeadersOf`), an interactor only with a package's. */
+export const headersOf = (
+  kind: SourceCheckJob['kind'],
+  data: StoredHeaders = {},
+): string[] =>
+  kind === 'customChecker'
+    ? customCheckerHeadersOf(data)
+    : (data.helperHeaders ?? []);
 
 /** The compile-only plan for one uploaded checker or interactor, or null when the judge has no compiler for its extension. */
 export function compileCheckPlan({
