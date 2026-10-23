@@ -27,6 +27,7 @@ export class UpdatePolygonLinkDto {
   @IsOptional() @IsBoolean() ignoreZeroPointBatches?: boolean;
   @IsOptional() @IsBoolean() ignoreZeroPointCases?: boolean;
   @IsOptional() @IsBoolean() appendMainSolution?: boolean;
+  @IsOptional() @IsBoolean() importTutorial?: boolean;
 }
 
 /** The body is optional: a sync without one keeps the local edits. */

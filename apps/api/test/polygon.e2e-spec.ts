@@ -1053,6 +1053,7 @@ describe('Polygon routes', () => {
           await patch({
             statementLanguages: ['vietnamese=vi', 'russian=skip'],
             appendMainSolution: false,
+            importTutorial: false,
             ignoreZeroPointCases: true,
             mainStatementLanguage: 'english',
           }).expect(200),
@@ -1063,6 +1064,7 @@ describe('Polygon routes', () => {
           mainStatementLanguage: 'english',
           statementLanguages: ['russian=skip', 'vietnamese=vi'],
           appendMainSolution: false,
+          importTutorial: false,
           ignoreZeroPointCases: true,
           ignoreZeroPointBatches: false,
           maxCases: 300,
@@ -1099,6 +1101,7 @@ describe('Polygon routes', () => {
         statementLanguages: { vietnamese: 'vi', russian: 'skip' },
         ignoreZeroPointCases: true,
         appendMainSolution: false,
+        importTutorial: false,
         maxCases: 300,
       });
     });

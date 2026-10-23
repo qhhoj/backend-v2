@@ -9,6 +9,8 @@ export interface StatementOptions {
   mainStatementLanguage: string | null;
   statementLanguages: Record<string, StatementLanguageChoice>;
   tutorialLanguage: string | null;
+  /** False: the tutorial is not imported, so a choice among several is not asked for; absent counts as true. */
+  importTutorial?: boolean;
 }
 
 /** A choice the worker would refuse, with the worker's code and text. */
@@ -87,6 +89,7 @@ export function statementOptionsRefusal(
     )
     .map(({ language }) => language);
   if (
+    options.importTutorial !== false &&
     tutorials.length > 1 &&
     !tutorials.includes(options.tutorialLanguage ?? '')
   )

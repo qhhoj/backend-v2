@@ -473,7 +473,10 @@ export async function parseStatements(
         toTranslation(source, rendered, context.job, imported.translations),
       );
   }
-  imported.tutorial = await pickAndSaveTutorial(kept, context);
+  imported.tutorial =
+    context.job.importTutorial === false
+      ? ''
+      : await pickAndSaveTutorial(kept, context);
   return imported;
 }
 
@@ -504,5 +507,6 @@ export function withMainSolution(
 ): string {
   const language =
     FENCE_LANGUAGES.find((prefix) => sourceType.startsWith(prefix)) ?? '';
-  return `${tutorial.trimEnd()}\n\n<blockquote class="spoiler">\n${fence(code, language)}</blockquote>\n`;
+  const lead = tutorial.trimEnd();
+  return `${lead ? `${lead}\n\n` : ''}<blockquote class="spoiler">\n${fence(code, language)}</blockquote>\n`;
 }

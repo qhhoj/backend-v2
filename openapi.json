@@ -8728,6 +8728,11 @@
             "description": "Skip cases worth zero points.",
             "type": "boolean"
           },
+          "importTutorial": {
+            "default": true,
+            "description": "Import the package statement's tutorial as the editorial.",
+            "type": "boolean"
+          },
           "link": {
             "description": "The problem page address, `https://polygon.codeforces.com/p…/owner/name`.",
             "maxLength": 300,
@@ -8795,6 +8800,10 @@
           "ignoreZeroPointCases": {
             "type": "boolean"
           },
+          "importTutorial": {
+            "description": "Whether the package statement's tutorial becomes the editorial.",
+            "type": "boolean"
+          },
           "mainStatementLanguage": {
             "nullable": true,
             "type": "string"
@@ -8822,6 +8831,7 @@
           "ignoreZeroPointBatches",
           "ignoreZeroPointCases",
           "appendMainSolution",
+          "importTutorial",
           "maxCases"
         ],
         "type": "object"
@@ -16239,6 +16249,9 @@
             "type": "boolean"
           },
           "ignoreZeroPointCases": {
+            "type": "boolean"
+          },
+          "importTutorial": {
             "type": "boolean"
           },
           "mainStatementLanguage": {
@@ -34148,6 +34161,16 @@
             "required": false,
             "schema": {
               "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Import the package statement's tutorial as the editorial.",
+            "in": "query",
+            "name": "importTutorial",
+            "required": false,
+            "schema": {
+              "default": true,
               "type": "boolean"
             }
           },

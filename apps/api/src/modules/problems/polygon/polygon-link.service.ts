@@ -183,6 +183,7 @@ const optionsView = ({
   ignoreZeroPointBatches: options.ignoreZeroPointBatches,
   ignoreZeroPointCases: options.ignoreZeroPointCases,
   appendMainSolution: options.appendMainSolution,
+  importTutorial: options.importTutorial ?? true,
   maxCases: options.maxCases,
 });
 

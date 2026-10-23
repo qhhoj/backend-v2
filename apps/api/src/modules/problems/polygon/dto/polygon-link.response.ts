@@ -17,6 +17,8 @@ export class PolygonLinkOptionsResponse {
   ignoreZeroPointBatches!: boolean;
   ignoreZeroPointCases!: boolean;
   appendMainSolution!: boolean;
+  /** Whether the package statement's tutorial becomes the editorial. */
+  importTutorial!: boolean;
   /** Testcase limit of the user who linked the problem; a sync of more tests fails with `too_many_testcases`. Not editable. */
   maxCases!: number;
 }

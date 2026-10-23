@@ -33,6 +33,8 @@ export class PolygonImportOptions {
   @Prop({ default: false }) ignoreZeroPointBatches!: boolean;
   @Prop({ default: false }) ignoreZeroPointCases!: boolean;
   @Prop({ default: false }) appendMainSolution!: boolean;
+  /** Whether the package statement's tutorial becomes the editorial; links made before the option take the default. */
+  @Prop({ default: true }) importTutorial!: boolean;
   /** The linking user's testcase limit; an automatic sync has no requester to ask. */
   @Prop({ required: true }) maxCases!: number;
 }

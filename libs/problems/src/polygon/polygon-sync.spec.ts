@@ -27,6 +27,7 @@ const link: PolygonLink = {
     ignoreZeroPointBatches: true,
     ignoreZeroPointCases: false,
     appendMainSolution: true,
+    importTutorial: true,
     maxCases: 300,
   },
 };

@@ -89,6 +89,12 @@ export class PolygonImportQueryDto {
   @Transform(toBoolean)
   @IsBoolean()
   appendMainSolution: boolean = false;
+  /** Import the package statement's tutorial as the editorial. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  importTutorial: boolean = true;
 }
 
 /** A UUIDv7, or the `polygon-sync-<problem id>-<package id>` id of a Polygon sync. */

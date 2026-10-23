@@ -176,6 +176,7 @@ describe('problem and tag schemas', () => {
       'ignoreZeroPointBatches',
       'ignoreZeroPointCases',
       'appendMainSolution',
+      'importTutorial',
     ])
       expect(parameterOf(document, route, name)).toMatchObject({
         required: false,

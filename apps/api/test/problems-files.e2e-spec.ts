@@ -201,6 +201,7 @@ afterAll(() => api.teardown());
         ignoreZeroPointBatches: false,
         ignoreZeroPointCases: false,
         appendMainSolution: true,
+        importTutorial: true,
         maxCases: 300,
       });
       expect(existsSync(join(importsDirectory(), `${jobId}.zip`))).toBe(true);
