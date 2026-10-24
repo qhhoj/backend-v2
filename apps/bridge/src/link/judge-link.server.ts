@@ -177,12 +177,13 @@ export class JudgeLinkServer {
     this.grpc.forceShutdown();
   }
 
-  /** Blocked, key rotated or force-disconnected (after the dispatcher told its registered session): every session of the judge ends, those still in their handshake too, a key check already under way is refused, and its sockets close once the statuses are out. */
+  /** Blocked, key rotated or force-disconnected (after the dispatcher told its registered session): every session of the judge ends, those still in their handshake too, a key check already under way is refused, and its sockets close once the statuses are out. A welcomed session the dispatcher has not registered yet (its Welcome is out, its online write pending) still gets the forced Disconnect first. */
   revoke(name: string): void {
     this.revision += 1;
     this.revokedAt.set(name, this.revision);
     for (const session of this.sessions)
-      if (session.name === name) session.end(status.PERMISSION_DENIED, REVOKED);
+      if (session.name === name)
+        session.disconnect({ isForced: true, reason: REVOKED });
     this.guard.closeJudge(name);
   }
 

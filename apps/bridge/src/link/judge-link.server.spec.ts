@@ -2,6 +2,8 @@ import { Metadata, status } from '@grpc/grpc-js';
 import { Logger } from '@nestjs/common';
 import { EventEmitter } from 'node:events';
 import type { Socket } from 'node:net';
+import { JudgeMessage } from '@libs/judge-proto';
+import type { BridgeMessage } from '@libs/judge-proto';
 import { DEFAULT_BRIDGE_TIMINGS } from '../bridge-timings';
 import { TIMER_ACCEPT_CLOCK } from './accept-clock';
 import { JudgeLinkServer } from './judge-link.server';
@@ -11,6 +13,7 @@ import { MAX_FAILED_AUTH_PER_ADDRESS } from './link-limits';
 class FakeCall extends EventEmitter {
   readonly metadata = new Metadata();
   readonly statuses: Array<{ code: status; details: string }> = [];
+  readonly written: BridgeMessage[] = [];
   constructor(name: string, key: string) {
     super();
     this.on('error', () => undefined);
@@ -19,7 +22,7 @@ class FakeCall extends EventEmitter {
   }
   closed = false;
   getPeer = () => '10.0.0.9:5000';
-  write = () => true;
+  write = (message: BridgeMessage) => this.written.push(message) > 0;
   pause = () => undefined;
   resume = () => undefined;
   end = () => setImmediate(() => this.emit('close'));
@@ -33,6 +36,17 @@ class FakeCall extends EventEmitter {
 }
 
 const IDENTITY = { isDisabled: false, authKeyHash: 'hash' };
+const HELLO = JudgeMessage.fromPartial({
+  body: {
+    $case: 'hello',
+    hello: {
+      protocolMinor: 3,
+      build: 'qhhoj-judge 0.1.0',
+      slots: 2,
+      runtimes: [{ languageKey: 'CPP17', name: 'g++', version: '13.2' }],
+    },
+  },
+});
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 /** A key check the test resolves, so it can act while the check is under way. */
@@ -44,13 +58,19 @@ function deferredCheck() {
   return { authenticate, pass: (value = IDENTITY) => pass(value) };
 }
 
+/** Hello handling up to the Welcome: the online write after it never finishes, so the dispatcher never registers the session. */
+const welcomeOnly = {
+  dispatch: { resume: () => Promise.resolve({ resume: [], abort: [] }) },
+  judges: { markSessionOnline: () => new Promise(() => undefined) },
+};
+
 function setup(authenticate: jest.Mock) {
   const server = new JudgeLinkServer(
     {} as never,
     DEFAULT_BRIDGE_TIMINGS,
     TIMER_ACCEPT_CLOCK,
-    { authenticate } as never,
-    {} as never,
+    { authenticate, ...welcomeOnly.judges } as never,
+    welcomeOnly.dispatch as never,
     {} as never,
     {} as never,
     {} as never,
@@ -129,6 +149,25 @@ describe('JudgeLinkServer', () => {
     expect(after.statuses).toEqual([]);
     server.revoke('j1');
     expect(after.statuses[0]?.code).toBe(status.PERMISSION_DENIED);
+  });
+
+  it('sends the forced Disconnect when revoking a welcomed judge the dispatcher has not registered yet, none before the Welcome', async () => {
+    const { server, open } = setup(jest.fn(() => Promise.resolve(IDENTITY)));
+    const [welcomed, handshaking] = [
+      new FakeCall('j1', 'key'),
+      new FakeCall('j2', 'key'),
+    ];
+    for (const call of [welcomed, handshaking]) await open(call);
+    welcomed.emit('data', { message: HELLO, bytes: 64 });
+    await settle();
+    server.revoke('j1');
+    server.revoke('j2');
+    const kinds = (call: FakeCall) =>
+      call.written.map((message) => message.body?.$case);
+    expect(kinds(welcomed)).toEqual(['welcome', 'disconnect']);
+    expect(kinds(handshaking)).toEqual([]);
+    for (const call of [welcomed, handshaking])
+      expect(call.statuses[0]?.code).toBe(status.PERMISSION_DENIED);
   });
 
   it('ends an older Session of the judge still in its handshake when a newer one opens, not another judge', async () => {

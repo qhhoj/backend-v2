@@ -1,6 +1,6 @@
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { ExternalRun } from '@libs/database';
+import { ExternalRun, IN_FLIGHT_STATUSES } from '@libs/database';
 import type { Submission } from '@libs/database';
 import { EXTERNAL_JUDGE_NAME } from '@libs/judging';
 import { SettingsService } from '@libs/settings';
@@ -136,6 +136,13 @@ describe('External judge adapter (bridge)', () => {
     pcd.script = [[200, done({ statusCanonical: 'AC' })]];
     pcd.submitStatus = 200;
     await settings().set('externalJudge.maxInFlight', 5, null);
+  });
+  // a test that failed midway leaves its rows queued or held: they would take later tests' maxInFlight and submits
+  afterEach(async () => {
+    await bridge.submissions.updateMany(
+      { status: { $in: ['QU', ...IN_FLIGHT_STATUSES] } },
+      { status: 'AB' },
+    );
   });
   afterAll(async () => {
     await bridge.teardown();
