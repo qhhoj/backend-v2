@@ -19,7 +19,7 @@ export class OrganizationPointsService {
   /** Clears the pending flag first: a change from now on queues a job that runs after this one. */
   async recompute(organizationId: string): Promise<void> {
     await clearOrganizationPointsPending(this.redis, organizationId);
-    return runCoalesced(
+    await runCoalesced(
       this.redis,
       `effects:organization:${organizationId}`,
       async () => {

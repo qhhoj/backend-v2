@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { hasPermission } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, unique } from '@libs/common';
@@ -91,6 +91,8 @@ function renderStatementsInto(
 
 @Injectable()
 export class ProblemEditingService {
+  private readonly logger = new Logger(ProblemEditingService.name);
+
   constructor(
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
@@ -218,9 +220,7 @@ export class ProblemEditingService {
       original,
       originalJson.translations as Problem['translations'],
     );
-    await this.saveCharged(principal, original, fields);
-    const updated = await this.repository.findById(original._id);
-    if (!updated) throw new AppError('not_found', 404, 'No such problem');
+    const updated = await this.save(principal, original, fields);
     const changes = fieldDiff(
       withoutRenderedHtml(originalJson),
       withoutRenderedHtml(updated.toJSON()),
@@ -233,6 +233,49 @@ export class ProblemEditingService {
         changeMessage?.trim() || DEFAULT_EDIT_COMMENT,
       );
     return { updated, isChanged };
+  }
+
+  /** Saves and reads the problem back. A code change does both and moves the data directory under the data locks of both codes (see `withRenameLocks`), so the directory judges read always follows the stored code. */
+  private async save(
+    principal: Principal,
+    original: ProblemDocument,
+    fields: ProblemFields,
+  ): Promise<ProblemDocument> {
+    const newCode = fields.code;
+    if (newCode === undefined || newCode === original.code)
+      return this.saveAndReload(principal, original, fields);
+    return this.dataFiles.withRenameLocks(original.code, newCode, async () => {
+      const updated = await this.saveAndReload(principal, original, fields);
+      if (updated.code !== original.code)
+        await this.moveDataDirectory(original.code, updated.code);
+      return updated;
+    });
+  }
+
+  private async saveAndReload(
+    principal: Principal,
+    original: ProblemDocument,
+    fields: ProblemFields,
+  ): Promise<ProblemDocument> {
+    await this.saveCharged(principal, original, fields);
+    const updated = await this.repository.findById(original._id);
+    if (!updated) throw new AppError('not_found', 404, 'No such problem');
+    return updated;
+  }
+
+  /** The new code is stored by now: a failed move is logged for the operator instead of failing a saved edit. */
+  private async moveDataDirectory(
+    oldCode: string,
+    newCode: string,
+  ): Promise<void> {
+    try {
+      await this.dataFiles.rename(oldCode, newCode);
+    } catch (error) {
+      this.logger.error(
+        `Moving problem data ${oldCode} -> ${newCode} failed`,
+        error,
+      );
+    }
   }
 
   /** A move into an organization (see `newlyChargedOrganization`) pays the problem credit like a create, refunded when the save fails; a new charged organization must fit the problem's bytes. */

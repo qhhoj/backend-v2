@@ -8,7 +8,6 @@ import {
   Paginated,
   RateLimitService,
   REDIS,
-  withRedisLock,
 } from '@libs/common';
 import {
   assertNotLockedByOfficialMode,
@@ -20,6 +19,7 @@ import type { OrganizationRequest } from '@libs/database';
 import { SettingsService } from '@libs/settings';
 import type Redis from 'ioredis';
 import { OrganizationAccess } from '../core/organization-access';
+import { withMemberSlotsLock } from '../core/member-slots-lock';
 import { OrganizationMembersRepository } from '../core/organization-members.repository';
 import { OrganizationPointsService } from '../core/organization-points.service';
 import {
@@ -28,7 +28,6 @@ import {
 } from '../core/organization-requests.repository';
 import { OrganizationsService } from '../core/organizations.service';
 import {
-  APPROVAL_LOCK_SECONDS,
   JOIN_REQUEST_LIMIT,
   JOIN_REQUEST_WINDOW_SECONDS,
 } from '../core/rate-limits';
@@ -158,7 +157,7 @@ export class OrganizationRequestsService {
     return this.respond(request, organization.slug);
   }
 
-  /** Legacy approval formset, one request at a time. A rejection is a compare-and-set; an approval runs under the organization's lock. */
+  /** Legacy approval formset, one request at a time. A rejection is a compare-and-set; an approval runs under the organization's member lock (`withMemberSlotsLock`). */
   async decide(
     principal: Principal,
     target: { slug: string; requestId: string },
@@ -174,14 +173,8 @@ export class OrganizationRequestsService {
     if (state === 'R') {
       await this.finish(id, 'R', principal.userId, now);
     } else {
-      await withRedisLock(
-        this.redis,
-        {
-          key: `organization-requests:${organization._id}`,
-          ttlSeconds: APPROVAL_LOCK_SECONDS,
-          busyMessage: 'Another decision is being made; try again',
-        },
-        () => this.approve(principal, slug, request, now),
+      await withMemberSlotsLock(this.redis, organization._id, () =>
+        this.approve(principal, slug, request, now),
       );
     }
     await this.notifyDecision(organization, request, state);

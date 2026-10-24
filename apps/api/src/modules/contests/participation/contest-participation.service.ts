@@ -49,6 +49,7 @@ import type {
 } from './dto/participation.response';
 import type { BulkVisibilityOutcome } from '../../problems/bulk/dto/bulk-visibility.response';
 import { ParticipationsRepository } from '../core/participations.repository';
+import { recountParticipants } from '../core/participant-counts';
 import type {
   ParticipationDocument,
   RulesAcceptance,
@@ -580,10 +581,11 @@ export class ContestParticipationService {
     await Promise.all([releaseUser(), releaseIp()]);
   }
 
-  private async refreshCounts(contestId: string): Promise<void> {
-    await this.contests.setCounts(
+  private refreshCounts(contestId: string): Promise<void> {
+    return recountParticipants(
+      this.redis,
+      { contests: this.contests, participations: this.participationRows },
       contestId,
-      await this.participationRows.countsOf(contestId),
     );
   }
 }

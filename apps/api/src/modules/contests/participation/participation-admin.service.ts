@@ -20,6 +20,7 @@ import { ContestsService } from '../core/contests.service';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
 import type { QueuedResponse } from '../core/dto/queued.response';
 import { ParticipationsRepository } from '../core/participations.repository';
+import { recountParticipants } from '../core/participant-counts';
 import type { ParticipationDocument } from '../core/participations.repository';
 import type {
   AddParticipationDto,
@@ -196,9 +197,10 @@ export class ParticipationAdminService {
     changes = {},
   }: ParticipationWrite): Promise<void> {
     if (action !== 'change')
-      await this.contests.setCounts(
+      await recountParticipants(
+        this.redis,
+        { contests: this.contests, participations: this.participationRows },
         contest._id,
-        await this.participationRows.countsOf(contest._id),
       );
     await purgeRankingCache(this.redis, contest._id);
     await this.revisions.append({

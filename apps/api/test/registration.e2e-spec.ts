@@ -278,6 +278,35 @@ describe('registration extras', () => {
       expect(await api.users.countDocuments({ username: 'newbie' })).toBe(0);
     });
 
+    it('refuses an organization that reached its slots', async () => {
+      const [full] = await api.organizations.create([
+        {
+          name: 'Full',
+          about: '',
+          aboutHtml: '',
+          slug: 'full',
+          shortName: 'FULL',
+          isOpen: true,
+          isUnlisted: false,
+          slots: 1,
+        },
+      ]);
+      await createUser(api.users, {
+        username: 'seated',
+        email: 'seated@example.com',
+        organizations: [full._id],
+      });
+      expect(
+        issues(await register({ organizationId: full._id }).expect(400)),
+      ).toEqual([
+        expect.objectContaining({
+          field: 'organizationId',
+          code: 'organization_full',
+        }),
+      ]);
+      expect(await api.users.countDocuments({ username: 'newbie' })).toBe(0);
+    });
+
     it('defaults the language to C++17 when none is chosen, and to none without an active C++17', async () => {
       const languageOf = async (overrides: Record<string, unknown> = {}) => {
         await api.users.deleteMany({ username: 'newbie' });

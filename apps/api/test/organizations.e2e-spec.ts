@@ -685,6 +685,27 @@ afterAll(() => api.teardown());
       expect(await membershipsOf(user._id)).toHaveLength(3);
     });
 
+    it('never lets parallel joins past slots', async () => {
+      const { user: seated } = await person();
+      const organization = await createOrganization(api, { slots: 2 }, [
+        seated._id,
+      ]);
+      const joiners = await Promise.all(
+        Array.from({ length: 6 }, () => person()),
+      );
+      const responses = await Promise.all(
+        joiners.map(({ session }) =>
+          post(organizationUrl(organization.slug, '/join'), session),
+        ),
+      );
+      const statuses = responses.map((response) => response.status);
+      expect(statuses.filter((status) => status === 204)).toHaveLength(1);
+      expect(statuses.filter((status) => status === 409)).toHaveLength(5);
+      expect(
+        await api.users.countDocuments({ organizations: organization._id }),
+      ).toBe(2);
+    });
+
     it('leaves and kicks members, never admins; only administrators kick', async () => {
       const { user: owner, session: ownerSession } = await person();
       const { user: member, session: memberSession } = await person();

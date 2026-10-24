@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # qhhoj-deploy: the one root command the CD `deploy` user may run (sudoers). Installed to /usr/local/sbin.
 #   backend <tag> [--force] [--token-stdin]
-#                             move the local :current image tag to <tag>, restart qhhoj.target, health-check, roll back on failure;
+#                             build <tag>'s indexes, move the local :current image tag to <tag>, restart qhhoj.target,
+#                             health-check, roll back on failure;
 #                             --token-stdin logs in to ghcr.io with one line of stdin (per-deploy authfile, removed on exit)
 #   frontend <version>        unpack incoming/frontend-dist-<version>.tar.gz, carry kept releases' recent assets/ over, flip /var/www/qhhoj/current, check, roll back on failure
 #   rollback backend|frontend go back to the previous history entry
@@ -66,6 +67,12 @@ backend_healthy() {
   return 1
 }
 
+build_indexes() { # <tag>: the new image builds every schema index while the live version still serves
+  # Hinted reads fail on a missing index and a unique index can fail over existing rows: both surface here, not live.
+  MONGO_URL="$(env_value MONGO_URL)" podman run --rm --network=host --user 987:987 -e MONGO_URL -e APP=worker \
+    "$IMAGE:$1" indexes
+}
+
 switch_backend() {
   podman tag "$IMAGE:$1" "$IMAGE:current" || return 1
   systemctl reset-failed qhhoj-api qhhoj-bridge qhhoj-worker || true # a crash-looping image exhausts the start limit
@@ -111,6 +118,7 @@ deploy_backend() { # <tag> [--force] [--token-stdin]
   if [ "$TOKEN_STDIN" = 1 ]; then login_registry; authfile="$TMP/auth.json"; fi
   podman pull --authfile "$authfile" "$IMAGE:$tag"
   previous="$(live backend)"
+  build_indexes "$tag" || die "index build of $tag failed; ${previous:-nothing} stays live"
   if switch_backend "$tag" && backend_healthy; then
     record backend "$tag"; prune_images; echo "deployed backend $tag"; return
   fi

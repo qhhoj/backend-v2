@@ -8,7 +8,6 @@ import {
   PDF_QUEUE,
   PdfCacheService,
   pdfJobId,
-  ProblemDataFilesService,
 } from '@libs/problems';
 import type { PdfRenderJob } from '@libs/problems';
 import { ProblemEvents } from '../core/problem.events';
@@ -20,18 +19,17 @@ export class ProblemDataLifecycleService implements OnModuleInit {
 
   constructor(
     private readonly repository: ProblemsRepository,
-    private readonly dataFiles: ProblemDataFilesService,
     private readonly pdfCache: PdfCacheService,
     private readonly packages: PackageCacheService,
     private readonly events: ProblemEvents,
     @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
   ) {}
 
-  /** Both volumes are keyed by code: the data directory follows the problem; cached PDFs are stale after a rename or any statement change. */
+  /** Both caches are keyed by code: cached PDFs and packages are stale after a rename, PDFs after any statement change too. The data directory itself moves inside the rename's save (`ProblemEditingService`), under the data locks. */
   onModuleInit(): void {
     this.events.on(
       'codeRenamed',
-      (oldCode, newCode) => void this.moveData(oldCode, newCode),
+      (oldCode, newCode) => void this.dropRenamedCaches(oldCode, newCode),
     );
     this.events.on(
       'statementChanged',
@@ -39,17 +37,19 @@ export class ProblemDataLifecycleService implements OnModuleInit {
     );
   }
 
-  /** The new code's PDFs go too: a reused code must not serve another problem's statement. The orphan check in `edit` is not atomic with this move, so a lost race shows up only as the log line. */
-  private async moveData(oldCode: string, newCode: string): Promise<void> {
+  /** The new code's files go too: a reused code must not serve another problem's statement or package. */
+  private async dropRenamedCaches(
+    oldCode: string,
+    newCode: string,
+  ): Promise<void> {
     try {
       await this.dropPdfsOf(oldCode);
       await this.dropPdfsOf(newCode);
       await this.packages.deleteAll(oldCode);
       await this.packages.deleteAll(newCode);
-      await this.dataFiles.rename(oldCode, newCode);
     } catch (error) {
       this.logger.error(
-        `Moving problem data ${oldCode} -> ${newCode} failed`,
+        `Dropping cached files of ${oldCode} -> ${newCode} failed`,
         error,
       );
     }

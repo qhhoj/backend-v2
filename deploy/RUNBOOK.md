@@ -46,7 +46,7 @@ The qhhoj server blocks answer 444 (close, no reply) to any TCP peer that is not
 5. nginx: `deploy/nginx/qhhoj.conf` to `conf.d/` (on the shared host: the in-place block replacement in "History: 2026-10 cutover") with the `CHANGE` lines, `security-headers.conf` to `snippets/qhhoj-security-headers.conf`, `qhhoj-gate.conf` to `snippets/qhhoj-gate.conf`, `maintenance.html` to `/var/www/qhhoj-maintenance/` (`install-host.sh` does these); `cloudflare-origin.conf` to `conf.d/qhhoj-cloudflare-origin.conf` (`install-host.sh` does that too; see "Cloudflare origin gate"); `nginx -t && systemctl reload nginx`. TLS: reuse the site certificate (copy it from the old host if the host is new until DNS points here), then `certbot` on this host.
 6. CD access: `ssh-keygen -t ed25519 -N '' -f /root/deploy_key`, append the public key, forced to the dispatcher, to `/home/deploy/.ssh/authorized_keys`: `printf 'restrict,command="/usr/local/sbin/qhhoj-deploy-serve" %s\n' "$(cat /root/deploy_key.pub)" >> /home/deploy/.ssh/authorized_keys` (owner `deploy`, mode 600; `qhhoj-deploy-serve` allows only `sudo qhhoj-deploy ...` and a write-only rsync into `incoming/`, needs `/usr/bin/rrsync` from the `rsync` package, and logs refusals with tag `qhhoj-deploy-serve`; `/var/lib/qhhoj-deploy` is root-owned, only its `incoming/` is the deploy user's); in both GitHub repos create environment `production` with secrets `DEPLOY_HOST`, `DEPLOY_SSH_KEY` (the private key; then delete it from the host), `DEPLOY_KNOWN_HOSTS` (`ssh-keyscan <host>`).
 7. First deploy: run the backend and frontend `deploy` workflows by hand (empty ref); until the nginx block swap the frontend deploy does a file check only (nginx does not serve v2 yet); `qhhoj-deploy status` shows both.
-8. On an empty database run `syncIndexes` before serving (the `.hint()` queries throw without them).
+8. Indexes: every backend deploy builds them with the new image before the restart (`.hint()` queries throw without them); a failed build (a unique index over duplicates, or an index whose options changed) fails the deploy and the previous version stays live. By hand: `MONGO_URL=... podman run --rm --network=host -e MONGO_URL -e APP=worker ghcr.io/qhhoj/backend-v2:<tag> indexes`.
 
 ## Smoke checks
 
@@ -85,7 +85,7 @@ The qhhoj server blocks answer 444 (close, no reply) to any TCP peer that is not
 
 ### Polygon link index (once, before the deploy that adds `polygon_link_problem_unique`)
 
-Purged tombstones keep their old `polygonLink`; clear them so the unique index is not blocked by them: `db.problems.updateMany({ purgedAt: { $exists: true }, 'polygonLink.problemId': { $exists: true } }, { $set: { polygonLink: null } })`. The index build fails (and is logged) if two live problems share a `polygonLink.problemId`: find them with an aggregation on that field and unlink one. After the new index exists, drop the old one: `db.problems.dropIndex('polygonLink.problemId_1')`.
+Purged tombstones keep their old `polygonLink`; clear them so the unique index is not blocked by them: `db.problems.updateMany({ purgedAt: { $exists: true }, 'polygonLink.problemId': { $exists: true } }, { $set: { polygonLink: null } })`. The deploy's index build fails (and the deploy with it) if two live problems share a `polygonLink.problemId`: find them with an aggregation on that field and unlink one. After the new index exists, drop the old one: `db.problems.dropIndex('polygonLink.problemId_1')`.
 
 ## Backups
 
