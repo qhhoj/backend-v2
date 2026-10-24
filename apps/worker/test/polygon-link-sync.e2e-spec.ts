@@ -143,6 +143,7 @@ describe('Polygon link, sync and auto-sync', () => {
     ignoreZeroPointBatches: false,
     ignoreZeroPointCases: false,
     appendMainSolution: false,
+    importTutorial: true,
     maxCases: 300,
     polygon: {
       problemId: polygonId,

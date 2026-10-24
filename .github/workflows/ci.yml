@@ -1,8 +1,8 @@
 # workflow_dispatch: release.yml starts it on changeset-release/main (a PR opened with GITHUB_TOKEN triggers nothing).
 name: ci
 on: { push: { branches: [main] }, pull_request: {}, workflow_dispatch: {} }
-# CI never starts MongoDB or Redis: it runs the unit specs (jest.config.js) and the static OpenAPI specs. The specs that
-# need services (*.db.spec.ts, *.e2e-spec.ts) run locally with npm run test:db (CONTRIBUTING.md, Testing).
+# The test job runs the unit specs (jest.config.js) and the static OpenAPI specs; the db job runs the specs that need
+# MongoDB and Redis (*.db.spec.ts, *.e2e-spec.ts; CONTRIBUTING.md, Testing).
 jobs:
   # Pushes that touch only docs, changesets or deploy scripts skip the heavy jobs below; a skipped job counts as a
   # pass, so the run (and the deploy gate waiting on it) stays green. deploy-scripts always runs.
@@ -60,6 +60,34 @@ jobs:
       - run: pandoc --version
       # --forceExit: one leaked handle must not hang the job until the timeout.
       - run: npm run test:unit -- --forceExit
+  db:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: npm ci
+      # Some specs use Redis db numbers above 15, so the server needs more than the default 16 databases.
+      - name: Start Redis
+        run: |
+          docker run -d --name redis -p 6379:6379 redis:7 redis-server --databases 100 --save '' --appendonly no
+          for _ in $(seq 30); do docker exec redis redis-cli ping | grep -q PONG && exit 0; sleep 1; done
+          exit 1
+      - id: mms
+        run: echo "version=$(node -p "require('mongodb-memory-server/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/mongodb-memory-server
+          key: mongodb-binaries-${{ runner.os }}-${{ steps.mms.outputs.version }}
+      # --forceExit: jest hangs at exit on leaked handles. In band: the submission-events pub/sub channel is shared
+      # across Redis dbs, so concurrent workers would see each other's events.
+      - run: npm run test:db -- --forceExit
+        env: { TEST_REDIS_URL: 'redis://localhost:6379/60' }
   openapi:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -109,7 +137,7 @@ jobs:
   # The required check (with changes): it fails when any job above failed or was cancelled; a skipped job passes.
   ci-ok:
     if: always()
-    needs: [changes, checks, test, openapi, image, deploy-scripts]
+    needs: [changes, checks, test, db, openapi, image, deploy-scripts]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
