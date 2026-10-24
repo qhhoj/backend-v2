@@ -2,7 +2,7 @@ import { TEST_REDIS_URL } from '@libs/common/testing';
 import type { SubmissionCase } from '@libs/database';
 import { recordSubmissionEvents } from '@libs/judging/testing';
 import type { AssignmentRef } from '@libs/judge-proto';
-import type { FinalReport } from '../src/link/messages';
+import type { RunFinalReport } from '../src/link/messages';
 import {
   LOST_JUDGE_MESSAGE,
   PROGRESS_EVENT_INTERVAL_MS,
@@ -27,7 +27,7 @@ const reported = (position: number): SubmissionCase => ({
   extendedFeedback: '',
   output: '',
 });
-const final = (fields: Partial<FinalReport> = {}): FinalReport => ({
+const final = (fields: Partial<RunFinalReport> = {}): RunFinalReport => ({
   kind: 'graded',
   log: '',
   dataVersionUsed: 0,

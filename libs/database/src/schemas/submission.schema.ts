@@ -97,6 +97,14 @@ export class SubmissionCase {
 export const SubmissionCaseSchema =
   SchemaFactory.createForClass(SubmissionCase);
 
+/** A Judge build that answered `Final{RETRY Unsupported}` for the Submission: that build is never offered it again; another build of the same Judge is. */
+@Schema({ _id: false })
+export class RefusingJudge {
+  @Prop({ required: true }) name!: string;
+  @Prop({ required: true }) build!: string;
+}
+export const RefusingJudgeSchema = SchemaFactory.createForClass(RefusingJudge);
+
 @Schema({ ...baseSchemaOptions, collection: 'submissions' })
 export class Submission {
   @IdProp() _id!: string;
@@ -141,6 +149,9 @@ export class Submission {
   @Prop({ type: Number, default: null }) judgedDataVersion!: number | null;
   /** `Final{RETRY}` answers since the last rejudge (the judge could not run it: data not visible yet, runtime missing, sandbox failure); the third is IE. */
   @Prop({ default: 0 }) retryCount!: number;
+  /** Judge builds that refused it as unsupported since the last rejudge; never counted in `retryCount`. While it is QU with any, it waits for a Judge that can grade it. */
+  @Prop({ type: [RefusingJudgeSchema], default: [] })
+  refusedBy!: RefusingJudge[];
   /** Set by every write that finishes the submission (D, CE, IE, AB, a reject) and cleared once its graded job applied the effects; the effects sweep re-applies rows still due, so a lost or failed graded job is repaired. */
   @Prop({ type: Date, default: null }) effectsDueAt!: Date | null;
   /** The judge chosen at submit (`judgeId`): only it takes the row, across accept timeouts, resyncs and restarts; cleared when that judge fails the run (grace expiry, RETRY) and by a rejudge. */

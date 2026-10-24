@@ -16,6 +16,7 @@ class Target implements DispatchTarget {
   readonly winding = new Set<string>();
   readonly generations = new Set<string>();
   features: ReadonlySet<string> = new Set();
+  build = 'test';
   executors: ReadonlySet<string> = new Set(['CPP17']);
   isDisabled = false;
   isDraining = false;
@@ -70,6 +71,7 @@ const entry = (fields: Partial<QueuedSubmission> = {}): QueuedSubmission => ({
   bannedJudges: [],
   retryBannedJudges: [],
   requiredFeatures: [],
+  refusedBy: [],
   ...fields,
 });
 const flush = () => new Promise((resolve) => setImmediate(resolve));

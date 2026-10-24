@@ -10,6 +10,7 @@ export class RecordingJudge implements DispatchTarget {
   readonly winding = new Set<string>();
   readonly generations = new Set<string>();
   features: ReadonlySet<string> = new Set();
+  build = 'test';
   isDisabled = false;
   isDraining = false;
   isClosed = false;

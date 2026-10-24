@@ -208,6 +208,7 @@ export class SubmissionsRepository {
           bannedJudges: metaOf.get(uuidStr(row._id))?.bannedJudges ?? [],
           retryBannedJudges: [],
           requiredFeatures: problem.requiredFeatures,
+          refusedBy: row.refusedBy ?? [],
         },
       ];
     });
@@ -225,6 +226,7 @@ export class SubmissionsRepository {
           contest: 1,
           judgeGeneration: 1,
           pinnedJudge: 1,
+          refusedBy: 1,
         },
       )
       .sort({ priority: 1, _id: 1 })

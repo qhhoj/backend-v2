@@ -27,6 +27,8 @@ export interface StoredRun {
   caseCount: number;
   /** RETRYs answered since the last rejudge (a missing field counts as 0). */
   retryCount: number;
+  /** Judge builds that refused it as unsupported since the last rejudge (`refusedBy`, counted). */
+  refusalCount: number;
 }
 
 export interface WriteExpectation {
@@ -36,11 +38,11 @@ export interface WriteExpectation {
   addsCases: number;
 }
 
-/** The row went back to QU on this run's own `Final{RETRY}`, which kept the run's generation and seq (`judgedOn` is cleared): a seq up to it is that Final or an earlier message, replayed. A rejudge resets `retryCount`, and every other requeue resets `judgeSeq`. */
+/** The row went back to QU on this run's own `Final{RETRY}` (a refusal included), which kept the run's generation and seq (`judgedOn` is cleared): a seq up to it is that Final or an earlier message, replayed. A rejudge resets `retryCount` and `refusedBy`, and every other requeue resets `judgeSeq`. */
 const isRetriedRun = (key: RunKey, stored: StoredRun): boolean =>
   stored.judgedOn === null &&
   stored.status === 'QU' &&
-  stored.retryCount > 0 &&
+  stored.retryCount + stored.refusalCount > 0 &&
   stored.judgeGeneration === key.ref.generation &&
   key.seq <= stored.judgeSeq;
 

@@ -14,6 +14,7 @@ const run = (fields: Partial<StoredRun> = {}): StoredRun => ({
   status: 'G',
   caseCount: 0,
   retryCount: 0,
+  refusalCount: 0,
   ...fields,
 });
 const grading = { statuses: ['G'] as const, addsCases: 0 };

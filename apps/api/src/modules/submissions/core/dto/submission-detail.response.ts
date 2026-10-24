@@ -66,6 +66,20 @@ const caseResponse = (
   ...(visibility.output ? { output: testCase.output } : {}),
 });
 
+export const SUBMISSION_WAITING_REASONS = [
+  'waiting_for_capable_judge',
+] as const;
+export type SubmissionWaitingReason =
+  (typeof SUBMISSION_WAITING_REASONS)[number];
+
+/** A queued row some Judge refused as unsupported waits for one that can grade it (a capable connected Judge takes it at once). Rows stored before `refusedBy` existed have none. */
+const waitingReasonOf = (
+  submission: Submission,
+): SubmissionWaitingReason | null =>
+  submission.status === 'QU' && (submission.refusedBy ?? []).length > 0
+    ? 'waiting_for_capable_judge'
+    : null;
+
 /** What the viewer may do here; each flag is the rule its action endpoint checks. All false for visitors. */
 export class SubmissionViewerResponse implements SubmissionActions {
   /** Whether `POST /submissions/{id}/abort` is allowed. */
@@ -105,6 +119,13 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
   /** Whether `GET /submissions/{id}/source` will answer: `granted`; `sign_in` for visitors; `solve_first` until the viewer solves the problem; `hidden` otherwise. Without source access, cases carry no feedback or output. */
   @ApiProperty({ enum: SOURCE_ACCESS, enumName: 'SubmissionSourceAccess' })
   sourceAccess!: SourceAccess;
+  /** Why a queued submission is not being judged: `waiting_for_capable_judge` once a Judge refused it as unsupported (it stays queued until a Judge that can grade it is connected; the missing feature is not reported yet); null otherwise. */
+  @ApiProperty({
+    enum: SUBMISSION_WAITING_REASONS,
+    enumName: 'SubmissionWaitingReason',
+    nullable: true,
+  })
+  waitingReason!: SubmissionWaitingReason | null;
   /** Number of the case being judged while the submission runs; null unless the viewer sees every case result (it would tell where judging stopped). */
   currentTestcase!: number | null;
   /** Whether only the pretests are judged (contest pretest mode). */
@@ -156,6 +177,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
       ...SubmissionListItemResponse.from(submission, refs, { contest }),
       error,
       sourceAccess,
+      waitingReason: waitingReasonOf(submission),
       currentTestcase:
         visibility.cases === 'all' ? submission.currentTestcase : null,
       isPretested: submission.isPretested,

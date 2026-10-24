@@ -245,6 +245,39 @@ describe('Run writes (seq compare-and-set)', () => {
     });
   });
 
+  it('requeues a refusal without spending a RETRY, keeps it from that judge build, and re-acks its replay', async () => {
+    const run = await claimed();
+    const refusing = { name: JUDGE, build: 'v1' };
+    let key = run.key(2);
+    for (let refusal = 0; refusal < 3; refusal += 1) {
+      const [queued] = await repository.loadQueued([run.id]);
+      const claim = refusal && (await repository.claimRun(queued, JUDGE));
+      if (claim && 'request' in claim)
+        key = { ref: claim.request.ref, judgeName: JUDGE, seq: 2 };
+      await writes.accept({ ...key, seq: 1 });
+      expect(await writes.refuse(key, refusing)).toMatchObject({
+        outcome: 'applied',
+      });
+    }
+    expect(await stored(run.id)).toMatchObject({
+      status: 'QU',
+      retryCount: 0,
+      refusedBy: [refusing],
+      judgedOn: null,
+    });
+    expect((await writes.refuse(key, refusing)).outcome).toBe('duplicate');
+    const [queued] = await repository.loadQueued([run.id]);
+    expect(queued.refusedBy).toEqual([refusing]);
+    const claim = await repository.claimRun(queued, JUDGE);
+    if (!claim || !('request' in claim)) throw new Error('not claimed');
+    const retried = { ref: claim.request.ref, judgeName: JUDGE, seq: 1 };
+    await writes.accept(retried);
+    expect(
+      await writes.retry({ ...retried, seq: 2 }, 'sandbox failed'),
+    ).toMatchObject({ outcome: 'applied', requeued: true });
+    expect(await stored(run.id)).toMatchObject({ status: 'QU', retryCount: 1 });
+  });
+
   it('counts a row without retryCount (a migrated one) as zero RETRYs', async () => {
     const { id, key } = await claimed();
     await writes.accept(key(1));

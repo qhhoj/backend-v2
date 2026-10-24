@@ -48,7 +48,8 @@ const isSameEntry = (left: QueuedSubmission, right: QueuedSubmission) =>
   left.judgeName === right.judgeName &&
   left.bannedJudges.join() === right.bannedJudges.join() &&
   left.retryBannedJudges.join() === right.retryBannedJudges.join() &&
-  left.requiredFeatures.join() === right.requiredFeatures.join();
+  left.requiredFeatures.join() === right.requiredFeatures.join() &&
+  JSON.stringify(left.refusedBy) === JSON.stringify(right.refusedBy);
 
 /** A session between Hello and `register`: it holds the runs it resumed; `plan` is open until its Welcome goes out. */
 interface Resuming {

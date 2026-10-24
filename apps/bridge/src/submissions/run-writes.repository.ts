@@ -7,7 +7,11 @@ import {
   Submission,
   toUuid,
 } from '@libs/database';
-import type { SubmissionCase, SubmissionStatus } from '@libs/database';
+import type {
+  RefusingJudge,
+  SubmissionCase,
+  SubmissionStatus,
+} from '@libs/database';
 import {
   effectsDue,
   gradeCases,
@@ -20,7 +24,7 @@ import { REQUEUE_RESET } from './submissions.repository';
 import { classifyMiss } from './write-outcome';
 import type { RunKey, StoredRun, WriteOutcome } from './write-outcome';
 
-/** `Final{RETRY}` answers a submission may get; the last one is IE. */
+/** `Final{RETRY}` answers a submission may get; the last one is IE. A RETRY Unsupported is a refusal and never counts. */
 export const MAX_RETRIES = 3;
 export const RETRY_LIMIT_MESSAGE = 'The judge could not run this submission';
 
@@ -39,6 +43,13 @@ const IN_FLIGHT = [...IN_FLIGHT_STATUSES];
 /** A GRADED Final may follow Accepted directly (conformance 37): a run with no cases is graded as it stands. */
 const GRADABLE: readonly SubmissionStatus[] = ['P', 'G'];
 const GRADED_JOB_FIELDS = { user: 1, problem: 1 } as const;
+
+/** Back to QU after the judge could not run it: the run's seq stays, so a replay of its Final is classified a duplicate (the next claim resets it); a pin to that judge would bring it back there. */
+const requeueByJudge = (key: RunKey) => ({
+  ...REQUEUE_RESET,
+  judgeSeq: key.seq,
+  pinnedJudge: null,
+});
 
 /** The run's row, its judge and generation, and the previous seq: exactly-once effect for at-least-once delivery. */
 const runFilter = (key: RunKey, statuses: readonly SubmissionStatus[]) => ({
@@ -171,12 +182,7 @@ export class RunWritesRepository {
           ...runFilter(key, IN_FLIGHT),
           retryCount: { $not: { $gte: MAX_RETRIES - 1 } },
         },
-        // the run's seq stays, so a replay of this Final is classified a duplicate (the next claim resets it)
-        {
-          // the judge cannot run it: a pin to that judge would bring it back there
-          $set: { ...REQUEUE_RESET, judgeSeq: key.seq, pinnedJudge: null },
-          $inc: { retryCount: 1 },
-        },
+        { $set: requeueByJudge(key), $inc: { retryCount: 1 } },
         { projection: GRADED_JOB_FIELDS },
       )
       .lean();
@@ -193,6 +199,14 @@ export class RunWritesRepository {
       $inc: { retryCount: 1 },
     });
     return { ...failed, requeued: false };
+  }
+
+  /** Final RETRY Unsupported: back to QU with that judge build recorded in `refusedBy`, so it is never offered the row again; `retryCount` is untouched, so a refusal never ends in IE. */
+  refuse(key: RunKey, judge: RefusingJudge): Promise<FinishOutcome> {
+    return this.finish(key, {
+      $set: requeueByJudge(key),
+      $addToSet: { refusedBy: judge },
+    });
   }
 
   private async finish(
@@ -247,6 +261,7 @@ export class RunWritesRepository {
           status: 1,
           caseCount: { $size: { $ifNull: ['$cases', []] } },
           retryCount: { $ifNull: ['$retryCount', 0] },
+          refusalCount: { $size: { $ifNull: ['$refusedBy', []] } },
         },
       },
     ]);

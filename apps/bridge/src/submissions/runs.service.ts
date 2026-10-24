@@ -1,7 +1,11 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import type { SubmissionCase, SubmissionStatus } from '@libs/database';
+import type {
+  RefusingJudge,
+  SubmissionCase,
+  SubmissionStatus,
+} from '@libs/database';
 import {
   gradedJobId,
   notifyGraded,
@@ -13,7 +17,7 @@ import type { SubmissionEventType, SubmissionGradedJob } from '@libs/judging';
 import type { AssignmentRef } from '@libs/judge-proto';
 import type { QueuedSubmission } from '../dispatch/slots';
 import { loggableText } from '../link/messages';
-import type { FinalReport } from '../link/messages';
+import type { RunFinalReport } from '../link/messages';
 import type { AssignRequest } from './assign-request';
 import { RunWritesRepository } from './run-writes.repository';
 import type { RetryOutcome } from './run-writes.repository';
@@ -151,7 +155,7 @@ export class RunsService {
   }
 
   /** The run's last message. Acked only after the write and the graded job: a Final resent before its ack is a duplicate that re-enqueues the same job id, which BullMQ drops while the first still waits. After a bridge crash the resend is dropped (the row is no longer P/G); the write's `effectsDueAt` lets the worker's effects sweep repair a job lost that way. */
-  async final(key: RunKey, report: FinalReport): Promise<WriteOutcome> {
+  async final(key: RunKey, report: RunFinalReport): Promise<WriteOutcome> {
     const { kind } = report;
     if (kind === 'retry') return this.retried(key, report.log);
     const written =
@@ -208,6 +212,18 @@ export class RunsService {
     );
     if (written.requeued) this.requeued(key.ref.submissionId);
     else await this.finished(written.job, 'IE', key.ref.generation);
+    return written.outcome;
+  }
+
+  /** The judge refused the run as unsupported: requeued without spending a RETRY, never again offered to that judge build (the dispatcher reads `refusedBy`). A row every connected judge refused stays QU, visibly waiting for a judge that can grade it. */
+  async refused(key: RunKey, judge: RefusingJudge): Promise<WriteOutcome> {
+    const written = await this.writes.refuse(key, judge);
+    if (written.outcome !== 'applied') return written.outcome;
+    const { ref } = key;
+    this.logger.warn(
+      `Judge ${judge.name} (build ${loggableText(judge.build)}) refused submission ${ref.submissionId} gen ${ref.generation} as unsupported; requeued for another judge`,
+    );
+    this.requeued(ref.submissionId);
     return written.outcome;
   }
 

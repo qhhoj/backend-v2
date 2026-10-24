@@ -4,7 +4,7 @@ import {
   MAX_CASE_TEXT_LENGTH,
 } from '@libs/database';
 import type { CaseStatus, SubmissionCase } from '@libs/database';
-import { JudgeMessage, Outcome, Status } from '@libs/judge-proto';
+import { JudgeMessage, Outcome, RetryReason, Status } from '@libs/judge-proto';
 import type {
   AssignmentRef,
   Case,
@@ -179,8 +179,14 @@ export function caseRowsOf(cases: Case[]): SubmissionCase[] {
   return cases.map(caseRowOf);
 }
 
+/** `refused`: a RETRY with reason UNSUPPORTED, the judge cannot grade this kind of submission (a refusal, not a failure; the feature it lacks is not on the wire). */
 export type FinalKind =
-  'graded' | 'compile-error' | 'internal-error' | 'aborted' | 'retry';
+  | 'graded'
+  | 'compile-error'
+  | 'internal-error'
+  | 'aborted'
+  | 'retry'
+  | 'refused';
 
 export interface FinalReport {
   kind: FinalKind;
@@ -188,6 +194,15 @@ export interface FinalReport {
   log: string;
   dataVersionUsed: number;
 }
+
+/** RETRY and refusal: the judge could not run it, so the row goes back to the queue. */
+export const isRequeuedByJudge = (report: FinalReport): boolean =>
+  report.kind === 'retry' || report.kind === 'refused';
+
+/** A Final the run's row takes as it stands; a refusal also names the refusing judge build (`RunsService.refused`). */
+export type RunFinalReport = FinalReport & {
+  kind: Exclude<FinalKind, 'refused'>;
+};
 
 const FINAL_KIND: ReadonlyMap<Outcome, FinalKind> = new Map([
   [Outcome.OUTCOME_GRADED, 'graded'],
@@ -200,8 +215,10 @@ const FINAL_KIND: ReadonlyMap<Outcome, FinalKind> = new Map([
 export function finalReportOf(final: Final): FinalReport {
   const kind = FINAL_KIND.get(final.outcome);
   if (!kind) throw new ProtocolError('a Final with no known outcome');
+  const isRefusal =
+    kind === 'retry' && final.reason === RetryReason.RETRY_REASON_UNSUPPORTED;
   return {
-    kind,
+    kind: isRefusal ? 'refused' : kind,
     log: clipBytes(final.log, MAX_LOG_BYTES),
     dataVersionUsed: final.dataVersionUsed,
   };

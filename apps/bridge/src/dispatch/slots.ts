@@ -1,4 +1,5 @@
 import { SUBMISSION_PRIORITY } from '@libs/database';
+import type { RefusingJudge } from '@libs/database';
 import { COMPILE_FEATURE, GENERATE_FEATURE } from '@libs/judging';
 import type { AssignmentRef, GenerateTests } from '@libs/judge-proto';
 import type { AssignRequest } from '../submissions/assign-request';
@@ -19,6 +20,8 @@ export interface QueuedSubmission {
   retryBannedJudges: string[];
   /** Hello features its problem's init.yml needs (`requiredJudgeFeatures`); a judge without one of them would answer with an internal error. */
   requiredFeatures: string[];
+  /** Judge builds that refused it as unsupported (the row's `refusedBy`): never offered it again, so a row every judge refuses waits in the queue instead of bouncing. */
+  refusedBy: RefusingJudge[];
 }
 
 export interface JudgeState {
@@ -34,6 +37,8 @@ export interface JudgeState {
   readonly winding: Set<string>;
   /** Features from its Hello (`generate.polygon`, ...). */
   readonly features: ReadonlySet<string>;
+  /** Build from its Hello: a refusal holds for that build only, an upgraded judge may try again. */
+  readonly build: string;
   /** Ids of the test generations it holds (a claim in flight included); each takes one slot. */
   readonly generations: Set<string>;
 }
@@ -86,7 +91,13 @@ export const mayStartGeneration = (
   );
 };
 
-/** Runs the language, has the features the problem needs, is not banned, and is enabled (or asked for by name). A submission pinned to a judge without a needed feature waits until that judge upgrades or the pin is dropped (resync of an absent judge, rejudge). */
+const hasRefused = (judge: JudgeState, submission: QueuedSubmission) =>
+  submission.refusedBy.some(
+    (refusing) =>
+      refusing.name === judge.name && refusing.build === judge.build,
+  );
+
+/** Runs the language, has the features the problem needs, is not banned, has not refused it as unsupported, and is enabled (or asked for by name). A submission pinned to a judge without a needed feature waits until that judge upgrades or the pin is dropped (resync of an absent judge, rejudge). */
 export const canJudge = (
   judge: JudgeState,
   submission: QueuedSubmission,
@@ -95,6 +106,7 @@ export const canJudge = (
   submission.requiredFeatures.every((feature) => judge.features.has(feature)) &&
   !submission.bannedJudges.includes(judge.name) &&
   !submission.retryBannedJudges.includes(judge.name) &&
+  !hasRefused(judge, submission) &&
   (submission.judgeName === null
     ? !judge.isDisabled
     : judge.name === submission.judgeName);
@@ -163,6 +175,7 @@ const candidateKey = (submission: QueuedSubmission): string =>
     submission.bannedJudges,
     submission.retryBannedJudges,
     submission.requiredFeatures,
+    submission.refusedBy,
   ]);
 
 /**
