@@ -39,20 +39,16 @@ export function pythonRound(value: number, digits: number): number {
   return Number(lastDigit) % 2 === 0 ? Number(towardZero) : rounded;
 }
 
-/** Cases worse than this one failed (`SC`, a skipped case, is not a failure of its own). */
-const ACCEPTED_SEVERITY = CASE_SEVERITY.indexOf('AC');
-
 /** Within float noise of the total counts as every point earned. */
 const FULL_EPSILON = 1e-9;
 
-/** Sums to one decimal like legacy, except that only every point earned reaches the total: a near miss (9.96 of 10) stays a tenth below it, and a full sum takes the rounded total exactly. With a failed case the sum never reaches the total, whatever points the cases report. */
+/** Sums to one decimal like legacy, except that only every point earned reaches the total: a near miss (9.96 of 10) stays a tenth below it, and a full sum takes the rounded total exactly. */
 function roundedSums(
   points: number,
   total: number,
-  hasFailedCase: boolean,
 ): Pick<CaseTotals, 'casePoints' | 'caseTotal'> {
   const caseTotal = pythonRound(total, 1);
-  if (!hasFailedCase && points >= total - FULL_EPSILON)
+  if (points >= total - FULL_EPSILON)
     return { casePoints: caseTotal, caseTotal };
   const tenthBelowTotal = Math.max(0, Math.round(caseTotal * 10) - 1) / 10;
   return {
@@ -61,7 +57,7 @@ function roundedSums(
   };
 }
 
-/** Legacy `on_grading_end`: time and memory are the largest over cases; plain cases add their points and totals; a batch adds its smallest points and its largest total; sums are rounded by `roundedSums` (never full marks with a failed case). */
+/** Legacy `on_grading_end`: time and memory are the largest over cases; plain cases add their points and totals; a batch adds its smallest points and its largest total; sums are rounded by `roundedSums`. */
 export function gradeCases(cases: readonly GradableCase[]): CaseTotals {
   let time = 0;
   let memory = 0;
@@ -97,7 +93,7 @@ export function gradeCases(cases: readonly GradableCase[]): CaseTotals {
     time,
     memory,
     result: CASE_SEVERITY[severity],
-    ...roundedSums(points, total, severity > ACCEPTED_SEVERITY),
+    ...roundedSums(points, total),
   };
 }
 

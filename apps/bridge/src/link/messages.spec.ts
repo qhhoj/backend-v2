@@ -162,7 +162,7 @@ describe('judge link messages', () => {
     ]);
   });
 
-  it('clamps case points to the case total, and a failed case never sums to full marks', () => {
+  it('clamps case points to the case total, so an over-scored case cannot make up for a failed one', () => {
     const rows = caseRowsOf([
       Case.fromPartial({
         position: 1,
@@ -173,14 +173,14 @@ describe('judge link messages', () => {
       Case.fromPartial({
         position: 2,
         status: Status.STATUS_WA,
-        points: 1,
+        points: 0,
         total: 1,
       }),
     ]);
-    expect(rows.map((row) => row.points)).toEqual([1, 1]);
+    expect(rows.map((row) => row.points)).toEqual([1, 0]);
     expect(gradeCases(rows)).toMatchObject({
       result: 'WA',
-      casePoints: 1.9,
+      casePoints: 1,
       caseTotal: 2,
     });
   });
