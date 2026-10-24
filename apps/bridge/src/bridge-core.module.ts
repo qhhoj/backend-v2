@@ -11,6 +11,7 @@ import { DispatcherService } from './dispatch/dispatcher.service';
 import { GenerationsRepository } from './generations/generations.repository';
 import { GenerationsService } from './generations/generations.service';
 import { JudgesRepository } from './judges/judges.repository';
+import { ACCEPT_CLOCK, TIMER_ACCEPT_CLOCK } from './link/accept-clock';
 import { JudgeLinkServer } from './link/judge-link.server';
 import { GenerationTransfer } from './link/generation-transfer';
 import { SourceFetch } from './link/source-fetch';
@@ -30,6 +31,7 @@ import { SubmissionsRepository } from './submissions/submissions.repository';
   ],
   providers: [
     { provide: BRIDGE_TIMINGS, useValue: DEFAULT_BRIDGE_TIMINGS },
+    { provide: ACCEPT_CLOCK, useValue: TIMER_ACCEPT_CLOCK },
     SubmissionsRepository,
     RunWritesRepository,
     ProblemDataWrites,

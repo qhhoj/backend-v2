@@ -5,6 +5,7 @@ import { TEST_REDIS_URL } from '@libs/common/testing';
 import { loadScenarios } from '@libs/judge-proto/conformance/scenario';
 import type { Scenario } from '@libs/judge-proto/conformance/scenario';
 import { BridgeCommandsService } from '@libs/judging';
+import { ManualAcceptClock } from './conformance/manual-accept-clock';
 import { ScenarioRunner, timingsOf } from './conformance/runner';
 import { ScenarioWorld, writtenSourceDirs } from './conformance/world';
 import { setupBridgeTest } from './setup';
@@ -15,13 +16,14 @@ const forBridge = scenarios.filter((scenario) =>
   scenario.applies_to.includes('bridge'),
 );
 
-/** judge-v2's conformance scenarios (vendored in libs/judge-proto) played by a scripted judge against the real bridge, Mongo and Redis: one Mongo and Redis for the file; before each scenario the old bridge stops (its timers die), Mongo and Redis are emptied and one bridge with the scenario's timings starts. */
+/** judge-v2's conformance scenarios (vendored in libs/judge-proto) played by a scripted judge against the real bridge, Mongo and Redis: one Mongo and Redis for the file; before each scenario the old bridge stops (its timers die), Mongo and Redis are emptied and one bridge with the scenario's timings starts. The accept clock is the runner's (`ManualAcceptClock`). */
 describe('protocol conformance (judge-v2 proto/conformance)', () => {
   let bridge: BridgeTest;
   const redis = new Redis(TEST_REDIS_URL);
   const commands = new BridgeCommandsService(redis);
+  const acceptClock = new ManualAcceptClock();
   beforeAll(async () => {
-    bridge = await setupBridgeTest();
+    bridge = await setupBridgeTest({ acceptClock });
   });
   afterAll(async () => {
     for (const directory of writtenSourceDirs) {
@@ -43,7 +45,7 @@ describe('protocol conformance (judge-v2 proto/conformance)', () => {
       await bridge.reset();
       await bridge.start(timingsOf(scenario));
       const world = new ScenarioWorld(bridge, commands);
-      const runner = new ScenarioRunner(bridge, world, scenario);
+      const runner = new ScenarioRunner(bridge, world, scenario, acceptClock);
       try {
         await world.seed(scenario);
         await runner.run();

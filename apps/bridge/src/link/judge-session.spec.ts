@@ -19,6 +19,7 @@ import type { JudgesRepository } from '../judges/judges.repository';
 import type { AssignRequest } from '../submissions/assign-request';
 import type { RunsService } from '../submissions/runs.service';
 import type { WriteOutcome } from '../submissions/write-outcome';
+import { TIMER_ACCEPT_CLOCK } from './accept-clock';
 import { JudgeSession } from './judge-session';
 import type { SessionCall } from './judge-session';
 
@@ -169,6 +170,7 @@ describe('JudgeSession', () => {
         runs: runs as unknown as RunsService,
         judges: judges as unknown as JudgesRepository,
         timings: TIMINGS,
+        acceptClock: TIMER_ACCEPT_CLOCK,
       },
     );
   });
@@ -562,6 +564,7 @@ describe('JudgeSession', () => {
         runs: runs as unknown as RunsService,
         judges: judges as unknown as JudgesRepository,
         timings: TIMINGS,
+        acceptClock: TIMER_ACCEPT_CLOCK,
       },
     );
     await online();

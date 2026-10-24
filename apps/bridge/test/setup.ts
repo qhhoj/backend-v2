@@ -26,6 +26,8 @@ import type { SubmissionGradedJob } from '@libs/judging';
 import { BridgeModule } from '../src/bridge.module';
 import { BRIDGE_TIMINGS } from '../src/bridge-timings';
 import type { BridgeTimings } from '../src/bridge-timings';
+import { ACCEPT_CLOCK, TIMER_ACCEPT_CLOCK } from '../src/link/accept-clock';
+import type { AcceptClock } from '../src/link/accept-clock';
 import { JudgeLinkServer } from '../src/link/judge-link.server';
 
 /** Milliseconds instead of seconds; `resyncMs` stays long so a test sees only the dispatches it caused (restart tests shorten it). No test waits for the idle or accept clock to expire, so both are long enough that a loaded host (event-loop stalls of seconds) never drops a judge or releases a slow Accepted mid-test. */
@@ -52,10 +54,13 @@ export const FAST_TIMINGS: BridgeTimings = {
 export async function setupBridgeTest({
   timings = {},
   env = {},
+  acceptClock = TIMER_ACCEPT_CLOCK,
 }: {
   timings?: Partial<BridgeTimings>;
   /** Extra environment, e.g. the judge port's TLS pair. */
   env?: Record<string, string>;
+  /** Every bridge this test boots times Accepted with it (conformance: a clock the scenario advances). */
+  acceptClock?: AcceptClock;
 } = {}) {
   const replSet = await startMongo();
   Object.assign(process.env, TEST_ENV, {
@@ -73,6 +78,8 @@ export async function setupBridgeTest({
     const compiled = await Test.createTestingModule({ imports: [BridgeModule] })
       .overrideProvider(BRIDGE_TIMINGS)
       .useValue({ ...FAST_TIMINGS, ...timings })
+      .overrideProvider(ACCEPT_CLOCK)
+      .useValue(acceptClock)
       .compile();
     try {
       await compiled.init();

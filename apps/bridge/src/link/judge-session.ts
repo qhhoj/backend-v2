@@ -26,6 +26,7 @@ import type { JudgesRepository } from '../judges/judges.repository';
 import type { AssignRequest } from '../submissions/assign-request';
 import type { RunsService } from '../submissions/runs.service';
 import type { RunKey, WriteOutcome } from '../submissions/write-outcome';
+import type { AcceptClock } from './accept-clock';
 import { MAX_LOG_BYTES, MAX_MESSAGES_PER_SECOND } from './link-limits';
 import { MessageRate } from './message-rate';
 import {
@@ -87,6 +88,7 @@ export interface SessionServices {
   runs: RunsService;
   judges: JudgesRepository;
   timings: BridgeTimings;
+  acceptClock: AcceptClock;
 }
 
 /** Who opened the session, as the key check found it. */
@@ -131,8 +133,8 @@ export class JudgeSession implements DispatchTarget {
   private nonce = 0;
   private readonly pingsSent = new Map<number, number>();
   private readonly roundTrips: number[] = [];
-  /** Accept clocks of assigned runs, by `windingKey`. */
-  private readonly acceptTimers = new Map<string, NodeJS.Timeout>();
+  /** Cancels of the accept clocks of assigned runs, by `windingKey`. */
+  private readonly acceptTimers = new Map<string, () => void>();
   /** Refs this session sent an Abort for (`windingKey`s, oldest first). */
   private readonly aborted = new Set<string>();
   /** `windingKey`s of runs whose Final this session stored (or found stored) and acked, oldest first. */
@@ -168,11 +170,13 @@ export class JudgeSession implements DispatchTarget {
   assign(request: AssignRequest): void {
     this.send({ $case: 'assign', assign: assignOf(request) });
     const { ref } = request;
+    const { acceptClock, timings } = this.services;
     this.acceptTimers.set(
       windingKey(ref),
-      setTimeout(
+      acceptClock.arm(
+        ref,
+        timings.acceptMs,
         () => void this.acceptTimedOut(ref),
-        this.services.timings.acceptMs,
       ),
     );
   }
@@ -648,7 +652,7 @@ export class JudgeSession implements DispatchTarget {
 
   private clearAcceptTimer(ref: AssignmentRef): void {
     const key = windingKey(ref);
-    clearTimeout(this.acceptTimers.get(key));
+    this.acceptTimers.get(key)?.();
     this.acceptTimers.delete(key);
   }
 
@@ -656,7 +660,7 @@ export class JudgeSession implements DispatchTarget {
     this.isClosed = true;
     clearTimeout(this.helloTimer);
     clearInterval(this.pingTimer);
-    for (const timer of this.acceptTimers.values()) clearTimeout(timer);
+    for (const cancel of this.acceptTimers.values()) cancel();
     this.logger.log(
       `Judge ${this.name} disconnected${this.helloed ? '' : ' before Hello'}: ${this.closeReason ?? 'connection lost'}; ${this.inFlight.size} runs held`,
     );

@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { EventEmitter } from 'node:events';
 import type { Socket } from 'node:net';
 import { DEFAULT_BRIDGE_TIMINGS } from '../bridge-timings';
+import { TIMER_ACCEPT_CLOCK } from './accept-clock';
 import { JudgeLinkServer } from './judge-link.server';
 import { MAX_FAILED_AUTH_PER_ADDRESS } from './link-limits';
 
@@ -46,6 +47,7 @@ function setup(authenticate: jest.Mock) {
   const server = new JudgeLinkServer(
     {} as never,
     DEFAULT_BRIDGE_TIMINGS,
+    TIMER_ACCEPT_CLOCK,
     { authenticate } as never,
     {} as never,
     {} as never,
