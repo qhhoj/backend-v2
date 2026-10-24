@@ -8,6 +8,27 @@ import { SCHEMAS } from './schemas';
  * may hint an index the new one no longer declares.
  */
 export async function buildIndexes(connection: Connection): Promise<void> {
-  for (const { name, schema } of SCHEMAS)
-    await connection.model(name, schema).createIndexes();
+  for (const { name, schema } of SCHEMAS) {
+    const model = connection.model(name, schema);
+    try {
+      await model.createIndexes();
+    } catch (error) {
+      throw new Error(indexBuildFailure(model.collection.name, error));
+    }
+  }
+}
+
+/** What the deploy log may show of a failed build: the collection, the index and the error code. Never the server's message, which quotes the duplicated value (`dup key: { … }`) into a public log. */
+export function indexBuildFailure(collection: string, error: unknown): string {
+  const { code, codeName, message } = error as {
+    code?: unknown;
+    codeName?: unknown;
+    message?: unknown;
+  };
+  const index =
+    typeof message === 'string'
+      ? (/\bindex: ([\w.$-]+)/.exec(message)?.[1] ?? 'unknown')
+      : 'unknown';
+  const reason = typeof codeName === 'string' ? codeName : 'error';
+  return `index build failed on ${collection}, index ${index}: ${reason} (code ${typeof code === 'number' ? code : 'unknown'})`;
 }

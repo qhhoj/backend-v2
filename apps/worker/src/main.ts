@@ -27,7 +27,8 @@ async function indexes() {
 
 if (process.argv[2] === 'indexes')
   indexes().catch((error: Error) => {
-    console.error(`index build failed: ${error.message}`);
+    // A build failure is already reduced to collection, index and code (`indexBuildFailure`); the rest are connection errors, which quote no row.
+    console.error(`indexes: ${error.message}`);
     process.exitCode = 1;
   });
 else void bootstrap();

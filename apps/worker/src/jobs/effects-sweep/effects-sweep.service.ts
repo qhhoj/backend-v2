@@ -86,9 +86,10 @@ export class EffectsSweepService {
         await this.repository.postponeEffectsDue(job.submissionId);
       }
     }
+    // Info, not warn: rows whose participation recompute was left to another owner land here in normal contest bursts.
     if (repaired)
-      this.logger.warn(
-        `Re-applied the effects of ${repaired} submissions still due (graded job lost, or its participation left to an owner that may have died)`,
+      this.logger.log(
+        `Re-applied the effects of ${repaired} submissions still due (a lost graded job, or a participation recompute left to another owner)`,
       );
     return repaired;
   }

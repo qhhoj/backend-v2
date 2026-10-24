@@ -37,6 +37,11 @@ import {
 } from '../core/rate-limits';
 
 const DEFAULT_LANGUAGE_KEY = 'CPP17';
+const organizationFull = (): FieldIssue => ({
+  field: 'organizationId',
+  code: 'organization_full',
+  message: 'This organization is full.',
+});
 
 @Injectable()
 export class RegistrationService {
@@ -111,20 +116,9 @@ export class RegistrationService {
         code: 'language_unknown',
         message: 'Choose one of the listed languages.',
       });
-    if (
-      organizationId &&
-      !(await this.organizations.exists({
-        _id: organizationId,
-        isOpen: true,
-        isUnlisted: false,
-        deletedAt: null,
-      }))
-    )
-      issues.push({
-        field: 'organizationId',
-        code: 'organization_unavailable',
-        message: 'Choose one of the listed open organizations.',
-      });
+    const organizationIssue =
+      organizationId && (await this.organizationIssue(organizationId));
+    if (organizationIssue) issues.push(organizationIssue);
     const problems = passwordProblems(password, { username, email });
     if (await this.pwned.isPwned(password))
       problems.push(PWNED_PASSWORD_PROBLEM);
@@ -133,6 +127,33 @@ export class RegistrationService {
     );
     if (issues.length)
       throw new ValidationFailedError('Registration rejected', issues);
+  }
+
+  /** Unknown, private, unlisted or deleted, or already at `slots`. The `slots` check here only answers early (a social signup has not spent its token yet); the insert re-checks it under the member lock. */
+  private async organizationIssue(
+    organizationId: string,
+  ): Promise<FieldIssue | null> {
+    const organization = await this.organizations
+      .findOne(
+        {
+          _id: organizationId,
+          isOpen: true,
+          isUnlisted: false,
+          deletedAt: null,
+        },
+        { slots: 1 },
+      )
+      .lean()
+      .exec();
+    if (!organization)
+      return {
+        field: 'organizationId',
+        code: 'organization_unavailable',
+        message: 'Choose one of the listed open organizations.',
+      };
+    return (await this.members.isFull(organizationId, organization.slots))
+      ? organizationFull()
+      : null;
   }
 
   private async registerLocked(body: RegisterDto): Promise<void> {
@@ -314,11 +335,7 @@ export class RegistrationService {
           await this.members.isFull(organizationId, organization?.slots ?? null)
         )
           throw new ValidationFailedError('Registration rejected', [
-            {
-              field: 'organizationId',
-              code: 'organization_full',
-              message: 'This organization is full.',
-            },
+            organizationFull(),
           ]);
         return this.users.create(fields);
       },
