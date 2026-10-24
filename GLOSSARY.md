@@ -160,7 +160,7 @@ _Avoid_: Exempt, free organization
 
 **Status codes**:
 The stored form of a Status or of a special row. `QU` queued, `P` pending (handed to a Judge, not yet grading), `G` grading, `D` done; `IE` internal error, `CE` compile error, `AB` aborted; `PD` held until final judging (see FSO). `SC` is not a Status: it is a short-circuited test, skipped because an earlier test of its batch failed. `QU`, `P` and `G` are unfinished; `IE` and `PD` do not count against a contest's `maxSubmissions`.
-_Avoid_: Verdict codes (the Verdict of a Judging is `result`: AC, WA, TLE...)
+See Verdict codes for the per-test codes; the Verdict of a Judging is `result`.
 
 **FSO**:
 Final submission only: a contest format where Submissions are stored as `PD` while the contest runs and judged once after it ends (Final judging).
@@ -197,8 +197,8 @@ Reloading a whole in-memory snapshot from Mongo on a timer, in case the change s
 _Avoid_: Refresh, reload
 
 **Data version**:
-A counter on a problem that rises on every change of its test data. A write is a compare-and-set on it, and a package or Test generation records the version it was built for.
-_Avoid_: Revision (that is a change-log row)
+A counter on a problem that rises on every change of its test data. A write is a compare-and-set on it, and a package or Test generation records the version it was built for. The backend stamps it in the problem's `.data-version` file after the last file change; a Judging grades one data version and reports which it used.
+_Avoid_: Revision (that is a change-log row), Stamp (in prose)
 
 **Revision**:
 One row of the change log (`revisions`): which entity changed, who, and each field's before and after. Written by problem, contest, organization, flatpage and setting edits.
@@ -325,7 +325,7 @@ The judge's word for a test, from init.yml. Case results and Case verdicts are t
 _Avoid_: Test case (in judge code)
 
 **Batch**:
-A group of Cases scored together: its points are awarded only if every Case in it is accepted, and the Bridge scores it by its weakest Case.
+A group of Cases scored together: it is scored by its weakest Case.
 _Avoid_: Subtask group (that is the problem-author word)
 
 **Pretest**:
@@ -372,10 +372,5 @@ _Avoid_: Report
 The numbered messages an Assignment has sent and the Bridge has not yet acknowledged. After a reconnect the Judge replays it from the Bridge's last acknowledged number.
 _Avoid_: Queue
 
-**Data version**:
-The number of the current contents of a problem's data, stamped in `.data-version` by the backend after the last file change. A Judging grades a data version, and the result reports which one it used.
-_Avoid_: Stamp (in prose), revision
-
 **Verdict codes**:
-The per-test codes: AC accepted, WA wrong answer, TLE time limit exceeded, MLE memory limit exceeded, OLE output limit exceeded, IR invalid return (the program exited with a non-zero code), RTE runtime error (killed by a signal or an uncaught exception), SC short-circuited (skipped).
-_Avoid_: Status (that is a Judging's lifecycle)
+The per-test codes: AC accepted, WA wrong answer, TLE time limit exceeded, MLE memory limit exceeded, OLE output limit exceeded, IR invalid return (the program exited with a non-zero code), RTE runtime error (killed by a signal or an uncaught exception), SC short-circuited (skipped). See Status codes for a Judging's lifecycle codes.
