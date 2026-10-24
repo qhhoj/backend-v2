@@ -1,4 +1,9 @@
-import { POINTS_DECIMALS, pythonRound } from '@libs/judging';
+import {
+  earnedAll,
+  partialPoints,
+  POINTS_DECIMALS,
+  pythonRound,
+} from '@libs/judging';
 import type { ContestFormat, ProblemCell, ScoringRow } from './format';
 import {
   parseKnownConfig,
@@ -47,6 +52,24 @@ export function dataPoints(
 const gradedBatchPoints = (scored: ScoringRow): Record<string, number> =>
   scored.status === 'D' ? (scored.batchPoints ?? {}) : {};
 
+/** The best batches scaled to the contest points and rounded as a submission's points are: only every data point earned gives exactly the contest points ("solved"); short of them the cell stays below (`partialPoints`). */
+function cellPoints(
+  best: Record<string, number>,
+  problem: { points: number; dataPoints: number | null } | undefined,
+): number {
+  if (!problem?.dataPoints) return 0;
+  const scale = problem.points / problem.dataPoints;
+  const batches = Object.values(best);
+  const points = pythonRound(
+    batches.reduce((sum, batch) => sum + batch * scale, 0),
+    POINTS_DECIMALS,
+  );
+  const earned = batches.reduce((sum, batch) => sum + batch, 0);
+  return earnedAll(earned, problem.dataPoints)
+    ? points
+    : partialPoints(points, problem.points);
+}
+
 /** Legacy `IOIContestFormat` (key `ioi16`): per batch the best across the participation's submissions, scaled by the contest points over the data's points; no times. A problem without data points scores 0 (legacy divided by zero). */
 export const ioi16Format: ContestFormat<Ioi16Config> = {
   parseConfig: (raw) => parseKnownConfig<Ioi16Config>(raw, { cumtime: false }),
@@ -61,15 +84,7 @@ export const ioi16Format: ContestFormat<Ioi16Config> = {
       for (const scored of problemRows)
         for (const [batch, points] of Object.entries(gradedBatchPoints(scored)))
           best[batch] = Math.max(best[batch] ?? points, points);
-      const problem = problems.get(problemId);
-      const scale = problem?.dataPoints
-        ? problem.points / problem.dataPoints
-        : 0;
-      // Rounded as a submission's points are, so a full cell is exactly the problem's points ("solved").
-      const points = pythonRound(
-        Object.values(best).reduce((sum, batch) => sum + batch * scale, 0),
-        POINTS_DECIMALS,
-      );
+      const points = cellPoints(best, problems.get(problemId));
       formatData[problemId] = { points, time: 0 };
       score += points;
     }

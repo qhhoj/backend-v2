@@ -22,6 +22,12 @@ export const IS_SOLVED = {
   $and: [{ $eq: ['$result', 'AC'] }, { $gte: ['$casePoints', '$caseTotal'] }],
 };
 
+/** `IS_SOLVED` as a query filter: `result` stays a plain field so the indexes on it serve the match. */
+export const SOLVED_FILTER = {
+  result: 'AC',
+  $expr: { $gte: ['$casePoints', '$caseTotal'] },
+};
+
 /** `$group` accumulator: 1 when some submission of the group is solved, else 0. */
 export const ANY_SOLVED = { $max: { $cond: [IS_SOLVED, 1, 0] } };
 

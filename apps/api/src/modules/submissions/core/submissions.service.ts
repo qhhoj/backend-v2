@@ -540,11 +540,7 @@ export class SubmissionsService {
     const access = this.detailAccessOf(principal, facts);
     const hasSolved =
       access === 'if-solved' &&
-      (await this.submissions.hasSolved(
-        principal.userId,
-        facts.problem._id,
-        facts.problem.points,
-      ));
+      (await this.submissions.hasSolved(principal.userId, facts.problem._id));
     return sourceAccessOf(principal, access, hasSolved);
   }
 

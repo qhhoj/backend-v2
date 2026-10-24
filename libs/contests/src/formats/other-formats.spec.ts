@@ -154,17 +154,17 @@ describe('ioi16 cells from the judged cases and the problem data', () => {
 
   it('never rounds a partial cell up to full points, even with no decimals shown', () => {
     const data: DataCase[] = [
-      { type: 'S', points: 199 },
+      { type: 'S', points: 999_999 },
       { type: 'C', points: null },
       { type: 'E', points: null },
       { type: 'C', points: 1 },
     ];
     const cell = cellOf(
       data,
-      [{ points: 199, batch: 1 }, ...plainCases([0])],
+      [{ points: 999_999, batch: 1 }, ...plainCases([0])],
       0,
     );
-    expect(cell).toBe(99.5);
+    expect(cell).toBe(99.999);
     expect(isSolvedCell({ points: cell }, 100)).toBe(false);
   });
 });

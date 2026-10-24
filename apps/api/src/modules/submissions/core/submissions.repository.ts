@@ -17,7 +17,12 @@ import {
   UNFINISHED_STATUSES,
   uuidStr,
 } from '@libs/database';
-import { effectsDue, JUDGE_COMMAND_BATCH, requeueUpdate } from '@libs/judging';
+import {
+  effectsDue,
+  JUDGE_COMMAND_BATCH,
+  requeueUpdate,
+  SOLVED_FILTER,
+} from '@libs/judging';
 import type { OverriddenScore } from '../actions/score-override';
 import { NOT_OVERRIDABLE_STATUSES } from './submission-access';
 import type { CaseHead } from './test-summary';
@@ -197,18 +202,13 @@ export class SubmissionsRepository {
     );
   }
 
-  /** Legacy SOLVED visibility: an AC worth the problem's full points. */
-  async hasSolved(
-    userId: string,
-    problemId: string,
-    points: number,
-  ): Promise<boolean> {
+  /** Legacy SOLVED visibility, by `IS_SOLVED` (every case point earned) rather than legacy's "AC worth the problem's full points". */
+  async hasSolved(userId: string, problemId: string): Promise<boolean> {
     return (
       (await this.submissions.exists({
         user: userId,
         problem: problemId,
-        result: 'AC',
-        points: { $gte: points },
+        ...SOLVED_FILTER,
       })) !== null
     );
   }

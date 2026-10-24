@@ -1071,10 +1071,10 @@ afterAll(() => worker.teardown());
       );
     });
 
-    it('recomputes problem stats like legacy update_stats: unlisted users left out, AC worth full points', async () => {
+    it('recomputes problem stats like legacy update_stats, unlisted users left out, but counts solved as IS_SOLVED: every case point, not the rounded score', async () => {
       const problem = await seedProblem(worker, { points: 1000 });
-      const [alice, bob, carol, erin, frank] = await Promise.all(
-        [1, 2, 3, 4, 5].map(() => seedUser(worker)),
+      const [alice, bob, carol, erin, frank, gina] = await Promise.all(
+        [1, 2, 3, 4, 5, 6].map(() => seedUser(worker)),
       );
       const dave = await seedUser(worker, { isUnlisted: true });
       await seedGraded(worker, alice._id, problem._id);
@@ -1091,15 +1091,20 @@ afterAll(() => worker.teardown());
         casePoints: 1,
         caseTotal: 2,
       });
-      // Full cases but below the problem's points (re-pointed since): legacy `update_stats` does not count it.
+      // Full cases but below the problem's points (re-pointed since): solved, which legacy `update_stats` did not count.
       await seedGraded(worker, frank._id, problem._id, {
         points: 500,
         casePoints: 1,
         caseTotal: 1,
       });
+      // Full points stored before the near-miss cap, with a case short: not solved.
+      const nearMiss = { points: 1000, casePoints: 200.9, caseTotal: 201 };
+      await seedGraded(worker, gina._id, problem._id, nearMiss);
+      await seedGraded(worker, gina._id, problem._id, nearMiss);
       await effects.recomputeProblem(problem._id);
+      // 8 listed submissions; solved: alice twice, bob, frank.
       expect(await statsOf(problem._id)).toMatchObject({
-        userCount: 2,
+        userCount: 3,
         acRate: 50,
       });
     });

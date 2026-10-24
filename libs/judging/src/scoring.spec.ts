@@ -150,6 +150,10 @@ describe('submissionPoints', () => {
   });
   it('zeroes a non-partial result that only rounds to full marks', () =>
     expect(submissionPoints(999.9, 1000, 1, false)).toBe(0));
+  it('keeps a partial near miss below full marks where 3-decimal rounding would reach them', () => {
+    expect(submissionPoints(200.9, 201, 1, true)).toBe(0.999);
+    expect(submissionPoints(201, 201, 1, true)).toBe(1);
+  });
   it('scores a near miss of 10 one-point cases below full marks', () => {
     const nineFull = Array.from({ length: 9 }, () => plain(1, 1));
     const { casePoints, caseTotal } = gradeCases([...nineFull, plain(0.96, 1)]);
