@@ -1,5 +1,12 @@
 # qhhoj-backend
 
+## 2.36.3
+
+### Patch Changes
+
+- fb7ca42: Problem renames run under the data locks of both codes; open-organization joins and signups respect `slots` under the member lock; deploy builds indexes before the restart; graded jobs keep their effects stamp when another owner recomputes the participation; participant counts are coalesced.
+- 60ac6fb: Sessions are keyed and signed with the new required `SESSION_SECRET` (at least 32 bytes); existing sessions are rebound on the api's first boot with `SESSION_KEY_MIGRATION=1` (staff, superusers and permission holders sign in once). Per-user session indexes now expire and drop dead members.
+
 ## 2.36.2
 
 ### Patch Changes
