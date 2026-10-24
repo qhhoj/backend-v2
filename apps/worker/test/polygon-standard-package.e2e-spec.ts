@@ -1,9 +1,12 @@
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import type { Job } from 'bullmq';
+import type Redis from 'ioredis';
 import type { Connection, Model } from 'mongoose';
+import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import { newId, PolygonSyncRun, TestGeneration } from '@libs/database';
 import { generationBucket } from '@libs/judging';
@@ -12,6 +15,7 @@ import {
   listZipEntries,
   POLYGON_ERROR_PREFIX,
   POLYGON_FETCH,
+  QUOTA_BACKFILL_DONE_KEY,
 } from '@libs/problems';
 import type { ImportProgress, PolygonImportJob } from '@libs/problems';
 import { buildZip, FakePolygon } from '@libs/problems/testing';
@@ -325,5 +329,38 @@ describe('Polygon standard package import', () => {
       /no main solution|not found|generator/,
     );
     expect(await generations.countDocuments()).toBe(0);
+  });
+
+  it('refuses, under enforce, generated tests that overflow the organization quota though the package fits', async () => {
+    const organization = await worker.organizations.create({
+      name: 'THPT B',
+      slug: 'thpt-b',
+      shortName: 'B',
+      quotaStorageBytes: standardPackage().length + 100,
+    });
+    await worker.setSetting('quota.enforce', 'enforce');
+    await worker.module.get<Redis>(REDIS).set(QUOTA_BACKFILL_DONE_KEY, '1');
+    polygon.reply('problem.package', { zip: standardPackage() });
+    const queued = job('stdquota');
+    queued.data.meteredOrganizationId = organization._id;
+    if (queued.data.polygon) queued.data.polygon.problemId = POLYGON_ID + 1;
+    const bulk = randomBytes(3000).toString('base64');
+    const judge = actAsJudge(async () => ({
+      status: 'done',
+      resultFileId: await uploadResult([
+        { name: '01.inp', content: bulk },
+        { name: '01.out', content: bulk },
+        { name: '02.inp', content: '2' },
+        { name: '02.out', content: '2' },
+        { name: '03.inp', content: '5 6' },
+        { name: '03.out', content: '11' },
+      ]),
+    }));
+    await expect(processor.process(queued)).rejects.toThrow(
+      /the organization's storage is full/,
+    );
+    await judge;
+    expect(await worker.problems.countDocuments({ code: 'stdquota' })).toBe(0);
+    await worker.setSetting('quota.enforce', 'warn');
   });
 });

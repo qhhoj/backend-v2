@@ -17,14 +17,40 @@ export class ImportQuota {
     target: ImportTarget,
     packagePath: string,
   ): Promise<void> {
+    await this.assertFits(job, target, {
+      path: packagePath,
+      checkShrinking: false,
+    });
+  }
+
+  /** A standard package is metered on its own size first; the tests a judge generates from it can be far larger, so their real size is checked once they exist. A create, an update and a sync all check the organization's usage, even when the new data is no larger than the data it replaces. */
+  async assertGeneratedTestsFit(
+    job: PolygonImportJob,
+    target: ImportTarget,
+    testsPath: string,
+  ): Promise<void> {
+    await this.assertFits(job, target, {
+      path: testsPath,
+      checkShrinking: true,
+    });
+  }
+
+  private async assertFits(
+    job: PolygonImportJob,
+    target: ImportTarget,
+    { path, checkShrinking }: { path: string; checkShrinking: boolean },
+  ): Promise<void> {
     const organizationId = target
       ? target.storageOrganizationId
       : job.meteredOrganizationId;
     if (!organizationId) return;
-    const addedBytes =
-      (await stat(packagePath)).size - (target?.dataBytes ?? 0);
+    const addedBytes = (await stat(path)).size - (target?.dataBytes ?? 0);
     try {
-      await this.ledger.assertStorage(organizationId, addedBytes);
+      await this.ledger.assertStorage(
+        organizationId,
+        addedBytes,
+        checkShrinking,
+      );
     } catch (error) {
       const refusal = quotaRefusalOf(error);
       if (!refusal) throw error;
