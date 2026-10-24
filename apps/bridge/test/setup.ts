@@ -43,6 +43,7 @@ export const FAST_TIMINGS: BridgeTimings = {
   externalPollMs: 20,
   externalSubmitGapMs: 0,
   generationGraceMs: 60_000,
+  finalWriteRetryMs: 20,
 };
 
 export async function setupBridgeTest({

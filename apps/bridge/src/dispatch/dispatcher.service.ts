@@ -189,6 +189,26 @@ export class DispatcherService {
     await this.offerWork(judge);
   }
 
+  /** The session could not store the run's Final (Mongo kept failing). The judge already finished the run, so its slot is free at once (never `winding`: no Final follows). The row goes back to the queue without spending its requeue; if that write fails too, the resync's stranded-run reset requeues it, as no session holds it any more. */
+  async finalNotStored(
+    judge: DispatchTarget,
+    ref: AssignmentRef,
+  ): Promise<void> {
+    if (judge.inFlight.get(ref.submissionId) !== ref.generation) return;
+    judge.inFlight.delete(ref.submissionId);
+    this.abortsRequested.delete(windingKey(ref));
+    this.clearDeadline(ref);
+    try {
+      if (await this.runs.requeueUnstored(ref, judge.name))
+        await this.dispatchRequeued(ref.submissionId);
+    } catch (error) {
+      this.logger.error(
+        `Requeuing submission ${runOf(ref)} after its lost Final failed, the resync requeues it: ${(error as Error).message}`,
+      );
+    }
+    await this.offerWork(judge);
+  }
+
   /** Whether the api aborted this held run: its judge's Final RETRY then ends it AB instead of requeuing it. */
   isAbortRequested(ref: AssignmentRef): boolean {
     return this.abortsRequested.has(windingKey(ref));

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { newId } from '@libs/database';
 import { Resume_Action } from '@libs/judge-proto';
 import type { AssignmentRef } from '@libs/judge-proto';
@@ -89,6 +90,8 @@ describe('DispatcherService', () => {
   /** Submissions a release announced as `queued`. */
   let published: string[];
   let expired: Array<{ ref: AssignmentRef; abortRequested: boolean }>;
+  /** When set, requeuing a run whose Final was not stored fails (Mongo still down). */
+  let requeueFails: boolean;
   let dispatcher: DispatcherService;
   const runs = {
     /** Mongo's compare-and-set: a row read before a later claim is no longer QU at that generation, so the claim misses. */
@@ -113,6 +116,10 @@ describe('DispatcherService', () => {
       if (tracked.delete(ref.submissionId)) published.push(ref.submissionId);
       return Promise.resolve(true);
     },
+    requeueUnstored: () =>
+      requeueFails
+        ? Promise.reject(new Error('Mongo down'))
+        : Promise.resolve(true),
     resumableSeq: async (ref: AssignmentRef) => {
       await resumeGates.get(ref.submissionId);
       return stored.get(`${ref.submissionId}.${ref.generation}`) ?? null;
@@ -155,6 +162,7 @@ describe('DispatcherService', () => {
     tracked = new Set();
     published = [];
     expired = [];
+    requeueFails = false;
     dispatcher = new DispatcherService(
       submissions,
       runs,
@@ -909,5 +917,34 @@ describe('DispatcherService', () => {
     expect(judge.assigned.map((request) => request.ref.generation)).toEqual([
       1, 2,
     ]);
+  });
+
+  it('frees the slot of a run whose Final was not stored and requeues it unspent; if that fails too, nothing holds it, so the resync requeues it', async () => {
+    const judge = await online(new Target('j1', 1));
+    const submission = entry();
+    await queue(submission);
+    await dispatcher.finalNotStored(judge, {
+      submissionId: submission.id,
+      generation: 1,
+    });
+    expect(judge.assigned.map((request) => request.ref.generation)).toEqual([
+      1, 2,
+    ]);
+    requeueFails = true;
+    const errors = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      await dispatcher.finalNotStored(judge, {
+        submissionId: submission.id,
+        generation: 2,
+      });
+    } finally {
+      errors.mockRestore();
+    }
+    expect(judge.inFlight.size).toBe(0);
+    expect(judge.winding.size).toBe(0);
+    expect(dispatcher.heldIds()).toEqual([]);
+    expect(judge.assigned).toHaveLength(2);
   });
 });

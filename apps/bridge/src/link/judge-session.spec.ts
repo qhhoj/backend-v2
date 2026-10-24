@@ -119,6 +119,7 @@ describe('JudgeSession', () => {
     acceptTimedOut: record('acceptTimedOut'),
     slotsRefused: record('slotsRefused'),
     judgeLost: record('judgeLost'),
+    finalNotStored: record('finalNotStored'),
     isStopped: () => false,
     isAbortRequested: (ref: AssignmentRef) =>
       abortsRequested.has(ref.submissionId),
@@ -623,6 +624,63 @@ describe('JudgeSession', () => {
     expect(call.paused).toBe(false);
     expect(call.bodies('ack')).toHaveLength(1);
     runs.compiled = record('compiled', () => outcome);
+  });
+
+  it('retries a Final whose store fails; one never stored frees its slot through the dispatcher and keeps the session', async () => {
+    const [flaky, lost] = [run(newId()), run(newId())];
+    await holding(flaky);
+    session.inFlight.set(lost.submissionId, 1);
+    const finalOf = (ref: AssignmentRef) =>
+      JudgeMessage.fromPartial({
+        body: {
+          $case: 'final',
+          final: { ref, seq: 5, outcome: Outcome.OUTCOME_GRADED },
+        },
+      });
+    /** Lets every wait of the store's retries pass. */
+    const throughRetries = async () => {
+      for (
+        let wait = TIMINGS.finalWriteRetryMs;
+        wait <= 8 * TIMINGS.finalWriteRetryMs;
+        wait *= 2
+      ) {
+        await settle();
+        await jest.advanceTimersByTimeAsync(wait);
+      }
+      await settle();
+    };
+    const stored = runs.final;
+    let failures = 1;
+    runs.final = (...args: unknown[]) =>
+      failures-- > 0
+        ? Promise.reject(new Error('Mongo down'))
+        : stored(...args);
+    const logs = [
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined),
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined),
+    ];
+    try {
+      call.emit('data', { message: finalOf(flaky), bytes: 32 });
+      await throughRetries();
+      expect(call.bodies('ack')).toEqual([
+        { $case: 'ack', ack: { ref: flaky, seq: 5 } },
+      ]);
+      expect(calls.runEnded).toEqual([[session, flaky, { retried: false }]]);
+      runs.final = () => Promise.reject(new Error('Mongo down'));
+      call.emit('data', { message: finalOf(lost), bytes: 32 });
+      await throughRetries();
+    } finally {
+      for (const log of logs) log.mockRestore();
+      runs.final = stored;
+    }
+    expect(calls.finalNotStored).toEqual([[session, lost]]);
+    expect(call.bodies('abort')).toEqual([
+      { $case: 'abort', abort: { ref: lost } },
+    ]);
+    expect(call.bodies('ack')).toHaveLength(1);
+    expect(session.isClosed).toBe(false);
+    expect(call.statuses).toEqual([]);
+    expect(call.paused).toBe(false);
   });
 
   it('logs a judge-reported error on one line, its text sanitized', async () => {

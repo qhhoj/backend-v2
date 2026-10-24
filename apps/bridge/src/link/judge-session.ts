@@ -43,6 +43,8 @@ import { flood, ProtocolError, seqGap } from './protocol-error';
 
 /** Legacy: the reported ping is the mean of the last 6 round trips. */
 const PING_SAMPLES = 6;
+/** Tries of a `Final` write in the session (Mongo failover): 0.5 + 1 + 2 + 4 s of waits with the default timings, while the judge's other messages wait behind it. */
+const FINAL_WRITE_ATTEMPTS = 5;
 /** Runs a session remembers as ended or aborted (a Final resent before its ack, a late Accepted, a second Abort): enough for any replay window, bounded for a session that lives for weeks. */
 const RUNS_REMEMBERED = 1024;
 
@@ -408,9 +410,15 @@ export class JudgeSession implements DispatchTarget {
     if (this.ended.has(windingKey(ref)))
       return this.replayedFinal(ref, seqOf(final.seq), received);
     const report = this.honourAbort(ref, received);
-    const handled = await this.handleRun(final, (key) =>
-      this.settle(key, report),
-    );
+    let handled: Handled | null;
+    try {
+      handled = await this.handleRun(final, (key) =>
+        this.storeFinal(key, report),
+      );
+    } catch (error) {
+      if (error instanceof ProtocolError || this.isClosed) throw error;
+      return this.finalNotStored(ref, error as Error);
+    }
     if (handled?.outcome === 'stale')
       return this.services.dispatch.windingEnded(this, handled.ref);
     if (handled?.outcome === 'applied' || handled?.outcome === 'duplicate') {
@@ -419,6 +427,39 @@ export class JudgeSession implements DispatchTarget {
         retried: isRequeuedByJudge(report) && handled.outcome === 'applied',
       });
     }
+  }
+
+  /** judge-v2 sends a Final once per session and nothing asks for it again, so its write is retried here (with doubling waits) until it is stored, the session ends or the tries run out. Every try is idempotent: the seq compare-and-set turns a write that did land into `duplicate`. */
+  private async storeFinal(
+    key: RunKey,
+    report: FinalReport,
+  ): Promise<WriteOutcome> {
+    let waitMs = this.services.timings.finalWriteRetryMs;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.settle(key, report);
+      } catch (error) {
+        const isLast = attempt >= FINAL_WRITE_ATTEMPTS || this.isClosed;
+        if (error instanceof ProtocolError || isLast) throw error;
+        this.logger.warn(
+          `Judge ${this.name}: storing the Final of submission ${key.ref.submissionId} gen ${key.ref.generation} failed (try ${attempt}), retrying in ${waitMs} ms: ${(error as Error).message}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        waitMs *= 2;
+      }
+    }
+  }
+
+  /** The Final could not be stored: the judge already finished the run, so the Abort only clears it from the judge's outbox (no Final follows) and the dispatcher frees the slot at once and requeues the row. */
+  private async finalNotStored(
+    ref: AssignmentRef,
+    error: Error,
+  ): Promise<void> {
+    this.logger.error(
+      `Judge ${this.name}: the Final of submission ${ref.submissionId} gen ${ref.generation} could not be stored; its slot is freed and it is requeued: ${error.message}`,
+    );
+    this.abortOnce(ref);
+    await this.services.dispatch.finalNotStored(this, ref);
   }
 
   /** A refusal names this judge build; every other Final is written as it stands. */
