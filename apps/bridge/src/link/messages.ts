@@ -149,18 +149,20 @@ const CASE_STATUS: ReadonlyMap<Status, CaseStatus> = new Map([
 const measured = (value: number): number =>
   Number.isFinite(value) && value > 0 ? value : 0;
 
+/** A case earns at most its total, whatever the judge reports. */
 function caseRowOf(reported: Case): SubmissionCase {
   const status = CASE_STATUS.get(reported.status);
   if (!status)
     throw new ProtocolError(`case ${reported.position} has no known status`);
+  const total = measured(reported.total);
   return {
     position: reported.position,
     status,
     time: measured(reported.timeS),
     juryTime: measured(reported.juryTimeS),
     memory: measured(reported.memoryKib),
-    points: measured(reported.points),
-    total: measured(reported.total),
+    points: Math.min(measured(reported.points), total),
+    total,
     batch: reported.batch > 0 ? reported.batch : null,
     feedback: clipBytes(reported.feedback, MAX_CASE_FEEDBACK_LENGTH),
     extendedFeedback: clipBytes(
@@ -171,7 +173,7 @@ function caseRowOf(reported: Case): SubmissionCase {
   };
 }
 
-/** Stored case rows; texts are clipped by UTF-8 bytes, a batch number 0 means "no batch". */
+/** Stored case rows; texts are clipped by UTF-8 bytes, a batch number 0 means "no batch", points are clamped to the case's total. */
 export function caseRowsOf(cases: Case[]): SubmissionCase[] {
   if (cases.length > MAX_CASES_PER_MESSAGE)
     throw tooLarge(

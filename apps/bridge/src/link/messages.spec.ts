@@ -12,6 +12,7 @@ import {
   RetryReason,
   Status,
 } from '@libs/judge-proto';
+import { gradeCases } from '@libs/judging';
 import {
   caseRowsOf,
   clipBytes,
@@ -159,6 +160,29 @@ describe('judge link messages', () => {
       [0.02, 0.25],
       [0, 0],
     ]);
+  });
+
+  it('clamps case points to the case total, and a failed case never sums to full marks', () => {
+    const rows = caseRowsOf([
+      Case.fromPartial({
+        position: 1,
+        status: Status.STATUS_AC,
+        points: 5,
+        total: 1,
+      }),
+      Case.fromPartial({
+        position: 2,
+        status: Status.STATUS_WA,
+        points: 1,
+        total: 1,
+      }),
+    ]);
+    expect(rows.map((row) => row.points)).toEqual([1, 1]);
+    expect(gradeCases(rows)).toMatchObject({
+      result: 'WA',
+      casePoints: 1.9,
+      caseTotal: 2,
+    });
   });
 
   it('refuses a case without a known status and more than 256 cases in one message', () => {
