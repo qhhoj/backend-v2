@@ -17,6 +17,8 @@ import type { BridgeTimings } from '../bridge-timings';
 import { DispatcherService } from '../dispatch/dispatcher.service';
 import { JudgesRepository } from '../judges/judges.repository';
 import { RunsService } from '../submissions/runs.service';
+import { ACCEPT_CLOCK } from './accept-clock';
+import type { AcceptClock } from './accept-clock';
 import { AuthFailures } from './auth-failures';
 import { ConnectionGuard, peerOfCall } from './connection-guard';
 import type { UnauthenticatedClose } from './connection-guard';
@@ -101,13 +103,14 @@ export class JudgeLinkServer {
   constructor(
     @Inject(ENV) private readonly env: Env,
     @Inject(BRIDGE_TIMINGS) timings: BridgeTimings,
+    @Inject(ACCEPT_CLOCK) acceptClock: AcceptClock,
     private readonly judges: JudgesRepository,
     private readonly dispatch: DispatcherService,
     runs: RunsService,
     private readonly sources: SourceFetch,
     private readonly transfers: GenerationTransfer,
   ) {
-    this.services = { dispatch, runs, judges, timings };
+    this.services = { dispatch, runs, judges, timings, acceptClock };
     this.guard = new ConnectionGuard(
       {
         maxUnauthenticatedPerAddress: MAX_UNAUTHENTICATED_PER_ADDRESS,

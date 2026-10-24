@@ -16,6 +16,7 @@ import { withinTimeout } from '@libs/judging';
 import { FakeJudge } from '../fake-judge';
 import type { BridgeTimings } from '../../src/bridge-timings';
 import type { BridgeTest } from '../setup';
+import type { ManualAcceptClock } from './manual-accept-clock';
 import type { ScenarioWorld } from './world';
 
 /** Every wait is bounded by this, so a failing scenario fails fast with the step it stopped at. */
@@ -24,7 +25,7 @@ export const STEP_TIMEOUT_MS = 5000;
 const END_STATE_MS = 2000;
 const POLL_MS = 50;
 
-/** Bridge timings a scenario does not name: `FAST_TIMINGS` (setup.ts) with the handshake, idle and accept clocks long enough that a loaded host never trips them in a scenario that does not test them. */
+/** Bridge timings a scenario does not name: `FAST_TIMINGS` (setup.ts) with the handshake and idle clocks long enough that a loaded host never trips them in a scenario that does not test them. The accept clock is the runner's (`ManualAcceptClock`): `acceptMs` is not waited for. */
 const UNNAMED_TIMINGS: Partial<BridgeTimings> = {
   handshakeMs: 2000,
   idleMs: 5000,
@@ -58,6 +59,7 @@ export class ScenarioRunner {
     private readonly bridge: BridgeTest,
     private readonly world: ScenarioWorld,
     private readonly scenario: Scenario,
+    private readonly acceptClock: ManualAcceptClock,
   ) {}
 
   async run(): Promise<void> {
@@ -178,6 +180,7 @@ export class ScenarioRunner {
     to: string;
     message: JsonObject;
   }): Promise<void> {
+    this.timeOutAcceptOf(message);
     const seen = await this.nextMessage(this.judge(to));
     if (seen.body?.$case === 'welcome') {
       this.world.bindings.set(`session:${to}`, seen.body.welcome.sessionId);
@@ -188,6 +191,14 @@ export class ScenarioRunner {
       BridgeMessage.toJSON(seen),
     );
     if (differs) throw new Error(`${differs} in ${shown(seen)}`);
+  }
+
+  /** An expected Abort of a run whose accept window is still armed is that window's timeout: the bridge armed it when it sent the Assign, and the runner fires it now, so the transcript, not host timing, decides when an Assign times out. */
+  private timeOutAcceptOf(message: JsonObject): void {
+    if (!('abort' in message)) return;
+    const { body } = BridgeMessage.fromJSON(this.expanded(message));
+    if (body?.$case === 'abort' && body.abort.ref)
+      this.acceptClock.fire(body.abort.ref);
   }
 
   /** The next non-ping message. grpc-js may emit a stream's status before the messages that preceded it, so a closed stream is given `POLL_MS` to deliver them. */
