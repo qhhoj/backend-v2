@@ -68,7 +68,7 @@ npm run lint
 npm run typecheck
 ```
 
-- CI runs `test:unit`, the static `test:openapi` and, in the `db` job (Redis container with 100 databases, cached mongod binary), `test:db`. Specs that need services are named `*.db.spec.ts` or `*.e2e-spec.ts` (CONTRIBUTING.md, Testing). `test:db` runs in band; `npx jest -c test/jest/db.config.js --maxWorkers=2` is safe: each worker has its own Redis db and Mongo databases.
+- CI runs `test:unit`, the static `test:openapi` and, in the `db` job (Redis container with 100 databases, cached mongod binary), `test:db`. Specs that need services are named `*.db.spec.ts` or `*.e2e-spec.ts` (CONTRIBUTING.md, Testing). `test:db` runs in band, in CI too: with `--maxWorkers=2` and up, workers get separate Redis and Mongo databases but share the `submission-events` pub/sub channel, so specs can see each other's events.
 - `TEST_REDIS_URL` picks the db (default `redis://127.0.0.1:6379/15`); use another db to run two checkouts side by side, e.g. `TEST_REDIS_URL=redis://127.0.0.1:6379/12 npm test`. Each jest worker uses the next db up (db + `JEST_WORKER_ID - 1`), so the base db plus `--maxWorkers` must fit the server (16 dbs by default).
 - MongoDB is in-memory (`mongodb-memory-server`): one replica set per jest run (`test/jest/global-setup.js`); `startMongo()` gives each caller databases of its own on it and drops them on `stop()`.
 

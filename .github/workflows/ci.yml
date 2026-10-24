@@ -84,8 +84,9 @@ jobs:
         with:
           path: node_modules/.cache/mongodb-memory-server
           key: mongodb-binaries-${{ runner.os }}-${{ steps.mms.outputs.version }}
-      # --forceExit: jest hangs at exit on leaked handles. Two workers: each has its own Redis db and Mongo databases.
-      - run: npx jest --config test/jest/db.config.js --forceExit --maxWorkers=2
+      # --forceExit: jest hangs at exit on leaked handles. In band: the submission-events pub/sub channel is shared
+      # across Redis dbs, so concurrent workers would see each other's events.
+      - run: npm run test:db -- --forceExit
         env: { TEST_REDIS_URL: 'redis://localhost:6379/60' }
   openapi:
     needs: changes

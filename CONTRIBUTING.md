@@ -567,8 +567,8 @@ One name per concept. Rename only where a term is ambiguous, and never rename a 
 | Command                   | Purpose                                                                       |
 | ------------------------- | ----------------------------------------------------------------------------- |
 | `npm test`                | every spec: unit, OpenAPI, then the DB-backed ones (needs Redis)              |
-| `npm run test:unit`       | unit specs only, no services (CI job `test`)                                   |
-| `npm run test:db`         | `*.db.spec.ts` and `*.e2e-spec.ts`, in band (needs Redis; CI job `db`)         |
+| `npm run test:unit`       | unit specs only, no services (CI job `test`)                                  |
+| `npm run test:db`         | `*.db.spec.ts` and `*.e2e-spec.ts`, in band (needs Redis; CI job `db`)        |
 | `npm run format`          | Prettier write on `apps/` and `libs/`                                         |
 | `npm run lint`            | ESLint (+ Prettier) on `apps/` and `libs/`                                    |
 | `npm run test:openapi`    | the static OpenAPI specs with the swagger plugin (see OpenAPI)                |
