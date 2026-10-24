@@ -1,6 +1,6 @@
 import { hashPassword, PASSWORD_ITERATIONS, UsersRepository } from '@libs/auth';
 
-import { REDIS } from '@libs/common';
+import { AppError, REDIS } from '@libs/common';
 
 import { newId } from '@libs/database';
 
@@ -198,6 +198,32 @@ describe('auth session endpoints', () => {
       }
       expect((await api.users.findOne({ username: 'rex' }))!.password).toBe(
         newer,
+      );
+    });
+    it('still signs in when the rehash is refused, spending one correct-password unit', async () => {
+      const user = await createUser(api.users, {
+        username: 'rhea',
+        email: 'rhea@example.com',
+      });
+      const before = user.password;
+      const spy = jest
+        .spyOn(api.app.get(UsersRepository), 'updatePasswordIfUnchanged')
+        .mockRejectedValueOnce(new AppError('rate_limited', 429));
+      try {
+        await api
+          .http()
+          .post(LOGIN)
+          .send({ username: 'rhea', password: 'correct horse battery' })
+          .expect(200);
+      } finally {
+        spy.mockRestore();
+      }
+      expect((await api.users.findOne({ username: 'rhea' }))!.password).toBe(
+        before,
+      );
+      const redis = api.app.get<Redis>(REDIS);
+      expect(await redis.get(`rate:password-success:user:${user._id}`)).toBe(
+        '1',
       );
     });
   });

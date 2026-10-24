@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   DUMMY_PASSWORD_HASH,
   generateApiToken,
@@ -42,6 +42,8 @@ type Budget = { key: string; limit: number };
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly users: UsersRepository,
     private readonly sessions: SessionService,
@@ -79,13 +81,7 @@ export class AuthService {
       );
     this.assertLoginAllowed(user);
     const passwordPwned = await this.pwned.isPwned(password);
-    // Compare-and-set: if the password changed since verification, keep the newer one.
-    if (needsRehash(user.password))
-      await this.users.updatePasswordIfUnchanged(
-        user._id,
-        user.password,
-        await hashPassword(password),
-      );
+    await this.upgradeWeakHash(user, password);
     return this.startSession(user, {
       isPasswordPwned: passwordPwned,
       previousSessionId,
@@ -123,6 +119,28 @@ export class AuthService {
     } catch (error) {
       await Promise.all([releaseFailure(), releaseSuccess()]);
       throw error;
+    }
+  }
+
+  /**
+   * Best effort, after the password was accepted: a refused or failed rehash (the hash queue is full) never costs the
+   * session, and the next login tries again. Compare-and-set: if the password changed since verification, keep the newer one.
+   */
+  private async upgradeWeakHash(
+    user: UserDocument,
+    password: string,
+  ): Promise<void> {
+    if (!needsRehash(user.password)) return;
+    try {
+      await this.users.updatePasswordIfUnchanged(
+        user._id,
+        user.password,
+        await hashPassword(password),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Password rehash skipped: ${error instanceof Error ? error.name : 'unknown error'}`,
+      );
     }
   }
 
