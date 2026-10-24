@@ -6,6 +6,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 ROOT="${QHHOJ_INSTALL_ROOT:-}"
 ID=987
+DEPLOY_SHELL=/usr/local/sbin/qhhoj-deploy-serve
 
 die() { echo "install-host: $*" >&2; exit 1; }
 
@@ -16,19 +17,19 @@ ensure_users() {
     groupadd -g "$ID" qhhoj
     useradd -u "$ID" -g "$ID" --system --home-dir /var/lib/qhhoj --create-home --shell /usr/sbin/nologin qhhoj
   fi
-  id deploy >/dev/null 2>&1 || useradd --system --home-dir /home/deploy --create-home --shell /bin/bash deploy
+  # The CD user's shell is its dispatcher (deploy/qhhoj-deploy-serve): the deploy helper and uploads into incoming/ only.
+  id deploy >/dev/null 2>&1 || useradd --system --home-dir /home/deploy --create-home --shell "$DEPLOY_SHELL" deploy
   usermod -aG qhhoj www-data 2>/dev/null || usermod -aG qhhoj nginx 2>/dev/null || true
 }
 
 ensure_dirs() {
   install -d -m 2750 "$ROOT/srv/qhhoj"
-  # nginx (group qhhoj) serves only media; every other tree stays owner-only so a web-server compromise cannot read hidden test data.
+  # nginx (group qhhoj) serves only media; every other tree stays owner-only so a web-server compromise cannot read hidden
+  # test data. The local judge and the laptop pull read their trees through per-user ACLs (grant_reads), not the group.
   install -d -m 2750 "$ROOT/srv/qhhoj/media"
-  # problem-data is 2750: the local judge (qhhoj-judge, group qhhoj) reads it via the group.
-  install -d -m 2750 "$ROOT/srv/qhhoj/problem-data"
-  for dir in pdf-cache contest-data user-data; do install -d -m 2700 "$ROOT/srv/qhhoj/$dir"; done
+  for dir in problem-data pdf-cache contest-data user-data; do install -d -m 2700 "$ROOT/srv/qhhoj/$dir"; done
   chown -R "$ID:$ID" "$ROOT/srv/qhhoj"
-  grant_pull_read
+  grant_reads
   install -d -m 700 "$ROOT/backup"
   # qhhoj-deploy (root) keeps its history here: root-owned; only incoming/ is writable by the deploy user
   install -d -m 755 "$ROOT/var/lib/qhhoj-deploy"
@@ -40,17 +41,26 @@ ensure_dirs() {
   install -d -m 700 "$ROOT/etc/qhhoj"
 }
 
-grant_pull_read() { # the laptop pull's read ACL on the owner-only trees (RUNBOOK "Pull copy" step 6), once that user exists
+grant_read() { # <user> <tree>...: a read ACL for user on each owner-only tree under /srv/qhhoj, once that user exists
   # `install -d -m 2700` above resets the group bits of an existing directory, and with them the ACL mask that the
   # entry needs: re-apply it on every run (-R also covers files made before the default entry was set).
-  id qhhoj-pull >/dev/null 2>&1 || return 0
-  command -v setfacl >/dev/null || die "the qhhoj-pull user exists but setfacl is missing: apt install acl"
-  setfacl -R -m u:qhhoj-pull:rX -m d:u:qhhoj-pull:rX "$ROOT/srv/qhhoj/contest-data" "$ROOT/srv/qhhoj/user-data"
+  local user="$1" tree paths=()
+  shift
+  id "$user" >/dev/null 2>&1 || return 0
+  command -v setfacl >/dev/null || die "the $user user exists but setfacl is missing: apt install acl"
+  for tree in "$@"; do paths+=("$ROOT/srv/qhhoj/$tree"); done
+  setfacl -R -m "u:$user:rX" -m "d:u:$user:rX" "${paths[@]}"
+}
+
+grant_reads() {
+  grant_read qhhoj-judge problem-data # the local judge (judge-v2 DEPLOY.md); remote judges read the NFS export
+  grant_read qhhoj-pull problem-data contest-data user-data # the laptop pull (RUNBOOK "Pull copy" step 6)
 }
 
 install_files() {
   install -d "$ROOT/usr/local/sbin" "$ROOT/etc/containers/systemd" "$ROOT/etc/systemd/system" "$ROOT/etc/sudoers.d" "$ROOT/etc/nginx/snippets" "$ROOT/etc/nginx/conf.d"
   install -m 755 "$here/qhhoj-deploy" "$ROOT/usr/local/sbin/qhhoj-deploy"
+  install -m 755 "$here/qhhoj-deploy-serve" "$ROOT$DEPLOY_SHELL"
   install -m 644 "$here"/quadlet/*.container "$ROOT/etc/containers/systemd/"
   install -m 644 "$here/quadlet/qhhoj.target" "$ROOT/etc/systemd/system/qhhoj.target"
   # Backups: the timer is enabled by hand once /etc/qhhoj/backup.env and the repositories exist (RUNBOOK "Backups").
@@ -71,6 +81,7 @@ install_files() {
 ensure_users
 ensure_dirs
 install_files
+usermod --shell "$DEPLOY_SHELL" deploy # once the dispatcher is installed (an existing user keeps its old shell until then)
 systemctl daemon-reload
 systemctl enable qhhoj.target
 echo "installed. Next: RUNBOOK \"First install\" steps for env, TLS, nginx site, GHCR auth."

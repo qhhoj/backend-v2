@@ -9,11 +9,18 @@ printf '#!/usr/bin/env bash\ntrue\n' > "$bin/sleep"; chmod +x "$bin/sleep"
 git -C "$repo" init -q; git -C "$repo" -c user.email=t@t -c user.name=t -c commit.gpgSign=false commit -q --allow-empty -m one
 git -C "$repo" -c tag.gpgSign=false tag v2.0.0; git -C "$repo" -c user.email=t@t -c user.name=t -c commit.gpgSign=false commit -q --allow-empty -m two
 git -C "$repo" -c tag.gpgSign=false tag v2.10.0; head="$(git -C "$repo" rev-parse HEAD)"
+git -C "$repo" update-ref refs/remotes/origin/main HEAD
 resolve() { (cd "$repo" && bash "$here/resolve-ref.sh" "$1"); }
 [ "$(resolve '')" = "$(printf 'sha=%s\ntag=v2.10.0' "$head")" ] || fail "empty ref = highest version tag"
 [ "$(resolve v2.0.0 | sed -n 's/^tag=//p')" = v2.0.0 ] || fail "tag ref keeps the tag"
 [ "$(resolve HEAD | sed -n 's/^tag=//p')" = "sha-${head:0:12}" ] || fail "non-tag ref = sha-<12>"
 (cd "$repo" && bash "$here/resolve-ref.sh" 'nope;rm -rf /' >/dev/null 2>&1) && fail "unknown ref must fail"
+git -C "$repo" checkout -q -b side; git -C "$repo" -c user.email=t@t -c user.name=t -c commit.gpgSign=false commit -q --allow-empty -m side
+git -C "$repo" -c tag.gpgSign=false tag v9.0.0; git -C "$repo" checkout -q -
+resolve side >/dev/null 2>&1 && fail "a branch off origin/main must fail"
+resolve v9.0.0 >/dev/null 2>&1 && fail "a version tag off origin/main must fail"
+resolve '' >/dev/null 2>&1 && fail "the highest tag off origin/main must fail, not deploy"
+git -C "$repo" tag -d v9.0.0 >/dev/null
 
 gh_answers() { printf '%s\n' "$@" > "$bin/answers"; cat > "$bin/gh" <<EOT
 #!/usr/bin/env bash
