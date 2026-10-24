@@ -1,4 +1,6 @@
 import type { AssignmentRef } from '@libs/judge-proto';
+import { TIMER_GRACE_CLOCK } from './grace-clock';
+import type { GraceClock } from './grace-clock';
 
 /** A run whose judge went away; it waits `graceMs` for the judge to resume it. */
 export interface GraceEntry {
@@ -9,7 +11,7 @@ export interface GraceEntry {
 }
 
 interface Held extends GraceEntry {
-  timer: NodeJS.Timeout;
+  cancel: () => void;
 }
 
 const entryOf = ({ ref, judgeName, abortRequested }: Held): GraceEntry => ({
@@ -25,6 +27,7 @@ export class GraceRegistry {
   constructor(
     private readonly graceMs: number,
     private readonly onExpire: (entry: GraceEntry) => void,
+    private readonly clock: GraceClock = TIMER_GRACE_CLOCK,
   ) {}
 
   /** `abortRequested`: the api aborted the run before the bridge noticed the judge was gone; an abort already recorded for this generation is kept. */
@@ -33,15 +36,14 @@ export class GraceRegistry {
     const abortKept =
       earlier?.ref.generation === ref.generation && earlier.abortRequested;
     this.remove(ref.submissionId);
-    const timer = setTimeout(
-      () => this.expireNow(ref.submissionId),
-      this.graceMs,
+    const cancel = this.clock.arm(ref, this.graceMs, () =>
+      this.expireNow(ref.submissionId),
     );
     this.held.set(ref.submissionId, {
       ref,
       judgeName,
       abortRequested: abortRequested || abortKept,
-      timer,
+      cancel,
     });
   }
 
@@ -97,7 +99,7 @@ export class GraceRegistry {
   private remove(submissionId: string): void {
     const entry = this.held.get(submissionId);
     if (!entry) return;
-    clearTimeout(entry.timer);
+    entry.cancel();
     this.held.delete(submissionId);
   }
 }

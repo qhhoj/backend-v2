@@ -29,6 +29,7 @@ export class CommandsService {
   private reading: Promise<void> | null = null;
   private running = false;
   private wake: (() => void) | null = null;
+  private lastApplied = '0-0';
 
   constructor(
     @Inject(ENV) private readonly env: Env,
@@ -50,9 +51,15 @@ export class CommandsService {
     return latest?.[0] ?? '0-0';
   }
 
+  /** The id of the last stream entry applied (or skipped as malformed or failed); entries up to `start`'s id count as applied. The conformance runner waits on it, so an `api` step ends once the bridge acted on it. */
+  get appliedId(): string {
+    return this.lastApplied;
+  }
+
   /** A no-op while already reading (`BridgeService` starts it at boot). */
   start(fromId: string): void {
     if (this.reading) return;
+    this.lastApplied = fromId;
     this.running = true;
     this.reading = this.readFrom(fromId);
   }
@@ -106,6 +113,7 @@ export class CommandsService {
           for (const [id, fields] of entries) {
             lastId = id;
             await this.applyEntry(fields);
+            this.lastApplied = id;
           }
         retryDelay = RETRY_DELAY_MS;
       } catch (error) {

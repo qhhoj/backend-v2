@@ -1,4 +1,6 @@
 import type { Socket } from 'node:net';
+import { TIMER_HANDSHAKE_CLOCK } from './handshake-clock';
+import type { HandshakeClock } from './handshake-clock';
 
 interface Tracked {
   socket: Socket;
@@ -7,8 +9,8 @@ interface Tracked {
   judge: string | null;
   /** Authenticated sessions still open on this socket, by judge. */
   open: Map<string, number>;
-  /** The deadline, or the delayed destroy once retired. */
-  timer: NodeJS.Timeout | null;
+  /** Cancels the deadline, or the delayed destroy once retired. */
+  cancelTimer: (() => void) | null;
   isRetiring: boolean;
   openedAt: number;
   /** Destroyed by the deadline rather than closed by either side. */
@@ -52,6 +54,7 @@ export class ConnectionGuard {
     private readonly onUnauthenticatedClose: (
       closed: UnauthenticatedClose,
     ) => void = () => undefined,
+    private readonly clock: HandshakeClock = TIMER_HANDSHAKE_CLOCK,
   ) {}
 
   /** False: refuse the socket (the caller destroys it). */
@@ -68,7 +71,7 @@ export class ConnectionGuard {
       address,
       judge: null,
       open: new Map(),
-      timer: null,
+      cancelTimer: null,
       isRetiring: false,
       openedAt: Date.now(),
       timedOut: false,
@@ -131,25 +134,30 @@ export class ConnectionGuard {
 
   private armDeadline(tracked: Tracked): void {
     this.clearTimer(tracked);
-    tracked.timer = setTimeout(() => {
-      tracked.timedOut = true;
-      tracked.socket.destroy();
-    }, this.limits.deadlineMs);
+    tracked.cancelTimer = this.clock.arm(
+      { peer: peerOfSocket(tracked.socket) },
+      this.limits.deadlineMs,
+      () => {
+        tracked.timedOut = true;
+        tracked.socket.destroy();
+      },
+    );
   }
 
   private retire(tracked: Tracked): void {
     if (tracked.isRetiring) return;
     tracked.isRetiring = true;
     this.clearTimer(tracked);
-    tracked.timer = setTimeout(
+    const timer = setTimeout(
       () => tracked.socket.destroy(),
       this.limits.flushMs,
     );
+    tracked.cancelTimer = () => clearTimeout(timer);
   }
 
   private clearTimer(tracked: Tracked): void {
-    if (tracked.timer) clearTimeout(tracked.timer);
-    tracked.timer = null;
+    tracked.cancelTimer?.();
+    tracked.cancelTimer = null;
   }
 
   private forget(peer: string, tracked: Tracked): void {

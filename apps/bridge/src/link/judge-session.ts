@@ -42,6 +42,7 @@ import {
 } from './messages';
 import type { DecodedJudgeMessage, FinalReport, HelloInfo } from './messages';
 import { assignOf, limitsOf } from './outbound';
+import type { HandshakeClock } from './handshake-clock';
 import { flood, ProtocolError, seqGap } from './protocol-error';
 
 /** Legacy: the reported ping is the mean of the last 6 round trips. */
@@ -89,6 +90,7 @@ export interface SessionServices {
   judges: JudgesRepository;
   timings: BridgeTimings;
   acceptClock: AcceptClock;
+  handshakeClock: HandshakeClock;
 }
 
 /** Who opened the session, as the key check found it. */
@@ -141,7 +143,10 @@ export class JudgeSession implements DispatchTarget {
   private readonly aborted = new Set<string>();
   /** `windingKey`s of runs whose Final this session stored (or found stored) and acked, oldest first. */
   private readonly ended = new Set<string>();
-  private readonly helloTimer: NodeJS.Timeout;
+  /** Cancels the Hello deadline. */
+  private readonly cancelHelloDeadline: () => void;
+  /** Judge messages handled so far (Hello and pongs included). */
+  private handledCount = 0;
   private pingTimer?: NodeJS.Timeout;
   /** Why the stream ended, for the disconnect line: the bridge's reason, or the stream error. */
   private closeReason: string | null = null;
@@ -163,9 +168,10 @@ export class JudgeSession implements DispatchTarget {
     this.finished = new Promise((resolve) =>
       call.once('close', () => void this.onClose().finally(resolve)),
     );
-    this.helloTimer = setTimeout(
-      () => this.end(status.DEADLINE_EXCEEDED, 'no Hello in time'),
+    this.cancelHelloDeadline = services.handshakeClock.arm(
+      { judge: this.name },
       services.timings.handshakeMs,
+      () => this.end(status.DEADLINE_EXCEEDED, 'no Hello in time'),
     );
   }
 
@@ -220,6 +226,11 @@ export class JudgeSession implements DispatchTarget {
     const reason = 'replaced by a newer session of this judge';
     this.send({ $case: 'disconnect', disconnect: { forced: false, reason } });
     this.end(status.ABORTED, reason);
+  }
+
+  /** Judge messages this session has finished handling, in arrival order (one at a time): the conformance runner compares it with what its judge sent before it acts on the world. */
+  get handled(): number {
+    return this.handledCount;
   }
 
   /** Hello was read: from here on the dispatcher decides about replacing this session. */
@@ -277,6 +288,8 @@ export class JudgeSession implements DispatchTarget {
       this.logger.error(
         `Judge ${this.name}: handling ${messageContext(decoded.message.body)} failed: ${(error as Error).message}`,
       );
+    } finally {
+      this.handledCount += 1;
     }
   }
 
@@ -309,7 +322,7 @@ export class JudgeSession implements DispatchTarget {
   }
 
   private async onHello(info: HelloInfo): Promise<void> {
-    clearTimeout(this.helloTimer);
+    this.cancelHelloDeadline();
     this.helloed = true;
     this.slots = info.slots;
     this.executors = new Set(info.runtimes.map((runtime) => runtime.language));
@@ -663,7 +676,7 @@ export class JudgeSession implements DispatchTarget {
 
   private async onClose(): Promise<void> {
     this.isClosed = true;
-    clearTimeout(this.helloTimer);
+    this.cancelHelloDeadline();
     clearInterval(this.pingTimer);
     for (const cancel of this.acceptTimers.values()) cancel();
     this.logger.log(

@@ -183,6 +183,19 @@ describe('DispatcherService (with Mongo)', () => {
       jest.restoreAllMocks();
     });
     afterAll(() => redis.quit());
+    /** The reader's blocked XREAD (on this test's Redis db) returns now as if its block had run out, so its next read meets the key as it stands at once, not up to `READ_BLOCK_MS` later; a reader not blocked yet reads the key on its next call anyway. */
+    const endBlockingRead = async () => {
+      const clients = (await redis.client('LIST')) as string;
+      const reader = clients
+        .split('\n')
+        .find(
+          (line) =>
+            line.includes(` db=${redis.options.db ?? 0} `) &&
+            line.includes(' cmd=xread'),
+        );
+      const id = reader?.match(/^id=(\d+)/)?.[1];
+      if (id) await redis.client('UNBLOCK', id, 'TIMEOUT');
+    };
 
     it('applies judge, abort, disable and disconnect commands, skipping a malformed entry with a warning', async () => {
       commands.start(await commands.position());
@@ -239,11 +252,20 @@ describe('DispatcherService (with Mongo)', () => {
       await waitUntil(() => judge.isDisabled, 8000);
       await redis.del(BRIDGE_COMMANDS_STREAM);
       await redis.set(BRIDGE_COMMANDS_STREAM, 'not a stream');
+      // the next backoff is ten minutes: stop() returns within the test only if it cuts the wait short
+      const backoff = commands as unknown as {
+        sleep: (ms: number) => Promise<void>;
+      };
+      const sleep = backoff.sleep.bind(commands);
+      const longBackoff = jest
+        .spyOn(backoff, 'sleep')
+        .mockImplementation(() => sleep(10 * 60_000));
       const before = errors.mock.calls.length;
+      await endBlockingRead();
       await waitUntil(() => errors.mock.calls.length > before, 8000);
-      const started = Date.now();
+      await waitUntil(() => longBackoff.mock.calls.length === 1);
       await commands.stop();
-      expect(Date.now() - started).toBeLessThan(500);
+      longBackoff.mockRestore();
       judge.isClosed = true;
     });
   });

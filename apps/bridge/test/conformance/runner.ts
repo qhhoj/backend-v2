@@ -5,6 +5,7 @@ import type { AssignmentRef } from '@libs/judge-proto';
 import { expand } from '@libs/judge-proto/conformance/expand';
 import { kindOf } from '@libs/judge-proto/conformance/scenario';
 import type {
+  ApiAction,
   JsonObject,
   Scenario,
   Step,
@@ -15,9 +16,10 @@ import { waitUntil } from '@libs/common/testing';
 import { withinTimeout } from '@libs/judging';
 import { FakeJudge } from '../fake-judge';
 import type { BridgeTimings } from '../../src/bridge-timings';
+import { JudgeLinkServer } from '../../src/link/judge-link.server';
 import { messageRateClock, systemNow } from '../../src/link/message-rate';
 import type { BridgeTest } from '../setup';
-import type { ManualAcceptClock } from './manual-accept-clock';
+import type { ScenarioClocks } from './scenario-clocks';
 import type { ScenarioWorld } from './world';
 
 /** Every wait is bounded by this, so a failing scenario fails fast with the step it stopped at. */
@@ -55,18 +57,17 @@ const shown = (message: BridgeMessage): string =>
 export class ScenarioRunner {
   /** Scenario judge name -> its current session. */
   private readonly judges = new Map<string, FakeJudge>();
-  /** The scenario's clock for the flood cap: it moves only by `wait` and `quiet` steps, so a `repeat` burst is one instant on any host. */
-  private scriptedNow = Date.now();
 
   constructor(
     private readonly bridge: BridgeTest,
     private readonly world: ScenarioWorld,
     private readonly scenario: Scenario,
-    private readonly acceptClock: ManualAcceptClock,
+    private readonly clocks: ScenarioClocks,
   ) {}
 
   async run(): Promise<void> {
-    const scriptedNow = () => this.scriptedNow;
+    // one closure per run: the identity check below only restores this run's clock
+    const scriptedNow = () => this.clocks.floodNow();
     messageRateClock.now = scriptedNow;
     try {
       await this.steps();
@@ -125,12 +126,34 @@ export class ScenarioRunner {
     if ('closed' in step) return this.closed(step.closed);
     if ('drop' in step) return this.drop(step.drop.judge);
     if ('fetch' in step) return this.fetch(step.fetch);
-    if ('api' in step) return this.world.api(step.api);
-    if ('wait' in step) {
-      this.scriptedNow += step.wait.ms;
-      return void (await sleep(step.wait.ms));
-    }
+    if ('api' in step) return this.api(step.api);
+    if ('wait' in step) return this.wait(step.wait.ms);
     await this.bridge.restart(timingsOf(this.scenario));
+  }
+
+  /** The bridge has handled what the judges sent before the api acts, so the transcript's order holds across the two channels (Draining has no reply to wait for); the world waits until the bridge applied the command. */
+  private async api(action: ApiAction): Promise<void> {
+    await this.settleJudges();
+    await this.world.api(action);
+  }
+
+  private async wait(ms: number): Promise<void> {
+    await this.settleJudges();
+    this.clocks.pass(ms);
+    await sleep(ms);
+  }
+
+  /** Until each open session's bridge side has handled every message its judge sent (or ended). */
+  private async settleJudges(): Promise<void> {
+    const server = this.bridge.module.get(JudgeLinkServer);
+    for (const [name, fake] of this.judges)
+      await waitUntil(() => {
+        if (fake.isClosed || !fake.sessionId) return true;
+        const session = server.sessionById(fake.sessionId);
+        return !session || session.isClosed || session.handled >= fake.sent;
+      }, STEP_TIMEOUT_MS).catch(() => {
+        throw new Error(`the bridge did not handle what ${name} sent`);
+      });
   }
 
   /** The judge row a scenario name authenticates as. */
@@ -198,7 +221,7 @@ export class ScenarioRunner {
     to: string;
     message: JsonObject;
   }): Promise<void> {
-    this.timeOutAcceptOf(message);
+    this.clocks.beforeExpect(this.expanded(message));
     const seen = await this.nextMessage(this.judge(to));
     if (seen.body?.$case === 'welcome') {
       this.world.bindings.set(`session:${to}`, seen.body.welcome.sessionId);
@@ -209,14 +232,6 @@ export class ScenarioRunner {
       BridgeMessage.toJSON(seen),
     );
     if (differs) throw new Error(`${differs} in ${shown(seen)}`);
-  }
-
-  /** An expected Abort of a run whose accept window is still armed is that window's timeout: the bridge armed it when it sent the Assign, and the runner fires it now, so the transcript, not host timing, decides when an Assign times out. */
-  private timeOutAcceptOf(message: JsonObject): void {
-    if (!('abort' in message)) return;
-    const { body } = BridgeMessage.fromJSON(this.expanded(message));
-    if (body?.$case === 'abort' && body.abort.ref)
-      this.acceptClock.fire(body.abort.ref);
   }
 
   /** The next non-ping message. grpc-js may emit a stream's status before the messages that preceded it, so a closed stream is given `POLL_MS` to deliver them. */
@@ -231,7 +246,7 @@ export class ScenarioRunner {
   }
 
   private async quiet({ to, ms }: { to: string; ms: number }): Promise<void> {
-    this.scriptedNow += ms;
+    this.clocks.pass(ms);
     await sleep(ms);
     const [unexpected] = this.judge(to).pending();
     if (unexpected)
@@ -246,6 +261,7 @@ export class ScenarioRunner {
     status: string;
   }): Promise<void> {
     const fake = this.judge(judge);
+    await this.clocks.beforeClosed(this.identityOf(judge), expected, fake);
     const ended: StatusObject = await within(
       fake.closed,
       STEP_TIMEOUT_MS,
@@ -260,12 +276,17 @@ export class ScenarioRunner {
     const [unread] = fake.pending();
     if (unread) throw new Error(`unread before the end: ${shown(unread)}`);
     await fake.close();
-    this.judges.delete(judge);
+    await this.gone(judge);
   }
 
-  /** The judge process dies, and the step ends once the bridge has noticed (it marks the row offline right after holding the runs in grace), so a following `api` step meets a judge that is away. */
+  /** The judge process dies. */
   private async drop(judge: string): Promise<void> {
     await within(this.judge(judge).close(), STEP_TIMEOUT_MS, 'dropped');
+    await this.gone(judge);
+  }
+
+  /** `judge`'s session ended; the step ends once the bridge has noticed (it marks the row offline right after holding the runs in grace), so a following `api` or `wait` step meets a judge that is away and runs that wait in grace. */
+  private async gone(judge: string): Promise<void> {
     this.judges.delete(judge);
     const name = this.identityOf(judge);
     // another open session of the same judge keeps its row online

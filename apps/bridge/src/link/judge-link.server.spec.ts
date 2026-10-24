@@ -6,6 +6,7 @@ import { JudgeMessage } from '@libs/judge-proto';
 import type { BridgeMessage } from '@libs/judge-proto';
 import { DEFAULT_BRIDGE_TIMINGS } from '../bridge-timings';
 import { TIMER_ACCEPT_CLOCK } from './accept-clock';
+import { TIMER_HANDSHAKE_CLOCK } from './handshake-clock';
 import { JudgeLinkServer } from './judge-link.server';
 import { MAX_FAILED_AUTH_PER_ADDRESS } from './link-limits';
 
@@ -69,6 +70,7 @@ function setup(authenticate: jest.Mock) {
     {} as never,
     DEFAULT_BRIDGE_TIMINGS,
     TIMER_ACCEPT_CLOCK,
+    TIMER_HANDSHAKE_CLOCK,
     { authenticate, ...welcomeOnly.judges } as never,
     welcomeOnly.dispatch as never,
     {} as never,

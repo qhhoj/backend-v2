@@ -21,6 +21,8 @@ import { ACCEPT_CLOCK } from './accept-clock';
 import type { AcceptClock } from './accept-clock';
 import { AuthFailures } from './auth-failures';
 import { ConnectionGuard, peerOfCall } from './connection-guard';
+import { HANDSHAKE_CLOCK } from './handshake-clock';
+import type { HandshakeClock } from './handshake-clock';
 import type { UnauthenticatedClose } from './connection-guard';
 import { addressOf, authenticateCall, loggableNameOf } from './judge-auth';
 import { JudgeSession } from './judge-session';
@@ -104,13 +106,21 @@ export class JudgeLinkServer {
     @Inject(ENV) private readonly env: Env,
     @Inject(BRIDGE_TIMINGS) timings: BridgeTimings,
     @Inject(ACCEPT_CLOCK) acceptClock: AcceptClock,
+    @Inject(HANDSHAKE_CLOCK) handshakeClock: HandshakeClock,
     private readonly judges: JudgesRepository,
     private readonly dispatch: DispatcherService,
     runs: RunsService,
     private readonly sources: SourceFetch,
     private readonly transfers: GenerationTransfer,
   ) {
-    this.services = { dispatch, runs, judges, timings, acceptClock };
+    this.services = {
+      dispatch,
+      runs,
+      judges,
+      timings,
+      acceptClock,
+      handshakeClock,
+    };
     this.guard = new ConnectionGuard(
       {
         maxUnauthenticatedPerAddress: MAX_UNAUTHENTICATED_PER_ADDRESS,
@@ -118,6 +128,7 @@ export class JudgeLinkServer {
         flushMs: SOCKET_FLUSH_MS,
       },
       (closed) => this.unauthenticatedClosed(closed),
+      handshakeClock,
     );
   }
 
@@ -153,6 +164,11 @@ export class JudgeLinkServer {
     const waiting = [...this.held];
     this.held.clear();
     for (const socket of waiting) this.serve(socket);
+  }
+
+  /** The open session with this id (its Welcome's `sessionId`), for the conformance runner. */
+  sessionById(id: string): JudgeSession | undefined {
+    return [...this.sessions].find((session) => session.id === id);
   }
 
   port(): number {

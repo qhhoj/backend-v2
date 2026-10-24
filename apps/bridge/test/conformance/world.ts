@@ -3,8 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sha256 } from '@libs/auth';
 import { SUBMISSION_PRIORITY } from '@libs/database';
-import { requeueUpdate } from '@libs/judging';
+import { waitUntil } from '@libs/common/testing';
+import { BRIDGE_COMMANDS_STREAM, requeueUpdate } from '@libs/judging';
 import type { BridgeCommandsService } from '@libs/judging';
+import type Redis from 'ioredis';
 import type {
   ApiAction,
   Scenario,
@@ -19,6 +21,7 @@ import {
   seedSubmission,
 } from '../fixtures';
 import type { BridgeCatalog } from '../fixtures';
+import { CommandsService } from '../../src/dispatch/commands.service';
 import type { BridgeTest } from '../setup';
 
 const SOURCE = 'int main() {}';
@@ -34,6 +37,16 @@ type LanguageIds = Record<string, string>;
 const asJson = (value: unknown): Json =>
   JSON.parse(JSON.stringify(value)) as Json;
 
+/** How long the bridge may take to apply a published command. */
+const APPLY_TIMEOUT_MS = 5000;
+
+/** Stream ids (`<ms>-<seq>`) in order: negative when `left` is older. */
+const compareStreamIds = (left: string, right: string): number => {
+  const [leftMs, leftSeq] = left.split('-').map(Number);
+  const [rightMs, rightSeq] = right.split('-').map(Number);
+  return leftMs - rightMs || leftSeq - rightSeq;
+};
+
 /** The Mongo side of a scenario: what `setup` seeds, what an `api` step does (as the api would), and the `end_state` check. */
 export class ScenarioWorld {
   /** Placeholder (`s1`) -> submission id, and `session:<judge>` -> session id once its Welcome arrived. */
@@ -42,6 +55,7 @@ export class ScenarioWorld {
   constructor(
     private readonly bridge: BridgeTest,
     private readonly commands: BridgeCommandsService,
+    private readonly redis: Redis,
   ) {}
 
   async seed({ setup }: Scenario): Promise<void> {
@@ -128,8 +142,32 @@ export class ScenarioWorld {
     return `/media/submission_file/${problem}/${catalog.user._id}/${name}`;
   }
 
-  /** What the api does for each action: Mongo first where it writes, then the command. */
+  /** What the api does for each action (Mongo first where it writes, then the command), done once the bridge applied the command: the transcript's next step meets its effect, however slow the host. */
   async api(action: ApiAction): Promise<void> {
+    await this.publish(action);
+    await this.applied();
+  }
+
+  /** Until the bridge's command reader has applied the newest stream entry. */
+  private async applied(): Promise<void> {
+    const [newest] = await this.redis.xrevrange(
+      BRIDGE_COMMANDS_STREAM,
+      '+',
+      '-',
+      'COUNT',
+      1,
+    );
+    if (!newest) return;
+    const reader = this.bridge.module.get(CommandsService);
+    await waitUntil(
+      () => compareStreamIds(reader.appliedId, newest[0]) >= 0,
+      APPLY_TIMEOUT_MS,
+    ).catch(() => {
+      throw new Error(`the bridge did not apply command ${newest[0]}`);
+    });
+  }
+
+  private async publish(action: ApiAction): Promise<void> {
     const id = (name: string): string => {
       const bound = this.bindings.get(name);
       if (bound === undefined) throw new Error(`unbound api name ${name}`);
