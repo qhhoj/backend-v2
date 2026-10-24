@@ -29,6 +29,16 @@ const sessionsOf = (bridge: BridgeTest, name: string): JudgeSession[] =>
       JudgeLinkServer,
     ).sessions,
   ].filter((session) => session.name === name);
+/** Sockets the link server's guard holds an open session of `name` on (private state: a session that passed its key check marks its socket). */
+const markedSocketsOf = (bridge: BridgeTest, name: string): number =>
+  [
+    ...bridge.module
+      .get<
+        JudgeLinkServer,
+        { guard: { sockets: Map<string, { open: Map<string, number> }> } }
+      >(JudgeLinkServer)
+      .guard.sockets.values(),
+  ].filter((socket) => socket.open.has(name)).length;
 /** The bridge authenticated a session of `name` that has not said Hello. */
 const handshakeSeen = (bridge: BridgeTest, name: string) =>
   waitUntil(() =>
@@ -266,7 +276,7 @@ describe('Judge link over TLS', () => {
     });
     expect(secure.sessionId).not.toBe('');
     // a session marks its socket only if grpc-js reports the TLS peer as the socket does
-    expect(await secure.connectionLost(1000)).toBe(false);
+    expect(markedSocketsOf(bridge, 'j1')).toBe(1);
     expect(secure.isClosed).toBe(false);
     await secure.close();
     const plain = FakeJudge.open(bridge.judgePort(), judge('j1'));

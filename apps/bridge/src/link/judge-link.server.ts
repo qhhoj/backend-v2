@@ -177,12 +177,13 @@ export class JudgeLinkServer {
     this.grpc.forceShutdown();
   }
 
-  /** Blocked, key rotated or force-disconnected (after the dispatcher told its registered session): every session of the judge ends, those still in their handshake too, a key check already under way is refused, and its sockets close once the statuses are out. */
+  /** Blocked, key rotated or force-disconnected (after the dispatcher told its registered session): every session of the judge ends, those still in their handshake too, a key check already under way is refused, and its sockets close once the statuses are out. A welcomed session the dispatcher has not registered yet (its Welcome is out, its online write pending) still gets the forced Disconnect first. */
   revoke(name: string): void {
     this.revision += 1;
     this.revokedAt.set(name, this.revision);
     for (const session of this.sessions)
-      if (session.name === name) session.end(status.PERMISSION_DENIED, REVOKED);
+      if (session.name === name)
+        session.disconnect({ isForced: true, reason: REVOKED });
     this.guard.closeJudge(name);
   }
 
@@ -203,7 +204,8 @@ export class JudgeLinkServer {
   private async openSession(call: SessionCall): Promise<void> {
     const peer = peerOfCall(call.getPeer());
     const identity = await this.identify(call, peer);
-    if (!identity) return;
+    // a stream that closed during the key check never emits 'close' again: a session on it would never finish, and close() would wait for it
+    if (!identity || call.closed) return;
     const session = new JudgeSession(call, identity, this.services);
     this.guard.sessionOpened(peer, session.name);
     this.endOlderHandshakes(session);

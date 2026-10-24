@@ -126,6 +126,8 @@ export class JudgeSession implements DispatchTarget {
   build = '';
   private readonly logger = new Logger(JudgeSession.name);
   private helloed = false;
+  /** The Welcome went out: from here on a Disconnect may precede the end of the stream. */
+  private welcomed = false;
   private readonly connectedAt = new Date();
   private lastReceivedAt = Date.now();
   private isHandling = false;
@@ -205,10 +207,12 @@ export class JudgeSession implements DispatchTarget {
     isForced: boolean;
     reason: string;
   }): void {
-    this.send({
-      $case: 'disconnect',
-      disconnect: { forced: isForced, reason },
-    });
+    // before its Welcome a judge learns only the status
+    if (this.welcomed)
+      this.send({
+        $case: 'disconnect',
+        disconnect: { forced: isForced, reason },
+      });
     if (isForced) this.end(status.PERMISSION_DENIED, reason);
   }
 
@@ -255,7 +259,7 @@ export class JudgeSession implements DispatchTarget {
     });
   }
 
-  /** Counted on arrival, before any is handled, so the bound does not depend on Mongo latency. */
+  /** Counted as each message is read, before it is handled. The stream is paused while one is handled, so a judge sending faster than the bridge handles is held back by HTTP/2 flow control and may never reach the cap. */
   private withinRate(): boolean {
     if (this.rate.admit()) return true;
     const error = flood();
@@ -351,6 +355,7 @@ export class JudgeSession implements DispatchTarget {
     const plan = await dispatch.resume(this, info.inFlight);
     // replaced while resuming: the newer session owns the admin row
     if (this.isClosed) return;
+    this.welcomed = true;
     this.send({
       $case: 'welcome',
       welcome: {

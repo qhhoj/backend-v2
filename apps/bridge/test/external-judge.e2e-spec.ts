@@ -1,6 +1,7 @@
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { ExternalRun } from '@libs/database';
+import { ExternalRun, IN_FLIGHT_STATUSES } from '@libs/database';
+import type { Submission } from '@libs/database';
 import { EXTERNAL_JUDGE_NAME } from '@libs/judging';
 import { SettingsService } from '@libs/settings';
 import { CommandsService } from '../src/dispatch/commands.service';
@@ -117,7 +118,7 @@ describe('External judge adapter (bridge)', () => {
     });
   const submitTo = async (
     problem: { _id: string },
-    fields: { language?: string } = {},
+    fields: Partial<Submission> = {},
   ) =>
     (await seedSubmission(bridge, catalog, { problem: problem._id, ...fields }))
       ._id;
@@ -135,6 +136,13 @@ describe('External judge adapter (bridge)', () => {
     pcd.script = [[200, done({ statusCanonical: 'AC' })]];
     pcd.submitStatus = 200;
     await settings().set('externalJudge.maxInFlight', 5, null);
+  });
+  // a test that failed midway leaves its rows queued or held: they would take later tests' maxInFlight and submits
+  afterEach(async () => {
+    await bridge.submissions.updateMany(
+      { status: { $in: ['QU', ...IN_FLIGHT_STATUSES] } },
+      { status: 'AB' },
+    );
   });
   afterAll(async () => {
     await bridge.teardown();
@@ -325,17 +333,13 @@ describe('External judge adapter (bridge)', () => {
   });
 
   it('requeues once a run the bridge held with no remote id (restart between claim and submit), then submits it', async () => {
-    const id = await submitTo(await externalProblem());
-    // as a bridge that died right after its claim leaves it
-    await bridge.submissions.updateOne(
-      { _id: id, status: 'QU' },
-      {
-        status: 'P',
-        judgedOn: EXTERNAL_JUDGE_NAME,
-        judgeGeneration: 1,
-        judgeSeq: 0,
-      },
-    );
+    // seeded as a bridge that died right after its claim leaves it: a queued row would be claimed by the running adapter first
+    const id = await submitTo(await externalProblem(), {
+      status: 'P',
+      judgedOn: EXTERNAL_JUDGE_NAME,
+      judgeGeneration: 1,
+      judgeSeq: 0,
+    });
     await finished(id);
     expect(await stored(id)).toMatchObject({
       status: 'D',
