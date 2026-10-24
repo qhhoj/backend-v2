@@ -160,7 +160,7 @@ _Avoid_: Exempt, free organization
 
 **Status codes**:
 The stored form of a Status or of a special row. `QU` queued, `P` pending (handed to a Judge, not yet grading), `G` grading, `D` done; `IE` internal error, `CE` compile error, `AB` aborted; `PD` held until final judging (see FSO). `SC` is not a Status: it is a short-circuited test, skipped because an earlier test of its batch failed. `QU`, `P` and `G` are unfinished; `IE` and `PD` do not count against a contest's `maxSubmissions`.
-_Avoid_: Verdict codes (the Verdict of a Judging is `result`: AC, WA, TLE...)
+See Verdict codes for the per-test codes; the Verdict of a Judging is `result`.
 
 **FSO**:
 Final submission only: a contest format where Submissions are stored as `PD` while the contest runs and judged once after it ends (Final judging).
@@ -197,8 +197,8 @@ Reloading a whole in-memory snapshot from Mongo on a timer, in case the change s
 _Avoid_: Refresh, reload
 
 **Data version**:
-A counter on a problem that rises on every change of its test data. A write is a compare-and-set on it, and a package or Test generation records the version it was built for.
-_Avoid_: Revision (that is a change-log row)
+A counter on a problem that rises on every change of its test data. A write is a compare-and-set on it, and a package or Test generation records the version it was built for. The backend stamps it in the problem's `.data-version` file after the last file change; a Judging grades one data version and reports which it used.
+_Avoid_: Revision (that is a change-log row), Stamp (in prose)
 
 **Revision**:
 One row of the change log (`revisions`): which entity changed, who, and each field's before and after. Written by problem, contest, organization, flatpage and setting edits.
@@ -311,3 +311,66 @@ _Avoid_: Org admin (ambiguous), owner
 **Org Admin group**:
 The site permission group named "Org Admin", which grants rights over every organization. Distinct from an Organization admin.
 _Avoid_: Org admin (bare)
+
+## Judge and Bridge internals
+
+Words used inside judge-v2 and the Bridge. The wire protocol keeps its names; this section says which glossary term each one is. See judge-v2 `docs/architecture.md`.
+
+**Assignment**:
+The wire name of a Judging as the Judge sees it: `Assign`, `AssignmentRef {submission_id, generation}`. One Assignment is one Judging.
+_Avoid_: Run, job
+
+**Case**:
+The judge's word for a test, from init.yml. Case results and Case verdicts are test verdicts.
+_Avoid_: Test case (in judge code)
+
+**Batch**:
+A group of Cases scored together: it is scored by its weakest Case.
+_Avoid_: Subtask group (that is the problem-author word)
+
+**Pretest**:
+A Case that a pretest run grades instead of the full set (`pretest_test_cases`).
+_Avoid_: Sample
+
+**Short-circuit**:
+Skipping the remaining Cases once one is not accepted: the rest of a Batch always, and every later Case when the Assign asks for it. Skipped Cases get the verdict code SC.
+_Avoid_: Early exit
+
+**Box**:
+One isolate sandbox. A Slot owns two: the solution Box (compile and every Run of the contestant's program) and the Jury box.
+_Avoid_: Container, sandbox (for the unit)
+
+**Jury box**:
+The Box that runs problem-author programs: the checker, the interactor, a generator, a signature entry. The judge code also calls it the helper box.
+_Avoid_: Helper box, checker box
+
+**Jury**:
+The problem-author programs of a problem, as opposed to the contestant's program: checker, interactor, generator, signature entry.
+_Avoid_: Helper, manager, custom, bridged (these name kinds of Jury program, not the idea)
+
+**Session**:
+The Judge's one gRPC stream to the Bridge. The judge code also uses the word for an interactor and contestant process pair, which is a Pair in this glossary.
+_Avoid_: Connection
+
+**Pair**:
+A Jury process and a contestant process running together over a channel, as in an interactive problem (`grader::session`).
+_Avoid_: Session (for this meaning)
+
+**Generation**:
+The number of a Judging of a Submission. Test generation (Polygon `GenerateTests`) is a different thing and is always called Test generation.
+_Avoid_: Generation (bare, for test generation)
+
+**Room**:
+The disk space a Box's quota must allow for the files the judge puts in it plus what the Run may write.
+_Avoid_: Quota (that is the organization limit)
+
+**Meta**:
+isolate's per-Run measurement file: status, exit code or signal, CPU and wall time, memory counters. Every Run verdict is derived from it.
+_Avoid_: Report
+
+**Outbox**:
+The numbered messages an Assignment has sent and the Bridge has not yet acknowledged. After a reconnect the Judge replays it from the Bridge's last acknowledged number.
+_Avoid_: Queue
+
+**Verdict codes**:
+The per-test codes: AC accepted, WA wrong answer, TLE time limit exceeded, MLE memory limit exceeded, OLE output limit exceeded, IR invalid return (the program exited with a non-zero code), RTE runtime error (killed by a signal or an uncaught exception), SC short-circuited (skipped). See Status codes for a Judging's lifecycle codes.
