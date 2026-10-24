@@ -169,16 +169,25 @@ export class UserPagesRepository {
       .exec();
   }
 
-  /** Submissions per day in `timezone` since `since`, through `{user, date}`. */
+  /** Submissions per day in `timezone` since `since`, through `{user, date}`, leaving out `hiddenContests`. */
   async activity(
     userId: string,
     since: Date,
     timezone: string,
+    hiddenContests: readonly string[],
   ): Promise<Array<{ _id: string; count: number }>> {
     try {
       return await this.submissions
         .aggregate<{ _id: string; count: number }>([
-          { $match: { user: toUuid(userId), date: { $gte: since } } },
+          {
+            $match: {
+              user: toUuid(userId),
+              date: { $gte: since },
+              ...(hiddenContests.length && {
+                contest: { $nin: hiddenContests.map(toUuid) },
+              }),
+            },
+          },
           {
             $group: {
               _id: {

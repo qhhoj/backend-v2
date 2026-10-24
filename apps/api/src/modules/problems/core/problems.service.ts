@@ -28,6 +28,7 @@ import {
   ProblemListItemResponse,
   RandomProblemResponse,
 } from './dto/problem-list.response';
+import { contestHiding, withheld } from './contest-hiding';
 import { ProblemAccess } from './problem-access';
 import type { ContestScope } from './problem-access';
 import {
@@ -137,6 +138,10 @@ export class ProblemsService {
     principal: Principal | null,
     query: ProblemListQueryDto,
   ): Promise<Paginated<ProblemListItemResponse>> {
+    const hiding = contestHiding(
+      principal,
+      await this.currentContest.current(principal),
+    );
     const { items, total } = await this.repository.list(
       await this.listFilter(principal, query),
       listSort(query.sort),
@@ -157,11 +162,15 @@ export class ProblemsService {
     };
     return new Paginated(
       items.map((problem) =>
-        ProblemListItemResponse.from(
-          problem,
-          catalog,
-          statuses.get(problem._id) ?? null,
-          authorsOf(problem),
+        withheld(
+          hiding,
+          problem._id,
+          ProblemListItemResponse.from(
+            problem,
+            catalog,
+            statuses.get(problem._id) ?? null,
+            authorsOf(problem),
+          ),
         ),
       ),
       { page: query.page, pageSize: query.pageSize, total },
@@ -252,7 +261,7 @@ export class ProblemsService {
       canEdit &&
       (canPublishToMembers ||
         (principal !== null && hasPermission(principal, permission)));
-    return ProblemDetailResponse.from(problem, {
+    const response = ProblemDetailResponse.from(problem, {
       lang,
       canEdit,
       canPublishToMembers,
@@ -271,6 +280,7 @@ export class ProblemsService {
       licenses: this.licenses,
       languages: this.languages,
     });
+    return withheld(contestHiding(principal, current), problem._id, response);
   }
 
   async editorial(

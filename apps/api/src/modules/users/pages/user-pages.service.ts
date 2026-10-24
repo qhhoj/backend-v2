@@ -242,7 +242,12 @@ export class UserPagesService {
     if (cached)
       return { ...(JSON.parse(cached) as ActivityResponse), timezone };
     const since = new Date(now.getTime() - ACTIVITY_DAYS * 86_400_000);
-    const rows = await this.pages.activity(userId, since, zone);
+    const rows = await this.pages.activity(
+      userId,
+      since,
+      zone,
+      await this.hiddenContests(),
+    );
     const response: ActivityResponse = {
       timezone,
       since: since.toISOString(),
