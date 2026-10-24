@@ -61,7 +61,7 @@ export type RunClaimOutcome =
   | { request: AssignRequest; subject: SubmissionGradedJob }
   | { failed: SubmissionGradedJob };
 
-/** Back to the queue with partial results dropped; the `$set` of every requeue and reset-in-flight write. */
+/** Back to the queue with partial results dropped; the `$set` of every requeue and reset-in-flight write. A transient wait (`deferral`) starts over: the next attempt is a new one, and only a transient RETRY (which sets it again) keeps it. */
 export const REQUEUE_RESET = {
   status: 'QU',
   judgedOn: null,
@@ -71,6 +71,7 @@ export const REQUEUE_RESET = {
   batch: false,
   error: null,
   judgeSeq: 0,
+  deferral: null,
 } as const;
 
 /** The claimed row's fields, as `claimIfQueued` projects them. */

@@ -348,6 +348,41 @@ describe('Run writes (seq compare-and-set)', () => {
     });
   });
 
+  it('starts a transient wait over on a requeue for another cause: a later transient RETRY waits again instead of ending IE at once', async () => {
+    const run = await claimed();
+    await writes.accept(run.key(1));
+    const first = new Date();
+    const data = { reason: 'data', log: 'DataUnavailable' } as const;
+    await writes.defer(run.key(2), data, first);
+    const reclaim = async () => {
+      const [queued] = await repository.loadQueued([run.id]);
+      const claim = await repository.claimRun(queued, JUDGE);
+      if (!claim || !('request' in claim)) throw new Error('not claimed');
+      return { ref: claim.request.ref, judgeName: JUDGE, seq: 1 };
+    };
+    const lost = await reclaim();
+    await writes.accept(lost);
+    // its judge was lost and the grace expired
+    expect(await repository.requeueRun(lost.ref, JUDGE)).not.toBeNull();
+    expect(await stored(run.id)).toMatchObject({
+      status: 'QU',
+      deferral: null,
+    });
+    const [queued] = await repository.loadQueued([run.id]);
+    expect(queued).toMatchObject({ waitsForData: false, retryAfter: 0 });
+    const again = await reclaim();
+    await writes.accept(again);
+    const late = new Date(first.getTime() + FAST_TIMINGS.deferralWindowMs);
+    expect(await writes.defer({ ...again, seq: 2 }, data, late)).toMatchObject({
+      outcome: 'applied',
+      requeued: true,
+    });
+    expect(await stored(run.id)).toMatchObject({
+      status: 'QU',
+      deferral: { since: late, count: 1 },
+    });
+  });
+
   it('counts a row without retryCount (a migrated one) as zero RETRYs', async () => {
     const { id, key } = await claimed();
     await writes.accept(key(1));
