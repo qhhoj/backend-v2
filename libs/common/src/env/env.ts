@@ -7,6 +7,10 @@ export interface Env {
   redisUrl: string;
   encryptionKey: string;
   tokenSecret: string;
+  /** Keys and signs the Redis session records; at least 32 bytes, checked where sessions are built (api only). Rotating it ends every session. */
+  sessionSecret: string;
+  /** `SESSION_KEY_MIGRATION=1`: this boot of the api may rebind sessions stored under the old keys (one deploy only). */
+  sessionKeyMigration: boolean;
   siteUrl: string;
   /** Interface the api listens on: loopback in production (nginx is the edge), all interfaces otherwise (dev servers, containers). */
   host: string;
@@ -122,6 +126,8 @@ function readEnv(reader: EnvReader): Env {
     redisUrl: reader.required('REDIS_URL'),
     encryptionKey: reader.textOr('ENCRYPTION_KEY', ''),
     tokenSecret: reader.textOr('TOKEN_SECRET', ''),
+    sessionSecret: reader.textOr('SESSION_SECRET', ''),
+    sessionKeyMigration: reader.textOr('SESSION_KEY_MIGRATION', '') === '1',
     siteUrl: reader.required('SITE_URL'),
     host: reader.nonBlankOr('LISTEN_HOST', defaultListenHost(reader)),
     port: reader.portNumber('PORT', 3000, 1),

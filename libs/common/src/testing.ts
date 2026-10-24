@@ -49,6 +49,7 @@ export const TEST_ENV = {
   ENCRYPTION_KEY:
     '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
   TOKEN_SECRET: 'test-token-secret-test-token-secret',
+  SESSION_SECRET: 'test-session-secret-test-session-secret',
   SITE_URL: 'http://localhost:5173',
   COOKIE_SECURE: 'false',
   LOG_LEVEL: 'silent',

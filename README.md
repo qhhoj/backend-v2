@@ -16,7 +16,7 @@ Backend of the QHHOJ online judge: NestJS 11 (Fastify) + Mongoose 8 on MongoDB, 
 
 ```
 npm ci
-cp .env.example .env   # fill ENCRYPTION_KEY (32 bytes hex) and TOKEN_SECRET at least
+cp .env.example .env   # fill ENCRYPTION_KEY (32 bytes hex), TOKEN_SECRET and SESSION_SECRET at least
 set -a; . ./.env; set +a   # the apps read process.env; they do not load .env themselves
 ```
 

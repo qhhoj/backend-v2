@@ -26,6 +26,7 @@ MONGO_URL=mongodb://127.0.0.1:${SMOKE_MONGO_PORT:-27017}/qhhoj_smoke?replicaSet=
 REDIS_URL=redis://127.0.0.1:${SMOKE_REDIS_PORT:-6379}/14
 ENCRYPTION_KEY=$(openssl rand -hex 32)
 TOKEN_SECRET=$(openssl rand -hex 32)
+SESSION_SECRET=$(openssl rand -hex 32)
 SITE_URL=http://localhost
 LISTEN_HOST=127.0.0.1
 PORT=3999

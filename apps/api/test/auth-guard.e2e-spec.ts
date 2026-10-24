@@ -21,8 +21,8 @@ import {
   type ServiceClientPrincipal,
   ServiceOnly,
   SessionOnly,
-  sha256,
 } from '@libs/auth';
+import { SessionRecords } from '@libs/auth/session/session-record';
 import { IntegrationClient } from '@libs/database';
 import {
   ApiTest,
@@ -248,7 +248,9 @@ describe('AuthGuard', () => {
       .expect(401);
     expect(await api.sessions.get(id)).toBeNull();
     expect(
-      await api.app.get<Redis>(REDIS).exists(`session:${sha256(id)}`),
+      await api.app
+        .get<Redis>(REDIS)
+        .exists(new SessionRecords(TEST_ENV.SESSION_SECRET).keyFor(id)),
     ).toBe(0);
   });
   it('authenticates bearer tokens without csrf and rejects bad ones', async () => {
@@ -399,34 +401,6 @@ describe('AuthGuard', () => {
       .expect(200);
     expect(quiet.headers['set-cookie']).toBeUndefined();
   });
-  it('reads sessions stored without the newer fields', async () => {
-    const { id } = await api.sessions.create({
-      userId,
-      twoFaPassed: true,
-      passwordPwned: false,
-      impersonatorId: null,
-    });
-    const legacy = {
-      userId,
-      twoFaPassed: true,
-      passwordPwned: false,
-      impersonatorId: null,
-      csrf: 'legacy',
-    };
-    await api.app
-      .get<Redis>(REDIS)
-      .set(`session:${sha256(id)}`, JSON.stringify(legacy), 'KEEPTTL');
-    expect(await api.sessions.get(id)).toEqual({
-      ...legacy,
-      // the absolute lifetime starts at the first read
-      createdAt: expect.any(Number) as number,
-      cookieIssuedAt: 0,
-      pendingTotpSecret: null,
-      webauthnChallenge: null,
-      webauthnRegistrationChallenge: null,
-    });
-  });
-
   it('reports the first failing check: csrf, then two-factor, then the pwned password', async () => {
     const both = await login({ twoFaPassed: false, passwordPwned: true });
     await api
