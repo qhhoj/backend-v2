@@ -34,6 +34,9 @@ slots = 2
 box_base = ${JUDGE_BOX_BASE:-960}
 drain_timeout_s = 5
 control_dir = "$FULLSTACK_CONTROL_DIR"
+
+[isolate]
+allow_unbounded_disk = true   # dev only: no disk quota on this machine's box root
 TOML
 
 start judge "$RUN/judge.log" "$JUDGE_V2_BIN" --config "$dir/config.toml"
