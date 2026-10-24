@@ -105,6 +105,11 @@ export function errorCodeToJSON(object: ErrorCode): string {
   }
 }
 
+/**
+ * Per-case verdict codes: AC accepted, WA wrong answer, TLE time limit, MLE memory limit, OLE output limit,
+ * IR invalid return (non-zero exit code), RTE runtime error (a signal or an uncaught exception), SC skipped
+ * (short-circuited by an earlier case or batch).
+ */
 export enum Status {
   STATUS_UNSPECIFIED = 0,
   STATUS_AC = 1,
@@ -237,6 +242,13 @@ export function outcomeToJSON(object: Outcome): string {
   }
 }
 
+/**
+ * Why a judge could not run a submission. UNSUPPORTED is a refusal: the bridge does not offer the submission to
+ * that judge build again while the problem's data is the version it refused. DATA_UNAVAILABLE, RUNTIME_MISSING and
+ * SANDBOX_FAILURE are transient: the bridge requeues with a backoff, never counts them toward the RETRY cap, and
+ * ends the submission as an internal error only after a long bounded wait. UNSPECIFIED is a failure and counts
+ * toward the bridge's RETRY cap.
+ */
 export enum RetryReason {
   RETRY_REASON_UNSPECIFIED = 0,
   RETRY_REASON_DATA_UNAVAILABLE = 1,

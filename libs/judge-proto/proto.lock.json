@@ -1,8 +1,9 @@
 {
   "source": "judge-v2",
-  "tag": "proto-v1.4",
-  "commit": "7317fb211623ac655d213c012e7a88ea4b754688",
+  "tag": "proto-v1.4.1",
+  "commit": "77bf6645460e1aadd72692fb0ec9b9bc88b7e669",
   "files": {
+    "README.md": "d8e36b6d73f196ab1b1cfdcfc310b3224a973d5c4f7f0d96ec3a7bd01ab71009",
     "compat/v1.shape.json": "28c1f4c43b99b87f33623cce3577753e2cee4b720c2c0fec0f096d1d3614c9e7",
     "conformance/matcher-cases.json": "328c8a084d23185ba634c5223becb48edc3a5a3dab277489612548d6d5d19eea",
     "conformance/scenarios/01-hello-first.yaml": "99e5a7c0de109da57ded61bdb2bca5ec061914f4deba727769a97964bf241c62",
@@ -32,7 +33,10 @@
     "conformance/scenarios/24-abort-in-grace-resume.yaml": "50f56b015ecbf3a0bca68c2b4ea931995d444c2d1b03e8839c41b0694f5b441a",
     "conformance/scenarios/25-grace-expiry-requeues.yaml": "cfb9083c1182f215508f683bacb8cca0840d55e794fb7221d13925607d610ccd",
     "conformance/scenarios/26-second-loss-is-ie.yaml": "ef04e8f471662b0baa3322cb5a66e9c37dcef3f7ecc784a7020b0fcaf50afcf1",
-    "conformance/scenarios/27-retry-cap.yaml": "ad19586c1bb4e6b7727176e93b5c0303ac96479946281eb40bed3617c0c6bda6",
+    "conformance/scenarios/27-retry-cap.yaml": "dbbcc4abe4dd5fce41e2a6f3e401588558bd36640c0c5c3a01db1c8da454e69f",
+    "conformance/scenarios/27b-transient-retry.yaml": "49e65f8dc49a6bfea3d8691d79423e68aee5633644a9606d5ebf1330e920746c",
+    "conformance/scenarios/27c-transient-retry-window.yaml": "096d2412305dc220096c590dfa6b17bdb170f6a927c6774ce5e9c1ce59708717",
+    "conformance/scenarios/27d-retry-counters-apart.yaml": "53d7c63467817cb5ed6b24a22b17ec755e91f20104c61f4f8c89313615f94ed5",
     "conformance/scenarios/28-accept-timeout.yaml": "33779c28e060b1168ad736f460745085945c2572f1ce03cc804ace12ec1b5eb0",
     "conformance/scenarios/28b-accept-timeout-one-slot.yaml": "c9f4d793c9f88a2d71de56baaa1fd12c7d254b6cbbb6613900625780387c61b0",
     "conformance/scenarios/28c-late-accepted-after-timeout.yaml": "32945c1b4dc2aa403924609c3d403c10bf959a252b6efb4a5b27515fbaac4525",
@@ -106,7 +110,7 @@
     "golden/upload-chunk.json": "4da9d2efc41d4681fb55bddb8225616808efc9d207ec12af1a3a571edc92add4",
     "golden/upload-receipt.bin": "58c789bfd002eb5f27601d89c0371e8e1890c79e5ff0aa64be8423d422596d83",
     "golden/upload-receipt.json": "4a2973da7005c13a376e71eb5ae3c150ced60c9b03f4e0d50d06cf93d9ea97ea",
-    "qhhoj/judge/v1/judge.proto": "c7a0f616c940a9c9865ee82ff5431577acb1cfa19b440990c359211682c52204",
+    "qhhoj/judge/v1/judge.proto": "16dcf6776938cba8239cd01d2a262845d96d22e17ec11b15f48c4170c45b7ad4",
     "version.json": "9720348fe802a9256c1c516ef203ca68d7c3254f0fe2fa77664972c6f5ce7e72"
   }
 }
