@@ -173,7 +173,7 @@ export class DispatcherService {
     return GenerationsService.heldIds(this.sessions());
   }
 
-  /** The run ended (its Final was stored, or the row moved on): the slot is free. After a RETRY the judge may not take the row again until the next resync tick. */
+  /** The run ended (its Final was stored, or the row moved on): the slot is free, also one wound down meanwhile (judge-v2 sends no other Final for it). After a RETRY the judge may not take the row again until the next resync tick. */
   async runEnded(
     judge: DispatchTarget,
     ref: AssignmentRef,
@@ -181,6 +181,7 @@ export class DispatcherService {
   ): Promise<void> {
     if (judge.inFlight.get(ref.submissionId) === ref.generation)
       judge.inFlight.delete(ref.submissionId);
+    judge.winding.delete(windingKey(ref));
     this.abortsRequested.delete(windingKey(ref));
     this.clearDeadline(ref);
     if (retried) {
@@ -197,6 +198,8 @@ export class DispatcherService {
     judge: DispatchTarget,
     ref: AssignmentRef,
   ): Promise<void> {
+    // wound down meanwhile: whoever wound it requeued the row
+    if (judge.winding.delete(windingKey(ref))) return this.offerWork(judge);
     if (judge.inFlight.get(ref.submissionId) !== ref.generation) return;
     judge.inFlight.delete(ref.submissionId);
     this.abortsRequested.delete(windingKey(ref));
@@ -302,11 +305,12 @@ export class DispatcherService {
     this.deadlines.clear(windingKey(ref));
   }
 
-  /** The judge still holds the run: its slot winds down (freed by the judge's `Final{ABORTED}`), the judge is told to stop, and the run is requeued once, internal error the second time (same as a lost judge); a run the user aborted ends AB. */
+  /** The judge still holds the run: its slot winds down (freed by the judge's `Final{ABORTED}`), the judge is told to stop, and the run is requeued once, internal error the second time (same as a lost judge); a run the user aborted ends AB. A run whose Final is being stored (`settling`) is left to that store: the judge finished it, and `runEnded` or `finalNotStored` frees the slot. */
   private async deadlineExpired(
     judge: DispatchTarget,
     ref: AssignmentRef,
   ): Promise<void> {
+    if (judge.settling.has(windingKey(ref))) return;
     // read before `windDown` forgets it
     const abortRequested = this.abortsRequested.has(windingKey(ref));
     if (!this.windDown(judge, ref)) return this.clearDeadline(ref);

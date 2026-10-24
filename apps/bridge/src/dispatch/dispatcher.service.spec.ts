@@ -447,6 +447,25 @@ describe('DispatcherService', () => {
       expect(judge.inFlight.get(hung.id)).toBe(2);
     });
 
+    it('leaves a run whose Final is being stored to that store when its deadline passes: no Abort, no requeue spent, the slot freed when the store ends', async () => {
+      const judge = await online(new Target('j1', 1));
+      const slow = entry();
+      await queue(slow);
+      judge.settling.add(`${slow.id}.1`);
+      jest.advanceTimersByTime(RUN_DEADLINE_MS);
+      await flush();
+      expect(judge.aborted).toEqual([]);
+      expect(expired).toEqual([]);
+      judge.settling.clear();
+      await dispatcher.runEnded(
+        judge,
+        { submissionId: slow.id, generation: 1 },
+        { retried: false },
+      );
+      expect(judge.inFlight.size).toBe(0);
+      expect(judge.winding.size).toBe(0);
+    });
+
     it('ends a user-aborted run as AB when its judge never answers the abort before the deadline', async () => {
       const judge = await online(new Target('j1', 2));
       const hung = entry();
