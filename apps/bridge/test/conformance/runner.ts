@@ -15,6 +15,7 @@ import { waitUntil } from '@libs/common/testing';
 import { withinTimeout } from '@libs/judging';
 import { FakeJudge } from '../fake-judge';
 import type { BridgeTimings } from '../../src/bridge-timings';
+import { messageRateClock } from '../../src/link/message-rate';
 import type { BridgeTest } from '../setup';
 import type { ManualAcceptClock } from './manual-accept-clock';
 import type { ScenarioWorld } from './world';
@@ -54,6 +55,8 @@ const shown = (message: BridgeMessage): string =>
 export class ScenarioRunner {
   /** Scenario judge name -> its current session. */
   private readonly judges = new Map<string, FakeJudge>();
+  /** The scenario's clock for the flood cap: it moves only by `wait` and `quiet` steps, so a `repeat` burst is one instant on any host. */
+  private scriptedNow = Date.now();
 
   constructor(
     private readonly bridge: BridgeTest,
@@ -63,14 +66,26 @@ export class ScenarioRunner {
   ) {}
 
   async run(): Promise<void> {
+    const realNow = messageRateClock.now;
+    const scriptedNow = () => this.scriptedNow;
+    messageRateClock.now = scriptedNow;
+    try {
+      await this.steps();
+    } finally {
+      // a run jest abandoned at its timeout must not take the clock from the next scenario's run
+      if (messageRateClock.now === scriptedNow) messageRateClock.now = realNow;
+    }
+    const differs = await this.settledEndState();
+    if (differs) throw new Error(`${this.scenario.name} end_state: ${differs}`);
+  }
+
+  private async steps(): Promise<void> {
     for (const [index, step] of this.scenario.steps.entries())
       await this.step(step).catch((error: Error) => {
         throw new Error(
           `${this.scenario.name} step ${index + 1} (${kindOf(step)}): ${error.message}`,
         );
       });
-    const differs = await this.settledEndState();
-    if (differs) throw new Error(`${this.scenario.name} end_state: ${differs}`);
   }
 
   /** Ends every session still open; bounded, so a stuck stream cannot hang the suite. */
@@ -111,7 +126,10 @@ export class ScenarioRunner {
     if ('drop' in step) return this.drop(step.drop.judge);
     if ('fetch' in step) return this.fetch(step.fetch);
     if ('api' in step) return this.world.api(step.api);
-    if ('wait' in step) return void (await sleep(step.wait.ms));
+    if ('wait' in step) {
+      this.scriptedNow += step.wait.ms;
+      return void (await sleep(step.wait.ms));
+    }
     await this.bridge.restart(timingsOf(this.scenario));
   }
 
@@ -213,6 +231,7 @@ export class ScenarioRunner {
   }
 
   private async quiet({ to, ms }: { to: string; ms: number }): Promise<void> {
+    this.scriptedNow += ms;
     await sleep(ms);
     const [unexpected] = this.judge(to).pending();
     if (unexpected)
