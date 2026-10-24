@@ -173,7 +173,7 @@ export class DispatcherService {
     return GenerationsService.heldIds(this.sessions());
   }
 
-  /** The run ended (its Final was stored, or the row moved on): the slot is free, also one wound down meanwhile (judge-v2 sends no other Final for it). After a RETRY the judge may not take the row again until the next resync tick. */
+  /** The run ended (its Final was stored, or the row moved on): the slot is free. After a RETRY the judge may not take the row again until the next resync tick. */
   async runEnded(
     judge: DispatchTarget,
     ref: AssignmentRef,
@@ -181,7 +181,6 @@ export class DispatcherService {
   ): Promise<void> {
     if (judge.inFlight.get(ref.submissionId) === ref.generation)
       judge.inFlight.delete(ref.submissionId);
-    judge.winding.delete(windingKey(ref));
     this.abortsRequested.delete(windingKey(ref));
     this.clearDeadline(ref);
     if (retried) {
@@ -193,13 +192,11 @@ export class DispatcherService {
     await this.offerWork(judge);
   }
 
-  /** The session could not store the run's Final (Mongo kept failing). The judge already finished the run, so its slot is free at once (never `winding`: no Final follows). The row goes back to the queue without spending its requeue; if that write fails too, the resync's stranded-run reset requeues it, as no session holds it any more. */
+  /** The session could not store the run's Final (Mongo kept failing). The judge already finished the run, so its slot is free at once (never `winding`: no Final follows). The row goes back to the queue, free twice since the last rejudge, then spending a RETRY each, IE once those are spent (`RunsService.requeueUnstored`); if that write fails too, the resync's stranded-run reset requeues it, as no session holds it any more. */
   async finalNotStored(
     judge: DispatchTarget,
     ref: AssignmentRef,
   ): Promise<void> {
-    // wound down meanwhile: whoever wound it requeued the row
-    if (judge.winding.delete(windingKey(ref))) return this.offerWork(judge);
     if (judge.inFlight.get(ref.submissionId) !== ref.generation) return;
     judge.inFlight.delete(ref.submissionId);
     this.abortsRequested.delete(windingKey(ref));

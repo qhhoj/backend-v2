@@ -396,14 +396,15 @@ export class JudgeSession implements DispatchTarget {
   /** Points over a case's total are clamped (`caseRowsOf`) and logged, so a judge build that over-scores shows up by name. */
   private async onCases(reported: CaseResults): Promise<void> {
     const rows = caseRowsOf(reported.cases);
-    const over = overScoredPositions(reported.cases);
-    if (over.length)
-      this.logger.warn(
-        `Judge ${this.name} reported more points than the case total for submission ${reported.ref?.submissionId} gen ${reported.ref?.generation}, case ${over.join(', ')}; clamped to the total`,
-      );
-    await this.handleRun(reported, (key) =>
+    const handled = await this.handleRun(reported, (key) =>
       this.services.runs.cases(key, rows),
     );
+    const over = overScoredPositions(reported.cases);
+    // the ref is validated by now, and a replay is not logged again
+    if (handled?.outcome === 'applied' && over.length)
+      this.logger.warn(
+        `Judge ${this.name} reported more points than the case total for submission ${handled.ref.submissionId} gen ${handled.ref.generation}, case ${over.join(', ')}; clamped to the total`,
+      );
   }
 
   /** A stored Started names the case count: the run's deadline is re-armed from it. */
