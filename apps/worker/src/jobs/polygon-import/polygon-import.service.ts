@@ -390,7 +390,11 @@ export class PolygonImportService {
       await tracker.progress({ step: 'statements', done: null, total: null });
       const read = await this.readPackage(pkg, job, { savedImages, local });
       const generated = isStandard(job)
-        ? await this.generateStandardTests(packagePath, pkg, read, tracker)
+        ? await this.generateStandardTests(
+            packagePath,
+            { pkg, read },
+            { job, target, tracker },
+          )
         : null;
       await tracker.progress({ step: 'tests', done: null, total: null });
       const testsArchive = generated
@@ -503,13 +507,17 @@ export class PolygonImportService {
   /** A standard package has no generated tests: a judge makes them, and the result zip becomes `tests.zip`. */
   private async generateStandardTests(
     packagePath: string,
-    pkg: PolygonPackage,
-    read: ReadPackage,
-    tracker: ImportTracker,
+    { pkg, read }: { pkg: PolygonPackage; read: ReadPackage },
+    {
+      job,
+      target,
+      tracker,
+    }: { job: PolygonImportJob; target: ImportTarget; tracker: ImportTracker },
   ): Promise<string> {
     await tracker.progress({ step: 'generating', done: null, total: null });
     const destination = generatedTestsPathOf(packagePath);
     await this.standardTests.generate(pkg, read, destination);
+    await this.quota.assertGeneratedTestsFit(job, target, destination);
     return destination;
   }
 

@@ -66,7 +66,7 @@ const hasBadSegment = (name: string) =>
   (name.endsWith('/') ? name.slice(0, -1) : name)
     .split('/')
     .some((segment) => segment === '' || segment === '.');
-/** yauzl names an entry from its Unicode Path extra, Python's zipfile from the raw name; refuse the entries on which they differ. */
+/** yauzl names an entry from its Unicode Path extra, the judge's Rust `zip` crate from the raw name; refuse the entries on which they differ. */
 const hasForeignUnicodePath = (entry: Entry) =>
   entry.extraFields.some((field) => field.id === UNICODE_PATH_EXTRA) &&
   !entry.fileNameRaw.equals(Buffer.from(entry.fileName, 'utf8'));
@@ -136,7 +136,7 @@ async function expectedCentralEnd(
     : endRecordStart;
 }
 
-/** Python's zipfile (the judge) trusts the central directory offset, yauzl the entry count; a count that hides records would skip every check, so the records must end exactly where the end record (zip64 or not) starts. */
+/** The judge's Rust `zip` crate trusts the central directory offset, yauzl the entry count; a count that hides records would skip every check, so the records must end exactly where the end record (zip64 or not) starts. */
 async function assertCentralDirectoryIsConsistent(
   zip: ZipFile,
   readAt: ReadAt,
