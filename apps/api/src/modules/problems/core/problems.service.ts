@@ -29,6 +29,7 @@ import {
   RandomProblemResponse,
 } from './dto/problem-list.response';
 import { contestHiding, withheld } from './contest-hiding';
+import type { ContestHiding } from './contest-hiding';
 import { ProblemAccess } from './problem-access';
 import type { ContestScope } from './problem-access';
 import {
@@ -79,9 +80,10 @@ const SUGGESTED_FILTER: FilterQuery<Problem> = {
 function staffClauses(
   principal: Principal | null,
   query: ProblemFilterQueryDto,
+  authorsHidden: boolean,
 ): FilterQuery<Problem>[] {
   const clauses: FilterQuery<Problem>[] = [];
-  if (query.authorId) {
+  if (query.authorId && !authorsHidden) {
     const seesCurators =
       principal !== null && hasPermission(principal, 'judge.edit_all_problem');
     clauses.push(
@@ -138,12 +140,10 @@ export class ProblemsService {
     principal: Principal | null,
     query: ProblemListQueryDto,
   ): Promise<Paginated<ProblemListItemResponse>> {
-    const hiding = contestHiding(
-      principal,
-      await this.currentContest.current(principal),
-    );
+    const current = await this.currentContest.current(principal);
+    const hiding = contestHiding(principal, current);
     const { items, total } = await this.repository.list(
-      await this.listFilter(principal, query),
+      await this.listFilter(principal, query, current, hiding),
       listSort(query.sort),
       query.page,
       query.pageSize,
@@ -199,8 +199,14 @@ export class ProblemsService {
     principal: Principal | null,
     query: ProblemFilterQueryDto,
   ): Promise<RandomProblemResponse> {
+    const current = await this.currentContest.current(principal);
     const code = await this.repository.randomCode(
-      await this.listFilter(principal, query),
+      await this.listFilter(
+        principal,
+        query,
+        current,
+        contestHiding(principal, current),
+      ),
     );
     if (!code) throw new AppError('no_problem', 404, 'No matching problem');
     return { code };
@@ -390,14 +396,17 @@ export class ProblemsService {
     return ProblemAccess.canEdit(principal, ProblemAccess.accessView(problem));
   }
 
+  /** Filters on tags or authors are ignored while the viewer's contest hides them, so they cannot be probed. */
   private async listFilter(
     principal: Principal | null,
     query: ProblemFilterQueryDto,
+    current: CurrentParticipation | null,
+    hiding: ContestHiding,
   ): Promise<FilterQuery<Problem>> {
     // An editor edits outside any contest (`editableProblem`), so the editable index ignores the current contest's scope.
     const scope = query.editable
       ? null
-      : await this.currentContest.scopeOf(principal);
+      : this.currentContest.scopeFrom(current);
     const clauses: FilterQuery<Problem>[] = [
       ProblemAccess.visibleFilter(principal, scope),
     ];
@@ -408,7 +417,7 @@ export class ProblemsService {
         narrowTo(ProblemAccess.editableFilter(principal), query.editable),
       );
     if (query.groupId) clauses.push({ groupId: query.groupId });
-    if (query.typeIds?.length)
+    if (query.typeIds?.length && !hiding.tags)
       clauses.push({ typeIds: { $in: query.typeIds } });
     if (query.pointsMin !== undefined)
       clauses.push({ points: { $gte: query.pointsMin } });
@@ -420,7 +429,7 @@ export class ProblemsService {
           ? publicEditorialFilter()
           : { $nor: [publicEditorialFilter()] },
       );
-    clauses.push(...staffClauses(principal, query));
+    clauses.push(...staffClauses(principal, query, hiding.authors));
     if (query.solved !== undefined) {
       const solved = principal
         ? await this.viewerStatuses.solvedIds(principal.userId)

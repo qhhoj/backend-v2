@@ -71,6 +71,20 @@ describe('P2-1 contest hideProblemTags / hideProblemAuthors', () => {
     const item = (list.body as { data: ProblemListItemResponse[] }).data.find(
       (row) => row.code === 'hidetags',
     );
+    const probe = await authed(
+      api
+        .http()
+        .get(
+          `/api/internal/problems?visibility=all&typeIds=${catalog.types.uncategorized}&authorId=${racer._id}`,
+        ),
+      session,
+    ).expect(200);
+    // A filter on a tag or author the problem lacks is ignored, so filters cannot probe hidden facts.
+    expect(
+      (probe.body as { data: ProblemListItemResponse[] }).data.map(
+        (row) => row.code,
+      ),
+    ).toContain('hidetags');
     expect({ types: item?.types, authors: item?.authors }).toEqual({
       types: [],
       authors: [],
