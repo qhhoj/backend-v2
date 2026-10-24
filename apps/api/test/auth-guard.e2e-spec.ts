@@ -418,6 +418,8 @@ describe('AuthGuard', () => {
       .set(`session:${sha256(id)}`, JSON.stringify(legacy), 'KEEPTTL');
     expect(await api.sessions.get(id)).toEqual({
       ...legacy,
+      // the absolute lifetime starts at the first read
+      createdAt: expect.any(Number) as number,
       cookieIssuedAt: 0,
       pendingTotpSecret: null,
       webauthnChallenge: null,

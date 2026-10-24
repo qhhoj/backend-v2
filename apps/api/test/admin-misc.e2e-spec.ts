@@ -111,6 +111,40 @@ afterAll(() => api.teardown());
       ).expect(409);
     });
 
+    it('unban restores the active flag from before the ban, and both are audited', async () => {
+      const moderator = await loginAs(
+        api,
+        (
+          await createUserWith(api, 'moderator3', {
+            permissions: ['judge.ban_user'],
+          })
+        )._id,
+      );
+      const pending = await createUserWith(api, 'pending', { isActive: false });
+      await authed(
+        api.http().post('/api/internal/users/pending/ban'),
+        moderator,
+      )
+        .send({ reason: 'spam' })
+        .expect(204);
+      await authed(
+        api.http().post('/api/internal/users/pending/unban'),
+        moderator,
+      ).expect(204);
+      expect(await api.users.findById(pending._id).lean()).toMatchObject({
+        banReason: null,
+        isActive: false,
+      });
+      const audit = await api.revisions
+        .find({ entity: 'user', entityId: pending._id })
+        .sort({ _id: 1 })
+        .lean();
+      expect(audit.map((row) => [row.action, row.comment])).toEqual([
+        ['ban', 'spam'],
+        ['unban', 'spam'],
+      ]);
+    });
+
     it('never bans yourself, a superuser, or without ban_user', async () => {
       const moderator = await createUserWith(api, 'moderator2', {
         permissions: ['judge.ban_user'],

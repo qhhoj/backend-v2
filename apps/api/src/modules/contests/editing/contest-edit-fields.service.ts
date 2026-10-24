@@ -4,7 +4,7 @@ import type { Principal } from '@libs/auth';
 import { AppError, invalidField, unique } from '@libs/common';
 import { FormatConfigError, parseFormatConfig } from '@libs/contests';
 import { uuidStr } from '@libs/database';
-import type { Contest, ContestProblem } from '@libs/database';
+import type { Contest, ContestProblem, Problem } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
@@ -210,6 +210,20 @@ function organizationChange(
   return { before, after };
 }
 
+/**
+ * A contest shows its problems to every participant, so seeing a problem is not enough to add one: the editor must
+ * edit it, or it must already be public to everyone; `judge.edit_all_contest` adds any. Members-only organization
+ * problems have one more way in (`ContestEditFieldsService.usableAsMembersOnly`).
+ */
+function usableInContest(principal: Principal, problem: Problem): boolean {
+  const view = ProblemAccess.accessView(problem);
+  return (
+    hasPermission(principal, 'judge.edit_all_contest') ||
+    ProblemAccess.isSitePublic(view) ||
+    ProblemAccess.canEdit(principal, view)
+  );
+}
+
 @Injectable()
 export class ContestEditFieldsService {
   constructor(
@@ -228,7 +242,10 @@ export class ContestEditFieldsService {
     assertNoForbiddenNulls(dto);
     const fields = fieldsWithoutLookups(dto);
     if (dto.problems !== undefined)
-      fields.problems = await this.contestProblems(principal, dto.problems);
+      fields.problems = await this.contestProblems(principal, dto.problems, {
+        current,
+        scope: organizationChange(fields, current).after,
+      });
     if (dto.description !== undefined)
       fields.descriptionHtml = renderField('description', dto.description);
     Object.assign(fields, rulesFields(dto, current));
@@ -319,10 +336,30 @@ export class ContestEditFieldsService {
         throw invalidField(field, 'Unknown user.');
   }
 
-  /** Each problem once, existing and visible to the editor; `order` is the request's order. */
+  /**
+   * A problem public only to its organizations' members, in a contest private to organizations that all list it and
+   * that the editor administers: an organization's admins build its contests from its problems, and its members could
+   * already read them.
+   */
+  private async usableAsMembersOnly(
+    principal: Principal,
+    problem: Problem,
+    scope: OrganizationScope,
+  ): Promise<boolean> {
+    const view = ProblemAccess.accessView(problem);
+    if (!view.isPublic || !view.isOrganizationPrivate) return false;
+    if (!scope.isOrganizationPrivate || !scope.organizations.length)
+      return false;
+    if (!scope.organizations.every((id) => view.organizations.includes(id)))
+      return false;
+    return this.rights.administersEach(principal, scope.organizations);
+  }
+
+  /** Each problem once and existing; a problem not yet in the contest must be one the editor may put in it (`usableInContest`, `usableAsMembersOnly`); `order` is the request's order. */
   private async contestProblems(
     principal: Principal,
     problems: ContestProblemDto[],
+    contest: { current: ContestDocument | null; scope: OrganizationScope },
   ): Promise<ContestProblem[]> {
     const ids = problems.map((entry) => entry.problem);
     if (unique(ids).length !== ids.length)
@@ -333,17 +370,17 @@ export class ContestEditFieldsService {
         problem,
       ]),
     );
+    const kept = new Set(
+      (contest.current?.problems ?? []).map((entry) => uuidStr(entry.problem)),
+    );
     for (const id of ids) {
       const problem = found.get(id);
-      if (
-        !problem ||
-        !ProblemAccess.canSee(
-          principal,
-          ProblemAccess.accessView(problem),
-          null,
-        )
-      )
-        throw invalidField('problems', 'Unknown problem.');
+      const usable =
+        problem &&
+        (kept.has(id) ||
+          usableInContest(principal, problem) ||
+          (await this.usableAsMembersOnly(principal, problem, contest.scope)));
+      if (!usable) throw invalidField('problems', 'Unknown problem.');
     }
     return problems.map((entry, order) => ({
       problem: entry.problem,

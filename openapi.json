@@ -12362,6 +12362,7 @@
           "auth.github",
           "auth.google",
           "auth.pwnedApiUrl",
+          "auth.sessionMaxDays",
           "contest.banAfterDisqualifications",
           "contest.officialMode",
           "contest.officialModeEndsAt",

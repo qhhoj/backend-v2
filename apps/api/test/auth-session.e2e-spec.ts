@@ -1,6 +1,6 @@
 import { hashPassword, PASSWORD_ITERATIONS, UsersRepository } from '@libs/auth';
 
-import { REDIS } from '@libs/common';
+import { AppError, REDIS } from '@libs/common';
 
 import { newId } from '@libs/database';
 
@@ -200,6 +200,32 @@ describe('auth session endpoints', () => {
         newer,
       );
     });
+    it('still signs in when the rehash is refused, spending one correct-password unit', async () => {
+      const user = await createUser(api.users, {
+        username: 'rhea',
+        email: 'rhea@example.com',
+      });
+      const before = user.password;
+      const spy = jest
+        .spyOn(api.app.get(UsersRepository), 'updatePasswordIfUnchanged')
+        .mockRejectedValueOnce(new AppError('rate_limited', 429));
+      try {
+        await api
+          .http()
+          .post(LOGIN)
+          .send({ username: 'rhea', password: 'correct horse battery' })
+          .expect(200);
+      } finally {
+        spy.mockRestore();
+      }
+      expect((await api.users.findOne({ username: 'rhea' }))!.password).toBe(
+        before,
+      );
+      const redis = api.app.get<Redis>(REDIS);
+      expect(await redis.get(`rate:password-success:user:${user._id}`)).toBe(
+        '1',
+      );
+    });
   });
   it('explains banned and unactivated accounts only after a correct password', async () => {
     await api
@@ -351,6 +377,35 @@ describe('auth session endpoints', () => {
       null,
     );
     expect(session.user.username).toBe('victor');
+  });
+
+  it('meters correct passwords per account, shared by login and confirmation, even in a concurrent burst', async () => {
+    const owner = await createUser(api.users, {
+      username: 'looper',
+      email: 'looper@example.com',
+    });
+    const auth = api.app.get(AuthService);
+    const context = {
+      principal: { userId: owner._id },
+      user: owner,
+    } as unknown as Parameters<AuthService['confirmPassword']>[0];
+    const password = 'correct horse battery';
+    // a wrong password gives its claim back
+    await expect(
+      auth.login('looper', 'wrong password', '198.51.100.200', null),
+    ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    const results = await Promise.allSettled([
+      ...Array.from({ length: 15 }, (_unused, index) =>
+        auth.login('looper', password, `198.51.100.${index}`, null),
+      ),
+      ...Array.from({ length: 15 }, () =>
+        auth.confirmPassword(context, password),
+      ),
+    ]);
+    const refused = results.filter((result) => result.status === 'rejected');
+    expect(results.length - refused.length).toBe(20);
+    for (const result of refused)
+      expect(result.reason).toMatchObject({ code: 'rate_limited' });
   });
 
   it('carries the personal appearance on the session user, null until it is set', async () => {

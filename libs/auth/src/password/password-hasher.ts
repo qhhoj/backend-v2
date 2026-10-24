@@ -1,7 +1,28 @@
 import { pbkdf2, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
+import { AppError } from '@libs/common';
+import { concurrencyLimit } from './concurrency-limit';
 
-const pbkdf2Async = promisify(pbkdf2);
+/** PBKDF2 runs on libuv's pool (4 threads by default), shared with file, DNS and zlib work, on a host with 2 cores outside judging: password checks never take more than half of it. */
+const MAX_CONCURRENT_HASHES = 2;
+/** A check still waiting for a slot after this long is refused, well inside nginx's 60 s proxy timeout. */
+export const MAX_HASH_WAIT_MS = 20_000;
+const busy = () =>
+  new AppError(
+    'rate_limited',
+    429,
+    'Too many password checks at once; try again shortly',
+    undefined,
+    { 'Retry-After': String(MAX_HASH_WAIT_MS / 1000) },
+  );
+const withHashSlot = concurrencyLimit(
+  MAX_CONCURRENT_HASHES,
+  MAX_HASH_WAIT_MS,
+  busy,
+);
+const derive = promisify(pbkdf2);
+const pbkdf2Async = (...args: Parameters<typeof derive>) =>
+  withHashSlot(() => derive(...args));
 const ALGORITHMS = new Map([
   ['pbkdf2_sha256', { digest: 'sha256', keyLength: 32 }],
   ['pbkdf2_sha1', { digest: 'sha1', keyLength: 20 }],

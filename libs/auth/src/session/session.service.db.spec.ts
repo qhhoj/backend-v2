@@ -1,8 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { REDIS, RedisModule } from '@libs/common';
 import { TEST_REDIS_URL } from '@libs/common/testing';
+import { SettingsService } from '@libs/settings';
+import { fakeSettings } from '@libs/settings/testing';
 import Redis from 'ioredis';
 import { SESSION_TTL_SECONDS, SessionService } from './session.service';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const fresh = {
   userId: 'user-1',
@@ -20,7 +24,13 @@ describe('SessionService', () => {
     process.env.REDIS_URL = TEST_REDIS_URL;
     testingModule = await Test.createTestingModule({
       imports: [RedisModule],
-      providers: [SessionService],
+      providers: [
+        SessionService,
+        {
+          provide: SettingsService,
+          useValue: fakeSettings({ 'auth.sessionMaxDays': 30 }),
+        },
+      ],
     }).compile();
     sessions = testingModule.get(SessionService);
     redis = testingModule.get(REDIS);
@@ -44,6 +54,28 @@ describe('SessionService', () => {
     await redis.expire(key, 10);
     await sessions.get(id);
     expect(await redis.ttl(key)).toBeGreaterThan(SESSION_TTL_SECONDS - 5);
+  });
+  it('ends a session at its absolute lifetime however recently it was used', async () => {
+    const { id } = await sessions.create(fresh);
+    const [key] = await redis.keys('session:*');
+    const stored = JSON.parse((await redis.get(key)) as string) as Record<
+      string,
+      unknown
+    >;
+    const started = Date.now() - 31 * DAY_MS;
+    await redis.set(key, JSON.stringify({ ...stored, createdAt: started }));
+    expect(await sessions.get(id)).toBeNull();
+    expect(await redis.exists(key)).toBe(0);
+    expect(await redis.scard('user-sessions:user-1')).toBe(0);
+  });
+  it('drops members whose session expired when the user signs in again', async () => {
+    await sessions.create(fresh);
+    const [expired] = await redis.keys('session:*');
+    await redis.del(expired);
+    await sessions.create(fresh);
+    const members = await redis.smembers('user-sessions:user-1');
+    expect(members).toHaveLength(1);
+    expect(members).not.toContain(expired);
   });
   it('updates flags and keeps the csrf token', async () => {
     const { id, session } = await sessions.create({

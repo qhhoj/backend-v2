@@ -294,7 +294,7 @@ afterAll(() => api.teardown());
       ).toBe('Round');
     });
 
-    it('lets the client attach only problems its acting user can see, and does not tell hidden from missing', async () => {
+    it('lets the client attach only problems its acting user may put in a contest, and does not tell hidden from missing', async () => {
       const { bearer, actsAs } = await makeClient();
       const key = newKey();
       const hidden = await put(
@@ -312,7 +312,13 @@ afterAll(() => api.teardown());
       expect(await api.contests.countDocuments({ key })).toBe(0);
       await api.users.updateOne(
         { _id: actsAs._id },
-        { $addToSet: { permissions: 'judge.see_private_problem' } },
+        {
+          $addToSet: {
+            permissions: {
+              $each: ['judge.edit_own_problem', 'judge.edit_all_problem'],
+            },
+          },
+        },
       );
       await put(
         bearer,

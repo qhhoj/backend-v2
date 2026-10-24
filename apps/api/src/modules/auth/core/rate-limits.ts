@@ -1,5 +1,9 @@
 export const FAILURE_LIMIT = 10;
 export const FAILURE_WINDOW_SECONDS = 15 * 60;
+/** Correct passwords per account and window (login, and confirmation): each check is a full PBKDF2 hash. */
+export const SUCCESS_ACCOUNT_LIMIT = 20;
+/** Correct logins per address and window: high enough for a classroom behind one NAT signing in together. */
+export const SUCCESS_IP_LIMIT = 300;
 export const DAILY_FAILURE_LIMIT = 50;
 export const DAILY_WINDOW_SECONDS = 24 * 60 * 60;
 export const OAUTH_START_LIMIT = 30;
