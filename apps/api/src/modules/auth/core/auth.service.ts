@@ -29,7 +29,7 @@ import {
   SUCCESS_IP_LIMIT,
 } from './rate-limits';
 
-/** Correct passwords of one account (login and confirmation share it), claimed before the hash and kept only on success: a valid-credential loop cannot run PBKDF2 without limit, and nobody else can spend it. */
+/** Correct passwords of one account (login and confirmation share it), claimed before the hash and kept only on success: a valid-credential loop cannot run PBKDF2 without limit, and nobody else can keep it (a wrong attempt holds a unit only while its hash runs). */
 const passwordSuccessBudget = (userId: string) => ({
   key: `password-success:user:${userId}`,
   limit: SUCCESS_ACCOUNT_LIMIT,
@@ -112,19 +112,21 @@ export class AuthService {
       await releaseFailure();
       throw error;
     }
+    let valid: boolean;
     try {
-      const valid = await verify();
-      await (valid ? releaseFailure() : releaseSuccess());
-      return valid;
+      valid = await verify();
     } catch (error) {
       await Promise.all([releaseFailure(), releaseSuccess()]);
       throw error;
     }
+    // Outside the try: a failed refund must not refund both budgets again.
+    await (valid ? releaseFailure() : releaseSuccess());
+    return valid;
   }
 
   /**
-   * Best effort, after the password was accepted: a refused or failed rehash (the hash queue is full) never costs the
-   * session, and the next login tries again. Compare-and-set: if the password changed since verification, keep the newer one.
+   * Best effort, after the password was accepted: a refused or failed rehash (the hash queue is full) never stops the
+   * session from being opened, and the next login tries again. Compare-and-set: if the password changed since verification, keep the newer one.
    */
   private async upgradeWeakHash(
     user: UserDocument,

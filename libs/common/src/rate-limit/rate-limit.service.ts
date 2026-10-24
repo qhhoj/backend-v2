@@ -35,19 +35,17 @@ export class RateLimitService {
     windowSeconds: number,
   ): Promise<() => Promise<void>> {
     const keys = budgets.map(({ key }) => key);
-    const counts = await Promise.all(
-      keys.map((key) => this.hit(key, windowSeconds)),
-    );
-    const release = async () => {
-      await Promise.all(keys.map((key) => this.release(key)));
-    };
+    const counts = await this.hitAll(keys, windowSeconds);
+    const release = () => this.releaseAll(keys);
     const overLimit = keys.filter(
       (_key, index) => counts[index] > budgets[index].limit,
     );
     if (overLimit.length === 0) return release;
-    const refusal = await this.refusal(overLimit);
-    await release();
-    throw refusal;
+    try {
+      throw await this.refusal(overLimit);
+    } finally {
+      await release();
+    }
   }
 
   /** Hits every key before the guarded work; over the limit throws (hits stay counted), else returns a release that gives the attempt back. */
@@ -56,14 +54,33 @@ export class RateLimitService {
     limit: number,
     windowSeconds: number,
   ): Promise<() => Promise<void>> {
-    const counts = await Promise.all(
-      keys.map((key) => this.hit(key, windowSeconds)),
-    );
+    const counts = await this.hitAll(keys, windowSeconds);
     const overLimit = keys.filter((_key, index) => counts[index] > limit);
     if (overLimit.length > 0) throw await this.refusal(overLimit);
-    return async () => {
-      await Promise.all(keys.map((key) => this.release(key)));
-    };
+    return () => this.releaseAll(keys);
+  }
+
+  /** Hits every key; when one hit fails, gives back the ones that were counted and rethrows, so a Redis error leaves no stray hits. */
+  private async hitAll(
+    keys: readonly string[],
+    windowSeconds: number,
+  ): Promise<number[]> {
+    const results = await Promise.allSettled(
+      keys.map((key) => this.hit(key, windowSeconds)),
+    );
+    const failed = results.find((result) => result.status === 'rejected');
+    if (!failed)
+      return results.map(
+        (result) => (result as PromiseFulfilledResult<number>).value,
+      );
+    await this.releaseAll(
+      keys.filter((_key, index) => results[index].status === 'fulfilled'),
+    );
+    throw failed.reason;
+  }
+
+  private async releaseAll(keys: readonly string[]): Promise<void> {
+    await Promise.all(keys.map((key) => this.release(key)));
   }
 
   /** The 429 for keys over their limit; Retry-After is the longest wait until one of their windows ends. */
