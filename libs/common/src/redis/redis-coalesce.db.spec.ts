@@ -33,7 +33,7 @@ describe('runCoalesced', () => {
       seen.push(read);
       running -= 1;
     };
-    const calls: Array<Promise<void>> = [];
+    const calls: Array<Promise<boolean>> = [];
     for (let call = 1; call <= 10; call += 1) {
       value = call;
       calls.push(runCoalesced(call % 2 ? redis : otherProcess, key, work));

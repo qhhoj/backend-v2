@@ -17,14 +17,11 @@ export class ContributionPointsService {
 
   async recompute(userId: string): Promise<void> {
     await clearContributionPointsPending(this.redis, userId);
-    return runCoalesced(
-      this.redis,
-      `effects:contribution:${userId}`,
-      async () =>
-        this.repository.setPoints(
-          userId,
-          contributionPoints(await this.repository.totals(userId)),
-        ),
+    await runCoalesced(this.redis, `effects:contribution:${userId}`, async () =>
+      this.repository.setPoints(
+        userId,
+        contributionPoints(await this.repository.totals(userId)),
+      ),
     );
   }
 }

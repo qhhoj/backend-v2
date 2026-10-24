@@ -17,19 +17,22 @@ const logRedisFailure = (what: string) => (error: Error) =>
 /**
  * Runs `work` for `key` so it never runs twice at once, across processes, and always runs once more after the last call: a caller marks the key dirty, then either becomes the owner, which reruns `work` until nobody marked it again, or leaves the work to the current owner and returns.
  * Recomputes are reads followed by `$set`; without this, two interleaved recomputes could write the older result last. Bursts collapse: 100 graded submissions on one problem cost a few stats recomputes, not 100. While marks keep arriving the owner keeps looping, so its caller (a queue job) stays busy; that is a hot key, not a hang.
+ * Resolves false when the work was left to another owner: a caller that must know its change was applied (a due stamp it clears) keeps its stamp then, since that owner may still die.
  */
 export async function runCoalesced(
   redis: Redis,
   key: string,
   work: () => Promise<void>,
   ttlSeconds = COALESCE_TTL_SECONDS,
-): Promise<void> {
+): Promise<boolean> {
   const dirtyKey = `${key}:dirty`;
   const lockKey = `${key}:lock`;
   const token = randomBytes(16).toString('hex');
   const markDirty = () => redis.set(dirtyKey, '1', 'EX', ttlSeconds);
   await markDirty();
+  let isOwner = false;
   while ((await redis.set(lockKey, token, 'EX', ttlSeconds, 'NX')) === 'OK') {
+    isOwner = true;
     const heartbeat = setInterval(
       () => {
         redis
@@ -52,6 +55,7 @@ export async function runCoalesced(
         .catch(logRedisFailure(`Lock ${lockKey} release`));
     }
     // A caller that marked the key after the last check saw the lock held and left: run for it.
-    if (!(await redis.exists(dirtyKey))) return;
+    if (!(await redis.exists(dirtyKey))) return true;
   }
+  return isOwner;
 }

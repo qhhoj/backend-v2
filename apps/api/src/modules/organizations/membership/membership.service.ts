@@ -1,13 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, conflictIssue } from '@libs/common';
+import { AppError, conflictIssue, REDIS } from '@libs/common';
 import {
   assertNotLockedByOfficialMode,
   MAX_OPEN_ORGANIZATIONS,
 } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import { SettingsService } from '@libs/settings';
+import type Redis from 'ioredis';
+import { withMemberSlotsLock } from '../core/member-slots-lock';
 import { OrganizationAccess } from '../core/organization-access';
 import { OrganizationMembersRepository } from '../core/organization-members.repository';
 import { OrganizationPointsService } from '../core/organization-points.service';
@@ -16,6 +18,7 @@ import {
   type OrganizationDocument,
 } from '../core/organizations.repository';
 import { OrganizationsService } from '../core/organizations.service';
+import { MEMBER_SLOTS_WAIT_SECONDS } from '../core/rate-limits';
 import { OrganizationRevisionsService } from '../editing/organization-revisions.service';
 
 const conflict = (message: string) => new AppError('conflict', 409, message);
@@ -30,41 +33,56 @@ export class MembershipService {
     private readonly points: OrganizationPointsService,
     private readonly settings: SettingsService,
     private readonly history: OrganizationRevisionsService,
+    @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  /** Legacy `JoinOrganization`: open organizations only, at most three open ones per user (private ones do not count). */
+  /** Legacy `JoinOrganization`: open organizations only, at most three open ones per user (private ones do not count). The `slots` count and the write share the organization's member lock, so parallel joins cannot overfill it. */
   async join(principal: Principal, slug: string): Promise<void> {
     assertNotLockedByOfficialMode(this.settings, principal);
     const organization = await this.organizationsService.bySlug(slug);
     if (!organization.isOpen)
       throw conflict('This organization is private; send a join request');
-    if (await this.members.isFull(organization._id, organization.slots))
-      throw conflictIssue(
-        'organization',
-        'organization_full',
-        'The organization is full',
-      );
     const current = (await this.users.findById(
       principal.userId,
     ))!.organizations.map(uuidStr);
     if (current.includes(organization._id))
       throw conflict('You are already in this organization');
-    const open = (await this.organizations.findByIds(current)).filter(
+    await this.assertOpenCap(current);
+    await withMemberSlotsLock(
+      this.redis,
+      organization._id,
+      () => this.joinWithinSlots(principal.userId, current, organization),
+      MEMBER_SLOTS_WAIT_SECONDS,
+    );
+    await this.points.refresh([organization._id]);
+  }
+
+  private async assertOpenCap(current: readonly string[]): Promise<void> {
+    const open = (await this.organizations.findByIds([...current])).filter(
       (other) => other.isOpen,
     ).length;
     if (open >= MAX_OPEN_ORGANIZATIONS)
       throw conflict(
         `You may not be part of more than ${MAX_OPEN_ORGANIZATIONS} open organizations`,
       );
+  }
+
+  /** Call under `withMemberSlotsLock`. */
+  private async joinWithinSlots(
+    userId: string,
+    current: readonly string[],
+    organization: OrganizationDocument,
+  ): Promise<void> {
+    if (await this.members.isFull(organization._id, organization.slots))
+      throw conflictIssue(
+        'organization',
+        'organization_full',
+        'The organization is full',
+      );
     if (
-      !(await this.members.joinIfUnchanged(
-        principal.userId,
-        current,
-        organization._id,
-      ))
+      !(await this.members.joinIfUnchanged(userId, current, organization._id))
     )
       throw conflict('Your memberships changed meanwhile; try again');
-    await this.points.refresh([organization._id]);
   }
 
   /**

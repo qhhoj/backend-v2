@@ -22,7 +22,10 @@ import { ActivationKey, Language, Organization, uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
+import { withMemberSlotsLock } from '../../organizations/core/member-slots-lock';
+import { OrganizationMembersRepository } from '../../organizations/core/organization-members.repository';
 import { OrganizationPointsService } from '../../organizations/core/organization-points.service';
+import { MEMBER_SLOTS_WAIT_SECONDS } from '../../organizations/core/rate-limits';
 import { withEmailLock } from '../../users/core/email-lock';
 import { ACTIVATION_DAYS, ActivationService } from './activation.service';
 import type { RegisterDto } from './dto/register.dto';
@@ -34,6 +37,11 @@ import {
 } from '../core/rate-limits';
 
 const DEFAULT_LANGUAGE_KEY = 'CPP17';
+const organizationFull = (): FieldIssue => ({
+  field: 'organizationId',
+  code: 'organization_full',
+  message: 'This organization is full.',
+});
 
 @Injectable()
 export class RegistrationService {
@@ -45,6 +53,7 @@ export class RegistrationService {
     private readonly rateLimit: RateLimitService,
     private readonly activation: ActivationService,
     private readonly organizationPoints: OrganizationPointsService,
+    private readonly members: OrganizationMembersRepository,
     @InjectModel(ActivationKey.name)
     private readonly activationKeys: Model<ActivationKey>,
     @InjectModel(Language.name) private readonly languages: Model<Language>,
@@ -107,20 +116,9 @@ export class RegistrationService {
         code: 'language_unknown',
         message: 'Choose one of the listed languages.',
       });
-    if (
-      organizationId &&
-      !(await this.organizations.exists({
-        _id: organizationId,
-        isOpen: true,
-        isUnlisted: false,
-        deletedAt: null,
-      }))
-    )
-      issues.push({
-        field: 'organizationId',
-        code: 'organization_unavailable',
-        message: 'Choose one of the listed open organizations.',
-      });
+    const organizationIssue =
+      organizationId && (await this.organizationIssue(organizationId));
+    if (organizationIssue) issues.push(organizationIssue);
     const problems = passwordProblems(password, { username, email });
     if (await this.pwned.isPwned(password))
       problems.push(PWNED_PASSWORD_PROBLEM);
@@ -129,6 +127,33 @@ export class RegistrationService {
     );
     if (issues.length)
       throw new ValidationFailedError('Registration rejected', issues);
+  }
+
+  /** Unknown, private, unlisted or deleted, or already at `slots`. The `slots` check here only answers early (a social signup has not spent its token yet); the insert re-checks it under the member lock. */
+  private async organizationIssue(
+    organizationId: string,
+  ): Promise<FieldIssue | null> {
+    const organization = await this.organizations
+      .findOne(
+        {
+          _id: organizationId,
+          isOpen: true,
+          isUnlisted: false,
+          deletedAt: null,
+        },
+        { slots: 1 },
+      )
+      .lean()
+      .exec();
+    if (!organization)
+      return {
+        field: 'organizationId',
+        code: 'organization_unavailable',
+        message: 'Choose one of the listed open organizations.',
+      };
+    return (await this.members.isFull(organizationId, organization.slots))
+      ? organizationFull()
+      : null;
   }
 
   private async registerLocked(body: RegisterDto): Promise<void> {
@@ -264,11 +289,9 @@ export class RegistrationService {
     Pick<User, 'username' | 'email'> & {
       password: string;
     }): Promise<UserDocument> {
+    const hashed = await hashPassword(password);
     try {
-      return await this.users.create({
-        ...fields,
-        password: await hashPassword(password),
-      });
+      return await this.insertWithinSlots({ ...fields, password: hashed });
     } catch (error) {
       if (isDuplicateKey(error, 'socialAuth.uid'))
         throw new AppError(
@@ -294,5 +317,29 @@ export class RegistrationService {
         ]);
       throw error;
     }
+  }
+
+  /** A signup into an organization counts its members against `slots` and inserts under the organization's member lock, like a join (`withMemberSlotsLock`). */
+  private insertWithinSlots(fields: Partial<User>): Promise<UserDocument> {
+    const [organizationId] = (fields.organizations ?? []).map(uuidStr);
+    if (!organizationId) return this.users.create(fields);
+    return withMemberSlotsLock(
+      this.redis,
+      organizationId,
+      async () => {
+        const organization = await this.organizations
+          .findById(organizationId, { slots: 1 })
+          .lean()
+          .exec();
+        if (
+          await this.members.isFull(organizationId, organization?.slots ?? null)
+        )
+          throw new ValidationFailedError('Registration rejected', [
+            organizationFull(),
+          ]);
+        return this.users.create(fields);
+      },
+      MEMBER_SLOTS_WAIT_SECONDS,
+    );
   }
 }

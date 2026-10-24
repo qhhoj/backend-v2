@@ -51,25 +51,26 @@ export class SubmissionEffectsService {
   /** The graded job (and the sweep's repair of one that was lost): the effects, then the run's judging time is charged (once per grading attempt, also for a deleted problem; after the effects, so billing never holds back a score), then the row's `effectsDueAt` is cleared, but only the stamp read before them, so a run that finished meanwhile keeps its own and a failed charge is repaired by the sweep. */
   async apply(job: SubmissionGradedJob): Promise<void> {
     const due = await this.repository.effectsDueAt(job.submissionId);
-    await this.applyEffects(job);
+    const isApplied = await this.applyEffects(job);
     await this.judgingCharges.chargeRun(job);
-    if (due) await this.repository.clearEffectsDue(job.submissionId, due);
+    if (due && isApplied)
+      await this.repository.clearEffectsDue(job.submissionId, due);
   }
 
-  /** Legacy `on_grading_end`: the user only when the problem counts for points, then the problem's stats. A deleted problem has nothing to update; its pending gradings finish without effects. */
-  private async applyEffects(job: SubmissionGradedJob): Promise<void> {
+  /** Legacy `on_grading_end`: the user only when the problem counts for points, then the problem's stats. A deleted problem has nothing to update; its pending gradings finish without effects. False when the participation's recompute was left to another owner: only rows still due bring a participation back in the sweep (users and problems come back by date). */
+  private async applyEffects(job: SubmissionGradedJob): Promise<boolean> {
     const problem = await this.repository.findProblem(job.problemId);
-    if (!problem || problem.deletedAt) return;
+    if (!problem || problem.deletedAt) return true;
     if (problem.isPublic && !problem.isOrganizationPrivate)
       await this.recomputeUser(job.userId);
     await this.recomputeProblem(job.problemId);
-    await this.applyContest(job.submissionId);
+    return this.applyContest(job.submissionId);
   }
 
-  /** Legacy `update_contest`: a contest submission's points from its case totals, then its participation. A problem no longer in the contest keeps its points. */
-  async applyContest(submissionId: string): Promise<void> {
+  /** Legacy `update_contest`: a contest submission's points from its case totals, then its participation. A problem no longer in the contest keeps its points. False when the participation's recompute was left to another owner (`runCoalesced`). */
+  async applyContest(submissionId: string): Promise<boolean> {
     const entry = await this.contestResults.findContestSubmission(submissionId);
-    if (!entry) return;
+    if (!entry) return true;
     const problemId = uuidStr(entry.problem);
     const [contest, totals, partials] = await Promise.all([
       this.contestResults.findContest(uuidStr(entry.contest)),
@@ -80,7 +81,7 @@ export class SubmissionEffectsService {
       (candidate) => uuidStr(candidate.problem) === problemId,
     );
     const caseTotals = totals.get(submissionId);
-    if (!contest || !contestProblem || !caseTotals) return;
+    if (!contest || !contestProblem || !caseTotals) return true;
     await this.contestResults.setContestSubmissionPoints(
       submissionId,
       contestSubmissionPoints(
@@ -90,8 +91,11 @@ export class SubmissionEffectsService {
         partials.get(problemId) ?? false,
       ),
     );
-    await this.recomputeParticipation(uuidStr(entry.participation));
+    const isRecomputed = await this.recomputeParticipation(
+      uuidStr(entry.participation),
+    );
     await this.followUpAfterEnd(contest, uuidStr(entry.participation));
+    return isRecomputed;
   }
 
   /**
@@ -119,7 +123,7 @@ export class SubmissionEffectsService {
   }
 
   /** Legacy `recompute_results` through the contest's format, then the contest's ranking cache is dropped (all four keys). */
-  recomputeParticipation(participationId: string): Promise<void> {
+  recomputeParticipation(participationId: string): Promise<boolean> {
     return runCoalesced(
       this.redis,
       `effects:participation:${participationId}`,
@@ -157,7 +161,7 @@ export class SubmissionEffectsService {
   }
 
   /** Legacy `Profile.calculate_points`, which also recomputed the user's organizations when the PP moved. */
-  recomputeUser(userId: string): Promise<void> {
+  recomputeUser(userId: string): Promise<boolean> {
     return runCoalesced(this.redis, `effects:user:${userId}`, async () => {
       const points = userPoints(await this.repository.problemBests(userId));
       const previous = await this.repository.setUserPoints(userId, points);
@@ -171,7 +175,7 @@ export class SubmissionEffectsService {
     });
   }
 
-  recomputeProblem(problemId: string): Promise<void> {
+  recomputeProblem(problemId: string): Promise<boolean> {
     return runCoalesced(
       this.redis,
       `effects:problem:${problemId}`,

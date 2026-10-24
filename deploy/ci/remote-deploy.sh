@@ -4,11 +4,13 @@
 # With REGISTRY_TOKEN set, the helper gets --token-stdin and the token goes over ssh's stdin on every attempt, never argv.
 set -uo pipefail
 interval="${RETRY_INTERVAL:-600}" max="${RETRY_MAX:-36}"
+# Keepalives: the helper's index build can print nothing for many minutes, and an idle link must not drop it.
+ssh_opts=(-o ServerAliveInterval=60 -o ServerAliveCountMax=10)
 run_once() { # <qhhoj-deploy args...>
   if [ -n "${REGISTRY_TOKEN:-}" ]; then
-    printf '%s\n' "$REGISTRY_TOKEN" | ssh "deploy@${DEPLOY_HOST:?DEPLOY_HOST}" sudo /usr/local/sbin/qhhoj-deploy "$@" --token-stdin
+    printf '%s\n' "$REGISTRY_TOKEN" | ssh "${ssh_opts[@]}" "deploy@${DEPLOY_HOST:?DEPLOY_HOST}" sudo /usr/local/sbin/qhhoj-deploy "$@" --token-stdin
   else
-    ssh "deploy@${DEPLOY_HOST:?DEPLOY_HOST}" sudo /usr/local/sbin/qhhoj-deploy "$@"
+    ssh "${ssh_opts[@]}" "deploy@${DEPLOY_HOST:?DEPLOY_HOST}" sudo /usr/local/sbin/qhhoj-deploy "$@"
   fi
 }
 for attempt in $(seq "$max"); do

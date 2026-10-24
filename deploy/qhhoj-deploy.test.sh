@@ -13,7 +13,7 @@ fresh() {
   mkdir -p "$root/etc/nginx/conf.d"; echo "root /var/www/qhhoj/current;" > "$root/etc/nginx/conf.d/qhhoj.conf"
   : > "$calls"
   # shellcheck disable=SC2016 # stub bodies are expanded when the stub runs
-  stub podman '[ "${1:-}" = login ] && { cat > "$QHHOJ_DEPLOY_ROOT/login.stdin"; touch "$3"; }; [ "${1:-}" = image ] && [ "${2:-}" = exists ] && [ -n "${STUB_IMAGE_MISSING:-}" ] && exit 1; [ "${1:-}" = image ] && [ "${2:-}" = ls ] && printf "%s\n" ${STUB_IMAGES:-}; true'
+  stub podman '[ "${1:-}" = login ] && { cat > "$QHHOJ_DEPLOY_ROOT/login.stdin"; touch "$3"; }; [ "${1:-}" = image ] && [ "${2:-}" = exists ] && [ -n "${STUB_IMAGE_MISSING:-}" ] && exit 1; [ "${1:-}" = image ] && [ "${2:-}" = ls ] && printf "%s\n" ${STUB_IMAGES:-}; [ "${1:-}" = run ] && [ -n "${STUB_INDEX_FAIL:-}" ] && exit 1; true'
   # shellcheck disable=SC2016
   stub systemctl '[ "$1" = restart ] && [ -e "$QHHOJ_DEPLOY_ROOT/restart_fail" ] && { rm -f "$QHHOJ_DEPLOY_ROOT/restart_fail"; exit 1; }; true'
   stub sleep
@@ -30,6 +30,15 @@ fresh; deploy backend v2.1.0 >/dev/null || fail "first deploy"
 grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.1.0 ghcr.io/qhhoj/backend-v2:current" "$calls" || fail "tag current"
 grep -q "systemctl restart qhhoj.target" "$calls" || fail "restart"
 [ "$(hist)" = v2.1.0 ] || fail "history after first deploy"
+grep -q "podman run .* ghcr.io/qhhoj/backend-v2:v2.1.0 indexes" "$calls" || fail "index step"
+[ "$(grep -n "indexes" "$calls" | cut -d: -f1)" -lt "$(grep -n "systemctl restart" "$calls" | cut -d: -f1)" ] \
+  || fail "indexes are built before the restart"
+grep -q 'mongodb://x' "$calls" && fail "MONGO_URL (password) must not be a podman argument"
+
+: > "$calls"; set +e; STUB_INDEX_FAIL=1 deploy backend v2.1.1 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] || fail "failed index build must exit 1, got $code"
+grep -q "podman tag\|systemctl restart" "$calls" && fail "failed index build switched the backend"
+[ "$(hist)" = v2.1.0 ] || fail "failed index build must not be recorded"
 
 set +e; deploy backend latest >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 64 ] || fail "bad tag must exit 64, got $code"

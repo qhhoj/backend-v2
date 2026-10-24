@@ -126,6 +126,23 @@ export class ProblemDataFilesService {
     );
   }
 
+  /** Runs a code rename (`work`: its Mongo write, then `rename`) under the data locks of both codes, so no data write runs on either side of the move. A write holding either lock refuses the rename at once with the 409 `busy` conflict. */
+  withRenameLocks<T>(
+    oldCode: string,
+    newCode: string,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const lockOf = (code: string) => ({
+      key: this.lockKey(code),
+      ttlSeconds: DATA_WRITE_LOCK_SECONDS,
+      busyMessage:
+        "A change to this problem's data is in progress; rename it once that is done",
+    });
+    return withRedisLock(this.redis, lockOf(oldCode), () =>
+      withRedisLock(this.redis, lockOf(newCode), work),
+    );
+  }
+
   /** Written atomically after every other file of a data change (init.yml, committed uploads, removals), so a judge that reads version N sees N's files; a judge that sees an older stamp waits for the newer one. Never lowers the stamp; callers hold the data lock, so the read-compare-rename does not interleave. */
   async writeDataVersion(code: string, version: number): Promise<void> {
     const current = await this.readDataVersion(code);
@@ -216,7 +233,7 @@ export class ProblemDataFilesService {
     return sizes.reduce((total, size) => total + size, 0);
   }
 
-  /** Moves a problem's whole directory; the target is reserved first so an existing one is never merged into, and a missing source is nothing to move. */
+  /** Moves a problem's whole directory; the target is reserved first so an existing one is never merged into, and a missing source is nothing to move. Call it inside `withRenameLocks`: no writer then holds either lock, so a writing marker that came along was left by a dead process and is dropped (judges would wait on it). */
   async rename(oldCode: string, newCode: string): Promise<void> {
     const oldDirectory = this.directoryOf(oldCode);
     const newDirectory = this.directoryOf(newCode);
@@ -234,7 +251,9 @@ export class ProblemDataFilesService {
     } catch (error) {
       await rmdir(newDirectory);
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      return;
     }
+    await rm(this.markerPath(newCode), { force: true });
   }
 
   /** A fresh temporary path inside the problem directory, for streaming uploads before they are validated. */

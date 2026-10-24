@@ -1,7 +1,10 @@
 import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type Redis from 'ioredis';
 import { parse } from 'yaml';
+import { REDIS } from '@libs/common';
+import { DATA_WRITING_MARKER, ProblemDataFilesService } from '@libs/problems';
 import { ProblemDataResponse } from '../src/modules/problems/data/dto/problem-data.response';
 import {
   authed,
@@ -14,7 +17,7 @@ import {
   writeDataArchive,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
-import { setupApiTest } from './setup';
+import { issueCodes, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 let api: ApiTest;
@@ -407,6 +410,39 @@ afterAll(() => api.teardown());
       await waitFor(
         () => !existsSync(pdf('sum', 'en')) && !existsSync(pdf('sum', 'vi')),
       );
+    });
+
+    it('refuses a rename while a data write holds either code, and moves no writing marker along', async () => {
+      seedFiles('blocked');
+      let finishWrite = () => {};
+      const write = api.app
+        .get(ProblemDataFilesService)
+        .withDataWrite(
+          'blocked',
+          () => new Promise<void>((done) => (finishWrite = done)),
+        );
+      await waitFor(() =>
+        existsSync(join(dataDir('blocked'), DATA_WRITING_MARKER)),
+      );
+      await rename('blocked', 'blocked2')
+        .expect(409)
+        .expect(issueCodes(['busy']));
+      finishWrite();
+      await write;
+      const redis = api.app.get<Redis>(REDIS);
+      await redis.set('problem-data-lock:blocked2', 'held');
+      await rename('blocked', 'blocked2')
+        .expect(409)
+        .expect(issueCodes(['busy']));
+      await redis.del('problem-data-lock:blocked2');
+      // A writer killed mid-write leaves its marker behind.
+      writeFileSync(join(dataDir('blocked'), DATA_WRITING_MARKER), '');
+      await rename('blocked', 'blocked2').expect(200);
+      expect(existsSync(join(dataDir('blocked2'), 'init.yml'))).toBe(true);
+      expect(existsSync(join(dataDir('blocked2'), DATA_WRITING_MARKER))).toBe(
+        false,
+      );
+      expect(existsSync(dataDir('blocked'))).toBe(false);
     });
   });
 }

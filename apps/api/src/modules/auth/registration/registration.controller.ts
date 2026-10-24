@@ -32,7 +32,7 @@ export class RegistrationController {
    *
    * @remarks
    * Public. Creates an inactive account and mails an activation link (valid 7 days); the account cannot sign in until it is activated. Optionally joins an open, listed organization and sets the default language.
-   * Limited to 5 attempts per IP per hour, every attempt counts. Errors: 400 `validation_failed` with per-field issues (`username_taken`, `email_taken`, `language_unknown`, `organization_unavailable`, password policy or breached password), 503 `mail_unavailable` when the activation mail cannot be sent (nothing is created then), 429 `rate_limited`. Returns 204.
+   * Limited to 5 attempts per IP per hour, every attempt counts. Errors: 400 `validation_failed` with per-field issues (`username_taken`, `email_taken`, `language_unknown`, `organization_unavailable`, `organization_full` (the organization reached its `slots`), password policy or breached password), 503 `mail_unavailable` when the activation mail cannot be sent (nothing is created then), 429 `rate_limited`. Returns 204.
    */
   @Post('register')
   @HttpCode(204)

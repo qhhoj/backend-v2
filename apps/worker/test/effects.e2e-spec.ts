@@ -476,6 +476,36 @@ afterAll(() => worker.teardown());
       },
     );
 
+    it('keeps the effects stamp of a job that left its participation to another owner, so the sweep can redo it', async () => {
+      const { problem, participation } = await contestOn({});
+      const submission = await seedContestSubmission(
+        worker,
+        participation,
+        problem._id,
+        {
+          fields: {
+            result: 'AC',
+            casePoints: 4,
+            caseTotal: 4,
+            effectsDueAt: new Date(),
+          },
+        },
+      );
+      const dueOf = async () =>
+        (await worker.submissions.findById(submission._id).lean())!
+          .effectsDueAt;
+      const redis = worker.module.get<Redis>(REDIS);
+      const ownerLock = `effects:participation:${participation._id}:lock`;
+      // Another worker is recomputing the participation; it may still die before reading this row.
+      await redis.set(ownerLock, 'other-owner', 'EX', 60);
+      await apply(submission);
+      expect(await dueOf()).toEqual(expect.any(Date));
+      await redis.del(ownerLock);
+      await apply(submission);
+      expect(await dueOf()).toBeNull();
+      expect((await participationOf(participation._id)).score).toBe(100);
+    });
+
     it('collapses 50 graded jobs of one participation into a few recomputes', async () => {
       const { problem, participation } = await contestOn({});
       const submissions = [];
@@ -1187,7 +1217,7 @@ afterAll(() => worker.teardown());
             { _id: rejudged._id },
             { $set: { effectsDueAt: newer } },
           );
-          await recomputeProblem(problemId);
+          return recomputeProblem(problemId);
         });
       try {
         await effects.apply(gradedJobOf(rejudged));
