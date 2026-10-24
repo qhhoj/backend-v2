@@ -16,9 +16,15 @@ const DEFERRAL_OF: ReadonlyMap<RetryReason, DeferralReason> = new Map([
 export const deferralReasonOf = (reason: RetryReason): DeferralReason | null =>
   DEFERRAL_OF.get(reason) ?? null;
 
+/** How far a backoff may stray either way: a data save during a contest defers every queued row of the problem at once, and they must not all come due together. */
+const BACKOFF_JITTER = 0.2;
+
+const jittered = (ms: number): number =>
+  Math.round(ms * (1 - BACKOFF_JITTER + 2 * BACKOFF_JITTER * Math.random()));
+
 /** The IE message once a row waited the whole window. */
 export const DEFERRAL_LIMIT_MESSAGE: Record<DeferralReason, string> = {
-  data: "The judge could not read this problem's test data for too long; save the problem's data again, then rejudge",
+  data: "The judge could not read this problem's test data for too long",
   runtime:
     "The judge was missing this submission's language runtime for too long",
   sandbox: "The judge's sandbox kept failing on this submission",
@@ -29,7 +35,7 @@ export type DeferralTimings = Pick<
   'deferralBackoffMs' | 'deferralMaxBackoffMs' | 'deferralWindowMs'
 >;
 
-/** The row's wait after one more transient RETRY at `now`: counted from the first one, backed off ×2 each time up to the cap; null once the window or `MAX_DEFERRALS` is reached (the row ends IE). */
+/** The row's wait after one more transient RETRY at `now`: counted from the first one, backed off ×2 each time up to the cap (±20%); null once the window or `MAX_DEFERRALS` is reached (the row ends IE). */
 export function nextDeferral(
   previous: JudgeDeferral | null,
   reason: DeferralReason,
@@ -48,6 +54,6 @@ export function nextDeferral(
     reason,
     since,
     count,
-    retryAfter: new Date(now.getTime() + backoffMs),
+    retryAfter: new Date(now.getTime() + jittered(backoffMs)),
   };
 }
