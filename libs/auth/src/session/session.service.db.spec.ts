@@ -100,6 +100,13 @@ describe('SessionService', () => {
     expect(await sessions.get(first.id)).toBeNull();
     expect(await sessions.get(second.id)).toBeNull();
     expect(await redis.exists(firstKey, secondKey)).toBe(0);
+    const unsigned = await sessions.create(fresh);
+    const unsignedKey = new SessionRecords(TEST_ENV.SESSION_SECRET).keyFor(
+      unsigned.id,
+    );
+    await redis.set(unsignedKey, JSON.stringify(forged));
+    expect(await sessions.get(unsigned.id)).toBeNull();
+    expect(await redis.exists(unsignedKey)).toBe(0);
   });
   it('keeps the per-user index as long as its sessions and drops members that expired', async () => {
     await sessions.create(fresh);
@@ -140,10 +147,13 @@ describe('SessionService', () => {
     for (const key of [newKey, 'user-sessions:user-1'])
       expect(Math.abs((await redis.ttl(key)) - 5000)).toBeLessThan(10);
     expect(await redis.exists(oldKey)).toBe(0);
-    expect(await sessions.get('old-cookie')).toEqual({
+    const beforeRead = Date.now();
+    const rebound = await sessions.get('old-cookie');
+    // the absolute lifetime starts at the first read
+    expect(rebound?.createdAt).toBeGreaterThanOrEqual(beforeRead);
+    expect(rebound).toEqual({
       ...legacy,
-      // the absolute lifetime starts at the first read
-      createdAt: expect.any(Number) as number,
+      createdAt: rebound?.createdAt,
       cookieIssuedAt: 0,
       pendingTotpSecret: null,
       webauthnChallenge: null,
