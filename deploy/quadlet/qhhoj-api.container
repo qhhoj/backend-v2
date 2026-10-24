@@ -2,7 +2,7 @@
 # The image tag :current is moved only by qhhoj-deploy.
 [Unit]
 Description=QHHOJ api
-After=network-online.target mongod.service redis-server.service
+After=network-online.target mongod.service redis-qhhoj.service
 Wants=network-online.target
 PartOf=qhhoj.target
 StartLimitIntervalSec=120
