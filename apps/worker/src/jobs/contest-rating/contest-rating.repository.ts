@@ -125,7 +125,7 @@ export class ContestRatingRepository {
     return row?.endTime ?? null;
   }
 
-  /** Visible rated contests ending in `[endTime, now]`, in end order (`endTime` index), without those still frozen: every contest here has ended, so a freezing format with `frozenLastMinutes > 0` is frozen (`isFrozen`). A hidden contest (a draft, a clone) is never rated. */
+  /** Rated contests ending in `[endTime, now]`, in end order (`endTime` index), without those still frozen: every contest here has ended, so a freezing format with `frozenLastMinutes > 0` is frozen (`isFrozen`). */
   async ratedContestsFrom(
     endTime: Date,
     now: Date,
@@ -135,7 +135,6 @@ export class ContestRatingRepository {
       .find(
         {
           isRated: true,
-          isVisible: true,
           endTime: { $gte: endTime, $lte: now },
           $nor: [
             {

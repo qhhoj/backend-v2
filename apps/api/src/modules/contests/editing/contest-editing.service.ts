@@ -39,7 +39,7 @@ import type {
 } from './dto/contest-edit.dto';
 import { ContestEditFieldsService } from './contest-edit-fields.service';
 import { shiftedWindow } from './contest-clone-window';
-import { withUngrantedGatesReset } from './contest-edit-rules';
+import { assertWindow, withUngrantedGatesReset } from './contest-edit-rules';
 import {
   chargedOrganization,
   newlyChargedOrganization,
@@ -136,7 +136,7 @@ export class ContestEditingService {
     return this.contestsService.detail(principal, contest.key);
   }
 
-  /** Legacy `ContestClone`: settings and problems are copied, the cloner is the only author, and per-contest collections stay with the source. A `startTime` moves the copy's whole window there. The copy starts hidden and unrated, and a gated setting the cloner may not set is reset (`withUngrantedGatesReset`). */
+  /** Legacy `ContestClone`: settings and problems are copied, the cloner is the only author, and per-contest collections stay with the source. A `startTime` moves the copy's whole window there. The copy starts hidden and unrated, a gated setting the cloner may not set is reset (`withUngrantedGatesReset`), and its window passes the create rules (`assertWindow`). */
   async clone(
     principal: Principal,
     key: string,
@@ -152,7 +152,11 @@ export class ContestEditingService {
         updatedAt?: Date;
       };
     void [_id, createdAt, updatedAt];
-    const copied = withUngrantedGatesReset(principal, settings) as Contest;
+    const copied = withUngrantedGatesReset(principal, {
+      ...settings,
+      ...(startTime && shiftedWindow(settings, new Date(startTime))),
+    }) as Contest;
+    assertWindow(principal, copied);
     const ids = (values: readonly string[]) => values.map(uuidStr);
     await this.editFields.assertOrganizationRights(
       principal,
@@ -164,7 +168,6 @@ export class ContestEditingService {
     );
     const contest = await this.insert(principal, {
       ...copied,
-      ...(startTime && shiftedWindow(copied, new Date(startTime))),
       key: newKey,
       isVisible: false,
       isRated: false,

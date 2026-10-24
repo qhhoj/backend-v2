@@ -496,7 +496,6 @@ describe('contest rescore', () => {
     const endedRatedContest = () =>
       contestWith({
         isRated: true,
-        isVisible: true,
         startTime: new Date(Date.now() - 3 * 3_600_000),
         endTime: new Date(Date.now() - 3_600_000),
         pointsPrecision: 0,

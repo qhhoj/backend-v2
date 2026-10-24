@@ -44,7 +44,6 @@ describe('contest rating', () => {
   const ratedContest = (endTime: Date, extra: Partial<Contest> = {}) =>
     seedContest(worker, {
       isRated: true,
-      isVisible: true,
       startTime: new Date(endTime.getTime() - 3_600_000),
       endTime,
       problems: [
@@ -834,22 +833,6 @@ describe('contest rating', () => {
       .limit(1)
       .lean();
     expect(await userRating(users[0]._id)).toBe(latest.rating);
-  });
-
-  it('rates no hidden contest: a run from an earlier contest skips it', async () => {
-    const [alice, bob] = await newUsers('hidden_alice', 'hidden_bob');
-    const earlier = await ratedContest(daysAgo(2));
-    const hidden = await ratedContest(daysAgo(1), { isVisible: false });
-    await join(earlier._id, alice._id, 200);
-    await join(earlier._id, bob._id, 100);
-    await join(hidden._id, alice._id, 100);
-    await join(hidden._id, bob._id, 200);
-
-    expect(await ratings.rateFrom(earlier._id)).toEqual({
-      contests: 1,
-      ratings: 2,
-    });
-    expect(await ratingRows(hidden._id)).toEqual([]);
   });
 
   it('counts no submission on a problem removed from the contest', async () => {

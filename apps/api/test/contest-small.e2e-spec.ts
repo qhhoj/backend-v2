@@ -417,6 +417,17 @@ afterAll(() => api.teardown());
         privateContestants: [],
         accessCodeHash: null,
       });
+      const long = await createContest(api, {
+        authors: [users.plainCloner._id],
+        endTime: hoursFromNow(20 * 24),
+      });
+      expect(
+        issueCodesOf(
+          await clone('plainCloner', long.key, { key: 'long_clone' }).expect(
+            400,
+          ),
+        ),
+      ).toEqual(['contest_too_long']);
     });
 
     it('moves the copy to a new start, keeping its length and registration window', async () => {
