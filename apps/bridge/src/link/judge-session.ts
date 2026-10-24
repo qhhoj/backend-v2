@@ -458,7 +458,7 @@ export class JudgeSession implements DispatchTarget {
     this.abortOnce(ref);
   }
 
-  /** judge-v2 ends every run it kills with `Final{ABORTED}`: not stored, not acked (plan A: the run is over for both sides), no Abort echo; the slot is freed. */
+  /** judge-v2 ends every run it kills with `Final{ABORTED}`: not stored, not acked (the run is over for both sides), no Abort echo; the slot is freed. */
   private async windingFinal(ref: AssignmentRef): Promise<void> {
     await this.services.dispatch.windingEnded(this, ref);
   }

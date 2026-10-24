@@ -13,7 +13,7 @@ export type BridgeCommand =
       submissionIds: string[];
       /** Only this judge may take them (submit with `judgeId`). */
       judgeName: string | null;
-      /** Contest hook (sub-project 4); always empty in 2a. */
+      /** Judges that must not take it. The api sends none; the bridge reads the contest's banned judges from Mongo. */
       bannedJudges: string[];
     }
   | { type: 'abort'; submissionId: string }

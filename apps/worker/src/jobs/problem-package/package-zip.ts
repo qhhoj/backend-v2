@@ -27,7 +27,7 @@ const bytesOf = (entry: PackageEntry): number =>
 /** Zip headers and rounding on top of the entries' own bytes. */
 const ZIP_OVERHEAD_BYTES = 1024 * 1024;
 
-/** Fails the stream once more than `maxBytes` went through: the size summed from `stat` can be outrun by a file that grows while it is streamed (preflight M10). */
+/** Fails the stream once more than `maxBytes` went through: the size summed from `stat` can be outrun by a file that grows while it is streamed. */
 const capBytes = (maxBytes: number): Transform => {
   let seen = 0;
   return new Transform({

@@ -85,7 +85,7 @@ export class PackageCacheService {
     await this.evictToLimit(PACKAGE_CACHE_MAX_BYTES);
   }
 
-  /** Total cache cap (preflight M10): the oldest zips go first until the cache holds at most `maxBytes`; returns how many went. */
+  /** Total cache cap: the oldest zips go first until the cache holds at most `maxBytes`; returns how many went. */
   async evictToLimit(maxBytes: number): Promise<number> {
     const zips: Array<{ name: string; size: number; mtimeMs: number }> = [];
     for (const name of await this.names()) {

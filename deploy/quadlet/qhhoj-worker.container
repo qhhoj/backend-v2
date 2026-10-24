@@ -1,7 +1,7 @@
 # Install to /etc/containers/systemd/ (rootful podman); the quadlet generator turns it into qhhoj-worker.service.
 # The image tag :current is moved only by qhhoj-deploy.
 [Unit]
-Description=QHHOJ worker (PDF, Polygon import, similarity, exports)
+Description=QHHOJ worker (BullMQ jobs, see README)
 After=network-online.target mongod.service redis-server.service
 Wants=network-online.target
 PartOf=qhhoj.target

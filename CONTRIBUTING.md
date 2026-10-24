@@ -21,24 +21,22 @@ Why things are the way they are: [docs/decisions.md](docs/decisions.md).
 
 ```
 apps/
-  api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts, modules/ (feature modules incl. `mail/` (SMTP mailer) and `settings/` (admin API)), seed/ (`npm run seed:e2e`)
-  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, similarity, contest-data, contest-export, organization-points, user-data, contribution-points, discord-webhook)
-  bridge/     judge gRPC server (qhhoj.judge.v1): link/ (server, sessions, messages, FetchSource), dispatch/ (slots, grace, dispatcher, commands), judges/, submissions/ (claims, run writes, runs), bridge-core.module.ts, bridge.service.ts
-  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, similarity, contest-data, contest-replay, organization-points, user-data, contribution-points, discord-webhook)
-  bridge/     judge gRPC server (qhhoj.judge.v1): link/, dispatch/, judges/, submissions/, bridge.service.ts
+  api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts, modules/ (see "Feature module pattern" for the folders), seed/ (`npm run seed:e2e`)
+  worker/     BullMQ jobs and boot routines: jobs/<job>/<job>.module|processor|service|repository.ts, one folder per job (the list is the README "Jobs" table); shared helpers `jobs/lazy-zip.ts`, `jobs/start-after-indexes.ts`
+  bridge/     judge gRPC server (qhhoj.judge.v1): link/ (server, sessions, messages, FetchSource), dispatch/ (slots, grace, dispatcher, commands), judges/, submissions/ (claims, run writes, runs), generations/ (test generation), external/ (external judge runs), bridge-core.module.ts, bridge.service.ts
 libs/
   common/     http layer (AppError and its subclasses, filter, interceptor, pipes), bootstrap, env, BaseMongoStreamQuerier, `runCoalesced`, AES-GCM helper (`crypto/`), time zones (`text/time-zone.ts`), OpenAPI helpers (`openapi/`), mail contract (`Mailer`, `MAILER`, `InMemoryMailer`)
   database/   uuid helpers, schema helpers, SCHEMAS, DatabaseModule
   settings/   runtime settings: `registry`, `setting-types`, `sealing`, `settings.querier`, `settings.service`, `settings.module`, `testing` (`fakeSettings`)
   auth/       groups, password, token, session, principal, users, guards, decorators, legacy Fernet `crypto` (no AES), AuthModule
-  problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
+  problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, Polygon contracts (`polygon/`), queue contracts (`queues.ts`)
   judge-proto/ the vendored qhhoj.judge.v1 contract and its generated TypeScript (see Judge protocol)
   judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep, similarity), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
-  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-data, contest-replay), replay queue, events and ghost scoring (`replay-queue`, `replay-events`, `ghost-replay`), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
-  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-data), `balloons`, `feed-events`, `contest-export`, Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
-  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-data; `replay-queue.ts`: contest-replay and its coalescing `requestReplayBuild`), replay events and ghost scoring (`replay-events`, `ghost-replay`, `ghost-gap`), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
+  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-data; `replay-queue.ts`: contest-replay and its coalescing `requestReplayBuild`), `balloons`, `feed-events`, `contest-export`, replay events and ghost scoring (`replay-events`, `ghost-replay`, `ghost-gap`), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
   community/  org PP, ranks, interaction gate, user-data paths, comment paths and pages, blog post rules, contribution formula, Discord payloads, tickets (limits, Discord texts), ticket-events contract, flatpage urls, user activity rules (session keys, user agent classifier, CSV cells), queue contracts (`queues.ts`: organization-points, user-data, contribution-points, discord-webhook), notifications (drafts, event contract, queues, repository, service, module)
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer, `blog` style); pure functions, golden fixtures in src/fixtures
+deploy/       production: nginx, podman quadlets, `qhhoj-deploy`, CI deploy scripts, backups, judge host packaging copies; start at `deploy/RUNBOOK.md`
+scripts/      helper scripts, one line per folder in `scripts/README.md`
 test/fixtures/  django.json (Django password hashes and Fernet secrets for the auth specs)
 tools/legacy/   elo_mmr_goldens.py
 ```
@@ -47,6 +45,7 @@ tools/legacy/   elo_mmr_goldens.py
 - Aliases: `@libs/common`, `@libs/database`, `@libs/settings`, `@libs/auth`, `@libs/render`, `@libs/problems`, `@libs/judging`, `@libs/contests`, `@libs/community` (and `@libs/<name>/*`) -> `libs/<name>/src`
 - Import from the alias root (`@libs/database`) except `/testing` entry points
 - Each lib exports through `libs/<name>/src/index.ts`; add new files there
+- Lib or app: a lib holds what more than one process reads (queue contracts, schemas, access rules, pure formulas); an app holds what only that process does. Pure single-app code lives in a lib only when it is a domain rule (rating, scoring), never for I/O helpers. When a second process needs a file, move it to the lib then (`ProblemAccess` moved to `libs/problems` for the worker; notifications and `SUBMISSION_FILE_DIR` followed the same rule; see docs/decisions.md)
 
 ## Feature module pattern
 
@@ -71,7 +70,7 @@ contests/
   ranking/         board, ranking links, official ranking
   rating/          rate endpoint, ratings.repository
   announcements/   announcements, contest-events (SSE pushes)
-  stats/  data/  submissions/
+  stats/  data/  submissions/  best/  bulk/  problem-ops/  publish/  tags/
   balloons/        balloons.* (queue, deliver, undeliver)
   feed/            feed.* (NDJSON snapshot and stream), feed-keys.* (mint, revoke, release), feed-auth, README (verdict table)
   export/          contest-export.* (request, status, download)
@@ -84,11 +83,11 @@ problems/
   catalog/         languages, licenses, groups, types queriers
   editing/         create/edit, policy, statement (translations, editorial, preview), clone
   data/            test data (store, upload, lifecycle, write guard)
-  imports/  pdf/  uploads/
+  imports/  pdf/  uploads/  bulk/  external-judge/  lifecycle/  package/  polygon/  quota/
 submissions/
   submissions-api.module.ts
   core/            list/detail, repository, access, rate-limits
-  create/  actions/  streams/
+  create/  actions/  streams/  batch/  best/
 auth/
   auth-api.module.ts
   core/            login/session/password change, rate-limits
@@ -98,12 +97,12 @@ auth/
 organizations/
   organizations-api.module.ts
   core/            access rules, repositories (organizations, members, requests), points refresh, rate-limits, dto
-  editing/  membership/  requests/
+  editing/  membership/  requests/  creation/  submissions/
   problem-tags/  problems/  usage/  quota/   each folder's `wiring.ts` holds an array of its classes: add a class there, never to `organizations-api.module.ts`
 users/
   users-api.module.ts
   core/            listed-users, rate-limits, shared dto (username param, time zone)
-  pages/  leaderboards/  profile/  moderation/  data/
+  pages/  leaderboards/  profile/  moderation/  data/  suggestions/
   admin/           staff user list (`judge.ban_user`): username prefix search, `banned` filter, never e-mail
   editing/         staff edit of one user: profile and moderation fields (`judge.change_profile`), e-mail, active flag, password set, reset link, rename (`auth.change_user`)
   creation/        staff account creation, single and batch (`auth.add_user`)
@@ -111,7 +110,7 @@ users/
 blog/
   blog-api.module.ts
   core/            BlogAccess (blog-access.ts), BlogAccessModule (posts repository + visibility, imported by comments), lists, detail, organization posts, dto
-  editing/  votes/
+  editing/  votes/  drafts/
   moderation/      staff lists of hidden and scheduled posts (`judge.edit_all_post`)
 comments/
   comments-api.module.ts
@@ -122,6 +121,10 @@ mail/              flat: `SmtpMailer` behind the `MAILER` token
 contributions/     flat: vote ledger (votes.repository), vote gates and limit, contribution-points enqueuer
 similarity/        core/ start/ runs/ pairs/: code-similarity runs and pairs (`judge.moss_contest` + edit rights)
 home/              flat: homepage data, RSS/Atom feeds
+audit/             flat: staff change log (`GET /admin/audit`)
+events/            flat: the SSE hub (`EventStreamHub`), stream limits; channels register from their own modules
+judges/            flat: judge list, runtimes page, staff judge administration
+tags/              flat: voted problem tags (`tags`, `tag-groups`, `tag-problems`)
 tickets/
   tickets-api.module.ts
   core/            TicketAccess (ticket-access.ts), tickets.service, ticket-gate.service (muted users), repository, context (access view, links), responses, rate-limits, dto
@@ -144,10 +147,10 @@ user-activity/
   staff/           logs, summary, CSV export, live, deletes (`judge.can_see_user_activity`)
 ```
 
-- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|store|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|processor|oauth-provider|spec`
+- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|store|events|guard|decorators|module|schema|dto|command|filter|interceptor|pipe|error|processor|oauth-provider|spec`
 - A class is named after its file: `<Name><Role>` in `<name>.<role>.ts` (`ContestEditFieldsService` in `contest-edit-fields.service.ts`), so a `*.service.ts` class always ends in `Service`
 - One exported responsibility per file; subdocument classes and small helper types may live with their owner
-- Scope: a file exporting a class is `<name>.<role>.ts` with role = class suffix (`IdMapRepository` -> `id-map.repository.ts`); function/type modules and entry points (`main.ts`, `index.ts`, `testing.ts`, `uuid.ts`, `schema.ts`, `crypto.ts`, `mapper.ts`, `bootstrap.ts`) use a plain noun
+- Scope: a file exporting a class is `<name>.<role>.ts` with role = class suffix (`IdMapRepository` -> `id-map.repository.ts`); function/type modules and entry points (`main.ts`, `index.ts`, `testing.ts`, `uuid.ts`, `schema.ts`, `crypto.ts`, `bootstrap.ts`) use a plain noun
 - Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
 - Tests: unit specs `<file>.spec.ts` next to the file under test (a spec that needs MongoDB or Redis is `<file>.db.spec.ts`, see Testing); app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
@@ -174,7 +177,7 @@ user-activity/
 ## Runtime settings
 
 - Env keeps infrastructure and key material: `MONGO_URL`, `REDIS_URL`, `ENCRYPTION_KEY`, `TOKEN_SECRET`, `SITE_URL`, `PORT`, `LOG_LEVEL`, `TRUST_PROXY`, `SSE_IP_ALLOWLIST`, `COOKIE_SECURE`, `MEDIA_ROOT`, `MEDIA_URL`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT`, `PDF_CONCURRENCY`, `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT`, `JUDGE_BRIDGE_TLS_CERT`, `JUDGE_BRIDGE_TLS_KEY`, `TEST_REDIS_URL`
-- Settings (the admin edits them, no restart): `site.timeZone`, `contest.officialMode`, `contest.banAfterDisqualifications`, `discord.webhooks`, `mail.from`, `mail.smtpUrl`, `auth.pwnedApiUrl`, `auth.google`, `auth.github`, `auth.facebook`, `pdf.renderTimeoutMs`, `pdf.maxBytes`, `similarity.minPercent`, `similarity.maxPairs`, `similarity.maxSubmissions`
+- Settings (the admin edits them, no restart): every key is one entry in `libs/settings/src/registry.ts`; read the list there, it is the only copy
 - Add one: a `define({ type, default, description, secret, combine? })` entry in `SETTINGS` (`libs/settings/src/registry.ts`), `type` from `setting-types.ts` (add a type there when none fits); no other file changes, the admin API and revisions pick it up. `secret: true` encrypts the whole value, `secret: ['clientSecret']` those top-level fields; `combine` merges a PATCH into the stored object (the `auth.*` clients), without it the patch replaces the value
 - Read: inject `SettingsService` and call `settings.get('<key>')` where the value is used, never cache it (it is a synchronous read of an in-memory snapshot kept fresh by change stream plus a one-minute resync, so a change reaches api, worker and bridge within seconds); a consumer that builds something expensive keys it by the value (the mailer keeps its SMTP transport per URL)
 - Write: only `SettingsService.set(key, patch, actorId)` (one transaction: combine, validate, seal, upsert, revision); over HTTP `GET /api/internal/admin/settings`, `PATCH /api/internal/admin/settings/:key` with `{ value }`, `GET .../:key/revisions`, `POST .../:key/revisions/:revisionId/restore` (writes the revision's `before` back as a new revision; a whole-secret key answers 409 `secret_unrestorable`, and sealed fields are never restored), all needing `judge.change_settings` (grant it to superusers only, it can point the server at outbound URLs). `null` is refused: clear with `{}` (webhooks), `''` (URLs, SMTP) or `enabled: false`
@@ -198,9 +201,7 @@ user-activity/
 - `issues: [{ field, code, message }]` is the machine-readable twin of `fields`, built from one list by `ValidationFailedError` (or derived by `AppError` when `fields` is given, code `invalid`); codes are snake_case: the failing constraint name (`max_length`, `is_in`), or `context: { code: '...' }` on the class-validator decorator (`username_invalid_characters`, `email_invalid`), or the code a service gives (`invalidField(field, message, code)`, `ValidationFailedError`): `username_taken`, `email_taken`, `password_pwned`, `organization_unavailable`, `language_unknown`, `language_takes_file`, `language_takes_text`, `file_upload_disabled`, `language_extension_invalid`, `file_wrong_extension`, `scratch_project_invalid`, `must_not_be_null` (a PATCH field that may not be null), `password_incorrect`, `password_unchanged`, `assignee_unknown`, `invalid_url`, `invalid_path`, `invalid_regex`, `parent_unknown`, `parent_cycle`; nested DTO fields use dotted names (`appearance.glass`)
 - `extra` (6th `AppError` argument) is merged into the error object next to `code` and `message`, never overriding them; `BannedError` (login) uses it for `banReason`
 - Contest participation refusals (`participation-refusals.ts`): 409 `editor_cannot_register`, `registration_not_required`, `registration_closed`, `contest_ended`, `already_registered`, `contest_not_started`, `virtual_disallowed`, `not_registered`; 403 `banned_from_contest`, `access_code_required`, `wrong_access_code`; 404 `not_in_contest`; 400 `rules_not_accepted` (field `acceptRules`, a contest with rules and a new participation without the box ticked)
-- Contest participation refusals (`participation-refusals.ts`): 409 `editor_cannot_register`, `registration_not_required`, `registration_closed`, `contest_ended`, `already_registered`, `contest_not_started`, `virtual_disallowed`, `not_registered`; 403 `banned_from_contest`, `access_code_required`, `wrong_access_code`; 404 `not_in_contest`
 - Contest admin refusals: 400 `confirmation_mismatch` (delete without the key typed again), 409 `contest_not_deletable` (visible, rated or pending final submissions), 409 `already_participating`, `participation_has_submissions` and `banned_from_contest` (hand-edited participations), issue `user_unknown`
-- Contest replay refusals (`replay/replay-refusal.ts`, every one carries `issues[].code`): 403 `forbidden` with issue `board_frozen` or `board_hidden`; 409 `contest_not_ended`, `replay_unsupported`, `replay_changed`; 400 `replay_build_required`; 404 `replay_chunk_not_found`, `replay_not_ready`, `not_found`; 429 `rate_limited`
 - Contest replay refusals (`replay/replay-refusal.ts`, every one carries `issues[].code`): 403 `forbidden` with issue `board_frozen` or `board_hidden`; 409 `contest_not_ended`, `replay_unsupported`, `replay_changed`; 400 `replay_build_required`; 404 `replay_chunk_not_found`, `replay_not_ready` (also when Redis is down on the lazy path), `not_found`; 429 `rate_limited`; 503 `replay_unavailable` (rebuild while Redis or the queue is down; the budget is given back)
 - Contest ghost refusals (`ghosts/`): 400 `ghost_import_invalid` with `issues[].code` from `GHOST_CSV_ISSUE_CODES` (`label_missing`, `label_formula`, `label_repeats`, `label_invalid`, `caption_invalid`, `caption_formula`, `control_character`, `cell_invalid`, `columns_mismatch`, `header_invalid`, `csv_invalid`, `too_many_ghosts`; `row` is the 1-based CSV row); 409 `ghost_unsupported_format` (import into a `final_submission` contest); 413 from Fastify's body limit (`GHOST_CSV_MAX_BYTES`, 1 MiB) before the handler runs
 - A hidden board is 403 `forbidden` with issue `board_hidden` everywhere (contest replay, sync standings); match on the issue code, not the error code
@@ -332,6 +333,7 @@ user-activity/
 
 - The contract is `libs/judge-proto/proto/qhhoj/judge/v1/judge.proto`, a copy of judge-v2 `proto/` at the tag named in `libs/judge-proto/proto.lock.json`. Never edit the copy or `libs/judge-proto/src/generated`: change judge-v2, tag it (`proto-v1.<minor>`), then `npm run judge-proto:sync -- ../judge-v2 <tag>` and commit `libs/judge-proto`.
 - `npm run judge-proto:check` (CI) checks the copy against the lock and regenerates the TypeScript; `npm run judge-proto:check -- ../judge-v2` also checks the lock against the judge-v2 tag.
+- `scripts/judge/check-deploy-copies.sh [../judge-v2]` checks that `deploy/judge/*` equals judge-v2 `packaging/`; run it when either side changes. `scripts/judge/emit-init-fixtures.ts <out-dir>` writes the `init.yml` shapes judge-v2 tests against (see `scripts/README.md`).
 - Import types and the service from `@libs/judge-proto`; oneof bodies are `{ $case, <name> }` unions, 64-bit fields are numbers. Golden fixtures (`proto/golden`) and conformance scenarios (`proto/conformance`) come with the copy.
 
 ## Local judge
@@ -493,12 +495,12 @@ Replaces MOSS. Code similarity per problem or contest with `@dodona/dolos-lib`.
 - Meaningful names; no single-character identifiers (variables, params, lambda args, catch vars); lint `id-length` min 2
 - Prefer full words over abbreviations (`replSet`, `testingModule`)
 - YAGNI, DRY, KISS; one-liners when equally readable
-- Same shape for every instance of a pattern (every mapper looks like `groups.mapper.ts`)
+- Same shape for every instance of a pattern (every response maps with a `static from(entity)` on its `*.response.ts` class, as `UserSummaryResponse.from`)
 - Formatting is Prettier through ESLint: `npx eslint --fix <files>`
 
 ### Glossary
 
-One name per concept. Rename only where a term is ambiguous, and never rename a wire field (DTOs, packets, job data, schema fields).
+Domain words (what a Judging, a Participation or an Effect is) are in [GLOSSARY.md](GLOSSARY.md); this table holds code identifiers only. One name per concept. Rename only where a term is ambiguous, and never rename a wire field (DTOs, packets, job data, schema fields).
 
 | Concept                                      | Use                                                                                                                                                                                                                        | Not                                                                                        |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -586,7 +588,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 
 ## Env and deploy
 
-- Production install, nginx, systemd units, env template, cutover and rollback: `deploy/RUNBOOK.md`
+- Production install, nginx, podman quadlets, env template, rollback: `deploy/RUNBOOK.md`
 - `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api, the worker and the bridge (all validate env)
 - The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly); boot checks only `CONTEST_DATA_ROOT` against it, the others are the operator's to keep apart

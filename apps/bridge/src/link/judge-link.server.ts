@@ -50,7 +50,7 @@ const SERVER_OPTIONS: ServerOptions = {
   'grpc.max_concurrent_streams': 1 + 2 * MAX_SLOTS,
   'grpc.keepalive_time_ms': 30_000,
   'grpc.keepalive_timeout_ms': 10_000,
-  /** judge-v2 pings every 10 s (core Task 26); without these grpc-js answers GOAWAY `too_many_pings` (preflight M3). */
+  /** judge-v2 pings every 10 s; without these grpc-js answers GOAWAY `too_many_pings`. */
   'grpc.http2.min_ping_interval_without_data_ms': 5_000,
   'grpc.keepalive_permit_without_calls': 1,
 };

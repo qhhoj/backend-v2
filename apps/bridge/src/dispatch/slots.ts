@@ -78,7 +78,7 @@ export const freeSlots = (judge: JudgeState): number =>
 export const loadOf = (judge: JudgeState): number =>
   judge.slots > 0 ? busySlots(judge) / judge.slots : 1;
 
-/** Spec §2 Scheduling: a generation goes only to an enabled judge that advertises a generation feature (which queued row fits is `pickGeneration`'s call), when no queued submission waits for it and it would not take the judge's last free slot (a 1-slot judge has no other). */
+/** Scheduling of test generations: a generation goes only to an enabled judge that advertises a generation feature (which queued row fits is `pickGeneration`'s call), when no queued submission waits for it and it would not take the judge's last free slot (a 1-slot judge has no other). */
 export const mayStartGeneration = (
   judge: JudgeState,
   isSubmissionWaiting: boolean,

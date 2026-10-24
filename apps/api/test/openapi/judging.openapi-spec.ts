@@ -61,7 +61,7 @@ describe('submission, judge and similarity schemas', () => {
     expect(schema('SubmissionResult').enum).toHaveLength(
       SUBMISSION_RESULTS.length,
     );
-    // PrepareDataDto.results (contests) belongs to B5; the global scan is B8's.
+    // PrepareDataDto.results (contests) is checked with the contests schemas; the global scan lives elsewhere.
     expect(owned(inlineEnumSites(document, SUBMISSION_STATUSES))).toEqual([]);
     expect(owned(inlineEnumSites(document, SUBMISSION_RESULTS))).toEqual([]);
   });
