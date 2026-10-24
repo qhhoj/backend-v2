@@ -1,5 +1,12 @@
 # qhhoj-backend
 
+## 2.36.4
+
+### Patch Changes
+
+- 50f604b: Bridge: a judge connection that drops during its key check no longer leaves a session that blocks bridge shutdown, and a judge blocked right after its Welcome gets the forced Disconnect. Bridge specs: two fixture races and a 500 ms test handshake deadline that failed them under host load are fixed.
+- 4265acf: bridge: the resume grace of a lost judge's runs and the handshake deadlines (socket and Hello) are timed through injectable clocks (`GRACE_CLOCK`, `HANDSHAKE_CLOCK`; production keeps one real timer each). The conformance runner drives them from the transcript, waits before each `api` and `wait` step until the bridge has handled every judge message, and ends an `api` step once the bridge has applied the command, so 04, 23 and 33 no longer depend on host timing.
+
 ## 2.36.3
 
 ### Patch Changes
