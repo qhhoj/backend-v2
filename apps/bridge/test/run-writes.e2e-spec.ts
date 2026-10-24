@@ -4,9 +4,12 @@ import {
   RETRY_LIMIT_MESSAGE,
   RunWritesRepository,
 } from '../src/submissions/run-writes.repository';
+import { canJudge } from '../src/dispatch/slots';
+import { RunsService } from '../src/submissions/runs.service';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import type { RunKey } from '../src/submissions/write-outcome';
 import { seedCatalog, seedProblem, seedSubmission } from './fixtures';
+import { RecordingJudge } from './recording-judge';
 import type { BridgeCatalog } from './fixtures';
 import { setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
@@ -34,6 +37,7 @@ describe('Run writes (seq compare-and-set)', () => {
   let catalog: BridgeCatalog;
   let writes: RunWritesRepository;
   let repository: SubmissionsRepository;
+  let runs: RunsService;
   let codes = 0;
   const stored = async (id: string) =>
     (await bridge.submissions.findById(id).select('+cases').lean())!;
@@ -63,6 +67,7 @@ describe('Run writes (seq compare-and-set)', () => {
     catalog = await seedCatalog(bridge);
     writes = bridge.module.get(RunWritesRepository);
     repository = bridge.module.get(SubmissionsRepository);
+    runs = bridge.module.get(RunsService);
   });
   afterAll(() => bridge.teardown());
 
@@ -243,6 +248,60 @@ describe('Run writes (seq compare-and-set)', () => {
       judgeGeneration: 3,
       error: `${RETRY_LIMIT_MESSAGE}: data version 4 not visible`,
     });
+  });
+
+  it('requeues a refusal without spending a RETRY, keeps it from that judge build until a data save, and re-acks its replay', async () => {
+    const run = await claimed();
+    const refusing = { name: JUDGE, build: 'v1', dataVersion: 0 };
+    let key = run.key(2);
+    for (let refusal = 0; refusal < 3; refusal += 1) {
+      const [queued] = await repository.loadQueued([run.id]);
+      const claim = refusal && (await repository.claimRun(queued, JUDGE));
+      if (claim && 'request' in claim)
+        key = { ref: claim.request.ref, judgeName: JUDGE, seq: 2 };
+      await writes.accept({ ...key, seq: 1 });
+      expect(await writes.refuse(key, refusing)).toMatchObject({
+        outcome: 'applied',
+      });
+    }
+    expect(await stored(run.id)).toMatchObject({
+      status: 'QU',
+      retryCount: 0,
+      refusedBy: [refusing],
+      judgedOn: null,
+    });
+    expect((await writes.refuse(key, refusing)).outcome).toBe('duplicate');
+    const [queued] = await repository.loadQueued([run.id]);
+    expect(queued.refusedBy).toEqual([refusing]);
+    const judge = Object.assign(new RecordingJudge(JUDGE), { build: 'v1' });
+    expect(canJudge(judge, queued)).toBe(false);
+    // the author fixes the data: the refusal was made against the old version
+    const { problem } = await stored(run.id);
+    await bridge.problems.updateOne(
+      { _id: problem },
+      { $inc: { dataVersion: 1 } },
+    );
+    const [fixed] = await repository.loadQueued([run.id]);
+    expect(canJudge(judge, fixed)).toBe(true);
+    // a judge with no stamp in the data dir reports 0: the version its Assign carried is recorded
+    const assigned = (await runs.claim(fixed, JUDGE))!;
+    runs.sent(assigned);
+    const unstamped = { ref: assigned.request.ref, judgeName: JUDGE, seq: 2 };
+    await writes.accept({ ...unstamped, seq: 1 });
+    await runs.refused(unstamped, { ...refusing, dataVersion: 0 });
+    expect((await stored(run.id)).refusedBy).toContainEqual({
+      ...refusing,
+      dataVersion: 1,
+    });
+    const [refusedAgain] = await repository.loadQueued([run.id]);
+    const claim = await repository.claimRun(refusedAgain, JUDGE);
+    if (!claim || !('request' in claim)) throw new Error('not claimed');
+    const retried = { ref: claim.request.ref, judgeName: JUDGE, seq: 1 };
+    await writes.accept(retried);
+    expect(
+      await writes.retry({ ...retried, seq: 2 }, 'sandbox failed'),
+    ).toMatchObject({ outcome: 'applied', requeued: true });
+    expect(await stored(run.id)).toMatchObject({ status: 'QU', retryCount: 1 });
   });
 
   it('counts a row without retryCount (a migrated one) as zero RETRYs', async () => {

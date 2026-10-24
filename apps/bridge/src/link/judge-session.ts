@@ -32,6 +32,7 @@ import {
   clipBytes,
   finalReportOf,
   helloOf,
+  isRequeuedByJudge,
   loggableText,
   refOf,
   seqOf,
@@ -115,6 +116,7 @@ export class JudgeSession implements DispatchTarget {
   slots = 0;
   executors: ReadonlySet<string> = new Set<string>();
   features: ReadonlySet<string> = new Set<string>();
+  build = '';
   private readonly logger = new Logger(JudgeSession.name);
   private helloed = false;
   private readonly connectedAt = new Date();
@@ -299,6 +301,7 @@ export class JudgeSession implements DispatchTarget {
     this.slots = info.slots;
     this.executors = new Set(info.runtimes.map((runtime) => runtime.language));
     this.features = new Set(info.features);
+    this.build = info.build;
     try {
       await this.welcome(info);
     } catch (error) {
@@ -397,7 +400,7 @@ export class JudgeSession implements DispatchTarget {
       this.services.dispatch.runStarted(this, handled.ref, caseCount);
   }
 
-  /** The Final is acked only after its write and graded job; the slot is then free. A RETRY frees it with a ban on this judge for the row until the next resync tick, unless the user aborted the run (`honourAbort`). A winding run's Final writes nothing and frees its slot; a stale Final (the row moved on) ends the run too; a Final resent for a run that already ended is re-acked. */
+  /** The Final is acked only after its write and graded job; the slot is then free. A RETRY frees it with a ban on this judge for the row until the next resync tick (a refusal bans this judge build until the problem's data changes, `refusedBy`), unless the user aborted the run (`honourAbort`). A winding run's Final writes nothing and frees its slot; a stale Final (the row moved on) ends the run too; a Final resent for a run that already ended is re-acked. */
   private async onFinal(final: Final): Promise<void> {
     const received = finalReportOf(final);
     const ref = refOf(final.ref);
@@ -406,27 +409,39 @@ export class JudgeSession implements DispatchTarget {
       return this.replayedFinal(ref, seqOf(final.seq), received);
     const report = this.honourAbort(ref, received);
     const handled = await this.handleRun(final, (key) =>
-      this.services.runs.final(key, report),
+      this.settle(key, report),
     );
     if (handled?.outcome === 'stale')
       return this.services.dispatch.windingEnded(this, handled.ref);
     if (handled?.outcome === 'applied' || handled?.outcome === 'duplicate') {
       remember(this.ended, windingKey(handled.ref));
       await this.services.dispatch.runEnded(this, handled.ref, {
-        retried: report.kind === 'retry' && handled.outcome === 'applied',
+        retried: isRequeuedByJudge(report) && handled.outcome === 'applied',
       });
     }
   }
 
-  /** A RETRY that crosses the user's abort ends the run AB, as the abort would have: requeued, it would be graded on another judge. */
+  /** A refusal names this judge build and the data version it refused; every other Final is written as it stands. */
+  private settle(key: RunKey, report: FinalReport): Promise<WriteOutcome> {
+    const { kind } = report;
+    if (kind !== 'refused')
+      return this.services.runs.final(key, { ...report, kind });
+    return this.services.runs.refused(key, {
+      name: this.name,
+      build: this.build,
+      dataVersion: report.dataVersionUsed,
+    });
+  }
+
+  /** A RETRY or refusal that crosses the user's abort ends the run AB, as the abort would have: requeued, it would be graded on another judge. */
   private honourAbort(ref: AssignmentRef, report: FinalReport): FinalReport {
     if (
-      report.kind !== 'retry' ||
+      !isRequeuedByJudge(report) ||
       !this.services.dispatch.isAbortRequested(ref)
     )
       return report;
     this.logger.warn(
-      `Judge ${this.name} answered RETRY for submission ${ref.submissionId} gen ${ref.generation} after its abort; ended as aborted: ${loggableText(report.log)}`,
+      `Judge ${this.name} ${report.kind === 'refused' ? 'refused' : 'answered RETRY for'} submission ${ref.submissionId} gen ${ref.generation} after its abort; ended as aborted: ${loggableText(report.log)}`,
     );
     return { ...report, kind: 'aborted' };
   }
@@ -438,7 +453,7 @@ export class JudgeSession implements DispatchTarget {
     report: FinalReport,
   ): Promise<void> {
     const key = { ref, judgeName: this.name, seq };
-    if ((await this.services.runs.final(key, report)) === 'duplicate')
+    if ((await this.settle(key, report)) === 'duplicate')
       return this.send({ $case: 'ack', ack: { ref, seq } });
     this.abortOnce(ref);
   }

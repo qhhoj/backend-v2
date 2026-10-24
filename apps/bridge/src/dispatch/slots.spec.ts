@@ -27,6 +27,7 @@ const judge = (name: string, extra: Partial<JudgeState> = {}): JudgeState => ({
   inFlight: new Map(),
   winding: new Set(),
   features: new Set(),
+  build: 'v1',
   generations: new Set(),
   ...extra,
 });
@@ -40,6 +41,8 @@ const queued = (extra: Partial<QueuedSubmission> = {}): QueuedSubmission => ({
   bannedJudges: [],
   retryBannedJudges: [],
   requiredFeatures: [],
+  refusedBy: [],
+  dataVersion: 0,
   ...extra,
 });
 
@@ -85,6 +88,14 @@ describe('canJudge', () => {
       canJudge(judge('a', { isDisabled: true }), queued({ judgeName: 'a' })),
     ).toBe(true);
     expect(canJudge(judge('a'), queued({ judgeName: 'b' }))).toBe(false);
+  });
+  it('skips a judge build that refused it as unsupported, not another build of that judge', () => {
+    const refused = queued({
+      refusedBy: [{ name: 'a', build: 'v1', dataVersion: 0 }],
+    });
+    expect(canJudge(judge('a'), refused)).toBe(false);
+    expect(canJudge(judge('a', { build: 'v2' }), refused)).toBe(true);
+    expect(canJudge(judge('b'), refused)).toBe(true);
   });
   it('needs every feature the problem asks for, even from the judge it is pinned to', () => {
     const needs = queued({ requiredFeatures: [INTERACTIVE_CHECKER_FEATURE] });

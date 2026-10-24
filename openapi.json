@@ -13784,12 +13784,22 @@
               }
             ],
             "description": "Which actions the caller may use on this submission."
+          },
+          "waitingReason": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionWaitingReason"
+              }
+            ],
+            "description": "Why a queued submission is not being judged: `waiting_for_capable_judge` once a Judge refused it as unsupported (it stays queued until a Judge that can grade it is connected; the missing feature is not reported yet); null otherwise.",
+            "nullable": true
           }
         },
         "required": [
           "status",
           "result",
           "sourceAccess",
+          "waitingReason",
           "error",
           "currentTestcase",
           "isPretested",
@@ -14460,6 +14470,13 @@
           "canOverrideScore"
         ],
         "type": "object"
+      },
+      "SubmissionWaitingReason": {
+        "description": "Why a queued submission is not being judged: `waiting_for_capable_judge` once a Judge refused it as unsupported (it stays queued until a Judge that can grade it is connected; the missing feature is not reported yet); null otherwise.",
+        "enum": [
+          "waiting_for_capable_judge"
+        ],
+        "type": "string"
       },
       "SubmitDto": {
         "properties": {

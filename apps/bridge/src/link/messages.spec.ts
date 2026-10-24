@@ -5,6 +5,7 @@ import {
   Final,
   Hello,
   Outcome,
+  RetryReason,
   Status,
 } from '@libs/judge-proto';
 import {
@@ -164,6 +165,14 @@ describe('judge link messages', () => {
         }),
       ),
     ).toEqual({ kind: 'retry', log: 'l'.repeat(65536), dataVersionUsed: 4 });
+    expect(
+      finalReportOf(
+        Final.fromPartial({
+          outcome: Outcome.OUTCOME_RETRY,
+          reason: RetryReason.RETRY_REASON_UNSUPPORTED,
+        }),
+      ).kind,
+    ).toBe('refused');
     expect(() => finalReportOf(Final.fromPartial({}))).toThrow(ProtocolError);
   });
 

@@ -44,6 +44,8 @@ interface JudgedProblem {
   /** The mirror root's code for a mirror; undefined when that problem is gone. */
   code: string | undefined;
   requiredFeatures: string[];
+  /** The judged data's `dataVersion` (the root's for a mirror). */
+  dataVersion: number;
   isExternal: boolean;
 }
 /** The IE message of a claimed row whose problem, source or uploaded file is gone. */
@@ -208,6 +210,8 @@ export class SubmissionsRepository {
           bannedJudges: metaOf.get(uuidStr(row._id))?.bannedJudges ?? [],
           retryBannedJudges: [],
           requiredFeatures: problem.requiredFeatures,
+          refusedBy: row.refusedBy ?? [],
+          dataVersion: problem.dataVersion,
         },
       ];
     });
@@ -225,17 +229,18 @@ export class SubmissionsRepository {
           contest: 1,
           judgeGeneration: 1,
           pinnedJudge: 1,
+          refusedBy: 1,
         },
       )
       .sort({ priority: 1, _id: 1 })
       .lean();
   }
 
-  /** Per problem id: the code judges know it by and the features its data needs, both from its mirror root when it has one, and whether the external judge takes it. */
+  /** Per problem id: the code judges know it by, the features its data needs and its data version, all from its mirror root when it has one, and whether the external judge takes it. */
   private async judgedProblemsOf(
     problemIds: string[],
   ): Promise<Map<string, JudgedProblem>> {
-    const judgedFields = { code: 1, ...JUDGED_DATA_PROJECTION };
+    const judgedFields = { code: 1, dataVersion: 1, ...JUDGED_DATA_PROJECTION };
     const problems = await this.problems
       .find(
         { _id: { $in: problemIds } },
@@ -261,6 +266,7 @@ export class SubmissionsRepository {
           requiredFeatures: judged?.data
             ? requiredJudgeFeatures(judged.data)
             : [],
+          dataVersion: judged?.dataVersion ?? 0,
           isExternal: Boolean(problem.externalJudge?.isActive),
         };
         return [uuidStr(problem._id), entry];
