@@ -203,7 +203,8 @@ export class JudgeLinkServer {
   private async openSession(call: SessionCall): Promise<void> {
     const peer = peerOfCall(call.getPeer());
     const identity = await this.identify(call, peer);
-    if (!identity) return;
+    // a stream that closed during the key check never emits 'close' again: a session on it would never finish, and close() would wait for it
+    if (!identity || call.closed) return;
     const session = new JudgeSession(call, identity, this.services);
     this.guard.sessionOpened(peer, session.name);
     this.endOlderHandshakes(session);

@@ -30,9 +30,9 @@ import { ACCEPT_CLOCK, TIMER_ACCEPT_CLOCK } from '../src/link/accept-clock';
 import type { AcceptClock } from '../src/link/accept-clock';
 import { JudgeLinkServer } from '../src/link/judge-link.server';
 
-/** Milliseconds instead of seconds; `resyncMs` stays long so a test sees only the dispatches it caused (restart tests shorten it). No test waits for the idle or accept clock to expire, so both are long enough that a loaded host (event-loop stalls of seconds) never drops a judge or releases a slow Accepted mid-test. */
+/** Milliseconds instead of seconds; `resyncMs` stays long so a test sees only the dispatches it caused (restart tests shorten it). No test waits for the idle or accept clock to expire, so both are long enough that a loaded host (event-loop stalls of seconds) never drops a judge or releases a slow Accepted mid-test. `handshakeMs` is also the socket deadline from accept to an authenticated session: a loaded host takes over a second for a judge's first connect, so it is seconds too, and short enough that a socket left without a session dies within a test. */
 export const FAST_TIMINGS: BridgeTimings = {
-  handshakeMs: 500,
+  handshakeMs: 5000,
   idleMs: 5000,
   pingIntervalMs: 200,
   resyncMs: 60_000,

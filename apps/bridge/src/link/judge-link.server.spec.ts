@@ -17,6 +17,7 @@ class FakeCall extends EventEmitter {
     this.metadata.set('x-judge-name', name);
     this.metadata.set('x-judge-key', key);
   }
+  closed = false;
   getPeer = () => '10.0.0.9:5000';
   write = () => true;
   pause = () => undefined;
@@ -57,9 +58,15 @@ function setup(authenticate: jest.Mock) {
   const internals = server as unknown as {
     openSession(call: FakeCall): Promise<void>;
     serve(socket: Socket): void;
+    sessions: Set<unknown>;
   };
   const open = (call: FakeCall) => internals.openSession(call);
-  return { server, open, serve: (socket: Socket) => internals.serve(socket) };
+  return {
+    server,
+    open,
+    serve: (socket: Socket) => internals.serve(socket),
+    sessions: internals.sessions,
+  };
 }
 
 describe('JudgeLinkServer', () => {
@@ -92,6 +99,18 @@ describe('JudgeLinkServer', () => {
     await open(late);
     expect(late.statuses[0]?.code).toBe(status.UNAVAILABLE);
     expect(check.authenticate).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens no session on a stream that closed during its key check', async () => {
+    const check = deferredCheck();
+    const { open, sessions } = setup(check.authenticate);
+    const dropped = new FakeCall('j1', 'key');
+    const opening = open(dropped);
+    dropped.closed = true;
+    dropped.emit('close');
+    check.pass();
+    await opening;
+    expect(sessions.size).toBe(0);
   });
 
   it('refuses a Session whose key check was under way when its judge was revoked, and serves one checked after', async () => {

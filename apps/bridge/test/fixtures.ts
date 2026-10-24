@@ -1,4 +1,5 @@
 import { sha256 } from '@libs/auth';
+import { newId } from '@libs/database';
 import type { Judge, Problem, Submission } from '@libs/database';
 import type { BridgeTest } from './setup';
 
@@ -49,7 +50,7 @@ export const seedProblem = (
     ...overrides,
   });
 
-/** A submission row plus its source, as the api writes them. */
+/** A submission row plus its source, source first as the api writes them: the external runner claims a queued row on its own timer, so the row never exists without its source. */
 export async function seedSubmission(
   test: BridgeTest,
   catalog: BridgeCatalog,
@@ -60,14 +61,15 @@ export async function seedSubmission(
     ...fields
   }: Partial<Submission> & { problem: string; source?: string },
 ) {
-  const submission = await test.submissions.create({
+  const id = newId();
+  await test.sources.create({ _id: id, source });
+  return test.submissions.create({
+    _id: id,
     user: catalog.user._id,
     problem,
     language,
     ...fields,
   });
-  await test.sources.create({ _id: submission._id, source });
-  return submission;
 }
 
 /** A contest submission as the api writes it: the submission (with its contest) and its contest row. */
