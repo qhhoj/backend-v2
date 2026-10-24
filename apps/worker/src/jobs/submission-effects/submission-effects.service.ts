@@ -9,6 +9,7 @@ import {
 } from '@libs/community';
 import type { OrganizationPointsJob } from '@libs/community';
 import {
+  CONTEST_RATING_QUEUE,
   CONTEST_REPLAY_QUEUE,
   contestSubmissionPoints,
   disqualify,
@@ -16,10 +17,11 @@ import {
   notifyReplayBuild,
   purgeRankingCache,
   replayDelayMs,
+  requestContestRerate,
   scoreParticipation,
   scoringContextOf,
 } from '@libs/contests';
-import type { ContestReplayJob } from '@libs/contests';
+import type { ContestRatingJob, ContestReplayJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { acceptanceRate, userPoints } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
@@ -42,6 +44,8 @@ export class SubmissionEffectsService {
     private readonly organizationPoints: Queue<OrganizationPointsJob>,
     @InjectQueue(CONTEST_REPLAY_QUEUE)
     private readonly replayQueue: Queue<ContestReplayJob>,
+    @InjectQueue(CONTEST_RATING_QUEUE)
+    private readonly ratingQueue: Queue<ContestRatingJob>,
   ) {}
 
   /** The graded job (and the sweep's repair of one that was lost): the effects, then the run's judging time is charged (once per grading attempt, also for a deleted problem; after the effects, so billing never holds back a score), then the row's `effectsDueAt` is cleared, but only the stamp read before them, so a run that finished meanwhile keeps its own and a failed charge is repaired by the sweep. */
@@ -87,26 +91,31 @@ export class SubmissionEffectsService {
       ),
     );
     await this.recomputeParticipation(uuidStr(entry.participation));
-    await this.requestReplayAfterEnd(contest, uuidStr(entry.participation));
+    await this.followUpAfterEnd(contest, uuidStr(entry.participation));
   }
 
-  /** A verdict that lands after the end (judge backlog, rejudge) is missing from a replay built earlier, so it queues a rebuild through the coalescing helper (one build at a time per contest, waiting for the settle time). Only live, qualified rows are in the replay; `final_submission` has none. Never throws: derived data. */
-  private async requestReplayAfterEnd(
+  /**
+   * A verdict that lands after the end (judge backlog, rejudge, reject, score override) on a live, qualified row is
+   * missing from what was built from the final board: the replay (`final_submission` has none) and, when the contest
+   * has ratings, the ratings. The replay request never throws (derived data); a failed re-rate request fails the job,
+   * whose retry recomputes the same results and asks again.
+   */
+  private async followUpAfterEnd(
     contest: ScoringContest,
     participationId: string,
     now = new Date(),
   ): Promise<void> {
-    if (now < contest.endTime || contest.formatName === 'final_submission')
-      return;
+    if (now < contest.endTime) return;
     const participation =
       await this.contestResults.findParticipation(participationId);
     if (participation?.virtual !== LIVE || participation.isDisqualified) return;
-    await notifyReplayBuild(
-      this.replayQueue,
-      uuidStr(participation.contest),
-      this.logger,
-      { delayMs: replayDelayMs(contest.endTime, now) },
-    );
+    const contestId = uuidStr(contest._id);
+    if (contest.formatName !== 'final_submission')
+      await notifyReplayBuild(this.replayQueue, contestId, this.logger, {
+        delayMs: replayDelayMs(contest.endTime, now),
+      });
+    if (await this.contestResults.hasRatings(contestId))
+      await requestContestRerate(this.ratingQueue, contestId);
   }
 
   /** Legacy `recompute_results` through the contest's format, then the contest's ranking cache is dropped (all four keys). */

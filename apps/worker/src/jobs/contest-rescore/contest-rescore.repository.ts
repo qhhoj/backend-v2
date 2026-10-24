@@ -5,7 +5,6 @@ import type { ContestRescoreScope } from '@libs/contests';
 import {
   ContestParticipation,
   ContestSubmission,
-  Rating,
   uuidStr,
 } from '@libs/database';
 
@@ -39,13 +38,7 @@ export class ContestRescoreRepository {
     private readonly contestSubmissions: Model<ContestSubmission>,
     @InjectModel(ContestParticipation.name)
     private readonly participations: Model<ContestParticipation>,
-    @InjectModel(Rating.name) private readonly ratings: Model<Rating>,
   ) {}
-
-  /** Through the `{contest, user}` index. */
-  async hasRatings(contestId: string): Promise<boolean> {
-    return (await this.ratings.exists({ contest: contestId })) !== null;
-  }
 
   /** The contest's rows, or the scope's, through a cursor (`{contest, problem}` or `{participation, problem}` index). */
   submissionChunks(

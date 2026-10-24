@@ -1,7 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
-import { CONTEST_REPLAY_QUEUE } from '@libs/contests';
+import { CONTEST_RATING_QUEUE, CONTEST_REPLAY_QUEUE } from '@libs/contests';
 import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
 import { QuotaLedgerModule } from '@libs/problems';
 import { ContestResultsRepository } from './contest-results.repository';
@@ -15,6 +15,7 @@ import { SubmissionEffectsService } from './submission-effects.service';
       { name: SUBMISSION_GRADED_QUEUE },
       { name: ORGANIZATION_POINTS_QUEUE },
       { name: CONTEST_REPLAY_QUEUE },
+      { name: CONTEST_RATING_QUEUE },
     ),
     QuotaLedgerModule,
   ],

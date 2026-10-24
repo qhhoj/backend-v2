@@ -23,7 +23,12 @@ export interface RatableContest {
   rateExclude: string[];
   ratingFloor: number | null;
   ratingCeiling: number | null;
+  /** The contest's current problems: rows of a removed problem do not count, as in scoring. */
+  problemIds: string[];
 }
+type RatableRow = Omit<RatableContest, 'problemIds'> & {
+  problems: Array<{ problem: unknown }>;
+};
 export interface Candidate {
   participationId: string;
   userId: string;
@@ -49,6 +54,7 @@ const RATABLE_FIELDS = {
   rateExclude: 1,
   ratingFloor: 1,
   ratingCeiling: 1,
+  'problems.problem': 1,
 };
 
 /** Every method takes the session of `inTransaction`: a re-rate reads its own uncommitted deletes and inserts. */
@@ -79,7 +85,7 @@ export class ContestRatingRepository {
     const row = await this.contests
       .findById(id, RATABLE_FIELDS)
       .session(session)
-      .lean<RatableContest>()
+      .lean<RatableRow>()
       .exec();
     return row ? ratable(row) : null;
   }
@@ -119,7 +125,7 @@ export class ContestRatingRepository {
     return row?.endTime ?? null;
   }
 
-  /** Rated contests ending in `[endTime, now]`, in end order (`endTime` index), without those still frozen: every contest here has ended, so a freezing format with `frozenLastMinutes > 0` is frozen (`isFrozen`). */
+  /** Visible rated contests ending in `[endTime, now]`, in end order (`endTime` index), without those still frozen: every contest here has ended, so a freezing format with `frozenLastMinutes > 0` is frozen (`isFrozen`). A hidden contest (a draft, a clone) is never rated. */
   async ratedContestsFrom(
     endTime: Date,
     now: Date,
@@ -129,6 +135,7 @@ export class ContestRatingRepository {
       .find(
         {
           isRated: true,
+          isVisible: true,
           endTime: { $gte: endTime, $lte: now },
           $nor: [
             {
@@ -141,7 +148,7 @@ export class ContestRatingRepository {
       )
       .sort({ endTime: 1, _id: 1 })
       .session(session)
-      .lean<RatableContest[]>()
+      .lean<RatableRow[]>()
       .exec();
     return rows.map(ratable);
   }
@@ -174,9 +181,9 @@ export class ContestRatingRepository {
     return { users: users.map(uuidStr), contests: contests.map(uuidStr) };
   }
 
-  /** Live, joined rows, with their contest-submission counts (one grouped read over `{participation, problem}`). Unlisted users who are not banned (staff and test accounts, owner decision Q3) are never rated and rank no one; banned users are unlisted too but stay, so a disqualified cheater keeps the last-place penalty. */
+  /** Live, joined rows, with their contest-submission counts on the contest's current problems (one grouped read over `{participation, problem}`). Unlisted users who are not banned (staff and test accounts, owner decision Q3) are never rated and rank no one; banned users are unlisted too but stay, so a disqualified cheater keeps the last-place penalty. */
   async candidates(
-    contestId: string,
+    { _id: contestId, problemIds }: RatableContest,
     session: ClientSession,
   ): Promise<Candidate[]> {
     const unrated = await this.unratedUsers(session);
@@ -202,6 +209,7 @@ export class ContestRatingRepository {
                 participation: {
                   $in: rows.map((row) => toUuid(uuidStr(row._id))),
                 },
+                problem: { $in: problemIds.map(toUuid) },
               },
             },
             { $group: { _id: '$participation', count: { $sum: 1 } } },
@@ -295,8 +303,9 @@ export class ContestRatingRepository {
   }
 }
 
-const ratable = (row: RatableContest): RatableContest => ({
+const ratable = ({ problems = [], ...row }: RatableRow): RatableContest => ({
   ...row,
   _id: uuidStr(row._id),
   rateExclude: row.rateExclude.map(uuidStr),
+  problemIds: problems.map((entry) => uuidStr(entry.problem)),
 });

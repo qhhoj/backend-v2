@@ -123,7 +123,7 @@ export class ContestRatingService {
     session: ClientSession,
   ): Promise<RatingRow[]> {
     const candidates = (
-      await this.repository.candidates(contest._id, session)
+      await this.repository.candidates(contest, session)
     ).filter(
       (candidate) =>
         !contest.rateExclude.includes(candidate.userId) &&
