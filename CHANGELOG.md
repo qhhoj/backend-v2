@@ -1,5 +1,15 @@
 # qhhoj-backend
 
+## 2.36.1
+
+### Patch Changes
+
+- beef651: Contests: a clone starts unrated, drops gated settings the cloner may not set and keeps the 14-day duration limit; a rejudge, reject or score override after the end of a contest with ratings re-rates it (debounced per contest); the public ranking is built once per burst and cached at least 5 s even with `scoreboardCacheTimeout` 0; rating ignores rows on removed problems; ICPC with `penalty: 0` marks an unsolved problem pending by its latest try.
+- a313622: Enforce contest hide-problem-tags/authors in problem detail and list; keep hidden-contest submissions out of the public activity heatmap.
+- 0063139: Polygon standard-package imports check the generated tests against the organization's storage quota.
+- 02dae4e: The local judge-v2 stack starts its judge with `allow_unbounded_disk`, which judge-v2 now needs on a box root without a disk quota.
+- 41991d6: bridge: a Judging a judge refuses as unsupported (`RETRY_REASON_UNSUPPORTED`) is requeued without spending a RETRY and not offered to that judge build again until the problem's data changes; it waits queued (`waitingReason: waiting_for_capable_judge` on the submission detail) instead of ending IE.
+
 ## 2.36.0
 
 ### Minor Changes
