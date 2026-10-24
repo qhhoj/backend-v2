@@ -8308,7 +8308,7 @@
             "type": "boolean"
           },
           "pendingRequestId": {
-            "description": "The viewer's pending join request (Task 6), else null.",
+            "description": "The viewer's pending join request, else null.",
             "nullable": true,
             "type": "string"
           }
