@@ -236,7 +236,7 @@ export class SubmissionsRepository {
       .lean();
   }
 
-  /** Per problem id: the code judges know it by and the features its data needs, both from its mirror root when it has one, and whether the external judge takes it. */
+  /** Per problem id: the code judges know it by, the features its data needs and its data version, all from its mirror root when it has one, and whether the external judge takes it. */
   private async judgedProblemsOf(
     problemIds: string[],
   ): Promise<Map<string, JudgedProblem>> {

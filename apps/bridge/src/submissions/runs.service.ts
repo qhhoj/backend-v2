@@ -1,11 +1,7 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import type {
-  RefusingJudge,
-  SubmissionCase,
-  SubmissionStatus,
-} from '@libs/database';
+import type { SubmissionCase, SubmissionStatus } from '@libs/database';
 import {
   gradedJobId,
   notifyGraded,
@@ -20,7 +16,7 @@ import { loggableText } from '../link/messages';
 import type { RunFinalReport } from '../link/messages';
 import type { AssignRequest } from './assign-request';
 import { RunWritesRepository } from './run-writes.repository';
-import type { RetryOutcome } from './run-writes.repository';
+import type { Refusal, RetryOutcome } from './run-writes.repository';
 import { SubmissionsRepository } from './submissions.repository';
 import type { RunKey, WriteOutcome } from './write-outcome';
 
@@ -42,6 +38,8 @@ interface Tracked {
   subject: SubmissionGradedJob;
   /** The run being tracked: `forget` of an older generation leaves a newer one alone. */
   generation: number;
+  /** The data version its Assign carried. */
+  dataVersion: number;
   progressAt: number;
 }
 
@@ -91,6 +89,7 @@ export class RunsService {
     this.tracked.set(subject.submissionId, {
       subject,
       generation,
+      dataVersion: request.dataVersion,
       progressAt: 0,
     });
     this.publish(subject, 'processing', 'P');
@@ -216,15 +215,26 @@ export class RunsService {
   }
 
   /** The judge refused the run as unsupported: requeued without spending a RETRY, not offered to that judge build again until the problem's data changes (the dispatcher reads `refusedBy`). A row every connected judge refused stays QU, visibly waiting for a judge that can grade it. */
-  async refused(key: RunKey, judge: RefusingJudge): Promise<WriteOutcome> {
-    const written = await this.writes.refuse(key, judge);
+  async refused(key: RunKey, refusal: Refusal): Promise<WriteOutcome> {
+    const written = await this.writes.refuse(key, {
+      ...refusal,
+      dataVersion: this.refusedDataVersion(key.ref, refusal.dataVersion),
+    });
     if (written.outcome !== 'applied') return written.outcome;
     const { ref } = key;
     this.logger.warn(
-      `Judge ${judge.name} (build ${loggableText(judge.build)}) refused submission ${ref.submissionId} gen ${ref.generation} as unsupported; requeued for another judge`,
+      `Judge ${refusal.name} (build ${loggableText(refusal.build)}) refused submission ${ref.submissionId} gen ${ref.generation} as unsupported; requeued for another judge`,
     );
     this.requeued(ref.submissionId);
     return written.outcome;
+  }
+
+  /** The larger of the version the judge reports and the one its Assign carried: a judge with no stamp in the data dir reports 0, which would make every refusal stale and the row bounce once per resync tick. A run resumed after a bridge restart is not tracked, so the reported version stands. */
+  private refusedDataVersion(ref: AssignmentRef, reported: number): number {
+    const tracked = this.tracked.get(ref.submissionId);
+    return tracked?.generation === ref.generation
+      ? Math.max(reported, tracked.dataVersion)
+      : reported;
   }
 
   private async renotify(key: RunKey): Promise<void> {

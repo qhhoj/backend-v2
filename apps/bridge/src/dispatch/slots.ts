@@ -39,7 +39,7 @@ export interface JudgeState {
   readonly winding: Set<string>;
   /** Features from its Hello (`generate.polygon`, ...). */
   readonly features: ReadonlySet<string>;
-  /** Build from its Hello: a refusal holds for that build only, so a new build may try again (judge-v2 sends its `CARGO_PKG_VERSION`, so today that means a new release). */
+  /** Build from its Hello: a refusal holds for that build only, so a new build may try again (judge-v2's build carries its commit since judge-v2 #60, so a new commit is a new build). */
   readonly build: string;
   /** Ids of the test generations it holds (a claim in flight included); each takes one slot. */
   readonly generations: Set<string>;

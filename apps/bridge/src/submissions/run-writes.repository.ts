@@ -45,6 +45,9 @@ const GRADABLE: readonly SubmissionStatus[] = ['P', 'G'];
 const GRADED_JOB_FIELDS = { user: 1, problem: 1 } as const;
 
 /** Back to QU after the judge could not run it: the run's seq stays, so a replay of its Final is classified a duplicate (the next claim resets it); a pin to that judge would bring it back there. */
+/** A refusal as written: unlike a stored `RefusingJudge` (old entries have none), it always names the data version, so the build catches a write that drops it. */
+export type Refusal = Required<RefusingJudge>;
+
 const requeueByJudge = (key: RunKey) => ({
   ...REQUEUE_RESET,
   judgeSeq: key.seq,
@@ -202,10 +205,10 @@ export class RunWritesRepository {
   }
 
   /** Final RETRY Unsupported: back to QU with that judge build and the data version it refused recorded in `refusedBy`, so it is not offered the row again until the data changes; `retryCount` is untouched, so a refusal never ends in IE. */
-  refuse(key: RunKey, judge: RefusingJudge): Promise<FinishOutcome> {
+  refuse(key: RunKey, refusal: Refusal): Promise<FinishOutcome> {
     return this.finish(key, {
       $set: requeueByJudge(key),
-      $addToSet: { refusedBy: judge },
+      $addToSet: { refusedBy: refusal },
     });
   }
 
