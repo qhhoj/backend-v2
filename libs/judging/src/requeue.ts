@@ -31,6 +31,7 @@ export const requeueUpdate = (
     priority,
     requeueCount: 0,
     retryCount: 0,
+    unstoredCount: 0,
     refusedBy: [],
     deferral: null,
     effectsDueAt: null,

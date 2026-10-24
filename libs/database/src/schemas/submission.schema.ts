@@ -168,6 +168,8 @@ export class Submission {
   @Prop({ type: Number, default: null }) judgedDataVersion!: number | null;
   /** `Final{RETRY}` answers with no transient reason since the last rejudge (the judge failed it); the third is IE. Transient ones are `deferral`, refusals `refusedBy`. */
   @Prop({ default: 0 }) retryCount!: number;
+  /** Runs requeued since the last rejudge because their Final could not be stored; past the first two each also counts in `retryCount`. */
+  @Prop({ default: 0 }) unstoredCount!: number;
   /** The transient wait since the last rejudge (data not there yet, runtime missing, sandbox failure); null when there was none. */
   @Prop({ type: JudgeDeferralSchema, default: null })
   deferral!: JudgeDeferral | null;

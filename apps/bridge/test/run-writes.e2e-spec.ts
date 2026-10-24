@@ -1,8 +1,11 @@
 import type { Problem, SubmissionCase } from '@libs/database';
 import type { AssignmentRef } from '@libs/judge-proto';
 import {
+  FREE_UNSTORED_REQUEUES,
+  MAX_RETRIES,
   RETRY_LIMIT_MESSAGE,
   RunWritesRepository,
+  UNSTORED_LIMIT_MESSAGE,
 } from '../src/submissions/run-writes.repository';
 import { DEFERRAL_LIMIT_MESSAGE } from '../src/submissions/deferral';
 import { canJudge } from '../src/dispatch/slots';
@@ -380,6 +383,28 @@ describe('Run writes (seq compare-and-set)', () => {
     expect(await stored(run.id)).toMatchObject({
       status: 'QU',
       deferral: { since: late, count: 1 },
+    });
+  });
+
+  it('requeues a run whose Final was never stored for free twice, then spends a RETRY on each, and ends it as IE once those are spent', async () => {
+    const run = await claimed();
+    let ref = run.ref;
+    const requeued: boolean[] = [];
+    for (let tries = FREE_UNSTORED_REQUEUES + MAX_RETRIES; tries > 0; tries--) {
+      await writes.accept({ ref, judgeName: JUDGE, seq: 1 });
+      requeued.push(await runs.requeueUnstored(ref, JUDGE));
+      const [queued] = await repository.loadQueued([run.id]);
+      if (!queued) break;
+      const claim = await repository.claimRun(queued, JUDGE);
+      if (!claim || !('request' in claim)) throw new Error('not claimed');
+      ref = claim.request.ref;
+    }
+    expect(requeued).toEqual([true, true, true, true, false]);
+    expect(await stored(run.id)).toMatchObject({
+      status: 'IE',
+      result: 'IE',
+      retryCount: MAX_RETRIES,
+      error: UNSTORED_LIMIT_MESSAGE,
     });
   });
 

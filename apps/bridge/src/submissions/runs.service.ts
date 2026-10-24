@@ -127,16 +127,16 @@ export class RunsService {
     }
   }
 
-  /** The run's Final could not be stored: back to QU with partial results dropped and nothing spent (the judge did not fail). False when the row moved on. */
+  /** The run's Final could not be stored: back to QU with partial results dropped, nothing spent the first times (the judge did not fail), then a RETRY each; IE once those are spent. True when it was requeued. */
   async requeueUnstored(
     ref: AssignmentRef,
     judgeName: string,
   ): Promise<boolean> {
-    const requeued = await this.submissions.resetStrandedRuns([
-      { id: ref.submissionId, judgedOn: judgeName, generation: ref.generation },
-    ]);
-    this.announceRequeued(requeued);
-    return requeued.length > 0;
+    const written = await this.writes.requeueUnstored(ref, judgeName);
+    if (!written) return false;
+    if (written.requeued) this.requeued(ref.submissionId);
+    else await this.finished(written.job, 'IE', ref.generation);
+    return written.requeued;
   }
 
   resumableSeq(ref: AssignmentRef, judgeName: string): Promise<number | null> {
