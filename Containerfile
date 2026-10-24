@@ -3,7 +3,8 @@
 FROM node:22-bookworm AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# No dependency install script runs; only the similarity worker's native parsers are built (by name).
+RUN npm ci --ignore-scripts && npm rebuild @dodona/dolos-parsers
 COPY . .
 RUN npm run build && npx nest build bridge && npx nest build worker \
  && npm prune --omit=dev

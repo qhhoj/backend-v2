@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# qhhoj-deploy-serve: the login shell and the forced command of the CD user `deploy` (RUNBOOK "First install" step 6).
+# Installed to /usr/local/sbin by install-host.sh. It allows exactly:
+#   sudo /usr/local/sbin/qhhoj-deploy <words>   the deploy helper as root (sudoers allows nothing else)
+#   rsync --server <opts> . /var/lib/qhhoj-deploy/incoming/
+#                                               a write-only upload (rrsync -wo -no-del) into that directory; the client
+#                                               names it in full, so the same upload works on a host without this script
+# Anything else (a login, sftp, another command) is refused with exit 1 and logged to syslog (auth, tag qhhoj-deploy-serve).
+# As the forced command it reads SSH_ORIGINAL_COMMAND; as the login shell sshd runs it with `-c <command>`.
+set -euo pipefail
+
+# Tests set ROOT and stub tools; under sshd (SSH_CONNECTION) the override is ignored whatever AcceptEnv passes on.
+ROOT="${QHHOJ_DEPLOY_ROOT:-}"
+[ -z "${SSH_CONNECTION:-}" ] || ROOT=""
+[ -n "$ROOT" ] || export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+HELPER=/usr/local/sbin/qhhoj-deploy
+UPLOAD_PATH=/var/lib/qhhoj-deploy/incoming/ # as the client names it
+INCOMING="$ROOT$UPLOAD_PATH"
+TAG=qhhoj-deploy-serve
+
+note() { logger -t "$TAG" -p "auth.$1" -- "$2" || true; } # priority message
+refuse() { note warning "refused: ${1:0:200}"; echo "$TAG: refused" >&2; exit 1; }
+
+plain_words() { # command -> words: no newline, quote, glob or shell character gets through
+  [[ $1 =~ ^[A-Za-z0-9\ ./_=,+:-]+$ ]] || refuse "$1"
+  read -ra words <<< "$1"
+}
+
+serve_helper() { # sudo /usr/local/sbin/qhhoj-deploy <words>
+  plain_words "$1"
+  note info "${words[*]:1}"
+  exec sudo -n "$HELPER" "${words[@]:2}"
+}
+
+serve_upload() { # rsync --server <opts> . /var/lib/qhhoj-deploy/incoming/: rrsync checks the options, rooted there
+  plain_words "$1"
+  [[ $1 == *" . $UPLOAD_PATH" ]] || refuse "$1"
+  note info "upload"
+  SSH_ORIGINAL_COMMAND="${1%"$UPLOAD_PATH"}." exec rrsync -wo -no-del "$INCOMING"
+}
+
+main() {
+  local command="${SSH_ORIGINAL_COMMAND-}"
+  if [ -z "${SSH_ORIGINAL_COMMAND+set}" ] && [ "${1:-}" = -c ]; then command="${2:-}"; fi
+  case "$command" in
+    "sudo $HELPER "*) serve_helper "$command" ;;
+    "rsync --server --sender "*) refuse "$command" ;;
+    "rsync --server "*) serve_upload "$command" ;;
+    *) refuse "${command:-<no command>}" ;;
+  esac
+}
+
+main "$@"

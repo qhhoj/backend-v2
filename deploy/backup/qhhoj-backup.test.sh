@@ -129,4 +129,17 @@ config RESTIC_PASSWORD=CHANGE; set +e; backup; rc=$?; set -e
 grep -q 'placeholder' "$out" || fail "the placeholder refusal is logged"
 set +e; bash "$here/restore-test.sh" > "$out" 2>&1; rc=$?; set -e
 [ "$rc" = 64 ] || fail "restore-test refuses a placeholder RESTIC_PASSWORD with 64, got $rc"
+
+# restore-test's scratch mongod has no auth, so it opens no TCP port: unix sockets in its 0700 scratch dir only.
+# shellcheck disable=SC2016 # $* belongs to the stubs
+printf '#!/usr/bin/env bash\necho "mongod $*" >> "%s"\n' "$calls" > "$bin/mongod"
+printf '#!/usr/bin/env bash\necho "mongorestore $*" >> "%s"\ncat > /dev/null\n' "$calls" > "$bin/mongorestore"
+printf '#!/usr/bin/env bash\necho "users 1"\n' > "$bin/mongosh"; chmod +x "$bin/mongod" "$bin/mongorestore" "$bin/mongosh"
+fresh; config "RESTORE_TEST_DIR=$work/rt"; backup || fail "backup before the restore test"
+: > "$calls"; bash "$here/restore-test.sh" > "$out" 2>&1 || fail "restore-test with stub mongod"
+scratch="$(sed -n 's/^mongod --dbpath \(.*\)\/db --bind_ip .*/\1/p' "$calls" | head -1)"
+[ -n "$scratch" ] && grep -qF "mongod --dbpath $scratch/db --bind_ip $scratch/mongod.sock --unixSocketPrefix $scratch " "$calls" \
+  || fail "the scratch mongod binds its socket in the scratch dir"
+grep -E '^mongod .*(--port|127\.0\.0\.1)' "$calls" && fail "the scratch mongod must not listen on TCP"
+grep -qF "mongorestore --uri mongodb://${scratch//\//%2F}%2Fmongod.sock/ --archive" "$calls" || fail "mongorestore uses the socket"
 echo "qhhoj-backup ok"

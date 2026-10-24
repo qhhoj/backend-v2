@@ -1,7 +1,9 @@
 # Builds the backend image, pushes it to GHCR and deploys it with qhhoj-deploy on the production host.
 # Called by release.yml when that run created the version tag (a tag pushed with GITHUB_TOKEN starts no
-# workflow itself) and run by hand (Actions → deploy → Run workflow) for any ref. A running contest defers
-# the restart (retried for 6 h) unless `force`.
+# workflow itself) and run by hand (Actions → deploy → Run workflow, from main only) for a release tag or a commit on
+# main; resolve-ref.sh refuses anything else. The CI gate and every deploy/ci script run from main's checkout before the
+# build checks out the target; the deploy job, which holds the SSH key, never checks the target out. A running contest
+# defers the restart (retried for 6 h) unless `force` (it never skips the CI gate).
 name: deploy
 on:
   workflow_call:
@@ -10,7 +12,7 @@ on:
       force: { type: boolean, default: false }
   workflow_dispatch:
     inputs:
-      ref: { description: 'Tag, branch or SHA (empty: latest v* tag)', type: string, default: '' }
+      ref: { description: 'Release tag or SHA on main (empty: latest v* tag)', type: string, default: '' }
       force: { description: 'Deploy even while a contest is running', type: boolean, default: false }
 concurrency:
   group: deploy-backend
@@ -28,15 +30,18 @@ jobs:
     outputs:
       tag: ${{ steps.ref.outputs.tag }}
     steps:
+      - name: Run from main only
+        run: test "$GITHUB_REF" = refs/heads/main || { echo "deploy runs from main, not $GITHUB_REF" >&2; exit 1; }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { fetch-depth: 0 }
       - id: ref
         env: { REF: '${{ inputs.ref }}' }
         run: bash deploy/ci/resolve-ref.sh "$REF" >> "$GITHUB_OUTPUT"
-      - run: git checkout --detach "${{ steps.ref.outputs.sha }}"
       - name: Wait for CI on this commit
-        env: { GH_TOKEN: '${{ github.token }}' }
-        run: bash deploy/ci/wait-for-ci.sh "${{ steps.ref.outputs.sha }}" ci.yml 90
+        env: { GH_TOKEN: '${{ github.token }}', SHA: '${{ steps.ref.outputs.sha }}' }
+        run: bash deploy/ci/wait-for-ci.sh "$SHA" ci.yml 90
+      - env: { SHA: '${{ steps.ref.outputs.sha }}' }
+        run: git checkout --detach "$SHA"
       - name: Build and push
         env:
           TAG: ${{ steps.ref.outputs.tag }}
@@ -62,7 +67,9 @@ jobs:
       contents: read
       packages: read
     steps:
+      # main's own commit (github.sha), never the deploy target: only main's scripts see the key
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { ref: '${{ github.sha }}' }
       - name: SSH key
         env:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}

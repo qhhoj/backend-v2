@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # scripts/judge/check-deploy-copies.sh [JUDGE_V2_DIR]: deploy/judge copies must equal judge-v2/packaging
-# (config files: a header line excepted; check-host.sh: byte for byte, its shebang must stay line 1).
+# (config files: a header line excepted; check-host.sh: byte for byte, its shebang must stay line 1). CI runs it against
+# the judge-v2 ref in deploy/judge/judge-release (a release tag, or a main commit SHA while the copies run ahead of the
+# latest release): move it with every copy.
 set -euo pipefail
 backend="$(cd "$(dirname "$0")/../.." && pwd)"
 judge="${1:-$backend/../judge-v2}"

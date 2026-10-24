@@ -36,7 +36,6 @@ load_config() {
   export -n MONGO_BACKUP_URL MONGO_BACKUP_PASSWORD
   MONGO_DB="${MONGO_DB:-qhhoj}"
   SCRATCH_PARENT="${RESTORE_TEST_DIR:-/backup/restore-test}"
-  PORT="${RESTORE_TEST_PORT:-27999}"
   TOLERANCE_PCT="${RESTORE_TEST_TOLERANCE_PCT:-2}"
   MIN_FREE_GB="${RESTORE_TEST_MIN_FREE_GB:-1}"
   export RESTIC_CACHE_DIR="${RESTIC_CACHE_DIR:-/var/cache/qhhoj-backup}"
@@ -69,12 +68,15 @@ check_space() { # the archive size bounds the restored database; MIN_FREE_GB mor
 }
 
 start_scratch_mongod() { # small cache and lowest priority: the site and the judge share the host
+  # No TCP port: only unix sockets inside the 0700 scratch dir, so no other local user reaches the unauthenticated copy.
   SCRATCH="$(mktemp -d "$SCRATCH_PARENT/run.XXXXXX")"
   trap stop_scratch_mongod EXIT
+  [ "${#SCRATCH}" -le 80 ] || die "RESTORE_TEST_DIR is too long for a unix socket path: $SCRATCH_PARENT"
+  SCRATCH_URI="mongodb://${SCRATCH//\//%2F}%2Fmongod.sock/"
   mkdir "$SCRATCH/db"
-  nice -n 19 ionice -c 3 mongod --dbpath "$SCRATCH/db" --port "$PORT" --bind_ip 127.0.0.1 \
+  nice -n 19 ionice -c 3 mongod --dbpath "$SCRATCH/db" --bind_ip "$SCRATCH/mongod.sock" --unixSocketPrefix "$SCRATCH" \
     --wiredTigerCacheSizeGB 0.25 --fork --logpath "$SCRATCH/mongod.log" --pidfilepath "$SCRATCH/mongod.pid" >/dev/null \
-    || fail "scratch mongod did not start on port $PORT (log: $SCRATCH/mongod.log)"
+    || fail "scratch mongod did not start (log: $SCRATCH/mongod.log)"
 }
 
 stop_scratch_mongod() {
@@ -87,7 +89,7 @@ restore_snapshot() { # the whole archive: mongorestore refuses --oplogReplay wit
   local replay=()
   [ "$OPLOG" = 0 ] || replay=(--oplogReplay)
   restic -r "$REPO" dump "$SNAPSHOT" "/$ARCHIVE_NAME" \
-    | nice -n 19 mongorestore --host 127.0.0.1 --port "$PORT" --archive --drop "${replay[@]}" \
+    | nice -n 19 mongorestore --uri "$SCRATCH_URI" --archive --drop "${replay[@]}" \
     || fail "restore of $SNAPSHOT failed"
 }
 
@@ -125,7 +127,7 @@ main() {
   start_scratch_mongod
   restore_snapshot
   collection_counts "$MONGO_BACKUP_URL" "$MONGO_BACKUP_PASSWORD" > "$SCRATCH/live"
-  collection_counts "mongodb://127.0.0.1:$PORT/" > "$SCRATCH/restored"
+  collection_counts "$SCRATCH_URI" > "$SCRATCH/restored"
   [ -s "$SCRATCH/live" ] || fail "the live database $MONGO_DB has no collections"
   compare_counts "$SCRATCH/live" "$SCRATCH/restored" || fail "restored counts differ from the live database"
   log "ok: $(wc -l < "$SCRATCH/restored") collections restored from $SNAPSHOT match the live database"

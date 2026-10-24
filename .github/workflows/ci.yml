@@ -3,6 +3,9 @@ name: ci
 on: { push: { branches: [main] }, pull_request: {}, workflow_dispatch: {} }
 # The test job runs the unit specs (jest.config.js) and the static OpenAPI specs; the db job runs the specs that need
 # MongoDB and Redis (*.db.spec.ts, *.e2e-spec.ts; CONTRIBUTING.md, Testing).
+# Third-party actions are pinned by commit SHA (the comment names the tag). `npm ci --ignore-scripts`: no dependency's
+# install script runs; a job rebuilds by name only the native modules it needs (dolos-parsers for the similarity
+# specs, grpc-tools' protoc for judge-proto:check). mongodb-memory-server fetches mongod on first use instead.
 jobs:
   # Pushes that touch only docs, changesets or deploy scripts skip the heavy jobs below; a skipped job counts as a
   # pass, so the run (and the deploy gate waiting on it) stays green. deploy-scripts always runs.
@@ -25,13 +28,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 22, cache: npm }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.12" }
       - run: pip install pyyaml==6.0.3
-      - run: npm ci
+      - run: npm ci --ignore-scripts && npm rebuild grpc-tools
       - run: npm run lint
       # No plan, task or preflight ids in source comments.
       - run: bash scripts/lint/check-plan-ids.sh
@@ -45,13 +48,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 22, cache: npm }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.12" }
       - run: pip install pyyaml==6.0.3
-      - run: npm ci
+      - run: npm ci --ignore-scripts && npm rebuild @dodona/dolos-parsers
       # Official static build: the Debian/Ubuntu pandoc fails to start threads under the worker's `prlimit --as=768MiB` cap.
       - name: Install pandoc 3.1.3
         run: |
@@ -68,12 +71,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 22, cache: npm }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.12" }
-      - run: npm ci
+      - run: npm ci --ignore-scripts && npm rebuild @dodona/dolos-parsers
       # Some specs use Redis db numbers above 15, so the server needs more than the default 16 databases.
       - name: Start Redis
         run: |
@@ -82,7 +85,7 @@ jobs:
           exit 1
       - id: mms
         run: echo "version=$(node -p "require('mongodb-memory-server/package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: node_modules/.cache/mongodb-memory-server
           key: mongodb-binaries-${{ runner.os }}-${{ steps.mms.outputs.version }}
@@ -96,12 +99,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 22, cache: npm }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.12" }
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       # The swagger CLI plugin does not run under plain jest, so the OpenAPI specs have their own config. Static: the
       # document comes from stubbed controllers (the specs that boot the app are local, npm run test:openapi:db).
       - run: npm run test:openapi -- --forceExit
@@ -131,11 +134,21 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # restic: the backup and pull tests run the scripts against real (temp-dir) repositories; rsync ships rrsync.
       - run: sudo apt-get install -y shellcheck restic rsync
-      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/install-host.sh deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh deploy/backup/qhhoj-backup deploy/backup/*.sh deploy/backup/pull/qhhoj-pull deploy/backup/pull/qhhoj-pull-serve deploy/backup/pull/*.sh
+      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/qhhoj-deploy-serve deploy/install-host.sh deploy/nginx/*.sh deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh deploy/backup/qhhoj-backup deploy/backup/*.sh deploy/backup/pull/qhhoj-pull deploy/backup/pull/qhhoj-pull-serve deploy/backup/pull/*.sh
       - name: Run script tests
         run: |
           shopt -s nullglob
           for t in deploy/*.test.sh deploy/*/*.test.sh deploy/*/*/*.test.sh; do echo "== $t"; bash "$t"; done
+      # deploy/judge copies equal judge-v2's packaging/ at the ref in deploy/judge/judge-release (a tag or a commit SHA).
+      - id: judge
+        run: echo "ref=$(cat deploy/judge/judge-release)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: qhhoj/judge-v2
+          ref: ${{ steps.judge.outputs.ref }}
+          path: judge-v2
+          sparse-checkout: packaging
+      - run: bash scripts/judge/check-deploy-copies.sh judge-v2
   # The required check (with changes): it fails when any job above failed or was cancelled; a skipped job passes.
   ci-ok:
     if: always()
