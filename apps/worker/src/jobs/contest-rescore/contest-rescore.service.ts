@@ -46,8 +46,7 @@ export class ContestRescoreService {
     if (!contest) return { rescored: 0, participations: 0 };
     const rescored = await this.rescoreSubmissions(contestId, contest, scope);
     const participations = await this.recomputeParticipations(contestId, scope);
-    // Keyed on stored ratings, not `isRated`: a contest no longer rated but still holding ratings loses them here.
-    if (await this.repository.hasRatings(contestId))
+    if (await this.contestResults.hasRatings(contestId))
       await enqueueContestRating(this.ratingQueue, contestId);
     // Waits for the judge to settle after the end: a build that starts earlier is a no-op (no head is written before then).
     // Derived, repairable data: a lost request is repaired by the next replay read or by the editor's button.

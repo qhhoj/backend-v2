@@ -6,6 +6,7 @@ import {
 } from '../src/submissions/run-writes.repository';
 import { DEFERRAL_LIMIT_MESSAGE } from '../src/submissions/deferral';
 import { canJudge } from '../src/dispatch/slots';
+import { RunsService } from '../src/submissions/runs.service';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import type { RunKey } from '../src/submissions/write-outcome';
 import { seedCatalog, seedProblem, seedSubmission } from './fixtures';
@@ -37,6 +38,7 @@ describe('Run writes (seq compare-and-set)', () => {
   let catalog: BridgeCatalog;
   let writes: RunWritesRepository;
   let repository: SubmissionsRepository;
+  let runs: RunsService;
   let codes = 0;
   const stored = async (id: string) =>
     (await bridge.submissions.findById(id).select('+cases').lean())!;
@@ -66,6 +68,7 @@ describe('Run writes (seq compare-and-set)', () => {
     catalog = await seedCatalog(bridge);
     writes = bridge.module.get(RunWritesRepository);
     repository = bridge.module.get(SubmissionsRepository);
+    runs = bridge.module.get(RunsService);
   });
   afterAll(() => bridge.teardown());
 
@@ -281,7 +284,18 @@ describe('Run writes (seq compare-and-set)', () => {
     );
     const [fixed] = await repository.loadQueued([run.id]);
     expect(canJudge(judge, fixed)).toBe(true);
-    const claim = await repository.claimRun(fixed, JUDGE);
+    // a judge with no stamp in the data dir reports 0: the version its Assign carried is recorded
+    const assigned = (await runs.claim(fixed, JUDGE))!;
+    runs.sent(assigned);
+    const unstamped = { ref: assigned.request.ref, judgeName: JUDGE, seq: 2 };
+    await writes.accept({ ...unstamped, seq: 1 });
+    await runs.refused(unstamped, { ...refusing, dataVersion: 0 });
+    expect((await stored(run.id)).refusedBy).toContainEqual({
+      ...refusing,
+      dataVersion: 1,
+    });
+    const [refusedAgain] = await repository.loadQueued([run.id]);
+    const claim = await repository.claimRun(refusedAgain, JUDGE);
     if (!claim || !('request' in claim)) throw new Error('not claimed');
     const retried = { ref: claim.request.ref, judgeName: JUDGE, seq: 1 };
     await writes.accept(retried);

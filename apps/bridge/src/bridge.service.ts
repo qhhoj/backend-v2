@@ -67,7 +67,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
       await this.dispatch.resyncGenerations();
       await this.dispatch.clearRetryBans();
       const rows = await this.submissions.loadQueued();
-      // a queued entry may hold constraints (judge, banned judges) only a command carries: the tick never replaces it, it only refreshes the features its problem needs
+      // a queued entry may hold constraints (judge, banned judges) only a command carries: the tick never replaces it, it only refreshes the features its problem needs and its data version
       await this.dispatch.enqueue(
         rows.filter((row) => !this.dispatch.hasQueued(row.id)),
       );

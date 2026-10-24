@@ -46,6 +46,17 @@ describe('contest rating', () => {
       isRated: true,
       startTime: new Date(endTime.getTime() - 3_600_000),
       endTime,
+      problems: [
+        {
+          problem: problemId,
+          points: 100,
+          partial: true,
+          order: 0,
+          isPretested: false,
+          outputPrefixOverride: null,
+          maxSubmissions: null,
+        },
+      ],
       ...extra,
     });
   /** A live participation with one contest submission, so it is rated by default. */
@@ -822,6 +833,23 @@ describe('contest rating', () => {
       .limit(1)
       .lean();
     expect(await userRating(users[0]._id)).toBe(latest.rating);
+  });
+
+  it('counts no submission on a problem removed from the contest', async () => {
+    const [alice, bob] = await newUsers('removed_alice', 'removed_bob');
+    const removedProblem = await seedProblem(worker);
+    const contest = await ratedContest(minutesAgo(10));
+    await join(contest._id, alice._id, 100);
+    const onRemovedOnly = await seedParticipation(worker, contest._id, bob._id);
+    await seedContestSubmission(worker, onRemovedOnly, removedProblem._id, {
+      points: 100,
+    });
+
+    await ratings.rateFrom(contest._id);
+
+    expect((await ratingRows(contest._id)).map((row) => row.user)).toEqual([
+      alice._id,
+    ]);
   });
 
   it('runs one rating at a time through the queue', async () => {

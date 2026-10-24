@@ -63,7 +63,7 @@ export class SyncParticipantsRepository {
       .exec();
   }
 
-  /** Tester submissions are history nobody asked to lose (preflight M16). Both collections are asked: a submission is stamped with its contest before its `contestSubmissions` row is written. */
+  /** Tester submissions are history nobody asked to lose. Both collections are asked: a submission is stamped with its contest before its `contestSubmissions` row is written. */
   async hasSubmissions(contestId: string): Promise<boolean> {
     const [inContest, submitted] = await Promise.all([
       this.contestSubmissions.exists({ contest: contestId }).exec(),

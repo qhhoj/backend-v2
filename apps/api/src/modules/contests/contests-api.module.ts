@@ -103,7 +103,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
       { name: NOTIFICATION_FANOUT_QUEUE },
     ),
   ],
-  // Fastify matches a static segment (Task 7's `current`) before `:key`, whatever the controller order.
+  // Fastify matches a static segment (`current`) before `:key`, whatever the controller order.
   controllers: [
     ContestAnnouncementsController,
     ContestBestSubmissionsController,

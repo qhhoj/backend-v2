@@ -104,7 +104,7 @@ export function gradeCases(cases: readonly GradableCase[]): CaseTotals {
 /** Decimals a submission's points (and an ioi16 cell) keep: legacy `round(…, 3)`. */
 export const POINTS_DECIMALS = 3;
 
-/** Legacy: `round(casePoints / caseTotal × problem.points, 3)`, and 0 for a non-partial problem unless the cases earned their whole total (as `IS_SOLVED`; the 3-decimal rounding alone may reach full marks). 2b's rescore uses this too. */
+/** Legacy: `round(casePoints / caseTotal × problem.points, 3)`, and 0 for a non-partial problem unless the cases earned their whole total (as `IS_SOLVED`; the 3-decimal rounding alone may reach full marks). The problem-rescore job uses this too. */
 export function submissionPoints(
   casePoints: number,
   caseTotal: number,

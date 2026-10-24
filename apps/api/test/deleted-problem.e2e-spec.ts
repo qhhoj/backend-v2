@@ -457,7 +457,7 @@ afterAll(() => api.teardown());
       });
     });
 
-    describe('actions on the history (ruling C2)', () => {
+    describe('actions on the history (restore and purge rules)', () => {
       const act = (who: string, id: string, action: string) =>
         authed(
           api.http().post(`${SUBMISSIONS}/${id}/${action}`),

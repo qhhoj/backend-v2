@@ -26,7 +26,7 @@ export class ProblemRescoreService {
     private readonly contestRescores: Queue<ContestRescoreJob>,
   ) {}
 
-  /** Legacy `rescore_problem` with 2a's rounding (`submissionPoints`): each graded submission's points from its case totals and the problem's current points and partial flag, written in chunks; then every user with a graded submission (their points also follow the problem's publicity) and the problem's stats. A second run writes nothing. */
+  /** Legacy `rescore_problem` with the rounding of `submissionPoints`: each graded submission's points from its case totals and the problem's current points and partial flag, written in chunks; then every user with a graded submission (their points also follow the problem's publicity) and the problem's stats. A second run writes nothing. */
   async rescore(
     problemId: string,
   ): Promise<{ rescored: number; users: number }> {

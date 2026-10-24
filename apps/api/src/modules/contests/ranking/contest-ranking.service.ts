@@ -51,6 +51,9 @@ interface RankedStanding {
   standing: Standing;
 }
 
+/** A shared board is cached at least this long, also with `scoreboardCacheTimeout` 0: a burst of requests (every contestant's poll, a reload loop) then builds it once. Recomputes purge it, so a new result shows at once. */
+export const MIN_RANKING_CACHE_SECONDS = 5;
+
 /** Each row's standing, sorted and ranked: ties share a rank, and equal standings fall back to participation id order. */
 const rankedStandings = (
   rows: ContestParticipation[],
@@ -123,7 +126,7 @@ export class ContestRankingService {
   }
 
   /**
-   * Every row, ranked: cached under `rankingCacheKey` for `scoreboardCacheTimeout` seconds when `isCacheable` (never for editors).
+   * Every row, ranked: cached under `rankingCacheKey` for `scoreboardCacheTimeout` seconds, at least `MIN_RANKING_CACHE_SECONDS`, when `isCacheable` (never for editors).
    * The public link and the ranking code read the same keys: a non-editor's board does not depend on who asks.
    */
   async board(
@@ -131,7 +134,7 @@ export class ContestRankingService {
     boardView: BoardView,
   ): Promise<RankingResponse> {
     const { withVirtual, isFrozenView, isCacheable } = boardView;
-    if (contest.scoreboardCacheTimeout <= 0 || !isCacheable)
+    if (!isCacheable)
       return this.buildBoard(
         contest,
         await this.participations.rankingRows(contest._id, { withVirtual }),
@@ -164,7 +167,7 @@ export class ContestRankingService {
       cacheKey,
       JSON.stringify(ranking),
       'EX',
-      contest.scoreboardCacheTimeout,
+      Math.max(contest.scoreboardCacheTimeout, MIN_RANKING_CACHE_SECONDS),
     );
     return ranking;
   }

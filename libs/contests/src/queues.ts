@@ -164,6 +164,30 @@ export const enqueueContestRating = async (
   );
 };
 
+/** How long a re-rate after a verdict change waits for the next one: each request in that time moves the not-yet-started run back, so a bulk rejudge of an ended contest ends in one re-rate. */
+export const RERATE_DEBOUNCE_MS = 60_000;
+
+/** The re-rate a verdict change after the end requests (rejudge, reject, score override). Debounced per contest (BullMQ deduplication): a delayed run is replaced by a later request, and a request while one runs keeps one more run for after it, which reads the newer standings. */
+export const requestContestRerate = async (
+  queue: Queue<ContestRatingJob>,
+  contestId: string,
+): Promise<void> => {
+  await queue.add(
+    CONTEST_RATING_JOB,
+    { contestId },
+    {
+      delay: RERATE_DEBOUNCE_MS,
+      deduplication: {
+        id: `rerate-${contestId}`,
+        replace: true,
+        keepLastIfActive: true,
+      },
+      ...JOB_RETRY,
+      ...JOB_RETENTION,
+    },
+  );
+};
+
 export const CONTEST_DATA_QUEUE = 'contest-data';
 export const CONTEST_DATA_JOB = 'prepare';
 export interface ContestDataJob {

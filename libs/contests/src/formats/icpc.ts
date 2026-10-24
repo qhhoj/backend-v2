@@ -46,11 +46,14 @@ export const icpcFormat: ContestFormat<IcpcConfig> = {
       const best = bestOf(problemRows);
       const time = secondsSince(context.start, best.date);
       const minutes = Math.floor(time / 60);
-      let pending = frozenAt !== null && best.date >= frozenAt;
+      const tried = problemRows.filter(isTry);
+      // Legacy: with no points the frozen state follows the last try (also without a penalty).
+      const decidedAt = best.points ? best.date : (tried.at(-1)?.date ?? null);
+      const pending =
+        frozenAt !== null && decidedAt !== null && decidedAt >= frozenAt;
       let tries = 0;
       let frozenTries = 0;
       if (config.penalty) {
-        const tried = problemRows.filter(isTry);
         if (best.points) {
           tries = tried.filter((scored) => scored.date <= best.date).length;
           live.penalty += (tries - 1) * config.penalty;
@@ -62,9 +65,6 @@ export const icpcFormat: ContestFormat<IcpcConfig> = {
         } else {
           tries = tried.length;
           frozenTries = tries;
-          // Legacy: with no points the frozen state follows the last try.
-          const latest = tried.at(-1)?.date ?? null;
-          pending = frozenAt !== null && latest !== null && latest >= frozenAt;
         }
       }
       let frozenPoints = 0;

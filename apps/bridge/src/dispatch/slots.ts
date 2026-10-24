@@ -43,7 +43,7 @@ export interface JudgeState {
   readonly winding: Set<string>;
   /** Features from its Hello (`generate.polygon`, ...). */
   readonly features: ReadonlySet<string>;
-  /** Build from its Hello: a refusal holds for that build only, so a new build may try again (judge-v2 sends its `CARGO_PKG_VERSION`, so today that means a new release). */
+  /** Build from its Hello: a refusal holds for that build only, so a new build may try again (judge-v2's build carries its commit since judge-v2 #60, so a new commit is a new build). */
   readonly build: string;
   /** Ids of the test generations it holds (a claim in flight included); each takes one slot. */
   readonly generations: Set<string>;
@@ -84,7 +84,7 @@ export const freeSlots = (judge: JudgeState): number =>
 export const loadOf = (judge: JudgeState): number =>
   judge.slots > 0 ? busySlots(judge) / judge.slots : 1;
 
-/** Spec §2 Scheduling: a generation goes only to an enabled judge that advertises a generation feature (which queued row fits is `pickGeneration`'s call), when no queued submission waits for it and it would not take the judge's last free slot (a 1-slot judge has no other). */
+/** Scheduling of test generations: a generation goes only to an enabled judge that advertises a generation feature (which queued row fits is `pickGeneration`'s call), when no queued submission waits for it and it would not take the judge's last free slot (a 1-slot judge has no other). */
 export const mayStartGeneration = (
   judge: JudgeState,
   isSubmissionWaiting: boolean,

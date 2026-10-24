@@ -68,7 +68,7 @@ describe('icpc (legacy ICPCContestFormat)', () => {
     for (const other of others) expect(other).toEqual(expected);
   });
 
-  it('without a penalty counts no tries and freezes by the best submission only', () => {
+  it('without a penalty counts no tries, and still freezes an unsolved problem by its latest try', () => {
     const score = icpcFormat.score(rows(), { penalty: 0 }, frozenContext());
     expect(score).toMatchObject({
       cumtime: 275,
@@ -76,12 +76,12 @@ describe('icpc (legacy ICPCContestFormat)', () => {
       tiebreaker: 250,
     });
     expect(score.formatData.A).toEqual({ time: 1530, points: 100, tries: 0 });
-    // C's best is at +100m: not frozen when tries are not counted.
+    // C's best is at +100m, but its latest try at +260m is frozen.
     expect(score.frozenFormatData.C).toEqual({
       time: null,
       points: 0,
       tries: 0,
-      pending: false,
+      pending: true,
     });
   });
 

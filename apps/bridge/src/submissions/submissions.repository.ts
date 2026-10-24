@@ -103,7 +103,7 @@ interface RunInputs extends JudgingInputs {
   sourceSize: number;
 }
 
-/** `PROBLEM_LIMITS.memoryLimit.min` is 0; isolate needs a positive `--cg-mem` (preflight M4). */
+/** `PROBLEM_LIMITS.memoryLimit.min` is 0; isolate needs a positive `--cg-mem`. */
 const MIN_MEMORY_LIMIT_KIB = 1024;
 
 /** The Assign for a claimed run: limits (a per-language override wins; memory at least 1 MiB), the data version, the source or its file, short-circuiting for non-partial problems (not in a contest whose format scores every case), contest meta and the attempt number. Pure. */
@@ -239,7 +239,7 @@ export class SubmissionsRepository {
       .lean();
   }
 
-  /** Per problem id: the code judges know it by and the features its data needs, both from its mirror root when it has one, and whether the external judge takes it. */
+  /** Per problem id: the code judges know it by, the features its data needs and its data version, all from its mirror root when it has one, and whether the external judge takes it. */
   private async judgedProblemsOf(
     problemIds: string[],
   ): Promise<Map<string, JudgedProblem>> {

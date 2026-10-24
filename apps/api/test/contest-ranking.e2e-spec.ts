@@ -323,7 +323,7 @@ describe('contest ranking', () => {
     await api.users.updateMany({}, { rating: null, organizations: [] });
   });
 
-  it('serves a cached board until its keys are purged, and caches nothing with a zero timeout', async () => {
+  it('serves a cached board until its keys are purged', async () => {
     const db = api.app.get<Connection>(getConnectionToken()).db!;
     const cached = await createContest(api, { scoreboardCacheTimeout: 60 });
     const row = await joinParticipation(
@@ -346,9 +346,6 @@ describe('contest ranking', () => {
     expect((await ranking(cached.key)).rows[0].score).toBe(100);
     await redis.del(...rankingCacheKeys(cached._id));
     expect((await ranking(cached.key)).rows[0].score).toBe(500);
-    const uncached = await createContest(api);
-    await ranking(uncached.key);
-    expect(await redis.exists(...rankingCacheKeys(uncached._id))).toBe(0);
   });
 
   it('leaks no live score, cumtime or cell to a non-editor during a freeze, through ?virtual or an own-row board', async () => {
@@ -460,9 +457,9 @@ describe('contest ranking', () => {
     expect(await redis.exists(...rankingCacheKeys(contest._id))).toBe(2);
   });
 
-  it('builds a missed board once for concurrent requests', async () => {
+  it('builds a board once for concurrent requests and keeps it a few seconds, even with a zero timeout', async () => {
     const db = api.app.get<Connection>(getConnectionToken()).db!;
-    const contest = await createContest(api, { scoreboardCacheTimeout: 60 });
+    const contest = await createContest(api);
     await joinParticipation(api, contest._id, users.alice._id, results(100));
     const queries = await profileQueries(db, () =>
       Promise.all(Array.from({ length: 8 }, () => ranking(contest.key))),
@@ -472,6 +469,9 @@ describe('contest ranking', () => {
         ({ collection }) => collection === 'contestParticipations',
       ),
     ).toHaveLength(1);
+    const ttlSeconds = await redis.ttl(rankingCacheKeys(contest._id)[0]);
+    expect(ttlSeconds).toBeGreaterThan(0);
+    expect(ttlSeconds).toBeLessThanOrEqual(5);
   });
 
   it('orders tied rows by participation id whatever the insertion order', async () => {
