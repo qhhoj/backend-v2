@@ -16,6 +16,7 @@ import {
   ContestParticipation,
   ContestSubmission,
   Problem,
+  Rating,
   Submission,
   toUuid,
   uuidStr,
@@ -43,7 +44,7 @@ interface JoinedRow {
   };
 }
 
-/** Every Mongo read and write of contest results: graded jobs (`applyContest`), participation recomputes and contest rescores. */
+/** Every Mongo read and write of contest results: graded jobs (`applyContest`), participation recomputes and contest rescores, and whether a contest has ratings to redo. */
 @Injectable()
 export class ContestResultsRepository {
   constructor(
@@ -55,7 +56,13 @@ export class ContestResultsRepository {
     @InjectModel(Submission.name)
     private readonly submissions: Model<Submission>,
     @InjectModel(Problem.name) private readonly problems: Model<Problem>,
+    @InjectModel(Rating.name) private readonly ratings: Model<Rating>,
   ) {}
+
+  /** Keyed on stored ratings, not `isRated`: a contest no longer rated but still holding ratings must lose them. Through the `{contest, user}` index. */
+  async hasRatings(contestId: string): Promise<boolean> {
+    return (await this.ratings.exists({ contest: contestId })) !== null;
+  }
 
   findContestSubmission(submissionId: string) {
     return this.contestSubmissions

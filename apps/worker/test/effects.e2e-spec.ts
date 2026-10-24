@@ -1,6 +1,7 @@
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
-import { rankingCacheKeys } from '@libs/contests';
+import { CONTEST_RATING_QUEUE, rankingCacheKeys } from '@libs/contests';
+import type { ContestRatingJob } from '@libs/contests';
 import { newId, OrganizationJudgingCharge, toUuid } from '@libs/database';
 import type { Submission } from '@libs/database';
 import { getModelToken } from '@nestjs/mongoose';
@@ -309,6 +310,52 @@ afterAll(() => worker.teardown());
       expect(
         Object.keys((await participationOf(participation._id)).formatData),
       ).toEqual([kept._id]);
+    });
+
+    it('re-rates an ended contest that has ratings once a burst of verdict changes settles', async () => {
+      const ratingQueue = worker.module.get<Queue<ContestRatingJob>>(
+        getQueueToken(CONTEST_RATING_QUEUE),
+      );
+      const { problem, contest, participation } = await contestOn(
+        {},
+        {
+          isRated: true,
+          isVisible: true,
+          startTime: new Date(Date.now() - 3 * 3_600_000),
+          endTime: new Date(Date.now() - 3_600_000),
+        },
+      );
+      await worker.ratings.create({
+        user: participation.user,
+        contest: contest._id,
+        participation: participation._id,
+        contestEndTime: contest.endTime,
+        rank: 1,
+        rating: 9999,
+        mean: 9999,
+        performance: 9999,
+        lastRated: new Date(),
+      });
+      const rejudged = await Promise.all(
+        [1, 2, 3].map(() =>
+          seedContestSubmission(worker, participation, problem._id),
+        ),
+      );
+      await Promise.all(rejudged.map((submission) => apply(submission)));
+      const queued = await ratingQueue.getDelayed();
+      expect(queued.map((job) => job.data)).toEqual([
+        { contestId: contest._id },
+      ]);
+      await queued[0].promote();
+      await waitUntil(async () =>
+        (await worker.ratings.find({ contest: contest._id }).lean()).some(
+          (row) => row.rating !== 9999,
+        ),
+      );
+      // The finished run releases the contest: a later verdict change queues the next re-rate.
+      await waitUntil(async () => (await ratingQueue.getActiveCount()) === 0);
+      await apply(rejudged[0]);
+      expect(await ratingQueue.getDelayedCount()).toBe(1);
     });
 
     it('fills the frozen fields of a frozen icpc contest', async () => {

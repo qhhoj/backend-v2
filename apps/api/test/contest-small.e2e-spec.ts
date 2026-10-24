@@ -272,8 +272,10 @@ afterAll(() => api.teardown());
             'judge.clone_contest',
             'judge.edit_own_contest',
             'judge.create_private_contest',
+            'judge.contest_access_code',
           ],
         ],
+        ['plainCloner', ['judge.clone_contest', 'judge.edit_own_contest']],
         ['editorOnly', ['judge.edit_own_contest']],
         ['cloneOutsider', ['judge.clone_contest']],
         ['other', []],
@@ -387,6 +389,45 @@ afterAll(() => api.teardown());
       expect(
         await api.contests.findOne({ key: source.key }).lean(),
       ).toMatchObject({ isVisible: true, userCount: 5 });
+    });
+
+    it('clones unrated, resetting each gated setting the cloner may not set', async () => {
+      const source = await createContest(api, {
+        authors: [users.plainCloner._id],
+        isRated: true,
+        rateAll: true,
+        ratingFloor: 1000,
+        ratingCeiling: 1500,
+        isPrivate: true,
+        privateContestants: [users.other._id],
+        accessCodeHash: sha256('code'),
+      });
+      await clone('plainCloner', source.key, { key: 'plain_clone' }).expect(
+        201,
+      );
+      const stored = (await api.contests
+        .findOne({ key: 'plain_clone' })
+        .lean())!;
+      expect(stored).toMatchObject({
+        isRated: false,
+        rateAll: false,
+        ratingFloor: null,
+        ratingCeiling: null,
+        isPrivate: false,
+        privateContestants: [],
+        accessCodeHash: null,
+      });
+      const long = await createContest(api, {
+        authors: [users.plainCloner._id],
+        endTime: hoursFromNow(20 * 24),
+      });
+      expect(
+        issueCodesOf(
+          await clone('plainCloner', long.key, { key: 'long_clone' }).expect(
+            400,
+          ),
+        ),
+      ).toEqual(['contest_too_long']);
     });
 
     it('moves the copy to a new start, keeping its length and registration window', async () => {

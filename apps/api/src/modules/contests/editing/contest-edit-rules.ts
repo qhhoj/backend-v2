@@ -37,6 +37,17 @@ export const CREATE_BASELINE: Partial<Record<keyof Contest, unknown>> = {
   isVisible: false,
 };
 
+/** A copied contest's gated fields the principal may not set, at a new contest's values: a clone must not hand out what create refuses. */
+export function withUngrantedGatesReset(
+  principal: Principal,
+  fields: Partial<Contest>,
+): Partial<Contest> {
+  const reset = GATED_FIELDS.filter(
+    ([, permission]) => !hasPermission(principal, permission),
+  ).map(([field]): [keyof Contest, unknown] => [field, CREATE_BASELINE[field]]);
+  return { ...fields, ...(Object.fromEntries(reset) as Partial<Contest>) };
+}
+
 /** Legacy `Contest.clean` and `ContestForm.clean`. */
 export function assertWindow(principal: Principal, contest: Contest): void {
   const { startTime, endTime, registrationStart, registrationEnd } = contest;
