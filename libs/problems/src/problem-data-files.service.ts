@@ -39,6 +39,10 @@ const STALE_UPLOAD_MS = 60 * 60 * 1000;
 /** The worker removes a package when its job ends; one left past a failed job's retention (a day) belongs to a lost job. */
 const STALE_IMPORT_MS = 2 * 24 * 60 * 60 * 1000;
 
+/** Redis lock held for the whole of one data change of `code` (the judge's marker is up meanwhile); the bridge reads it to hold a submission waiting for that problem's data. */
+export const problemDataLockKey = (code: string): string =>
+  `problem-data-lock:${code}`;
+
 /** `<PROBLEM_DATA_ROOT>/<code>/` is the judge contract: init.yml, the archive and the checker/grader sources, all flat single segments. */
 @Injectable()
 export class ProblemDataFilesService {
@@ -147,7 +151,7 @@ export class ProblemDataFilesService {
   }
 
   private lockKey(code: string): string {
-    return `problem-data-lock:${code}`;
+    return problemDataLockKey(code);
   }
 
   private markerPath(code: string): string {

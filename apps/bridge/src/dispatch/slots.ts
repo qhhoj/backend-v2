@@ -22,6 +22,10 @@ export interface QueuedSubmission {
   requiredFeatures: string[];
   /** Judge builds that refused it as unsupported (the row's `refusedBy`): not offered it again while the problem's data is the version they refused, so a row every judge refuses waits in the queue instead of bouncing. */
   refusedBy: RefusingJudge[];
+  /** Epoch ms before which no judge takes it (the row's `deferral.retryAfter`, a transient RETRY's backoff); 0 when it waits for nothing. The resync tick offers it again once due. */
+  retryAfter: number;
+  /** Its last transient RETRY said the problem's data was not there yet: its claim also waits while that problem's data is being written. */
+  waitsForData: boolean;
   /** Its problem's `dataVersion` now (the root's for a mirror): a refusal made against an older version no longer holds. */
   dataVersion: number;
 }
@@ -55,6 +59,8 @@ const busySlots = (judge: JudgeState): number =>
 
 /** What the dispatcher needs from a connected judge (`JudgeSession`). */
 export interface DispatchTarget extends JudgeState {
+  /** `windingKey`s of held runs whose `Final` the session is storing right now: the judge already finished them, so a row the Final just requeued is not void (no Abort; the session ends the run itself). */
+  readonly settling: ReadonlySet<string>;
   /** Session id, sent in `Welcome`. */
   readonly id: string;
   /** True from the moment the session is ending; its close is handled a little later (`judgeLost`). */
@@ -102,7 +108,7 @@ const hasRefused = (judge: JudgeState, submission: QueuedSubmission) =>
       (refusing.dataVersion ?? -1) >= submission.dataVersion,
   );
 
-/** Runs the language, has the features the problem needs, is not banned, has not refused it as unsupported on the problem's current data, and is enabled (or asked for by name). A submission pinned to a judge without a needed feature waits until that judge upgrades or the pin is dropped (resync of an absent judge, rejudge). */
+/** Runs the language, has the features the problem needs, is not banned, has not refused it as unsupported on the problem's current data, its backoff is over, and is enabled (or asked for by name). A submission pinned to a judge without a needed feature waits until that judge upgrades or the pin is dropped (resync of an absent judge, rejudge). */
 export const canJudge = (
   judge: JudgeState,
   submission: QueuedSubmission,
@@ -112,6 +118,7 @@ export const canJudge = (
   !submission.bannedJudges.includes(judge.name) &&
   !submission.retryBannedJudges.includes(judge.name) &&
   !hasRefused(judge, submission) &&
+  submission.retryAfter <= Date.now() &&
   (submission.judgeName === null
     ? !judge.isDisabled
     : judge.name === submission.judgeName);
@@ -181,6 +188,7 @@ const candidateKey = (submission: QueuedSubmission): string =>
     submission.retryBannedJudges,
     submission.requiredFeatures,
     submission.refusedBy,
+    submission.retryAfter,
     submission.dataVersion,
   ]);
 

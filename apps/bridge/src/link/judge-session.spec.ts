@@ -9,6 +9,7 @@ import {
   Outcome,
   PROTOCOL_MINOR,
   Resume_Action,
+  Status,
 } from '@libs/judge-proto';
 import type { AssignmentRef } from '@libs/judge-proto';
 import { DEFAULT_BRIDGE_TIMINGS } from '../bridge-timings';
@@ -119,6 +120,7 @@ describe('JudgeSession', () => {
     acceptTimedOut: record('acceptTimedOut'),
     slotsRefused: record('slotsRefused'),
     judgeLost: record('judgeLost'),
+    finalNotStored: record('finalNotStored'),
     isStopped: () => false,
     isAbortRequested: (ref: AssignmentRef) =>
       abortsRequested.has(ref.submissionId),
@@ -195,8 +197,9 @@ describe('JudgeSession', () => {
     if (body?.$case !== 'welcome') throw new Error('no Welcome');
     const { welcome } = body;
     expect(welcome.sessionId).toBe(session.id);
-    // the judge speaks minor 3, above the bridge's: the bridge's own minor wins
-    expect(welcome.protocolMinor).toBe(PROTOCOL_MINOR);
+    // a minor-3 judge, below the bridge's: the lower minor wins
+    expect(PROTOCOL_MINOR).toBeGreaterThan(3);
+    expect(welcome.protocolMinor).toBe(3);
     expect(welcome.limits).toMatchObject({
       maxCasesPerMessage: 256,
       acceptTimeoutMs: 20_000,
@@ -622,6 +625,120 @@ describe('JudgeSession', () => {
     expect(call.paused).toBe(false);
     expect(call.bodies('ack')).toHaveLength(1);
     runs.compiled = record('compiled', () => outcome);
+  });
+
+  it('retries a Final whose store fails; one never stored frees its slot through the dispatcher and keeps the session', async () => {
+    const [flaky, lost] = [run(newId()), run(newId())];
+    await holding(flaky);
+    session.inFlight.set(lost.submissionId, 1);
+    const finalOf = (ref: AssignmentRef) =>
+      JudgeMessage.fromPartial({
+        body: {
+          $case: 'final',
+          final: { ref, seq: 5, outcome: Outcome.OUTCOME_GRADED },
+        },
+      });
+    /** Lets every wait of the store's retries pass. */
+    const throughRetries = async () => {
+      for (
+        let wait = TIMINGS.finalWriteRetryMs;
+        wait <= 8 * TIMINGS.finalWriteRetryMs;
+        wait *= 2
+      ) {
+        await settle();
+        await jest.advanceTimersByTimeAsync(wait);
+      }
+      await settle();
+    };
+    const stored = runs.final;
+    let failures = 1;
+    runs.final = (...args: unknown[]) =>
+      failures-- > 0
+        ? Promise.reject(new Error('Mongo down'))
+        : stored(...args);
+    const logs = [
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined),
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined),
+    ];
+    try {
+      call.emit('data', { message: finalOf(flaky), bytes: 32 });
+      await throughRetries();
+      expect(call.bodies('ack')).toEqual([
+        { $case: 'ack', ack: { ref: flaky, seq: 5 } },
+      ]);
+      expect(calls.runEnded).toEqual([[session, flaky, { retried: false }]]);
+      runs.final = () => Promise.reject(new Error('Mongo down'));
+      call.emit('data', { message: finalOf(lost), bytes: 32 });
+      await throughRetries();
+    } finally {
+      for (const log of logs) log.mockRestore();
+      runs.final = stored;
+    }
+    expect(calls.finalNotStored).toEqual([[session, lost]]);
+    expect(call.bodies('abort')).toEqual([
+      { $case: 'abort', abort: { ref: lost } },
+    ]);
+    expect(call.bodies('ack')).toHaveLength(1);
+    expect(session.isClosed).toBe(false);
+    expect(call.statuses).toEqual([]);
+    expect(call.paused).toBe(false);
+  });
+
+  it('logs a judge-reported error on one line, its text sanitized', async () => {
+    await online();
+    const warns = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      await receive(
+        JudgeMessage.fromPartial({
+          body: {
+            $case: 'error',
+            error: {
+              code: ErrorCode.ERROR_CODE_PROTOCOL,
+              message: 'bad\nsecond line\u0007',
+            },
+          },
+        }),
+      );
+      expect(warns.mock.calls).toEqual([
+        [`j1 reports ${ErrorCode.ERROR_CODE_PROTOCOL}: bad second line`],
+      ]);
+    } finally {
+      warns.mockRestore();
+    }
+  });
+
+  it('logs a case reported with more points than its total, by run and position', async () => {
+    const ref = run(newId());
+    await holding(ref);
+    const warns = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      await receive(
+        JudgeMessage.fromPartial({
+          body: {
+            $case: 'cases',
+            cases: {
+              ref,
+              seq: 2,
+              cases: [
+                { position: 1, status: Status.STATUS_AC, points: 5, total: 1 },
+                { position: 2, status: Status.STATUS_AC, points: 1, total: 1 },
+              ],
+            },
+          },
+        }),
+      );
+      expect(warns.mock.calls).toEqual([
+        [
+          `Judge j1 reported more points than the case total for submission ${ref.submissionId} gen 1, case 1; clamped to the total`,
+        ],
+      ]);
+    } finally {
+      warns.mockRestore();
+    }
   });
 
   it('keeps the session when the store fails, and logs it with the run and seq', async () => {

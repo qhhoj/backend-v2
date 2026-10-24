@@ -10,6 +10,7 @@ import {
 } from '@libs/judge-proto';
 import type {
   AssignmentRef,
+  CaseResults,
   Final,
   GenerateTests,
   GradingStarted,
@@ -34,6 +35,7 @@ import {
   helloOf,
   isRequeuedByJudge,
   loggableText,
+  overScoredPositions,
   refOf,
   seqOf,
 } from './messages';
@@ -43,6 +45,8 @@ import { flood, ProtocolError, seqGap } from './protocol-error';
 
 /** Legacy: the reported ping is the mean of the last 6 round trips. */
 const PING_SAMPLES = 6;
+/** Tries of a `Final` write in the session (Mongo failover): 0.5 + 1 + 2 + 4 s of waits with the default timings, while the judge's other messages wait behind it. */
+const FINAL_WRITE_ATTEMPTS = 5;
 /** Runs a session remembers as ended or aborted (a Final resent before its ack, a late Accepted, a second Abort): enough for any replay window, bounded for a session that lives for weeks. */
 const RUNS_REMEMBERED = 1024;
 
@@ -107,6 +111,7 @@ export class JudgeSession implements DispatchTarget {
   readonly inFlight = new Map<string, number>();
   /** Runs the dispatcher let go of that the judge has not ended yet (`windingKey`s); they keep a slot until their `Final`. */
   readonly winding = new Set<string>();
+  readonly settling = new Set<string>();
   /** Test generations it holds, by generation id. */
   readonly generations = new Set<string>();
   readonly finished: Promise<void>;
@@ -381,13 +386,25 @@ export class JudgeSession implements DispatchTarget {
       }
       case 'started':
         return this.onStarted(body.started);
-      case 'cases': {
-        const rows = caseRowsOf(body.cases.cases);
-        return this.handleRun(body.cases, (key) => runs.cases(key, rows));
-      }
+      case 'cases':
+        return this.onCases(body.cases);
       case 'final':
         return this.onFinal(body.final);
     }
+  }
+
+  /** Points over a case's total are clamped (`caseRowsOf`) and logged, so a judge build that over-scores shows up by name. */
+  private async onCases(reported: CaseResults): Promise<void> {
+    const rows = caseRowsOf(reported.cases);
+    const handled = await this.handleRun(reported, (key) =>
+      this.services.runs.cases(key, rows),
+    );
+    const over = overScoredPositions(reported.cases);
+    // the ref is validated by now, and a replay is not logged again
+    if (handled?.outcome === 'applied' && over.length)
+      this.logger.warn(
+        `Judge ${this.name} reported more points than the case total for submission ${handled.ref.submissionId} gen ${handled.ref.generation}, case ${over.join(', ')}; clamped to the total`,
+      );
   }
 
   /** A stored Started names the case count: the run's deadline is re-armed from it. */
@@ -408,29 +425,83 @@ export class JudgeSession implements DispatchTarget {
     if (this.ended.has(windingKey(ref)))
       return this.replayedFinal(ref, seqOf(final.seq), received);
     const report = this.honourAbort(ref, received);
-    const handled = await this.handleRun(final, (key) =>
-      this.settle(key, report),
-    );
-    if (handled?.outcome === 'stale')
-      return this.services.dispatch.windingEnded(this, handled.ref);
-    if (handled?.outcome === 'applied' || handled?.outcome === 'duplicate') {
-      remember(this.ended, windingKey(handled.ref));
-      await this.services.dispatch.runEnded(this, handled.ref, {
-        retried: isRequeuedByJudge(report) && handled.outcome === 'applied',
-      });
+    let handled: Handled | null;
+    this.settling.add(windingKey(ref));
+    try {
+      handled = await this.handleRun(final, (key) =>
+        this.storeFinal(key, report),
+      );
+    } catch (error) {
+      this.settling.delete(windingKey(ref));
+      if (error instanceof ProtocolError || this.isClosed) throw error;
+      return this.finalNotStored(ref, error as Error);
+    }
+    this.settling.delete(windingKey(ref));
+    if (handled) await this.runOver(handled, report);
+  }
+
+  /** A stored (or already stored) Final ends the run and frees its slot; a stale one ends its winding. */
+  private async runOver(
+    { ref, outcome }: Handled,
+    report: FinalReport,
+  ): Promise<void> {
+    if (outcome === 'stale')
+      return this.services.dispatch.windingEnded(this, ref);
+    if (outcome !== 'applied' && outcome !== 'duplicate') return;
+    remember(this.ended, windingKey(ref));
+    await this.services.dispatch.runEnded(this, ref, {
+      retried: isRequeuedByJudge(report) && outcome === 'applied',
+    });
+  }
+
+  /** judge-v2 sends a Final once per session and nothing asks for it again, so its write is retried here (with doubling waits) until it is stored, the session ends or the tries run out. Every try is idempotent: the seq compare-and-set turns a write that did land into `duplicate`. */
+  private async storeFinal(
+    key: RunKey,
+    report: FinalReport,
+  ): Promise<WriteOutcome> {
+    let waitMs = this.services.timings.finalWriteRetryMs;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.settle(key, report);
+      } catch (error) {
+        const isLast = attempt >= FINAL_WRITE_ATTEMPTS || this.isClosed;
+        if (error instanceof ProtocolError || isLast) throw error;
+        this.logger.warn(
+          `Judge ${this.name}: storing the Final of submission ${key.ref.submissionId} gen ${key.ref.generation} failed (try ${attempt}), retrying in ${waitMs} ms: ${(error as Error).message}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        waitMs *= 2;
+      }
     }
   }
 
-  /** A refusal names this judge build and the data version it refused; every other Final is written as it stands. */
+  /** The Final could not be stored: the judge already finished the run, so the Abort only clears it from the judge's outbox (no Final follows) and the dispatcher frees the slot at once and requeues the row. */
+  private async finalNotStored(
+    ref: AssignmentRef,
+    error: Error,
+  ): Promise<void> {
+    this.logger.error(
+      `Judge ${this.name}: the Final of submission ${ref.submissionId} gen ${ref.generation} could not be stored; its slot is freed and it is requeued: ${error.message}`,
+    );
+    this.abortOnce(ref);
+    await this.services.dispatch.finalNotStored(this, ref);
+  }
+
+  /** A refusal names this judge build and the data version it refused, a deferral its reason; every other Final is written as it stands. */
   private settle(key: RunKey, report: FinalReport): Promise<WriteOutcome> {
-    const { kind } = report;
-    if (kind !== 'refused')
-      return this.services.runs.final(key, { ...report, kind });
-    return this.services.runs.refused(key, {
-      name: this.name,
-      build: this.build,
-      dataVersion: report.dataVersionUsed,
-    });
+    const { runs } = this.services;
+    switch (report.kind) {
+      case 'refused':
+        return runs.refused(key, {
+          name: this.name,
+          build: this.build,
+          dataVersion: report.dataVersionUsed,
+        });
+      case 'deferred':
+        return runs.deferred(key, report.reason, report.log);
+      default:
+        return runs.final(key, { ...report, kind: report.kind });
+    }
   }
 
   /** A RETRY or refusal that crosses the user's abort ends the run AB, as the abort would have: requeued, it would be graded on another judge. */
@@ -443,7 +514,8 @@ export class JudgeSession implements DispatchTarget {
     this.logger.warn(
       `Judge ${this.name} ${report.kind === 'refused' ? 'refused' : 'answered RETRY for'} submission ${ref.submissionId} gen ${ref.generation} after its abort; ended as aborted: ${loggableText(report.log)}`,
     );
-    return { ...report, kind: 'aborted' };
+    const { log, dataVersionUsed } = report;
+    return { kind: 'aborted', log, dataVersionUsed };
   }
 
   /** The judge resent the Final of a run it already got an ack for (it may not have seen the ack): the write finds it stored, the ack goes out again; the slot was freed the first time. Anything else is treated as an unheld ref (`applied` cannot happen: the stored Final already advanced `judgeSeq` past this seq's filter). */
@@ -522,7 +594,7 @@ export class JudgeSession implements DispatchTarget {
   private async onJudgeError(error: JudgeError): Promise<void> {
     if (error.code !== ErrorCode.ERROR_CODE_SLOTS_FULL)
       return this.logger.warn(
-        `${this.name} reports ${error.code}: ${error.message}`,
+        `${this.name} reports ${error.code}: ${loggableText(error.message)}`,
       );
     const ref = refOf(error.ref);
     this.clearAcceptTimer(ref);

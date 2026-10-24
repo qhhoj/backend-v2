@@ -15,6 +15,7 @@ export const casesFor = (count: number, verdict: FakeVerdict): Case[] =>
     position: index + 1,
     status: verdict === 'AC' ? Status.STATUS_AC : Status.STATUS_WA,
     timeS: 0.01,
+    juryTimeS: 0,
     memoryKib: 1024,
     points: verdict === 'AC' ? 1 : 0,
     total: 1,

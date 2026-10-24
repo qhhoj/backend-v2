@@ -50,6 +50,8 @@ const isSameEntry = (left: QueuedSubmission, right: QueuedSubmission) =>
   left.retryBannedJudges.join() === right.retryBannedJudges.join() &&
   left.requiredFeatures.join() === right.requiredFeatures.join() &&
   JSON.stringify(left.refusedBy) === JSON.stringify(right.refusedBy) &&
+  left.retryAfter === right.retryAfter &&
+  left.waitsForData === right.waitsForData &&
   left.dataVersion === right.dataVersion;
 
 /** A session between Hello and `register`: it holds the runs it resumed; `plan` is open until its Welcome goes out. */
@@ -190,6 +192,26 @@ export class DispatcherService {
     await this.offerWork(judge);
   }
 
+  /** The session could not store the run's Final (Mongo kept failing). The judge already finished the run, so its slot is free at once (never `winding`: no Final follows). The row goes back to the queue, free twice since the last rejudge, then spending a RETRY each, IE once those are spent (`RunsService.requeueUnstored`); if that write fails too, the resync's stranded-run reset requeues it, as no session holds it any more. */
+  async finalNotStored(
+    judge: DispatchTarget,
+    ref: AssignmentRef,
+  ): Promise<void> {
+    if (judge.inFlight.get(ref.submissionId) !== ref.generation) return;
+    judge.inFlight.delete(ref.submissionId);
+    this.abortsRequested.delete(windingKey(ref));
+    this.clearDeadline(ref);
+    try {
+      if (await this.runs.requeueUnstored(ref, judge.name))
+        await this.dispatchRequeued(ref.submissionId);
+    } catch (error) {
+      this.logger.error(
+        `Requeuing submission ${runOf(ref)} after its lost Final failed, the resync requeues it: ${(error as Error).message}`,
+      );
+    }
+    await this.offerWork(judge);
+  }
+
   /** Whether the api aborted this held run: its judge's Final RETRY then ends it AB instead of requeuing it. */
   isAbortRequested(ref: AssignmentRef): boolean {
     return this.abortsRequested.has(windingKey(ref));
@@ -280,11 +302,12 @@ export class DispatcherService {
     this.deadlines.clear(windingKey(ref));
   }
 
-  /** The judge still holds the run: its slot winds down (freed by the judge's `Final{ABORTED}`), the judge is told to stop, and the run is requeued once, internal error the second time (same as a lost judge); a run the user aborted ends AB. */
+  /** The judge still holds the run: its slot winds down (freed by the judge's `Final{ABORTED}`), the judge is told to stop, and the run is requeued once, internal error the second time (same as a lost judge); a run the user aborted ends AB. A run whose Final is being stored (`settling`) is left to that store: the judge finished it, and `runEnded` or `finalNotStored` frees the slot. */
   private async deadlineExpired(
     judge: DispatchTarget,
     ref: AssignmentRef,
   ): Promise<void> {
+    if (judge.settling.has(windingKey(ref))) return;
     // read before `windDown` forgets it
     const abortRequested = this.abortsRequested.has(windingKey(ref));
     if (!this.windDown(judge, ref)) return this.clearDeadline(ref);
@@ -447,13 +470,14 @@ export class DispatcherService {
     this.queued.set(submission.id, submission);
   }
 
-  /** The row is QU at `generation`, so a run of that generation or older still held (live, resumed by a handshaking session, or in grace) is void: the judge is told to stop, and the slot comes back with its `Final{ABORTED}` (`winding`). A newer run (claimed after the row was read) or a claim in flight is kept. */
+  /** The row is QU at `generation`, so a run of that generation or older still held (live, resumed by a handshaking session, or in grace) is void: the judge is told to stop, and the slot comes back with its `Final{ABORTED}` (`winding`). A newer run (claimed after the row was read), a claim in flight, and a run whose Final is being stored (`settling`: a RETRY's own requeue read by a resync tick before the session ended the run) are kept. */
   private voidOlderRuns(submission: QueuedSubmission): void {
     this.grace.discard(submission.id, submission.generation);
     for (const judge of this.sessions()) {
       const generation = judge.inFlight.get(submission.id);
       if (!generation || generation > submission.generation) continue;
       const ref = { submissionId: submission.id, generation };
+      if (judge.settling.has(windingKey(ref))) continue;
       this.windDown(judge, ref);
       this.sendAbort(judge, ref);
     }

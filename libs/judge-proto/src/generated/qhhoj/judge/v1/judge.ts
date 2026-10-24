@@ -105,6 +105,11 @@ export function errorCodeToJSON(object: ErrorCode): string {
   }
 }
 
+/**
+ * Per-case verdict codes: AC accepted, WA wrong answer, TLE time limit, MLE memory limit, OLE output limit,
+ * IR invalid return (non-zero exit code), RTE runtime error (a signal or an uncaught exception), SC skipped
+ * (short-circuited by an earlier case or batch).
+ */
 export enum Status {
   STATUS_UNSPECIFIED = 0,
   STATUS_AC = 1,
@@ -237,6 +242,13 @@ export function outcomeToJSON(object: Outcome): string {
   }
 }
 
+/**
+ * Why a judge could not run a submission. UNSUPPORTED is a refusal: the bridge does not offer the submission to
+ * that judge build again while the problem's data is the version it refused. DATA_UNAVAILABLE, RUNTIME_MISSING and
+ * SANDBOX_FAILURE are transient: the bridge requeues with a backoff, never counts them toward the RETRY cap, and
+ * ends the submission as an internal error only after a long bounded wait. UNSPECIFIED is a failure and counts
+ * toward the bridge's RETRY cap.
+ */
 export enum RetryReason {
   RETRY_REASON_UNSPECIFIED = 0,
   RETRY_REASON_DATA_UNAVAILABLE = 1,
@@ -514,6 +526,11 @@ export interface Case {
   feedback: string;
   extendedFeedback: string;
   outputPrefix: string;
+  /**
+   * CPU seconds (isolate `time`) of the problem's own programs for this case: the custom checker, the
+   * interactor and the interactive checker, summed. 0 for built-in checkers and skipped cases.
+   */
+  juryTimeS: number;
 }
 
 export interface CaseResults {
@@ -3641,6 +3658,7 @@ function createBaseCase(): Case {
     feedback: "",
     extendedFeedback: "",
     outputPrefix: "",
+    juryTimeS: 0,
   };
 }
 
@@ -3675,6 +3693,9 @@ export const Case: MessageFns<Case> = {
     }
     if (message.outputPrefix !== "") {
       writer.uint32(82).string(message.outputPrefix);
+    }
+    if (message.juryTimeS !== 0) {
+      writer.uint32(89).double(message.juryTimeS);
     }
     return writer;
   },
@@ -3772,6 +3793,14 @@ export const Case: MessageFns<Case> = {
             message.outputPrefix = reader.string();
             continue;
           }
+          case 11: {
+            if (tag !== 89) {
+              break;
+            }
+
+            message.juryTimeS = reader.double();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3812,6 +3841,11 @@ export const Case: MessageFns<Case> = {
         : isSet(object.output_prefix)
         ? globalThis.String(object.output_prefix)
         : "",
+      juryTimeS: isSet(object.juryTimeS)
+        ? globalThis.Number(object.juryTimeS)
+        : isSet(object.jury_time_s)
+        ? globalThis.Number(object.jury_time_s)
+        : 0,
     };
   },
 
@@ -3847,6 +3881,9 @@ export const Case: MessageFns<Case> = {
     if (message.outputPrefix !== "") {
       obj.outputPrefix = message.outputPrefix;
     }
+    if (message.juryTimeS !== 0) {
+      obj.juryTimeS = message.juryTimeS;
+    }
     return obj;
   },
 
@@ -3865,6 +3902,7 @@ export const Case: MessageFns<Case> = {
     message.feedback = object.feedback ?? "";
     message.extendedFeedback = object.extendedFeedback ?? "";
     message.outputPrefix = object.outputPrefix ?? "";
+    message.juryTimeS = object.juryTimeS ?? 0;
     return message;
   },
 };

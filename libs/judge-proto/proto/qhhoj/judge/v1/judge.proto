@@ -214,6 +214,9 @@ message GradingStarted {
   uint32 case_count = 4;
 }
 
+// Per-case verdict codes: AC accepted, WA wrong answer, TLE time limit, MLE memory limit, OLE output limit,
+// IR invalid return (non-zero exit code), RTE runtime error (a signal or an uncaught exception), SC skipped
+// (short-circuited by an earlier case or batch).
 enum Status {
   STATUS_UNSPECIFIED = 0;
   STATUS_AC = 1;
@@ -238,6 +241,9 @@ message Case {
   string feedback = 8;
   string extended_feedback = 9;
   string output_prefix = 10;
+  // CPU seconds (isolate `time`) of the problem's own programs for this case: the custom checker, the
+  // interactor and the interactive checker, summed. 0 for built-in checkers and skipped cases.
+  double jury_time_s = 11;
 }
 
 message CaseResults {
@@ -255,6 +261,11 @@ enum Outcome {
   OUTCOME_RETRY = 5;
 }
 
+// Why a judge could not run a submission. UNSUPPORTED is a refusal: the bridge does not offer the submission to
+// that judge build again while the problem's data is the version it refused. DATA_UNAVAILABLE, RUNTIME_MISSING and
+// SANDBOX_FAILURE are transient: the bridge requeues with a backoff, never counts them toward the RETRY cap, and
+// ends the submission as an internal error only after a long bounded wait. UNSPECIFIED is a failure and counts
+// toward the bridge's RETRY cap.
 enum RetryReason {
   RETRY_REASON_UNSPECIFIED = 0;
   RETRY_REASON_DATA_UNAVAILABLE = 1;

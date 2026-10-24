@@ -1,13 +1,18 @@
 import { status } from '@grpc/grpc-js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   Case,
   ErrorCode,
   Final,
   Hello,
+  JudgeMessage,
   Outcome,
+  PROTO_ROOT,
   RetryReason,
   Status,
 } from '@libs/judge-proto';
+import { gradeCases } from '@libs/judging';
 import {
   caseRowsOf,
   clipBytes,
@@ -128,6 +133,7 @@ describe('judge link messages', () => {
       position: 3,
       status: 'TLE',
       time: 0,
+      juryTime: 0,
       memory: 0,
       points: 0.5,
       total: 1,
@@ -143,6 +149,42 @@ describe('judge link messages', () => {
     ).toBe(2);
   });
 
+  it("stores the checker and interactor CPU a judge reports per case (judge-v2's golden CaseResults)", () => {
+    const golden = readFileSync(join(PROTO_ROOT, 'golden', 'judge-cases.bin'));
+    const { body } = JudgeMessage.decode(golden);
+    if (body?.$case !== 'cases') throw new Error('not a CaseResults');
+    expect(
+      caseRowsOf(body.cases.cases).map((row) => [row.time, row.juryTime]),
+    ).toEqual([
+      [0.015, 0],
+      [0.02, 0.25],
+      [0, 0],
+    ]);
+  });
+
+  it('clamps case points to the case total, so an over-scored case cannot make up for a failed one', () => {
+    const rows = caseRowsOf([
+      Case.fromPartial({
+        position: 1,
+        status: Status.STATUS_AC,
+        points: 5,
+        total: 1,
+      }),
+      Case.fromPartial({
+        position: 2,
+        status: Status.STATUS_WA,
+        points: 0,
+        total: 1,
+      }),
+    ]);
+    expect(rows.map((row) => row.points)).toEqual([1, 0]);
+    expect(gradeCases(rows)).toMatchObject({
+      result: 'WA',
+      casePoints: 1,
+      caseTotal: 2,
+    });
+  });
+
   it('refuses a case without a known status and more than 256 cases in one message', () => {
     expect(() => caseRowsOf([Case.fromPartial({ position: 1 })])).toThrow(
       /no known status/,
@@ -155,7 +197,7 @@ describe('judge link messages', () => {
     );
   });
 
-  it('reads a Final: outcome, clipped log, data version; an unknown outcome is a protocol error', () => {
+  it('reads a Final: outcome, clipped log, data version, a RETRY by its reason (refusal, transient deferral, failure); an unknown outcome is a protocol error', () => {
     expect(
       finalReportOf(
         Final.fromPartial({
@@ -173,6 +215,25 @@ describe('judge link messages', () => {
         }),
       ).kind,
     ).toBe('refused');
+    const retryWith = (reason: RetryReason) =>
+      finalReportOf(
+        Final.fromPartial({ outcome: Outcome.OUTCOME_RETRY, reason }),
+      );
+    expect(retryWith(RetryReason.RETRY_REASON_DATA_UNAVAILABLE)).toEqual({
+      kind: 'deferred',
+      reason: 'data',
+      log: '',
+      dataVersionUsed: 0,
+    });
+    expect(retryWith(RetryReason.RETRY_REASON_RUNTIME_MISSING)).toMatchObject({
+      kind: 'deferred',
+      reason: 'runtime',
+    });
+    expect(retryWith(RetryReason.RETRY_REASON_SANDBOX_FAILURE)).toMatchObject({
+      kind: 'deferred',
+      reason: 'sandbox',
+    });
+    expect(retryWith(RetryReason.RETRY_REASON_UNSPECIFIED).kind).toBe('retry');
     expect(() => finalReportOf(Final.fromPartial({}))).toThrow(ProtocolError);
   });
 

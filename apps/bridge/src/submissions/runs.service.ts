@@ -1,7 +1,11 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import type { SubmissionCase, SubmissionStatus } from '@libs/database';
+import type {
+  DeferralReason,
+  SubmissionCase,
+  SubmissionStatus,
+} from '@libs/database';
 import {
   gradedJobId,
   notifyGraded,
@@ -15,6 +19,7 @@ import type { QueuedSubmission } from '../dispatch/slots';
 import { loggableText } from '../link/messages';
 import type { RunFinalReport } from '../link/messages';
 import type { AssignRequest } from './assign-request';
+import { ProblemDataWrites } from './problem-data-writes';
 import { RunWritesRepository } from './run-writes.repository';
 import type { Refusal, RetryOutcome } from './run-writes.repository';
 import { SubmissionsRepository } from './submissions.repository';
@@ -62,13 +67,19 @@ export class RunsService {
     @InjectQueue(SUBMISSION_GRADED_QUEUE)
     private readonly graded: Queue<SubmissionGradedJob>,
     private readonly events: SubmissionEventsService,
+    private readonly dataWrites: ProblemDataWrites,
   ) {}
 
-  /** The claim for `judgeName`, or null when the row is no longer queued or lost its data (finished as IE, graded job enqueued). A claim that throws (Mongo down) is logged; if the row was already P, no session holds it and the resync returns it to the queue within two ticks. */
+  /** The claim for `judgeName`, or null when the row is no longer queued or lost its data (finished as IE, graded job enqueued), or waits for its problem's data while that is being written (it stays QU; the next resync tick offers it again). A claim that throws (Mongo down) is logged; if the row was already P, no session holds it and the resync returns it to the queue within two ticks. */
   async claim(
     queued: QueuedSubmission,
     judgeName: string,
   ): Promise<Claimed | null> {
+    if (
+      queued.waitsForData &&
+      (await this.dataWrites.isWriting(queued.problemCode))
+    )
+      return null;
     let outcome: Awaited<ReturnType<SubmissionsRepository['claimRun']>>;
     try {
       outcome = await this.submissions.claimRun(queued, judgeName);
@@ -114,6 +125,18 @@ export class RunsService {
       this.tracked.delete(subject.submissionId);
       this.publish(subject, 'queued', 'QU');
     }
+  }
+
+  /** The run's Final could not be stored: back to QU with partial results dropped, nothing spent the first times (the judge did not fail), then a RETRY each; IE once those are spent. True when it was requeued. */
+  async requeueUnstored(
+    ref: AssignmentRef,
+    judgeName: string,
+  ): Promise<boolean> {
+    const written = await this.writes.requeueUnstored(ref, judgeName);
+    if (!written) return false;
+    if (written.requeued) this.requeued(ref.submissionId);
+    else await this.finished(written.job, 'IE', ref.generation);
+    return written.requeued;
   }
 
   resumableSeq(ref: AssignmentRef, judgeName: string): Promise<number | null> {
@@ -226,6 +249,23 @@ export class RunsService {
       `Judge ${refusal.name} (build ${loggableText(refusal.build)}) refused submission ${ref.submissionId} gen ${ref.generation} as unsupported; requeued for another judge`,
     );
     this.requeued(ref.submissionId);
+    return written.outcome;
+  }
+
+  /** The judge could not run it for a transient reason (data not there yet, runtime missing, sandbox failure): requeued, held back by a growing backoff, no RETRY spent; IE once it has waited the whole deferral window. Logged with the reason, so a broken host shows up by name. */
+  async deferred(
+    key: RunKey,
+    reason: DeferralReason,
+    log: string,
+  ): Promise<WriteOutcome> {
+    const written = await this.writes.defer(key, { reason, log });
+    if (written.outcome !== 'applied') return written.outcome;
+    const { ref, judgeName } = key;
+    this.logger.warn(
+      `Judge ${judgeName} could not run submission ${ref.submissionId} gen ${ref.generation} for now (${reason}; ${written.requeued ? 'requeued with a backoff' : 'internal error, waited too long'}): ${loggableText(log)}`,
+    );
+    if (written.requeued) this.requeued(ref.submissionId);
+    else await this.finished(written.job, 'IE', ref.generation);
     return written.outcome;
   }
 

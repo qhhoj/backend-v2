@@ -23,6 +23,13 @@ export interface BridgeTimings {
   externalSubmitGapMs: number;
   /** A test generation still held this long after its own `deadline_s` is cancelled and fails with JOB_TIME_LIMIT. */
   generationGraceMs: number;
+  /** First wait before a failed `Final` write is tried again in the session; each later wait doubles (`FINAL_WRITE_ATTEMPTS` in all). */
+  finalWriteRetryMs: number;
+  /** A transient `Final{RETRY}` (data, runtime, sandbox) holds the row back this long before any judge gets it again; each later one doubles it, up to `deferralMaxBackoffMs`. */
+  deferralBackoffMs: number;
+  deferralMaxBackoffMs: number;
+  /** A row still deferred this long after its first transient RETRY ends IE. */
+  deferralWindowMs: number;
 }
 
 export const BRIDGE_TIMINGS = Symbol('BRIDGE_TIMINGS');
@@ -42,6 +49,10 @@ export const DEFAULT_BRIDGE_TIMINGS: BridgeTimings = {
   externalPollMs: 5000,
   externalSubmitGapMs: 1000,
   generationGraceMs: 60_000,
+  finalWriteRetryMs: 500,
+  deferralBackoffMs: 15_000,
+  deferralMaxBackoffMs: 5 * 60_000,
+  deferralWindowMs: 30 * 60_000,
 };
 
 /** Deadline of one run from its Assign; `null` (no deadline) when the inputs are not finite. */

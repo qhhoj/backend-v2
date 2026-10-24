@@ -1,9 +1,10 @@
 {
   "source": "judge-v2",
-  "tag": "proto-v1.3",
-  "commit": "8d86079c5b7a8ba9a766eb34f216b77f31aa0918",
+  "tag": "proto-v1.4.1",
+  "commit": "77bf6645460e1aadd72692fb0ec9b9bc88b7e669",
   "files": {
-    "compat/v1.shape.json": "02f21aecbcf8556e034e32423b4e00908f0edaa01c067240fa2f5758f0548ac6",
+    "README.md": "d8e36b6d73f196ab1b1cfdcfc310b3224a973d5c4f7f0d96ec3a7bd01ab71009",
+    "compat/v1.shape.json": "28c1f4c43b99b87f33623cce3577753e2cee4b720c2c0fec0f096d1d3614c9e7",
     "conformance/matcher-cases.json": "328c8a084d23185ba634c5223becb48edc3a5a3dab277489612548d6d5d19eea",
     "conformance/scenarios/01-hello-first.yaml": "99e5a7c0de109da57ded61bdb2bca5ec061914f4deba727769a97964bf241c62",
     "conformance/scenarios/02-bad-key.yaml": "1e765d4887e7adf872a01f0ac79a33fd10a30c357f1dee0f0771d1d4cf5af76f",
@@ -32,7 +33,10 @@
     "conformance/scenarios/24-abort-in-grace-resume.yaml": "50f56b015ecbf3a0bca68c2b4ea931995d444c2d1b03e8839c41b0694f5b441a",
     "conformance/scenarios/25-grace-expiry-requeues.yaml": "cfb9083c1182f215508f683bacb8cca0840d55e794fb7221d13925607d610ccd",
     "conformance/scenarios/26-second-loss-is-ie.yaml": "ef04e8f471662b0baa3322cb5a66e9c37dcef3f7ecc784a7020b0fcaf50afcf1",
-    "conformance/scenarios/27-retry-cap.yaml": "ad19586c1bb4e6b7727176e93b5c0303ac96479946281eb40bed3617c0c6bda6",
+    "conformance/scenarios/27-retry-cap.yaml": "dbbcc4abe4dd5fce41e2a6f3e401588558bd36640c0c5c3a01db1c8da454e69f",
+    "conformance/scenarios/27b-transient-retry.yaml": "49e65f8dc49a6bfea3d8691d79423e68aee5633644a9606d5ebf1330e920746c",
+    "conformance/scenarios/27c-transient-retry-window.yaml": "096d2412305dc220096c590dfa6b17bdb170f6a927c6774ce5e9c1ce59708717",
+    "conformance/scenarios/27d-retry-counters-apart.yaml": "53d7c63467817cb5ed6b24a22b17ec755e91f20104c61f4f8c89313615f94ed5",
     "conformance/scenarios/28-accept-timeout.yaml": "33779c28e060b1168ad736f460745085945c2572f1ce03cc804ace12ec1b5eb0",
     "conformance/scenarios/28b-accept-timeout-one-slot.yaml": "c9f4d793c9f88a2d71de56baaa1fd12c7d254b6cbbb6613900625780387c61b0",
     "conformance/scenarios/28c-late-accepted-after-timeout.yaml": "32945c1b4dc2aa403924609c3d403c10bf959a252b6efb4a5b27515fbaac4525",
@@ -76,8 +80,8 @@
     "golden/generation-request.json": "461feaa3e563469b692c7f28391e781e71b004a1d6d387778051c67266879474",
     "golden/judge-accepted.bin": "b1ca14d4cb17b9e9fbc295dbbf3f04da2b72e902c5b0f3a58de985fef0a1452e",
     "golden/judge-accepted.json": "cd3c80944962632a0eb2e6f17ed845e4d510b2328d81092a345a7a7ff3d6e893",
-    "golden/judge-cases.bin": "aafd07b23c5b1c5984af23421a4822b0dc5f236a1af66497d3f9350e18170d21",
-    "golden/judge-cases.json": "cec7cddf6080f4cee86aee318b073e349c906a1cfa747993b0b1c0b179898c7b",
+    "golden/judge-cases.bin": "531aca4f65a8ea8230c63601319cf471ddccbe5e3bae1478454ee93f10ae33a1",
+    "golden/judge-cases.json": "70845f560bba515a15a3c95076ec80dc6564e09ce33694e949e7dd526c371195",
     "golden/judge-compiled.bin": "9bc6441b627af656e484c53cc1d524e4886d80405c073a406e2b97509fd7d2f7",
     "golden/judge-compiled.json": "c79cfe863446d7ae708ad491abb7931e8e02f3d09bc55d67a79b729a6bb20777",
     "golden/judge-draining.bin": "10123d615b336deeb1527503f9a3cff788cfc5f333d195f06a00f32c5a9054cd",
@@ -106,7 +110,7 @@
     "golden/upload-chunk.json": "4da9d2efc41d4681fb55bddb8225616808efc9d207ec12af1a3a571edc92add4",
     "golden/upload-receipt.bin": "58c789bfd002eb5f27601d89c0371e8e1890c79e5ff0aa64be8423d422596d83",
     "golden/upload-receipt.json": "4a2973da7005c13a376e71eb5ae3c150ced60c9b03f4e0d50d06cf93d9ea97ea",
-    "qhhoj/judge/v1/judge.proto": "8624296e53ad4da5496f5870c6aaf2f95ce7f715c2def10ee74c87f874056026",
-    "version.json": "0b58d9d24b33eaeb1c3838f6a0550d79a672432a63349ec2e84123dcc9c7789e"
+    "qhhoj/judge/v1/judge.proto": "16dcf6776938cba8239cd01d2a262845d96d22e17ec11b15f48c4170c45b7ad4",
+    "version.json": "9720348fe802a9256c1c516ef203ca68d7c3254f0fe2fa77664972c6f5ce7e72"
   }
 }

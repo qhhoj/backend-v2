@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model, UpdateQuery } from 'mongoose';
 import {
@@ -8,6 +8,7 @@ import {
   toUuid,
 } from '@libs/database';
 import type {
+  DeferralReason,
   RefusingJudge,
   SubmissionCase,
   SubmissionStatus,
@@ -19,14 +20,23 @@ import {
   submissionPoints,
 } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
+import type { AssignmentRef } from '@libs/judge-proto';
+import { BRIDGE_TIMINGS } from '../bridge-timings';
+import type { BridgeTimings } from '../bridge-timings';
 import { MAX_SUBMISSION_CASES } from '../link/link-limits';
+import { DEFERRAL_LIMIT_MESSAGE, nextDeferral } from './deferral';
 import { REQUEUE_RESET } from './submissions.repository';
 import { classifyMiss } from './write-outcome';
 import type { RunKey, StoredRun, WriteOutcome } from './write-outcome';
 
-/** `Final{RETRY}` answers a submission may get; the last one is IE. A RETRY Unsupported is a refusal and never counts. */
+/** `Final{RETRY}` answers a submission may get; the last one is IE. A RETRY Unsupported is a refusal and a transient one (data, runtime, sandbox) a deferral: neither counts. */
 export const MAX_RETRIES = 3;
 export const RETRY_LIMIT_MESSAGE = 'The judge could not run this submission';
+
+/** Final stores that may fail in a row without cost: a Mongo primary election (about 12 s at the default 10 s election timeout) can outlast one session's store retries (about 7.5 s) once or twice; a third in a row is a broken write, not a failover, so from then on each counts toward the RETRY cap. */
+export const FREE_UNSTORED_REQUEUES = 2;
+export const UNSTORED_LIMIT_MESSAGE =
+  'The result of this submission could not be saved';
 
 /** A write that may end the run: when applied, the graded job of the finished submission. */
 export interface FinishOutcome {
@@ -72,6 +82,7 @@ export class RunWritesRepository {
     @InjectModel(Submission.name)
     private readonly submissions: Model<Submission>,
     @InjectModel(Problem.name) private readonly problems: Model<Problem>,
+    @Inject(BRIDGE_TIMINGS) private readonly timings: BridgeTimings,
   ) {}
 
   /** Accepted is seq 1: the row stays P and only `judgeSeq` moves. */
@@ -212,6 +223,94 @@ export class RunWritesRepository {
     });
   }
 
+  /** Final RETRY with a transient reason: back to QU, held back until the deferral's `retryAfter`, `retryCount` untouched; IE once the row has waited the whole deferral window. The read is safe: the write filters on the run's seq again. */
+  async defer(
+    key: RunKey,
+    { reason, log }: { reason: DeferralReason; log: string },
+    now = new Date(),
+  ): Promise<RetryOutcome> {
+    const row = await this.submissions
+      .findOne(runFilter(key, IN_FLIGHT), { deferral: 1 })
+      .lean();
+    if (!row)
+      return {
+        outcome: await this.miss(key, IN_FLIGHT),
+        job: null,
+        requeued: false,
+      };
+    const deferral = nextDeferral(row.deferral, reason, now, this.timings);
+    if (deferral)
+      return {
+        ...(await this.finish(key, {
+          $set: { ...requeueByJudge(key), deferral },
+        })),
+        requeued: true,
+      };
+    const failed = await this.finish(key, {
+      $set: {
+        status: 'IE',
+        result: 'IE',
+        error: `${DEFERRAL_LIMIT_MESSAGE[reason]}: ${log}`,
+        judgeSeq: key.seq,
+        ...effectsDue(),
+      },
+    });
+    return { ...failed, requeued: false };
+  }
+
+  /** The run's Final could not be stored: back to QU with partial results dropped, free for the first `FREE_UNSTORED_REQUEUES`, then each spends a RETRY; IE once those are spent. Null when the row moved on. */
+  async requeueUnstored(
+    ref: AssignmentRef,
+    judgeName: string,
+  ): Promise<{ job: SubmissionGradedJob; requeued: boolean } | null> {
+    const run = {
+      _id: ref.submissionId,
+      judgedOn: judgeName,
+      judgeGeneration: ref.generation,
+      status: { $in: IN_FLIGHT },
+    };
+    const free = await this.requeueRow(
+      { ...run, unstoredCount: { $not: { $gte: FREE_UNSTORED_REQUEUES } } },
+      { unstoredCount: 1 },
+    );
+    if (free) return { job: free, requeued: true };
+    const spent = await this.requeueRow(
+      { ...run, retryCount: { $not: { $gte: MAX_RETRIES - 1 } } },
+      { unstoredCount: 1, retryCount: 1 },
+    );
+    if (spent) return { job: spent, requeued: true };
+    const failed = await this.submissions
+      .findOneAndUpdate(
+        run,
+        {
+          $set: {
+            status: 'IE',
+            result: 'IE',
+            error: UNSTORED_LIMIT_MESSAGE,
+            ...effectsDue(),
+          },
+          $inc: { unstoredCount: 1, retryCount: 1 },
+        },
+        { projection: GRADED_JOB_FIELDS },
+      )
+      .lean();
+    return failed && { job: gradedJobOf(failed), requeued: false };
+  }
+
+  private async requeueRow(
+    filter: Record<string, unknown>,
+    counts: Record<string, number>,
+  ): Promise<SubmissionGradedJob | null> {
+    const row = await this.submissions
+      .findOneAndUpdate(
+        filter,
+        { $set: REQUEUE_RESET, $inc: counts },
+        { projection: GRADED_JOB_FIELDS },
+      )
+      .lean();
+    return row && gradedJobOf(row);
+  }
+
   private async finish(
     key: RunKey,
     update: UpdateQuery<Submission>,
@@ -265,6 +364,7 @@ export class RunWritesRepository {
           caseCount: { $size: { $ifNull: ['$cases', []] } },
           retryCount: { $ifNull: ['$retryCount', 0] },
           refusalCount: { $size: { $ifNull: ['$refusedBy', []] } },
+          deferralCount: { $ifNull: ['$deferral.count', 0] },
         },
       },
     ]);

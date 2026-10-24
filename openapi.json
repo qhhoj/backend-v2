@@ -13792,7 +13792,7 @@
                 "$ref": "#/components/schemas/SubmissionWaitingReason"
               }
             ],
-            "description": "Why a queued submission is not being judged: `waiting_for_capable_judge` once a Judge refused it as unsupported (it stays queued until a Judge that can grade it is connected; the missing feature is not reported yet); null otherwise.",
+            "description": "Why a queued submission is not being judged: `waiting_for_problem_data`, `waiting_for_judge_runtime` or `waiting_for_judge_sandbox` while a Judge could not run it for that transient reason (it is retried with a backoff, and ends Internal Error after about 30 minutes); `waiting_for_capable_judge` once a Judge refused it as unsupported (it stays queued until a Judge that can grade it is connected; the missing feature is not reported yet); null otherwise.",
             "nullable": true
           }
         },
@@ -14473,9 +14473,12 @@
         "type": "object"
       },
       "SubmissionWaitingReason": {
-        "description": "Why a queued submission is not being judged: `waiting_for_capable_judge` once a Judge refused it as unsupported (it stays queued until a Judge that can grade it is connected; the missing feature is not reported yet); null otherwise.",
+        "description": "Why a queued submission is not being judged: `waiting_for_problem_data`, `waiting_for_judge_runtime` or `waiting_for_judge_sandbox` while a Judge could not run it for that transient reason (it is retried with a backoff, and ends Internal Error after about 30 minutes); `waiting_for_capable_judge` once a Judge refused it as unsupported (it stays queued until a Judge that can grade it is connected; the missing feature is not reported yet); null otherwise.",
         "enum": [
-          "waiting_for_capable_judge"
+          "waiting_for_capable_judge",
+          "waiting_for_judge_runtime",
+          "waiting_for_judge_sandbox",
+          "waiting_for_problem_data"
         ],
         "type": "string"
       },

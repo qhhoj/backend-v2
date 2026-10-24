@@ -1,9 +1,13 @@
 import type { Problem, SubmissionCase } from '@libs/database';
 import type { AssignmentRef } from '@libs/judge-proto';
 import {
+  FREE_UNSTORED_REQUEUES,
+  MAX_RETRIES,
   RETRY_LIMIT_MESSAGE,
   RunWritesRepository,
+  UNSTORED_LIMIT_MESSAGE,
 } from '../src/submissions/run-writes.repository';
+import { DEFERRAL_LIMIT_MESSAGE } from '../src/submissions/deferral';
 import { canJudge } from '../src/dispatch/slots';
 import { RunsService } from '../src/submissions/runs.service';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
@@ -11,7 +15,7 @@ import type { RunKey } from '../src/submissions/write-outcome';
 import { seedCatalog, seedProblem, seedSubmission } from './fixtures';
 import { RecordingJudge } from './recording-judge';
 import type { BridgeCatalog } from './fixtures';
-import { setupBridgeTest } from './setup';
+import { FAST_TIMINGS, setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
 
 const JUDGE = 'judge-01';
@@ -302,6 +306,106 @@ describe('Run writes (seq compare-and-set)', () => {
       await writes.retry({ ...retried, seq: 2 }, 'sandbox failed'),
     ).toMatchObject({ outcome: 'applied', requeued: true });
     expect(await stored(run.id)).toMatchObject({ status: 'QU', retryCount: 1 });
+  });
+
+  it('defers a transient RETRY without spending a RETRY, holds it back, re-acks its replay, and fails it as IE once the deferral window is over', async () => {
+    const run = await claimed();
+    await writes.accept(run.key(1));
+    const first = new Date();
+    const data = { reason: 'data', log: 'DataUnavailable' } as const;
+    expect(await writes.defer(run.key(2), data, first)).toMatchObject({
+      outcome: 'applied',
+      requeued: true,
+    });
+    expect(await stored(run.id)).toMatchObject({
+      status: 'QU',
+      retryCount: 0,
+      judgedOn: null,
+      deferral: { reason: 'data', since: first, count: 1 },
+    });
+    expect((await writes.defer(run.key(2), data, first)).outcome).toBe(
+      'duplicate',
+    );
+    const [queued] = await repository.loadQueued([run.id]);
+    expect(queued).toMatchObject({
+      waitsForData: true,
+      retryAfter: first.getTime() + FAST_TIMINGS.deferralBackoffMs,
+    });
+    const claim = await repository.claimRun(queued, JUDGE);
+    if (!claim || !('request' in claim)) throw new Error('not claimed');
+    const again = { ref: claim.request.ref, judgeName: JUDGE, seq: 1 };
+    await writes.accept(again);
+    const late = new Date(first.getTime() + FAST_TIMINGS.deferralWindowMs);
+    expect(
+      await writes.defer(
+        { ...again, seq: 2 },
+        { reason: 'sandbox', log: 'SandboxFailure' },
+        late,
+      ),
+    ).toMatchObject({ outcome: 'applied', requeued: false });
+    expect(await stored(run.id)).toMatchObject({
+      status: 'IE',
+      result: 'IE',
+      retryCount: 0,
+      error: `${DEFERRAL_LIMIT_MESSAGE.sandbox}: SandboxFailure`,
+    });
+  });
+
+  it('starts a transient wait over on a requeue for another cause: a later transient RETRY waits again instead of ending IE at once', async () => {
+    const run = await claimed();
+    await writes.accept(run.key(1));
+    const first = new Date();
+    const data = { reason: 'data', log: 'DataUnavailable' } as const;
+    await writes.defer(run.key(2), data, first);
+    const reclaim = async () => {
+      const [queued] = await repository.loadQueued([run.id]);
+      const claim = await repository.claimRun(queued, JUDGE);
+      if (!claim || !('request' in claim)) throw new Error('not claimed');
+      return { ref: claim.request.ref, judgeName: JUDGE, seq: 1 };
+    };
+    const lost = await reclaim();
+    await writes.accept(lost);
+    // its judge was lost and the grace expired
+    expect(await repository.requeueRun(lost.ref, JUDGE)).not.toBeNull();
+    expect(await stored(run.id)).toMatchObject({
+      status: 'QU',
+      deferral: null,
+    });
+    const [queued] = await repository.loadQueued([run.id]);
+    expect(queued).toMatchObject({ waitsForData: false, retryAfter: 0 });
+    const again = await reclaim();
+    await writes.accept(again);
+    const late = new Date(first.getTime() + FAST_TIMINGS.deferralWindowMs);
+    expect(await writes.defer({ ...again, seq: 2 }, data, late)).toMatchObject({
+      outcome: 'applied',
+      requeued: true,
+    });
+    expect(await stored(run.id)).toMatchObject({
+      status: 'QU',
+      deferral: { since: late, count: 1 },
+    });
+  });
+
+  it('requeues a run whose Final was never stored for free twice, then spends a RETRY on each, and ends it as IE once those are spent', async () => {
+    const run = await claimed();
+    let ref = run.ref;
+    const requeued: boolean[] = [];
+    for (let tries = FREE_UNSTORED_REQUEUES + MAX_RETRIES; tries > 0; tries--) {
+      await writes.accept({ ref, judgeName: JUDGE, seq: 1 });
+      requeued.push(await runs.requeueUnstored(ref, JUDGE));
+      const [queued] = await repository.loadQueued([run.id]);
+      if (!queued) break;
+      const claim = await repository.claimRun(queued, JUDGE);
+      if (!claim || !('request' in claim)) throw new Error('not claimed');
+      ref = claim.request.ref;
+    }
+    expect(requeued).toEqual([true, true, true, true, false]);
+    expect(await stored(run.id)).toMatchObject({
+      status: 'IE',
+      result: 'IE',
+      retryCount: MAX_RETRIES,
+      error: UNSTORED_LIMIT_MESSAGE,
+    });
   });
 
   it('counts a row without retryCount (a migrated one) as zero RETRYs', async () => {

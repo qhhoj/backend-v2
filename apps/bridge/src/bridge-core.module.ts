@@ -14,6 +14,7 @@ import { JudgesRepository } from './judges/judges.repository';
 import { JudgeLinkServer } from './link/judge-link.server';
 import { GenerationTransfer } from './link/generation-transfer';
 import { SourceFetch } from './link/source-fetch';
+import { ProblemDataWrites } from './submissions/problem-data-writes';
 import { RunWritesRepository } from './submissions/run-writes.repository';
 import { RunsService } from './submissions/runs.service';
 import { SubmissionsRepository } from './submissions/submissions.repository';
@@ -31,6 +32,7 @@ import { SubmissionsRepository } from './submissions/submissions.repository';
     { provide: BRIDGE_TIMINGS, useValue: DEFAULT_BRIDGE_TIMINGS },
     SubmissionsRepository,
     RunWritesRepository,
+    ProblemDataWrites,
     SubmissionEventsService,
     RunsService,
     GenerationsRepository,
