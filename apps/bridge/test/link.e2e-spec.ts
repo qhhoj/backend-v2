@@ -17,6 +17,8 @@ import {
   seedProblem,
   seedSubmission,
 } from './fixtures';
+import { TIMER_HANDSHAKE_CLOCK } from '../src/link/handshake-clock';
+import type { HandshakeClock } from '../src/link/handshake-clock';
 import { JudgeLinkServer } from '../src/link/judge-link.server';
 import type { JudgeSession } from '../src/link/judge-session';
 import { setupBridgeTest } from './setup';
@@ -44,6 +46,13 @@ const handshakeSeen = (bridge: BridgeTest, name: string) =>
   waitUntil(() =>
     sessionsOf(bridge, name).some((session) => !session.hasHelloed),
   );
+/** Real Hello deadlines, no socket deadline: a TLS handshake and key check slower than `handshakeMs` on a loaded host cannot end a session before its Hello is due. */
+const HELLO_DEADLINE_ONLY: HandshakeClock = {
+  arm: (owner, ms, fire) =>
+    'judge' in owner
+      ? TIMER_HANDSHAKE_CLOCK.arm(owner, ms, fire)
+      : () => undefined,
+};
 const judge = (name: string, extra = {}) => ({
   name,
   key: `${name}-key`,
@@ -263,6 +272,7 @@ describe('Judge link over TLS', () => {
     ca = readFileSync(cert);
     bridge = await setupBridgeTest({
       env: { JUDGE_BRIDGE_TLS_CERT: cert, JUDGE_BRIDGE_TLS_KEY: key },
+      handshakeClock: HELLO_DEADLINE_ONLY,
     });
     await seedJudge(bridge, 'j1', 'j1-key');
   });

@@ -26,8 +26,15 @@ import type { SubmissionGradedJob } from '@libs/judging';
 import { BridgeModule } from '../src/bridge.module';
 import { BRIDGE_TIMINGS } from '../src/bridge-timings';
 import type { BridgeTimings } from '../src/bridge-timings';
+import { GRACE_CLOCK, TIMER_GRACE_CLOCK } from '../src/dispatch/grace-clock';
+import type { GraceClock } from '../src/dispatch/grace-clock';
 import { ACCEPT_CLOCK, TIMER_ACCEPT_CLOCK } from '../src/link/accept-clock';
 import type { AcceptClock } from '../src/link/accept-clock';
+import {
+  HANDSHAKE_CLOCK,
+  TIMER_HANDSHAKE_CLOCK,
+} from '../src/link/handshake-clock';
+import type { HandshakeClock } from '../src/link/handshake-clock';
 import { JudgeLinkServer } from '../src/link/judge-link.server';
 
 /** Milliseconds instead of seconds; `resyncMs` stays long so a test sees only the dispatches it caused (restart tests shorten it). No test waits for the idle or accept clock to expire, so both are long enough that a loaded host (event-loop stalls of seconds) never drops a judge or releases a slow Accepted mid-test. `handshakeMs` is also the socket deadline from accept to an authenticated session: a loaded host takes over a second for a judge's first connect, so it is seconds too, and short enough that a socket left without a session dies within a test. */
@@ -55,12 +62,18 @@ export async function setupBridgeTest({
   timings = {},
   env = {},
   acceptClock = TIMER_ACCEPT_CLOCK,
+  graceClock = TIMER_GRACE_CLOCK,
+  handshakeClock = TIMER_HANDSHAKE_CLOCK,
 }: {
   timings?: Partial<BridgeTimings>;
   /** Extra environment, e.g. the judge port's TLS pair. */
   env?: Record<string, string>;
   /** Every bridge this test boots times Accepted with it (conformance: a clock the scenario advances). */
   acceptClock?: AcceptClock;
+  /** Same for the resume grace of a lost judge's runs. */
+  graceClock?: GraceClock;
+  /** Same for the socket and Hello deadlines. */
+  handshakeClock?: HandshakeClock;
 } = {}) {
   const replSet = await startMongo();
   Object.assign(process.env, TEST_ENV, {
@@ -80,6 +93,10 @@ export async function setupBridgeTest({
       .useValue({ ...FAST_TIMINGS, ...timings })
       .overrideProvider(ACCEPT_CLOCK)
       .useValue(acceptClock)
+      .overrideProvider(GRACE_CLOCK)
+      .useValue(graceClock)
+      .overrideProvider(HANDSHAKE_CLOCK)
+      .useValue(handshakeClock)
       .compile();
     try {
       await compiled.init();

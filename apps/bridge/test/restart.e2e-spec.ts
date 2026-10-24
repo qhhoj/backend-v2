@@ -114,11 +114,14 @@ describe('Bridge restart', () => {
     const [first, second] = [await seedOne(), await seedOne()];
     await commands.judge([first, second]);
     const judge = await connect('restart-19', { slots: 2 });
+    // two claims can be in flight at once (the command and a resync tick), so the Assigns may come in either order
     const refs = [
       (await judge.nextAssign()).ref!,
       (await judge.nextAssign()).ref!,
     ];
-    const [one, two] = refs;
+    const [one, two] = [first, second].map((id) =>
+      refs.find((ref) => ref.submissionId === id)!,
+    );
     judge.accept(one);
     judge.started(one, 1);
     judge.cases(one, [

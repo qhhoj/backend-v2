@@ -59,6 +59,7 @@ export class FakeJudge {
   status: StatusObject | null = null;
   readonly closed: Promise<StatusObject>;
   private readonly seqs = new Map<string, number>();
+  private sentCount = 0;
   private waiters: Array<() => void> = [];
   /** Set by `endSession`: the channel outlives the session. */
   private keepsChannel = false;
@@ -126,7 +127,14 @@ export class FakeJudge {
   }
 
   send(body: JudgeBody): void {
-    if (!this.isClosed) this.call.write(JudgeMessage.fromPartial({ body }));
+    if (this.isClosed) return;
+    this.call.write(JudgeMessage.fromPartial({ body }));
+    this.sentCount += 1;
+  }
+
+  /** Messages written to the stream so far, pongs included. */
+  get sent(): number {
+    return this.sentCount;
   }
 
   hello(extra: Partial<Hello> = {}): void {

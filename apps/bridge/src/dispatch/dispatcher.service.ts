@@ -11,6 +11,8 @@ import { RunsService } from '../submissions/runs.service';
 import type { Claimed, GraceOutcome } from '../submissions/runs.service';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
 import { GraceRegistry } from './grace';
+import { GRACE_CLOCK, TIMER_GRACE_CLOCK } from './grace-clock';
+import type { GraceClock } from './grace-clock';
 import type { GraceEntry } from './grace';
 import { RunDeadlines } from './run-deadlines';
 import {
@@ -80,11 +82,13 @@ export class DispatcherService {
     private readonly runs: RunsService,
     private readonly generations: GenerationsService,
     @Inject(BRIDGE_TIMINGS) private readonly timings: BridgeTimings,
+    @Inject(GRACE_CLOCK) graceClock: GraceClock = TIMER_GRACE_CLOCK,
   ) {
     this.deadlines = new RunDeadlines(timings);
     this.grace = new GraceRegistry(
       timings.resumeGraceMs,
       (entry) => void this.graceExpired(entry),
+      graceClock,
     );
   }
 
