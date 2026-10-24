@@ -209,13 +209,12 @@ export class QuotaLedger {
     ]);
   }
 
-  /** The storage meter: reads what the organization holds and checks that `addedBytes` (what this write adds) stays within its limit. A write that adds nothing or shrinks fits without a read, unless `checkShrinking` asks for the usage to be checked anyway. Enforce refuses with 403 `quota_exceeded`; warn logs. */
+  /** The storage meter: reads what the organization holds and checks that `addedBytes` (what this write adds; negative or zero always fits) stays within its limit. Enforce refuses with 403 `quota_exceeded`; warn logs. */
   async assertStorage(
     organizationId: string,
     addedBytes: number,
-    checkShrinking = false,
   ): Promise<void> {
-    if (addedBytes <= 0 && !checkShrinking) return;
+    if (addedBytes <= 0) return;
     const { storageBytes: limit, unlimited } =
       await this.limitsOf(organizationId);
     if (unlimited) return;

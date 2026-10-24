@@ -122,6 +122,7 @@ describe('Polygon standard package import', () => {
     };
     const queued = {
       id: newId(),
+      timestamp: Date.now(),
       data,
       updateProgress: (value: ImportProgress) => {
         progress.push(value);
@@ -212,7 +213,12 @@ describe('Polygon standard package import', () => {
       includeInProblem: true,
     });
     requesterId = (
-      await worker.users.create({ username: 'setter', password: '!' })
+      await worker.users.create({
+        username: 'setter',
+        password: '!',
+        isActive: true,
+        permissions: ['judge.sync_polygon_problem', 'judge.edit_own_problem'],
+      })
     )._id;
   });
   beforeEach(() => polygon.reset());
@@ -331,36 +337,55 @@ describe('Polygon standard package import', () => {
     expect(await generations.countDocuments()).toBe(0);
   });
 
-  it('refuses, under enforce, generated tests that overflow the organization quota though the package fits', async () => {
+  it('refuses, under enforce, a sync whose generated tests grow the organization past its quota though the package fits', async () => {
+    const bulk = randomBytes(3000).toString('base64');
+    const judgeResult = (inputs: string) =>
+      actAsJudge(async () => ({
+        status: 'done',
+        resultFileId: await uploadResult([
+          { name: '01.inp', content: inputs },
+          { name: '01.out', content: inputs },
+          { name: '02.inp', content: '2' },
+          { name: '02.out', content: '2' },
+          { name: '03.inp', content: '5 6' },
+          { name: '03.out', content: '11' },
+        ]),
+      }));
+    polygon.reply('problem.package', { zip: standardPackage() });
+    const created = judgeResult('1');
+    const create = job('stdquota');
+    create.data.polygon!.problemId = POLYGON_ID + 1;
+    await processor.process(create);
+    await created;
     const organization = await worker.organizations.create({
       name: 'THPT B',
       slug: 'thpt-b',
       shortName: 'B',
       quotaStorageBytes: standardPackage().length + 100,
     });
+    await worker.problems.updateOne(
+      { code: 'stdquota' },
+      {
+        isOrganizationPrivate: true,
+        organizations: [organization._id],
+        dataBytes: 10,
+      },
+    );
     await worker.setSetting('quota.enforce', 'enforce');
     await worker.module.get<Redis>(REDIS).set(QUOTA_BACKFILL_DONE_KEY, '1');
+    const stored = await worker.problems.findOne({ code: 'stdquota' });
+    const sync = job('stdquota');
+    sync.data.mode = 'update';
+    sync.data.expectedDataVersion = stored!.dataVersion;
+    sync.data.polygon!.problemId = POLYGON_ID + 1;
+    sync.data.polygon!.purpose = 'sync';
+    sync.data.polygon!.revision = 4;
     polygon.reply('problem.package', { zip: standardPackage() });
-    const queued = job('stdquota');
-    queued.data.meteredOrganizationId = organization._id;
-    if (queued.data.polygon) queued.data.polygon.problemId = POLYGON_ID + 1;
-    const bulk = randomBytes(3000).toString('base64');
-    const judge = actAsJudge(async () => ({
-      status: 'done',
-      resultFileId: await uploadResult([
-        { name: '01.inp', content: bulk },
-        { name: '01.out', content: bulk },
-        { name: '02.inp', content: '2' },
-        { name: '02.out', content: '2' },
-        { name: '03.inp', content: '5 6' },
-        { name: '03.out', content: '11' },
-      ]),
-    }));
-    await expect(processor.process(queued)).rejects.toThrow(
+    const judge = judgeResult(bulk);
+    await expect(processor.process(sync)).rejects.toThrow(
       /the organization's storage is full/,
     );
     await judge;
-    expect(await worker.problems.countDocuments({ code: 'stdquota' })).toBe(0);
     await worker.setSetting('quota.enforce', 'warn');
   });
 });
