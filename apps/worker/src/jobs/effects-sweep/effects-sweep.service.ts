@@ -88,7 +88,7 @@ export class EffectsSweepService {
     }
     if (repaired)
       this.logger.warn(
-        `Re-applied the effects of ${repaired} submissions whose graded job was lost`,
+        `Re-applied the effects of ${repaired} submissions still due (graded job lost, or its participation left to an owner that may have died)`,
       );
     return repaired;
   }

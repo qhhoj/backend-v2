@@ -1,11 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { escapeRegExp, Paginated } from '@libs/common';
+import { escapeRegExp, Paginated, REDIS } from '@libs/common';
 import { frozenTime, isFrozenFor, liveStatusOf } from '@libs/contests';
 import { narrowTo, uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
+import type Redis from 'ioredis';
 import type { FilterQuery, SortOrder } from 'mongoose';
 import { ContestAccess } from './contest-access';
 import { ContestOrganizationsService } from './contest-organizations.service';
@@ -14,6 +15,7 @@ import { ContestViewerService } from './contest-viewer.service';
 import type { ContestViewer } from './contest-viewer.service';
 import { ContestsRepository } from './contests.repository';
 import type { ContestDocument } from './contests.repository';
+import { recountParticipants } from './participant-counts';
 import { ParticipationsRepository } from './participations.repository';
 import {
   ContestDetailResponse,
@@ -106,6 +108,7 @@ export class ContestsService {
     private readonly organizations: ContestOrganizationsService,
     private readonly users: UsersRepository,
     private readonly ratingChanges: RatingChangesRepository,
+    @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
   /** Legacy `ContestList` over `get_visible_contests`; upcoming soonest first, the rest newest first unless `sort` says otherwise; each row carries the signed-in viewer's own state, and the editor block for contests they may edit. */
@@ -220,7 +223,11 @@ export class ContestsService {
       counts.virtualCount === contest.virtualCount
     )
       return;
-    await this.contests.setCounts(uuidStr(contest._id), counts);
+    await recountParticipants(
+      this.redis,
+      { contests: this.contests, participations: this.participations },
+      uuidStr(contest._id),
+    );
     contest.userCount = counts.userCount;
     contest.virtualCount = counts.virtualCount;
   }
