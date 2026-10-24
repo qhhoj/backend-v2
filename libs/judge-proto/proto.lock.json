@@ -1,9 +1,9 @@
 {
   "source": "judge-v2",
-  "tag": "proto-v1.3",
-  "commit": "8d86079c5b7a8ba9a766eb34f216b77f31aa0918",
+  "tag": "proto-v1.4",
+  "commit": "7317fb211623ac655d213c012e7a88ea4b754688",
   "files": {
-    "compat/v1.shape.json": "02f21aecbcf8556e034e32423b4e00908f0edaa01c067240fa2f5758f0548ac6",
+    "compat/v1.shape.json": "28c1f4c43b99b87f33623cce3577753e2cee4b720c2c0fec0f096d1d3614c9e7",
     "conformance/matcher-cases.json": "328c8a084d23185ba634c5223becb48edc3a5a3dab277489612548d6d5d19eea",
     "conformance/scenarios/01-hello-first.yaml": "99e5a7c0de109da57ded61bdb2bca5ec061914f4deba727769a97964bf241c62",
     "conformance/scenarios/02-bad-key.yaml": "1e765d4887e7adf872a01f0ac79a33fd10a30c357f1dee0f0771d1d4cf5af76f",
@@ -76,8 +76,8 @@
     "golden/generation-request.json": "461feaa3e563469b692c7f28391e781e71b004a1d6d387778051c67266879474",
     "golden/judge-accepted.bin": "b1ca14d4cb17b9e9fbc295dbbf3f04da2b72e902c5b0f3a58de985fef0a1452e",
     "golden/judge-accepted.json": "cd3c80944962632a0eb2e6f17ed845e4d510b2328d81092a345a7a7ff3d6e893",
-    "golden/judge-cases.bin": "aafd07b23c5b1c5984af23421a4822b0dc5f236a1af66497d3f9350e18170d21",
-    "golden/judge-cases.json": "cec7cddf6080f4cee86aee318b073e349c906a1cfa747993b0b1c0b179898c7b",
+    "golden/judge-cases.bin": "531aca4f65a8ea8230c63601319cf471ddccbe5e3bae1478454ee93f10ae33a1",
+    "golden/judge-cases.json": "70845f560bba515a15a3c95076ec80dc6564e09ce33694e949e7dd526c371195",
     "golden/judge-compiled.bin": "9bc6441b627af656e484c53cc1d524e4886d80405c073a406e2b97509fd7d2f7",
     "golden/judge-compiled.json": "c79cfe863446d7ae708ad491abb7931e8e02f3d09bc55d67a79b729a6bb20777",
     "golden/judge-draining.bin": "10123d615b336deeb1527503f9a3cff788cfc5f333d195f06a00f32c5a9054cd",
@@ -106,7 +106,7 @@
     "golden/upload-chunk.json": "4da9d2efc41d4681fb55bddb8225616808efc9d207ec12af1a3a571edc92add4",
     "golden/upload-receipt.bin": "58c789bfd002eb5f27601d89c0371e8e1890c79e5ff0aa64be8423d422596d83",
     "golden/upload-receipt.json": "4a2973da7005c13a376e71eb5ae3c150ced60c9b03f4e0d50d06cf93d9ea97ea",
-    "qhhoj/judge/v1/judge.proto": "8624296e53ad4da5496f5870c6aaf2f95ce7f715c2def10ee74c87f874056026",
-    "version.json": "0b58d9d24b33eaeb1c3838f6a0550d79a672432a63349ec2e84123dcc9c7789e"
+    "qhhoj/judge/v1/judge.proto": "c7a0f616c940a9c9865ee82ff5431577acb1cfa19b440990c359211682c52204",
+    "version.json": "9720348fe802a9256c1c516ef203ca68d7c3254f0fe2fa77664972c6f5ce7e72"
   }
 }

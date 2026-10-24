@@ -514,6 +514,11 @@ export interface Case {
   feedback: string;
   extendedFeedback: string;
   outputPrefix: string;
+  /**
+   * CPU seconds (isolate `time`) of the problem's own programs for this case: the custom checker, the
+   * interactor and the interactive checker, summed. 0 for built-in checkers and skipped cases.
+   */
+  juryTimeS: number;
 }
 
 export interface CaseResults {
@@ -3641,6 +3646,7 @@ function createBaseCase(): Case {
     feedback: "",
     extendedFeedback: "",
     outputPrefix: "",
+    juryTimeS: 0,
   };
 }
 
@@ -3675,6 +3681,9 @@ export const Case: MessageFns<Case> = {
     }
     if (message.outputPrefix !== "") {
       writer.uint32(82).string(message.outputPrefix);
+    }
+    if (message.juryTimeS !== 0) {
+      writer.uint32(89).double(message.juryTimeS);
     }
     return writer;
   },
@@ -3772,6 +3781,14 @@ export const Case: MessageFns<Case> = {
             message.outputPrefix = reader.string();
             continue;
           }
+          case 11: {
+            if (tag !== 89) {
+              break;
+            }
+
+            message.juryTimeS = reader.double();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3812,6 +3829,11 @@ export const Case: MessageFns<Case> = {
         : isSet(object.output_prefix)
         ? globalThis.String(object.output_prefix)
         : "",
+      juryTimeS: isSet(object.juryTimeS)
+        ? globalThis.Number(object.juryTimeS)
+        : isSet(object.jury_time_s)
+        ? globalThis.Number(object.jury_time_s)
+        : 0,
     };
   },
 
@@ -3847,6 +3869,9 @@ export const Case: MessageFns<Case> = {
     if (message.outputPrefix !== "") {
       obj.outputPrefix = message.outputPrefix;
     }
+    if (message.juryTimeS !== 0) {
+      obj.juryTimeS = message.juryTimeS;
+    }
     return obj;
   },
 
@@ -3865,6 +3890,7 @@ export const Case: MessageFns<Case> = {
     message.feedback = object.feedback ?? "";
     message.extendedFeedback = object.extendedFeedback ?? "";
     message.outputPrefix = object.outputPrefix ?? "";
+    message.juryTimeS = object.juryTimeS ?? 0;
     return message;
   },
 };

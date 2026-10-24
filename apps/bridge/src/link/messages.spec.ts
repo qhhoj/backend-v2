@@ -1,10 +1,14 @@
 import { status } from '@grpc/grpc-js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   Case,
   ErrorCode,
   Final,
   Hello,
+  JudgeMessage,
   Outcome,
+  PROTO_ROOT,
   RetryReason,
   Status,
 } from '@libs/judge-proto';
@@ -128,6 +132,7 @@ describe('judge link messages', () => {
       position: 3,
       status: 'TLE',
       time: 0,
+      juryTime: 0,
       memory: 0,
       points: 0.5,
       total: 1,
@@ -141,6 +146,19 @@ describe('judge link messages', () => {
         Case.fromPartial({ position: 1, status: Status.STATUS_AC, batch: 2 }),
       ])[0].batch,
     ).toBe(2);
+  });
+
+  it("stores the checker and interactor CPU a judge reports per case (judge-v2's golden CaseResults)", () => {
+    const golden = readFileSync(join(PROTO_ROOT, 'golden', 'judge-cases.bin'));
+    const { body } = JudgeMessage.decode(golden);
+    if (body?.$case !== 'cases') throw new Error('not a CaseResults');
+    expect(
+      caseRowsOf(body.cases.cases).map((row) => [row.time, row.juryTime]),
+    ).toEqual([
+      [0.015, 0],
+      [0.02, 0.25],
+      [0, 0],
+    ]);
   });
 
   it('refuses a case without a known status and more than 256 cases in one message', () => {

@@ -195,8 +195,9 @@ describe('JudgeSession', () => {
     if (body?.$case !== 'welcome') throw new Error('no Welcome');
     const { welcome } = body;
     expect(welcome.sessionId).toBe(session.id);
-    // the judge speaks minor 3, above the bridge's: the bridge's own minor wins
-    expect(welcome.protocolMinor).toBe(PROTOCOL_MINOR);
+    // a minor-3 judge, below the bridge's: the lower minor wins
+    expect(PROTOCOL_MINOR).toBeGreaterThan(3);
+    expect(welcome.protocolMinor).toBe(3);
     expect(welcome.limits).toMatchObject({
       maxCasesPerMessage: 256,
       acceptTimeoutMs: 20_000,

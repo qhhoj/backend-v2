@@ -157,6 +157,7 @@ function caseRowOf(reported: Case): SubmissionCase {
     position: reported.position,
     status,
     time: measured(reported.timeS),
+    juryTime: measured(reported.juryTimeS),
     memory: measured(reported.memoryKib),
     points: measured(reported.points),
     total: measured(reported.total),
