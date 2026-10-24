@@ -182,10 +182,7 @@ export class SubmissionEffectsService {
       async () => {
         const problem = await this.repository.findProblem(problemId);
         if (!problem) return;
-        const counts = await this.repository.problemCounts(
-          problemId,
-          problem.points,
-        );
+        const counts = await this.repository.problemCounts(problemId);
         await this.repository.setProblemStats(problemId, {
           userCount: counts.userCount,
           acRate: acceptanceRate(counts.accepted, counts.total),

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { Problem, Submission, toUuid, User, uuidStr } from '@libs/database';
-import { ANY_SOLVED, gradedJobOf } from '@libs/judging';
+import { ANY_SOLVED, gradedJobOf, SOLVED_FILTER } from '@libs/judging';
 import type {
   ProblemBest,
   SubmissionGradedJob,
@@ -168,10 +168,9 @@ export class SubmissionEffectsRepository {
     );
   }
 
-  /** Legacy `update_stats` counts over listed users: every submission, and the AC ones worth the problem's points with their distinct users. Listed means `$nin` of the unlisted users' ids, read through the partial index: unlisted users are few (staff and test accounts), so the list stays small. A submission whose user has no `users` row counts as listed (legacy's join would drop it); only possible after a hard delete of a user. If they ever grow into the thousands, replace it with a `$lookup` of `users` on `user` filtered by `isUnlisted`. */
+  /** Legacy `update_stats` counts over listed users: every submission, and the solved ones (`SOLVED_FILTER`, not legacy's "AC worth the problem's points") with their distinct users. Listed means `$nin` of the unlisted users' ids, read through the partial index: unlisted users are few (staff and test accounts), so the list stays small. A submission whose user has no `users` row counts as listed (legacy's join would drop it); only possible after a hard delete of a user. If they ever grow into the thousands, replace it with a `$lookup` of `users` on `user` filtered by `isUnlisted`. */
   async problemCounts(
     problemId: string,
-    problemPoints: number,
   ): Promise<{ total: number; accepted: number; userCount: number }> {
     const unlisted = (
       await this.users.distinct('_id', { isUnlisted: true }).exec()
@@ -185,11 +184,7 @@ export class SubmissionEffectsRepository {
         .exec(),
       this.submissions.aggregate<{ accepted: number; userCount: number }>([
         {
-          $match: {
-            ...listed,
-            result: 'AC',
-            points: { $gte: problemPoints },
-          },
+          $match: { ...listed, ...SOLVED_FILTER },
         },
         { $group: { _id: '$user', submissions: { $sum: 1 } } },
         {

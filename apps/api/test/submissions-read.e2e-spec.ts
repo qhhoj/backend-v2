@@ -511,7 +511,7 @@ afterAll(() => api.teardown());
           .expect(403)
           .expect(errorCode('hidden')));
 
-      it('opens an all-solved source once the viewer solved the problem with full points', async () => {
+      it('opens an all-solved source once the viewer solved the problem: an AC that earned every case point', async () => {
         const path = `${SUBMISSIONS}/${owned['vis_s']}`;
         const source = `${path}/source`;
         const problem = (await api.problems.findOne({ code: 'vis_s' }))!;
@@ -535,12 +535,15 @@ afterAll(() => api.teardown());
         });
         await as('other', source).expect(403).expect(errorCode('solve_first'));
         expect(await accessNow()).toBe('solve_first');
+        // Full points stored for a near miss (a case short) are not solved.
         await seedSubmission(api, {
           user: ids.other,
           problem: problem._id,
           language: catalog.languages.cpp,
           result: 'AC',
-          points: 999,
+          points: 1000,
+          casePoints: 200.9,
+          caseTotal: 201,
         });
         await as('other', source).expect(403);
         await seedSubmission(api, {
@@ -549,6 +552,8 @@ afterAll(() => api.teardown());
           language: catalog.languages.cpp,
           result: 'AC',
           points: 1000,
+          casePoints: 201,
+          caseTotal: 201,
         });
         await as('other', source).expect(200);
         expect(await accessNow()).toBe('granted');
