@@ -21,16 +21,14 @@ import type { RunsService } from '../submissions/runs.service';
 import type { WriteOutcome } from '../submissions/write-outcome';
 import { TIMER_ACCEPT_CLOCK } from './accept-clock';
 import { JudgeSession } from './judge-session';
-import { MAX_MESSAGE_BYTES } from './link-limits';
 import type { SessionCall } from './judge-session';
 
-/** The server side of one Session stream, recorded; like grpc-js, a paused stream holds the messages that arrive until it resumes. */
+/** The server side of one Session stream, recorded. */
 class FakeCall extends EventEmitter {
   readonly written: BridgeMessage[] = [];
   readonly statuses: Array<{ code: status; details: string }> = [];
   ended = false;
   paused = false;
-  private readonly held: unknown[][] = [];
   write(message: BridgeMessage): boolean {
     this.written.push(message);
     return true;
@@ -40,15 +38,12 @@ class FakeCall extends EventEmitter {
   }
   resume(): void {
     this.paused = false;
-    while (!this.paused && this.held.length)
-      super.emit('data', ...this.held.shift()!);
   }
   end(): void {
     this.ended = true;
     setImmediate(() => this.emit('close'));
   }
   override emit(event: string | symbol, ...args: unknown[]): boolean {
-    if (event === 'data' && this.paused) return this.held.push(args) > 0;
     if (event === 'error') {
       this.statuses.push(args[0] as { code: status; details: string });
       setImmediate(() => super.emit('close'));
@@ -540,21 +535,14 @@ describe('JudgeSession', () => {
     expect(call.bodies('ack')).toHaveLength(2);
   });
 
-  it('closes a session flooding more than 1000 messages in a second, counted as they arrive however slow handling is, even pongs that write nothing', async () => {
-    const { markSessionOnline } = judges;
-    // the Hello is still being handled while the flood arrives
-    judges.markSessionOnline = () => new Promise(() => undefined);
-    try {
-      await receive(HELLO);
-      const pong = JudgeMessage.fromPartial({
-        body: { $case: 'pong', pong: { nonce: 999 } },
-      });
-      for (let index = 0; index < 1000; index += 1)
-        call.emit('data', { message: pong, bytes: 8 });
-      await settle();
-    } finally {
-      judges.markSessionOnline = markSessionOnline;
-    }
+  it('closes a session flooding more than 1000 messages in a second, even pongs that write nothing', async () => {
+    await online();
+    const pong = JudgeMessage.fromPartial({
+      body: { $case: 'pong', pong: { nonce: 999 } },
+    });
+    for (let index = 0; index < 1001; index += 1)
+      call.emit('data', { message: pong, bytes: 8 });
+    await settle();
     expect(call.errorCodes()).toEqual([ErrorCode.ERROR_CODE_FLOOD]);
     expect(call.statuses).toEqual([
       expect.objectContaining({ code: status.RESOURCE_EXHAUSTED }),
@@ -621,7 +609,7 @@ describe('JudgeSession', () => {
     ]);
   });
 
-  it('reads ahead while a message is being stored, and stops reading once the backlog holds two of the largest messages (HTTP/2 flow control then holds the judge back)', async () => {
+  it('reads nothing more while a message is being stored (HTTP/2 flow control then holds the judge back)', async () => {
     const ref = run(newId());
     await holding(ref);
     let release: (value: WriteOutcome) => void = () => undefined;
@@ -634,13 +622,6 @@ describe('JudgeSession', () => {
       bytes: 32,
     });
     await settle();
-    expect(call.paused).toBe(false);
-    const pong = JudgeMessage.fromPartial({
-      body: { $case: 'pong', pong: { nonce: 999 } },
-    });
-    call.emit('data', { message: pong, bytes: MAX_MESSAGE_BYTES });
-    expect(call.paused).toBe(false);
-    call.emit('data', { message: pong, bytes: MAX_MESSAGE_BYTES });
     expect(call.paused).toBe(true);
     release('applied');
     await settle();

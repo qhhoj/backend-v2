@@ -27,11 +27,7 @@ import type { AssignRequest } from '../submissions/assign-request';
 import type { RunsService } from '../submissions/runs.service';
 import type { RunKey, WriteOutcome } from '../submissions/write-outcome';
 import type { AcceptClock } from './accept-clock';
-import {
-  MAX_LOG_BYTES,
-  MAX_MESSAGE_BYTES,
-  MAX_MESSAGES_PER_SECOND,
-} from './link-limits';
+import { MAX_LOG_BYTES, MAX_MESSAGES_PER_SECOND } from './link-limits';
 import { MessageRate } from './message-rate';
 import {
   caseRowsOf,
@@ -54,8 +50,6 @@ const PING_SAMPLES = 6;
 const FINAL_WRITE_ATTEMPTS = 5;
 /** Runs a session remembers as ended or aborted (a Final resent before its ack, a late Accepted, a second Abort): enough for any replay window, bounded for a session that lives for weeks. */
 const RUNS_REMEMBERED = 1024;
-/** Bytes of read, unhandled messages a session holds before it stops reading: two of the largest messages. */
-const MAX_BACKLOG_BYTES = 2 * MAX_MESSAGE_BYTES;
 
 /** What a judge message was about, for a server-side failure's log line: the run, generation and seq of a run message. */
 function messageContext(body: JudgeMessage['body']): string {
@@ -111,7 +105,7 @@ interface Handled {
   outcome: WriteOutcome;
 }
 
-/** One judge's `Session` stream: Hello first, liveness, the flood cap, one message handled at a time (read ahead into a bounded backlog; a full one pauses the stream, so HTTP/2 flow control pushes back on the judge), an ack per stored message, and Assign/Abort/Disconnect from the dispatcher. */
+/** One judge's `Session` stream: Hello first, liveness, the flood cap, one message handled at a time (the stream is paused meanwhile, so HTTP/2 flow control pushes back on the judge), an ack per stored message, and Assign/Abort/Disconnect from the dispatcher. */
 export class JudgeSession implements DispatchTarget {
   readonly id = newId();
   readonly name: string;
@@ -138,11 +132,6 @@ export class JudgeSession implements DispatchTarget {
   private lastReceivedAt = Date.now();
   private isHandling = false;
   private readonly rate = new MessageRate(MAX_MESSAGES_PER_SECOND);
-  /** Read, counted and not handled yet, oldest first. */
-  private readonly backlog: DecodedJudgeMessage[] = [];
-  private backlogBytes = 0;
-  /** Paused by a full backlog (not by grpc-js). */
-  private isReadPaused = false;
   private nonce = 0;
   private readonly pingsSent = new Map<number, number>();
   private readonly roundTrips: number[] = [];
@@ -257,45 +246,20 @@ export class JudgeSession implements DispatchTarget {
     if (!this.isClosed) this.call.write(BridgeMessage.fromPartial({ body }));
   }
 
-  /** Counts each message against the rate as it is read, then queues it: messages are handled one at a time, in order. The stream is read on while the backlog is under its bounds, so a burst over the rate is counted before backpressure slows reading it, however slow handling is. */
   private receive(decoded: DecodedJudgeMessage): void {
-    if (this.isClosed) return;
     this.lastReceivedAt = Date.now();
     if (!this.withinRate()) return;
-    this.backlog.push(decoded);
-    this.backlogBytes += decoded.bytes;
-    if (this.isBacklogFull()) {
-      this.isReadPaused = true;
-      this.call.pause();
-    }
-    if (!this.isHandling) void this.drainBacklog();
-  }
-
-  /** At most a second's worth of messages, and at most `MAX_BACKLOG_BYTES`. */
-  private isBacklogFull(): boolean {
-    return (
-      this.backlog.length >= MAX_MESSAGES_PER_SECOND ||
-      this.backlogBytes >= MAX_BACKLOG_BYTES
-    );
-  }
-
-  private async drainBacklog(): Promise<void> {
     this.isHandling = true;
-    for (let next = this.backlog.shift(); next; next = this.backlog.shift()) {
-      this.backlogBytes -= next.bytes;
-      await this.handleSafely(next);
-      if (this.isClosed) break;
-      if (this.isReadPaused && !this.isBacklogFull()) {
-        this.isReadPaused = false;
-        this.call.resume();
-      }
-    }
-    this.backlog.length = 0;
-    // handling time is not silence: the idle clock restarts once the backlog is handled
-    this.isHandling = false;
-    this.lastReceivedAt = Date.now();
+    this.call.pause();
+    void this.handleSafely(decoded).finally(() => {
+      /** Handling time is not silence: the idle clock restarts when the judge may speak again. */
+      this.isHandling = false;
+      this.lastReceivedAt = Date.now();
+      if (!this.isClosed) this.call.resume();
+    });
   }
 
+  /** Counted as each message is read, before it is handled. The stream is paused while one is handled, so a judge sending faster than the bridge handles is held back by HTTP/2 flow control and may never reach the cap. */
   private withinRate(): boolean {
     if (this.rate.admit()) return true;
     const error = flood();
