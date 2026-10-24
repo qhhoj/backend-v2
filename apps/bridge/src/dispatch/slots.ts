@@ -20,12 +20,14 @@ export interface QueuedSubmission {
   retryBannedJudges: string[];
   /** Hello features its problem's init.yml needs (`requiredJudgeFeatures`); a judge without one of them would answer with an internal error. */
   requiredFeatures: string[];
-  /** Judge builds that refused it as unsupported (the row's `refusedBy`): never offered it again, so a row every judge refuses waits in the queue instead of bouncing. */
+  /** Judge builds that refused it as unsupported (the row's `refusedBy`): not offered it again while the problem's data is the version they refused, so a row every judge refuses waits in the queue instead of bouncing. */
   refusedBy: RefusingJudge[];
   /** Epoch ms before which no judge takes it (the row's `deferral.retryAfter`, a transient RETRY's backoff); 0 when it waits for nothing. The resync tick offers it again once due. */
   retryAfter: number;
   /** Its last transient RETRY said the problem's data was not there yet: its claim also waits while that problem's data is being written. */
   waitsForData: boolean;
+  /** Its problem's `dataVersion` now (the root's for a mirror): a refusal made against an older version no longer holds. */
+  dataVersion: number;
 }
 
 export interface JudgeState {
@@ -41,7 +43,7 @@ export interface JudgeState {
   readonly winding: Set<string>;
   /** Features from its Hello (`generate.polygon`, ...). */
   readonly features: ReadonlySet<string>;
-  /** Build from its Hello: a refusal holds for that build only, an upgraded judge may try again. */
+  /** Build from its Hello: a refusal holds for that build only, so a new build may try again (judge-v2 sends its `CARGO_PKG_VERSION`, so today that means a new release). */
   readonly build: string;
   /** Ids of the test generations it holds (a claim in flight included); each takes one slot. */
   readonly generations: Set<string>;
@@ -97,13 +99,16 @@ export const mayStartGeneration = (
   );
 };
 
+/** This build refused the problem's current data; an entry without a version (stored before it was recorded) or for older data is stale. */
 const hasRefused = (judge: JudgeState, submission: QueuedSubmission) =>
   submission.refusedBy.some(
     (refusing) =>
-      refusing.name === judge.name && refusing.build === judge.build,
+      refusing.name === judge.name &&
+      refusing.build === judge.build &&
+      (refusing.dataVersion ?? -1) >= submission.dataVersion,
   );
 
-/** Runs the language, has the features the problem needs, is not banned, has not refused it as unsupported, its backoff is over, and is enabled (or asked for by name). A submission pinned to a judge without a needed feature waits until that judge upgrades or the pin is dropped (resync of an absent judge, rejudge). */
+/** Runs the language, has the features the problem needs, is not banned, has not refused it as unsupported on the problem's current data, its backoff is over, and is enabled (or asked for by name). A submission pinned to a judge without a needed feature waits until that judge upgrades or the pin is dropped (resync of an absent judge, rejudge). */
 export const canJudge = (
   judge: JudgeState,
   submission: QueuedSubmission,
@@ -184,6 +189,7 @@ const candidateKey = (submission: QueuedSubmission): string =>
     submission.requiredFeatures,
     submission.refusedBy,
     submission.retryAfter,
+    submission.dataVersion,
   ]);
 
 /**

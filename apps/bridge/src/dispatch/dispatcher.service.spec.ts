@@ -76,6 +76,7 @@ const entry = (fields: Partial<QueuedSubmission> = {}): QueuedSubmission => ({
   refusedBy: [],
   retryAfter: 0,
   waitsForData: false,
+  dataVersion: 0,
   ...fields,
 });
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -814,7 +815,7 @@ describe('DispatcherService', () => {
     expect(dispatcher.queuedIds()).toEqual([submission.id]);
   });
 
-  it('gives a queued entry the features its problem needs now, keeping its pin and bans', async () => {
+  it('gives a queued entry the features and data version its problem has now, keeping its pin and bans', async () => {
     // j2 comes first: it would take the entry if the refresh dropped the pin.
     const free = await online(new Target('j2'));
     const judge = await online(new Target('j1', 2));
@@ -843,6 +844,17 @@ describe('DispatcherService', () => {
     ]);
     await dispatcher.setDisabled('j1', false);
     expect(dispatcher.queuedIds()).toEqual([other.id]);
+
+    // j1 refused this data; a data save lifts the refusal at the next tick.
+    const refused = entry({
+      refusedBy: [{ name: 'j1', build: 'test', dataVersion: 0 }],
+    });
+    await queue(refused);
+    expect(dispatcher.queuedIds()).toContain(refused.id);
+    await dispatcher.refreshRequiredFeatures([{ ...refused, dataVersion: 1 }]);
+    expect(judge.assigned.map(({ ref }) => ref.submissionId)).toContain(
+      refused.id,
+    );
   });
 
   it('releases an unaccepted Assign alone and hands it to a free slot', async () => {

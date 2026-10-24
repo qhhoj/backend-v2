@@ -44,6 +44,8 @@ interface JudgedProblem {
   /** The mirror root's code for a mirror; undefined when that problem is gone. */
   code: string | undefined;
   requiredFeatures: string[];
+  /** The judged data's `dataVersion` (the root's for a mirror). */
+  dataVersion: number;
   isExternal: boolean;
 }
 /** The IE message of a claimed row whose problem, source or uploaded file is gone. */
@@ -211,6 +213,7 @@ export class SubmissionsRepository {
           refusedBy: row.refusedBy ?? [],
           retryAfter: row.deferral?.retryAfter.getTime() ?? 0,
           waitsForData: row.deferral?.reason === 'data',
+          dataVersion: problem.dataVersion,
         },
       ];
     });
@@ -240,7 +243,7 @@ export class SubmissionsRepository {
   private async judgedProblemsOf(
     problemIds: string[],
   ): Promise<Map<string, JudgedProblem>> {
-    const judgedFields = { code: 1, ...JUDGED_DATA_PROJECTION };
+    const judgedFields = { code: 1, dataVersion: 1, ...JUDGED_DATA_PROJECTION };
     const problems = await this.problems
       .find(
         { _id: { $in: problemIds } },
@@ -266,6 +269,7 @@ export class SubmissionsRepository {
           requiredFeatures: judged?.data
             ? requiredJudgeFeatures(judged.data)
             : [],
+          dataVersion: judged?.dataVersion ?? 0,
           isExternal: Boolean(problem.externalJudge?.isActive),
         };
         return [uuidStr(problem._id), entry];

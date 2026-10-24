@@ -403,7 +403,7 @@ export class JudgeSession implements DispatchTarget {
       this.services.dispatch.runStarted(this, handled.ref, caseCount);
   }
 
-  /** The Final is acked only after its write and graded job; the slot is then free. A RETRY frees it with a ban on this judge for the row until the next resync tick (a refusal bans this judge build for good, `refusedBy`), unless the user aborted the run (`honourAbort`). A winding run's Final writes nothing and frees its slot; a stale Final (the row moved on) ends the run too; a Final resent for a run that already ended is re-acked. */
+  /** The Final is acked only after its write and graded job; the slot is then free. A RETRY frees it with a ban on this judge for the row until the next resync tick (a refusal bans this judge build until the problem's data changes, `refusedBy`), unless the user aborted the run (`honourAbort`). A winding run's Final writes nothing and frees its slot; a stale Final (the row moved on) ends the run too; a Final resent for a run that already ended is re-acked. */
   private async onFinal(final: Final): Promise<void> {
     const received = finalReportOf(final);
     const ref = refOf(final.ref);
@@ -473,12 +473,16 @@ export class JudgeSession implements DispatchTarget {
     await this.services.dispatch.finalNotStored(this, ref);
   }
 
-  /** A refusal names this judge build, a deferral its reason; every other Final is written as it stands. */
+  /** A refusal names this judge build and the data version it refused, a deferral its reason; every other Final is written as it stands. */
   private settle(key: RunKey, report: FinalReport): Promise<WriteOutcome> {
     const { runs } = this.services;
     switch (report.kind) {
       case 'refused':
-        return runs.refused(key, { name: this.name, build: this.build });
+        return runs.refused(key, {
+          name: this.name,
+          build: this.build,
+          dataVersion: report.dataVersionUsed,
+        });
       case 'deferred':
         return runs.deferred(key, report.reason, report.log);
       default:
@@ -494,7 +498,7 @@ export class JudgeSession implements DispatchTarget {
     )
       return report;
     this.logger.warn(
-      `Judge ${this.name} answered RETRY for submission ${ref.submissionId} gen ${ref.generation} after its abort; ended as aborted: ${loggableText(report.log)}`,
+      `Judge ${this.name} ${report.kind === 'refused' ? 'refused' : 'answered RETRY for'} submission ${ref.submissionId} gen ${ref.generation} after its abort; ended as aborted: ${loggableText(report.log)}`,
     );
     const { log, dataVersionUsed } = report;
     return { kind: 'aborted', log, dataVersionUsed };

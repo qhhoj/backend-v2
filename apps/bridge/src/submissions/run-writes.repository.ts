@@ -206,7 +206,7 @@ export class RunWritesRepository {
     return { ...failed, requeued: false };
   }
 
-  /** Final RETRY Unsupported: back to QU with that judge build recorded in `refusedBy`, so it is never offered the row again; `retryCount` is untouched, so a refusal never ends in IE. */
+  /** Final RETRY Unsupported: back to QU with that judge build and the data version it refused recorded in `refusedBy`, so it is not offered the row again until the data changes; `retryCount` is untouched, so a refusal never ends in IE. */
   refuse(key: RunKey, judge: RefusingJudge): Promise<FinishOutcome> {
     return this.finish(key, {
       $set: requeueByJudge(key),

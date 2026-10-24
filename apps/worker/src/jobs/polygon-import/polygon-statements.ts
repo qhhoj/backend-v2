@@ -10,7 +10,8 @@ import {
   SOURCE_MAX_BYTES,
   SVG_MAX_BYTES,
 } from '@libs/problems';
-import type { PolygonImportJob } from '@libs/problems';
+import { importOptionsOf } from '@libs/problems';
+import type { ImportOptions, PolygonImportJob } from '@libs/problems';
 import { renderMarkdown, RenderLimitError, sanitizeSvg } from '@libs/render';
 import type { RenderStyle } from '@libs/render';
 import { PolygonImportError } from './polygon-import.error';
@@ -338,10 +339,10 @@ async function readStatementSources(
 /** A single statement is the main one; with several, the job names it. Checked before anything is rendered, so a bad choice saves no image. */
 function pickMainLanguage(
   sources: StatementSource[],
-  job: PolygonImportJob,
+  options: ImportOptions,
 ): string {
   const mainLanguage =
-    sources.length === 1 ? sources[0].language : job.mainStatementLanguage;
+    sources.length === 1 ? sources[0].language : options.mainStatementLanguage;
   if (
     !mainLanguage ||
     !sources.some((source) => source.language === mainLanguage)
@@ -377,19 +378,19 @@ async function renderSourceAndSaveImages(
 }
 
 /** A statement the job leaves out: not rendered, no images saved, its tutorial never the editorial. */
-const isSkipped = (source: StatementSource, job: PolygonImportJob): boolean =>
-  Object.hasOwn(job.statementLanguages, source.language) &&
-  job.statementLanguages[source.language] === 'skip';
+const isSkipped = (source: StatementSource, options: ImportOptions): boolean =>
+  Object.hasOwn(options.statementLanguages, source.language) &&
+  options.statementLanguages[source.language] === 'skip';
 
 function toTranslation(
   source: StatementSource,
   rendered: RenderedStatement,
-  job: PolygonImportJob,
+  options: ImportOptions,
   earlierTranslations: Translation[],
 ): Translation {
   /** Languages come from problem.xml: `constructor` or `__proto__` must not resolve through the prototype. */
-  const choice = Object.hasOwn(job.statementLanguages, source.language)
-    ? job.statementLanguages[source.language]
+  const choice = Object.hasOwn(options.statementLanguages, source.language)
+    ? options.statementLanguages[source.language]
     : undefined;
   const siteLanguage = choice === 'skip' ? undefined : choice;
   if (!siteLanguage)
@@ -414,7 +415,8 @@ function toTranslation(
 /** The one tutorial, or the job's choice among several, as markdown with its images saved; '' when no statement has one. */
 async function pickAndSaveTutorial(
   sources: StatementSource[],
-  { job, pkg, texToMarkdown, saveImage }: StatementContext,
+  options: ImportOptions,
+  { pkg, texToMarkdown, saveImage }: StatementContext,
 ): Promise<string> {
   const tutorials = sources.filter(
     (source) =>
@@ -423,11 +425,11 @@ async function pickAndSaveTutorial(
   );
   const tutorialSource =
     tutorials.length > 1
-      ? tutorials.find((source) => source.language === job.tutorialLanguage)
+      ? tutorials.find((source) => source.language === options.tutorialLanguage)
       : tutorials[0];
   if (tutorials.length > 1 && !tutorialSource)
     throw new PolygonImportError(
-      `invalid main tutorial language ${job.tutorialLanguage ?? '(none)'}`,
+      `invalid main tutorial language ${options.tutorialLanguage ?? '(none)'}`,
       'tutorial_language_required',
       { languages: tutorials.map((source) => source.language) },
     );
@@ -445,8 +447,9 @@ export async function parseStatements(
   root: XmlElement,
   context: StatementContext,
 ): Promise<ImportedStatements> {
+  const options = importOptionsOf(context.job);
   const sources = await readStatementSources(root, context.pkg);
-  const mainLanguage = pickMainLanguage(sources, context.job);
+  const mainLanguage = pickMainLanguage(sources, options);
   // Imported text is never trusted HTML, full-markup problem or not: TeX math holding `$` splits a formula and leaves raw HTML outside it.
   const style: RenderStyle = 'problem';
   context = {
@@ -461,8 +464,7 @@ export async function parseStatements(
     tutorial: '',
   };
   const kept = sources.filter(
-    (source) =>
-      source.language === mainLanguage || !isSkipped(source, context.job),
+    (source) => source.language === mainLanguage || !isSkipped(source, options),
   );
   for (const source of kept) {
     const rendered = await renderSourceAndSaveImages(source, style, context);
@@ -470,13 +472,12 @@ export async function parseStatements(
       Object.assign(imported, { name: source.name, ...rendered });
     else
       imported.translations.push(
-        toTranslation(source, rendered, context.job, imported.translations),
+        toTranslation(source, rendered, options, imported.translations),
       );
   }
-  imported.tutorial =
-    context.job.importTutorial === false
-      ? ''
-      : await pickAndSaveTutorial(kept, context);
+  imported.tutorial = options.importTutorial
+    ? await pickAndSaveTutorial(kept, options, context)
+    : '';
   return imported;
 }
 

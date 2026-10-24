@@ -11,3 +11,4 @@ export * from './polygon-problem-link';
 export * from './polygon-package-token';
 export * from './polygon-import-errors';
 export * from './polygon-options-check';
+export * from './import-options';

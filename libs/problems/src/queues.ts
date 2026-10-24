@@ -2,13 +2,13 @@ import type {
   Checker,
   PolygonSyncStep,
   StatementLanguage,
-  StatementLanguageChoice,
   SyncedSetting,
 } from '@libs/database';
 import type {
   ImportErrorParams,
   PolygonImportErrorCode,
 } from './polygon/polygon-import-errors';
+import type { ImportOptions } from './polygon/import-options';
 import type { PolygonSource } from './polygon/polygon-link';
 import type { SpentCharge } from './quota/quota.types';
 
@@ -49,7 +49,7 @@ export interface PdfRenderJob {
 }
 
 /** Everything the api resolved and authorised before enqueueing; the worker never re-reads request state. */
-export interface PolygonImportJob {
+export interface PolygonImportJob extends ImportOptions {
   requesterId: string;
   code: string;
   mode: 'create' | 'update';
@@ -67,18 +67,6 @@ export interface PolygonImportJob {
   charge?: SpentCharge;
   /** Render style of the target problem (an update keeps the problem's flag). */
   isFullMarkup: boolean;
-  /** Polygon statement language of the main statement; null = the only one. */
-  mainStatementLanguage: string | null;
-  /** Polygon language → site language for the remaining statements, or `skip` to leave one out. */
-  statementLanguages: Record<string, StatementLanguageChoice>;
-  tutorialLanguage: string | null;
-  ignoreZeroPointBatches: boolean;
-  ignoreZeroPointCases: boolean;
-  appendMainSolution: boolean;
-  /** Whether the package statement's tutorial becomes the editorial; absent (a job queued before the option) means true. */
-  importTutorial?: boolean;
-  /** The requester's testcase limit: 300, or 9999 with `judge.create_mass_testcases`. */
-  maxCases: number;
   /** The problem's `dataVersion` when the import was queued (update only); the worker refuses if it moved since. */
   expectedDataVersion?: number;
   /** Sync only: replace the settings edited on QHHOJ since the last import with the package's (`SYNCED_SETTINGS`); absent keeps them. */
