@@ -133,7 +133,7 @@ export class Problem {
   /** Maintained by the submission-effects job. */
   @Prop({ default: 0 }) userCount!: number;
   @Prop({ default: 0 }) acRate!: number;
-  /** Test data configuration (3b); null until the data editor or an import writes it. */
+  /** Test data configuration; null until the data editor or an import writes it. */
   @Prop({ type: ProblemDataSchema, default: null, select: false })
   data!: ProblemData | null;
   /** Compile checks of the uploaded checker and interactor; kept beside `data` so a data save never overwrites a result the worker wrote meanwhile. Absent (never null, so `$set` on a member works) until the first check. */
