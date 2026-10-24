@@ -518,7 +518,7 @@ export class JudgeSession implements DispatchTarget {
   private async onJudgeError(error: JudgeError): Promise<void> {
     if (error.code !== ErrorCode.ERROR_CODE_SLOTS_FULL)
       return this.logger.warn(
-        `${this.name} reports ${error.code}: ${error.message}`,
+        `${this.name} reports ${error.code}: ${loggableText(error.message)}`,
       );
     const ref = refOf(error.ref);
     this.clearAcceptTimer(ref);

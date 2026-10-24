@@ -625,6 +625,31 @@ describe('JudgeSession', () => {
     runs.compiled = record('compiled', () => outcome);
   });
 
+  it('logs a judge-reported error on one line, its text sanitized', async () => {
+    await online();
+    const warns = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      await receive(
+        JudgeMessage.fromPartial({
+          body: {
+            $case: 'error',
+            error: {
+              code: ErrorCode.ERROR_CODE_PROTOCOL,
+              message: 'bad\nsecond line\u0007',
+            },
+          },
+        }),
+      );
+      expect(warns.mock.calls).toEqual([
+        [`j1 reports ${ErrorCode.ERROR_CODE_PROTOCOL}: bad second line`],
+      ]);
+    } finally {
+      warns.mockRestore();
+    }
+  });
+
   it('keeps the session when the store fails, and logs it with the run and seq', async () => {
     const ref = run(newId());
     await holding(ref);
