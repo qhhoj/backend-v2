@@ -69,7 +69,7 @@ describe('problem and tag schemas', () => {
     if (!found) throw new Error(`The document has no schema ${name}`);
     return found as SchemaObject;
   };
-  /** Sites on the problem and tag routes (not B7's ticket routes) and on the schemas this lane owns. */
+  /** Sites on the problem and tag routes (ticket routes are checked in their own spec). */
   const ownSites = (sites: string[]) =>
     sites.filter(
       (site) =>

@@ -75,7 +75,7 @@ export interface PackageManifest {
 const plain = <Value>(value: Value): Value =>
   JSON.parse(JSON.stringify(value)) as Value;
 
-/** The one name of the uploaded material: the manifest states it and the zip entry (Task 9) uses it, so the two cannot differ. */
+/** The one name of the uploaded material: the manifest states it and the zip entry uses it, so the two cannot differ. */
 export const materialName = (url: string | null): string | null =>
   url ? safeFileName(url.split('/').pop() ?? '') : null;
 
@@ -161,7 +161,7 @@ export function buildManifest(problem: Problem): PackageManifest {
   };
 }
 
-/** `<dataVersion>.<hash>`: the hash covers the manifest, every statement text and the two upload URLs. A re-uploaded PDF gets a new URL (`pdf/<newId>.pdf`), so the URL moves the key; a same-named material keeps its URL, so `ProblemUploadsService.replaceFile` also drops the problem's cached packages (Task 12, preflight I1). A build already running during an upload can still write one stale zip under the old key until the next request: accepted. */
+/** `<dataVersion>.<hash>`: the hash covers the manifest, every statement text and the two upload URLs. A re-uploaded PDF gets a new URL (`pdf/<newId>.pdf`), so the URL moves the key; a same-named material keeps its URL, so `ProblemUploadsService.replaceFile` also drops the problem's cached packages. A build already running during an upload can still write one stale zip under the old key until the next request: accepted. */
 export function packageKey(problem: Problem): string {
   const content = JSON.stringify([
     buildManifest(problem),

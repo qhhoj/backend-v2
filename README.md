@@ -46,11 +46,11 @@ Local mail: start Mailpit (`docker compose up -d mailpit`), then `npm run seed:e
 
 Run each from the repo root (the worker needs `node_modules` for KaTeX's CSS).
 
-| App                                    | Dev                       | Production                                           |
-| -------------------------------------- | ------------------------- | ---------------------------------------------------- |
-| api (`:3000`)                          | `npm run start:dev`       | `npm run build && npm run start:prod`                |
-| worker                                 | `npm run start:worker`    | `npx nest build worker && npm run start:prod:worker` |
-| bridge (`:9999`, exactly one instance) | `npm run start:bridge`    | `npx nest build bridge && npm run start:prod:bridge` |
+| App                                    | Dev                    | Production                                           |
+| -------------------------------------- | ---------------------- | ---------------------------------------------------- |
+| api (`:3000`)                          | `npm run start:dev`    | `npm run build && npm run start:prod`                |
+| worker                                 | `npm run start:worker` | `npx nest build worker && npm run start:prod:worker` |
+| bridge (`:9999`, exactly one instance) | `npm run start:bridge` | `npx nest build bridge && npm run start:prod:bridge` |
 
 API reference: `GET /api/docs` ([Scalar](https://scalar.com), https://qhhoj.com/api/docs) renders the live OpenAPI document, so it cannot drift from the code; the bundle is served by the api itself (no third-party script or font).
 
@@ -76,76 +76,109 @@ npm run typecheck
 
 ```
 apps/api       HTTP: /api/internal (SPA), SSE streams
-apps/bridge    judge TCP server, dispatch queue, grading
+apps/bridge    judge gRPC server, dispatch queue, grading
 apps/worker    BullMQ jobs
 libs/          common, database, auth, render, problems, judging, contests, community
 ```
 
 ### Submission flow
 
-1. The api accepts `POST /api/internal/problems/:code/submit`, stores the submission as `QU` and sends a `judge` command on the Redis stream `bridge:commands`.
-2. The **bridge** claims it (`QU` -> `P`), picks a judge by priority and load, and sends it to a free judge slot over gRPC (`qhhoj.judge.v1`). Mongo is the queue truth; the bridge rebuilds its queue from it on start.
-3. The **judge** returns case results and a verdict; the bridge writes them and publishes progress on Redis `submission-events`.
-4. On finish the bridge enqueues a `submission-graded` job.
-5. The worker's **effects** (`submission-effects`) recompute user points/PP, problem stats and, for contest submissions, the participation and ranking. A sweep repairs lost jobs.
-6. The api serves **SSE** from the Redis events (`/api/internal/events/submissions/:id`, the public feed and `/events/contests/:key`).
+| #   | Process | What happens                                                                                                                                                                     | File and method                                                                                                           |
+| --- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 1   | api     | `POST /api/internal/problems/:code/submit` stores the submission as `QU` and sends a `judge` command on the Redis stream `bridge:commands`                                       | `modules/submissions/create/submission-create.service.ts` `submit`; `libs/judging/src/bridge-commands.service.ts` `judge` |
+| 2   | bridge  | reads the stream and puts the row in the dispatch queue; Mongo is the queue truth, so the bridge rebuilds its queue from it on start                                             | `dispatch/commands.service.ts` `apply`; `dispatch/dispatcher.service.ts` `enqueue`                                        |
+| 3   | bridge  | a judge with a free slot takes the next row it fits; the **claim** moves `QU` to `P` and bumps the judging generation, then the bridge sends Assign over gRPC (`qhhoj.judge.v1`) | `dispatcher.service.ts` `offerWork`; `submissions/runs.service.ts` `claim`                                                |
+| 4   | bridge  | the judge's messages (accepted, compiled, started, cases, final) are written under a sequence number, and progress goes out on Redis `submission-events`                         | `link/judge-session.ts` `handle`; `submissions/runs.service.ts` `cases`, `final`                                          |
+| 5   | bridge  | on a final verdict the bridge enqueues the `submission-graded` job                                                                                                               | `submissions/runs.service.ts` `final`; `libs/judging/src/notify-graded.ts` `notifyGraded`                                 |
+| 6   | worker  | the **effects** recompute user points/PP, problem stats and, for a contest submission, the participation and ranking; the sweep repairs lost jobs                                | `jobs/submission-effects/submission-effects.service.ts` `apply`; `jobs/effects-sweep/effects-sweep.service.ts`            |
+| 7   | api     | serves **SSE** from the Redis events (`/api/internal/events/submissions/:id`, the public feed, `/events/contests/:key`)                                                          | `modules/submissions/streams/submission-streams.service.ts` `openSubmission`, `openFeed`                                  |
 
-Inside a current contest, step 1 also adds a contest submission to the viewer's participation (joining creates it); `final_submission` contests hold submissions as `PD` until the end.
+Inside a current contest, step 1 also adds a contest submission to the viewer's participation (joining creates it); `final_submission` contests hold submissions as `PD` until the end. Vocabulary: [GLOSSARY.md](GLOSSARY.md) (Claim, Effects, Sweep, Status codes).
 
 ### Jobs (`apps/worker/src/jobs`)
 
-| Job                   | Purpose                                                                 |
-| --------------------- | ----------------------------------------------------------------------- |
-| `submission-effects`  | consume `submission-graded`: points, stats, contest scoring             |
-| `effects-sweep`       | every 10 min, recompute what lost a graded job                          |
-| `problem-rescore`     | rescore a problem's submissions after a points change                   |
-| `contest-rescore`     | recompute every participation of a contest                              |
-| `contest-final-judge` | requeue `PD` rows of a final-submission contest at its end              |
-| `contest-rating`      | Elo-MMR rating run                                                      |
-| `similarity`          | code-similarity run (Dolos) per problem or contest                      |
-| `contest-data`        | contest data zip                                                        |
-| `organization-points` | organization PP and member counts                                       |
-| `user-data`           | user data export zips, hourly expiry sweep                              |
-| `contribution-points` | users' contribution points (votes, hidden comments, posts, suggestions) |
-| `discord-webhook`     | Discord announcements                                                   |
-| `pdf-render`          | statement PDFs (Playwright)                                             |
-| `polygon-import`      | Polygon package import                                                  |
+One folder per job. Schedule: a repeating job registers its own scheduler when the worker starts; the rest run when something enqueues them. Boot routines are not jobs: they run once at every worker start and are idempotent.
+
+| Job                              | Schedule                 | Purpose                                                                 |
+| -------------------------------- | ------------------------ | ----------------------------------------------------------------------- |
+| `submission-effects`             | on `submission-graded`   | points, stats, contest scoring of one graded submission                 |
+| `effects-sweep`                  | every 10 min             | recompute what lost a graded job                                        |
+| `problem-rescore`                | on points change         | rescore a problem's submissions after a points change                   |
+| `problem-solvers`                | on delete or restore     | recompute the solvers of a problem that left or re-entered the counts   |
+| `contest-rescore`                | on contest change        | recompute every participation of a contest                              |
+| `contest-final-judge`            | every 1 min              | requeue `PD` rows of a final-submission contest at its end              |
+| `contest-publish`                | every 1 min              | publish a contest's problems and editorials at its end                  |
+| `contest-rating`                 | on request               | Elo-MMR rating run                                                      |
+| `contest-data`                   | on request               | contest data zip                                                        |
+| `contest-export`                 | on request               | contest export zip (submissions CSV and sources)                        |
+| `contest-replay`                 | on request               | build the replay chunks of an ended contest                             |
+| `similarity`                     | on request               | code-similarity run (Dolos) per problem or contest                      |
+| `organization-points`            | on change                | organization PP and member counts                                       |
+| `organization-usage-audit`       | daily 03:00              | compare the credit counters with the ledger; reports, never repairs     |
+| `user-data`                      | on request, hourly sweep | user data export zips and their expiry                                  |
+| `contribution-points`            | on change                | users' contribution points (votes, hidden comments, posts, suggestions) |
+| `notification-fanout`            | on announcement          | deliver an announcement to every user's inbox                           |
+| `notification-trim`              | daily 03:30              | trim old inbox rows                                                     |
+| `discord-webhook`                | on event                 | Discord announcements                                                   |
+| `pdf-render`                     | on request               | statement PDFs (Playwright)                                             |
+| `polygon-import`                 | on request               | Polygon package import and sync (includes Test generation requests)     |
+| `polygon-autosync`               | every 10 min             | enqueue the automatic Syncs that are due                                |
+| `problem-package`                | on request, daily 04:15  | problem package zip; the sweep trims the package cache                  |
+| `problem-purge`                  | daily 03:30              | purge the heavy data of deleted problems, leave the tombstone           |
+| `problem-databytes`              | once                     | measure data, statement and material sizes for the storage quota        |
+| `source-check`                   | on upload                | compile an uploaded checker or interactor on a judge                    |
+| `permission-rename` (boot)       | every worker start       | carry renamed permission codenames over to roles and users              |
+| `ie-override-cleanup` (boot)     | every worker start       | move an overridden internal error's message into its revision           |
+| `contest-summary-cleanup` (boot) | every worker start       | turn old JSON contest summaries into format options                     |
 
 ## Where to change what
 
-| To change                                                                   | Look in                                                                                                                                                                                                      |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| An HTTP endpoint                                                            | `apps/api/src/modules/<feature>/<sub-feature>/` (controller, service, `dto/`); register it in the feature's `*-api.module.ts` (flat modules such as `events/`, `tags/`, `judges/` use their own module file) |
-| Who can see/edit a problem or contest                                       | `modules/problems/core/problem-access.ts`, `modules/contests/core/contest-access.ts`                                                                                                                         |
-| A contest scoring format                                                    | `libs/contests/src/formats/<kebab-case-name>.ts` and `registry.ts`                                                                                                                                           |
-| Contest viewer fields (list `viewer`, detail `viewerResult`, `solverCount`) | `modules/contests/core/contest-viewer.service.ts`, `core/contest-problem-facts.service.ts`, `core/solver-counts.service.ts`, `core/viewer-problem-results.ts`                                                |
-| Contest register/join/leave refusal codes                                   | `modules/contests/participation/participation-refusals.ts`                                                                                                                                                   |
-| Who can see/administer an organization                                      | `modules/organizations/core/organization-access.ts`                                                                                                                                                          |
-| Who can see/edit a blog post                                                | `modules/blog/core/blog-access.ts`                                                                                                                                                                           |
-| Which comment pages a viewer may read (and comment page types)              | `modules/comments/core/comment-pages.service.ts`                                                                                                                                                             |
-| Votes, contribution points                                                  | `modules/contributions/`, `libs/community/src/contribution.ts`, job in `apps/worker/src/jobs/contribution-points`                                                                                            |
-| Homepage data, RSS/Atom feeds                                               | `apps/api/src/modules/home/`                                                                                                                                                                                 |
-| Code similarity                                                             | `modules/similarity/`, job in `apps/worker/src/jobs/similarity`, language families in `similarity-languages.ts`                                                                                              |
-| Discord webhooks                                                            | `libs/community/src/discord.ts`, `DiscordWebhooksService` (`libs/community`, api and worker), job in `apps/worker/src/jobs/discord-webhook`                                                                                                           |
-| Who can see/edit a ticket                                                   | `modules/tickets/core/ticket-access.ts` (list filter: `ProblemAccess.editableFilter`)                                                                                                                        |
-| Ticket events (SSE) and Discord texts                                       | `modules/tickets/streams/`, `libs/community/src/ticket-events.ts`, `libs/community/src/tickets.ts`                                                                                                           |
-| Flatpages, misc config                                      | `modules/site/`                                                                                                                                                                                              |
-| User activity capture and its staff API                                     | `modules/user-activity/capture/`, `modules/user-activity/staff/`, rules in `libs/community/src/user-activity.ts`                                                                                             |
-| Org PP, ranks, interaction gate, comment and blog rules                     | `libs/community/src`                                                                                                                                                                                         |
-| Rating                                                                      | `libs/contests/src/rating/elo-mmr.ts`, job in `apps/worker/src/jobs/contest-rating`                                                                                                                          |
-| Points, PP, problem stats                                                   | `libs/judging/src/points.ts`, `apps/worker/src/jobs/submission-effects`                                                                                                                                      |
-| Judge protocol, dispatch, grading                                           | `apps/bridge/src/{link,dispatch,judges,submissions}`                                                                                                                                                         |
-| SSE channels and limits                                                     | `apps/api/src/modules/events/`, channel services under `submissions/streams` and `contests/announcements`                                                                                                    |
-| Auth, sessions, permissions                                                 | `libs/auth/src`, flows in `modules/auth/<flow>/`; new permissions in `libs/auth/src/principal/permissions.ts`                                                                                                |
-| Markdown rendering                                                          | `libs/render/src` (goldens in `src/fixtures`)                                                                                                                                                                |
-| `init.yml`, zip handling, data files                                        | `libs/problems/src`, routes in `modules/problems/data`                                                                                                                                                       |
-| A Mongo schema                                                              | `libs/database/src/schemas/` (register in `SCHEMAS`)                                                                                                                                                         |
-| A background job                                                            | `apps/worker/src/jobs/<job>/` and its queue contract in `libs/<lib>/src/queues.ts`                                                                                                                           |
-| Env variables                                                               | `libs/common/src/env/`, `.env.example`                                                                                                                                                                       |
-| A runtime setting (admin-editable)                                          | one entry in `libs/settings/src/registry.ts`; admin API in `modules/settings/`                                                                                                                               |
-| OpenAPI schemas                                                             | `dto/*.response.ts`; `libs/common/src/openapi/`                                                                                                                                                              |
+| To change                                                                                      | Look in                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An HTTP endpoint                                                                               | `apps/api/src/modules/<feature>/<sub-feature>/` (controller, service, `dto/`); register it in the feature's `*-api.module.ts` (flat modules such as `events/`, `tags/`, `judges/` use their own module file)                                                           |
+| Who can see/edit a problem or contest                                                          | `modules/problems/core/problem-access.ts`, `modules/contests/core/contest-access.ts`                                                                                                                                                                                   |
+| A contest scoring format                                                                       | `libs/contests/src/formats/<kebab-case-name>.ts` and `registry.ts`                                                                                                                                                                                                     |
+| Contest viewer fields (list `viewer`, detail `viewerResult`, `solverCount`)                    | `modules/contests/core/contest-viewer.service.ts`, `core/contest-problem-facts.service.ts`, `core/solver-counts.service.ts`, `core/viewer-problem-results.ts`                                                                                                          |
+| Contest register/join/leave refusal codes                                                      | `modules/contests/participation/participation-refusals.ts`                                                                                                                                                                                                             |
+| Who can see/administer an organization                                                         | `modules/organizations/core/organization-access.ts`                                                                                                                                                                                                                    |
+| Who can see/edit a blog post                                                                   | `modules/blog/core/blog-access.ts`                                                                                                                                                                                                                                     |
+| Which comment pages a viewer may read (and comment page types)                                 | `modules/comments/core/comment-pages.service.ts`                                                                                                                                                                                                                       |
+| Votes, contribution points                                                                     | `modules/contributions/`, `libs/community/src/contribution.ts`, job in `apps/worker/src/jobs/contribution-points`                                                                                                                                                      |
+| Homepage data, RSS/Atom feeds                                                                  | `apps/api/src/modules/home/`                                                                                                                                                                                                                                           |
+| Code similarity                                                                                | `modules/similarity/`, job in `apps/worker/src/jobs/similarity`, language families in `similarity-languages.ts`                                                                                                                                                        |
+| Discord webhooks                                                                               | `libs/community/src/discord.ts`, `DiscordWebhooksService` (`libs/community`, api and worker), job in `apps/worker/src/jobs/discord-webhook`                                                                                                                            |
+| Who can see/edit a ticket                                                                      | `modules/tickets/core/ticket-access.ts` (list filter: `ProblemAccess.editableFilter`)                                                                                                                                                                                  |
+| Ticket events (SSE) and Discord texts                                                          | `modules/tickets/streams/`, `libs/community/src/ticket-events.ts`, `libs/community/src/tickets.ts`                                                                                                                                                                     |
+| Flatpages, misc config                                                                         | `modules/site/`                                                                                                                                                                                                                                                        |
+| User activity capture and its staff API                                                        | `modules/user-activity/capture/`, `modules/user-activity/staff/`, rules in `libs/community/src/user-activity.ts`                                                                                                                                                       |
+| Org PP, ranks, interaction gate, comment and blog rules                                        | `libs/community/src`                                                                                                                                                                                                                                                   |
+| Rating                                                                                         | `libs/contests/src/rating/elo-mmr.ts`, job in `apps/worker/src/jobs/contest-rating`                                                                                                                                                                                    |
+| Points, PP, problem stats                                                                      | `libs/judging/src/points.ts`, `apps/worker/src/jobs/submission-effects`                                                                                                                                                                                                |
+| Judge protocol, dispatch, grading                                                              | `apps/bridge/src/{link,dispatch,judges,submissions}`                                                                                                                                                                                                                   |
+| SSE channels and limits                                                                        | `apps/api/src/modules/events/`, channel services under `submissions/streams` and `contests/announcements`                                                                                                                                                              |
+| Auth, sessions, permissions                                                                    | `libs/auth/src`, flows in `modules/auth/<flow>/`; new permissions in `libs/auth/src/principal/permissions.ts`                                                                                                                                                          |
+| Markdown rendering                                                                             | `libs/render/src` (goldens in `src/fixtures`)                                                                                                                                                                                                                          |
+| `init.yml`, zip handling, data files                                                           | `libs/problems/src`, routes in `modules/problems/data`                                                                                                                                                                                                                 |
+| Submission read access (who sees a submission's list row, detail, source)                      | `modules/submissions/core/submission-access.ts` (rules), `SubmissionsService` (facts, list filter)                                                                                                                                                                     |
+| Users, by audience: own account, public page, staff list, staff edit, staff create, ban, roles | `modules/users/{profile,pages,admin,editing,creation,moderation,access}/` (own data export: `data/`)                                                                                                                                                                   |
+| Tags, problem types, problem groups, permission groups                                         | voted Tags: `modules/tags/`; organization problem tags: `modules/organizations/problem-tags/`; contest tags: `modules/contests/tags/`; Problem types and groups: `modules/problems/catalog/`; permission groups: `libs/auth/src/groups/`. See GLOSSARY, Classification |
+| Polygon Import and Sync                                                                        | `modules/problems/polygon/` (routes, link options), `apps/worker/src/jobs/polygon-import/`, `polygon-autosync/`, `libs/problems/src/polygon/`                                                                                                                          |
+| Test generation (tests built on a judge)                                                       | worker `jobs/polygon-import/test-generation.service.ts`, bridge `apps/bridge/src/generations/`                                                                                                                                                                         |
+| A bridge command (api to bridge)                                                               | contract and parser `libs/judging/src/bridge-commands.ts`, sender `bridge-commands.service.ts`, receiver `apps/bridge/src/dispatch/commands.service.ts`                                                                                                                |
+| Deploy, release, nginx, quadlets                                                               | `deploy/RUNBOOK.md` (start at "How a change reaches production")                                                                                                                                                                                                       |
+| A Mongo schema                                                                                 | `libs/database/src/schemas/` (register in `SCHEMAS`)                                                                                                                                                                                                                   |
+| A background job                                                                               | `apps/worker/src/jobs/<job>/` and its queue contract in `libs/<lib>/src/queues.ts`                                                                                                                                                                                     |
+| Env variables                                                                                  | `libs/common/src/env/`, `.env.example`                                                                                                                                                                                                                                 |
+| A runtime setting (admin-editable)                                                             | one entry in `libs/settings/src/registry.ts`; admin API in `modules/settings/`                                                                                                                                                                                         |
+| OpenAPI schemas                                                                                | `dto/*.response.ts`; `libs/common/src/openapi/`                                                                                                                                                                                                                        |
+
+## Deploy
+
+A release is a merged Version PR: tag, CI-gated image build, then `qhhoj-deploy` on the host. The chain, with file names, and the common changes (memory cap, env var, nginx) are the first two sections of [deploy/RUNBOOK.md](deploy/RUNBOOK.md); CONTRIBUTING.md has "Releasing" and "Env and deploy".
 
 ## More
 
-- [CONTRIBUTING.md](CONTRIBUTING.md): layout, patterns, naming, testing, per-area rules, deploy notes
+- [CONTRIBUTING.md](CONTRIBUTING.md): layout, patterns, naming (code identifiers), testing, per-area rules, deploy notes
+- [GLOSSARY.md](GLOSSARY.md): domain words and what not to call them
+- [scripts/README.md](scripts/README.md): what each script folder does
 - [docs/decisions.md](docs/decisions.md): design decisions and why

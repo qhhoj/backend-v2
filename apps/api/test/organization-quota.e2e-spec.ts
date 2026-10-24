@@ -597,7 +597,7 @@ describe('problem creation quota', () => {
     expect(await usedBy(organization._id)).toBe(10);
   });
 
-  // broken by #231 (issue #244); removed with credits in quota B2
+  // broken by #231 (issue #244); removed together with credits
   it.skip('refunds the credits when the code is already taken', async () => {
     const organization = await limited(100);
     await createProblem(api, catalog, { code: 'takenquota' });

@@ -45,7 +45,7 @@ export interface ProblemPurgeJob {
 export const problemPurgeJobId = (problemId: string): string =>
   `problem-purge-${problemId}`;
 
-/** One job per problem at a time (`jobId`); a finished job is removed, so a later request can queue again. A job that failed all its attempts is kept for a week and would swallow a new `add` with the same id, so it is removed first (preflight I5). */
+/** One job per problem at a time (`jobId`); a finished job is removed, so a later request can queue again. A job that failed all its attempts is kept for a week and would swallow a new `add` with the same id, so it is removed first. */
 export async function enqueuePurge(
   queue: Queue<ProblemPurgeJob>,
   problemId: string,

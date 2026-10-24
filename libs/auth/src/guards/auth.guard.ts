@@ -39,7 +39,7 @@ import { AuthContext } from './auth-context';
 
 const isBearerHeader = (header: string) => /^bearer/i.test(header);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-/** Failed integration-key lookups per address and window (preflight M15). */
+/** Failed integration-key lookups per address and window. */
 const SERVICE_KEY_FAILURE_LIMIT = 20;
 const SERVICE_KEY_FAILURE_WINDOW_SECONDS = 600;
 /** Reads a decorator's value, the handler's overriding the controller's. */
@@ -125,7 +125,7 @@ export class AuthGuard implements CanActivate {
   }
 
   /**
-   * Failed lookups are counted per address (preflight M15): the key is 256 bits, so this is about load, not guessing. Over the limit (20 in 10 minutes) the answer is 429 before the database is asked, for valid keys from that address too: whoever sends 20 junk keys locks out every client sharing its address for the window. Behind a proxy `request.ip` is the proxy unless `TRUST_PROXY` lists it, which would make that every client, so a deploy behind nginx must set `TRUST_PROXY` (the API warns at boot otherwise).
+   * Failed lookups are counted per address: the key is 256 bits, so this is about load, not guessing. Over the limit (20 in 10 minutes) the answer is 429 before the database is asked, for valid keys from that address too: whoever sends 20 junk keys locks out every client sharing its address for the window. Behind a proxy `request.ip` is the proxy unless `TRUST_PROXY` lists it, which would make that every client, so a deploy behind nginx must set `TRUST_PROXY` (the API warns at boot otherwise).
    */
   private async findServiceClient(
     token: string,

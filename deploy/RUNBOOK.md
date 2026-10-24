@@ -4,25 +4,29 @@ Files: `nginx/qhhoj.conf`, `nginx/security-headers.conf`, `nginx/qhhoj-gate.conf
 Layout: image `ghcr.io/qhhoj/backend-v2` run by rootful podman quadlets (`/etc/containers/systemd/`, host network, uid/gid 987); frontend under `/var/www/qhhoj/releases/<version>` with `current`; data `/srv/qhhoj`; env `/etc/qhhoj/env`; nginx, MongoDB and Redis native.
 This host is the shared live old-site box (the production host), v2 goes in place; judge-v2 runs on a separate machine. Never stop, restart or reconfigure anything on it that is not QHHOJ's.
 
+## How a change reaches production
+
+1. A PR with a changeset (`.changeset/*.md`, `npm run changeset`; empty for CI or docs) is squash-merged to `main`.
+2. `.github/workflows/release.yml` opens or updates the "chore: version packages" PR (bumps `package.json`, writes `CHANGELOG.md`). Merging it makes the next run tag `vX.Y.Z` (`scripts/release/tag-release.mjs`, `npm run release:tag`) and call `deploy.yml`.
+3. `.github/workflows/deploy.yml` builds the image from `Containerfile` (entrypoint `deploy/container/entrypoint.sh`), pushes `ghcr.io/qhhoj/backend-v2:vX.Y.Z`, waits for CI (`deploy/ci/wait-for-ci.sh`) and resolves the ref (`deploy/ci/resolve-ref.sh`, `code-changed.sh`).
+4. `deploy/ci/remote-deploy.sh` runs `sudo qhhoj-deploy backend vX.Y.Z` over ssh as `deploy`; exit 75 means deferred (a contest is ending) and is retried.
+5. `deploy/qhhoj-deploy` (installed to `/usr/local/sbin`) moves the `:current` tag and restarts the quadlet units (`deploy/quadlet/qhhoj-{api,worker,bridge}.container`, `qhhoj.target`); `qhhoj-deploy status` shows the live versions, `qhhoj-deploy rollback backend` goes back.
+
+A release swaps only the image. Quadlets, nginx files, `/etc/qhhoj/env` and `deploy/judge/*` do not travel with it: see "Common changes". The frontend deploys by its own workflow (`qhhoj-deploy frontend <version>`).
+
+## Common changes
+
+- **Memory cap of an app:** edit `MemoryHigh=` and `MemoryMax=` in `deploy/quadlet/qhhoj-<app>.container` (worker 4G/5G, api 1536M/2G, bridge 384M/512M; `deploy/quadlet/quadlet.test.sh` pins the worker value). Merge it, then on the host copy `deploy/` over and run `bash install-host.sh` (idempotent, never starts services), `systemctl daemon-reload` and `systemctl restart qhhoj-<app>`. Plan about 2 GB per PDF job of concurrency.
+- **A new or changed env variable:** add it in `libs/common/src/env/` and `.env.example`; document it in `deploy/env.production.example`; set it in `/etc/qhhoj/env` on the host (mode 600, unquoted `KEY=value`); restart the units that read it. Each app validates env at boot and refuses to start on a bad value. Anything an operator changes at runtime is an admin setting instead, not env.
+- **An nginx change:** edit `deploy/nginx/qhhoj.conf` (or the snippets), install it as in "First install" step 5, then `nginx -t && systemctl reload nginx`. The Cloudflare ranges: "Cloudflare origin gate".
+- **The judge copies:** `deploy/judge/*` are copies of judge-v2 `packaging/`. After touching either side run `scripts/judge/check-deploy-copies.sh ../judge-v2`; a judge release itself is installed on the judge machine ("Judge hosts", "Judge connection").
+- **A hot fix of a bad release:** `qhhoj-deploy rollback backend` (seconds), then fix forward through the chain above.
+
 ## Prerequisites
 
 - podman >= 4.9 (Ubuntu 24.04 package; installed beside Docker, host network only), nginx >= 1.25.1 (older: `listen 443 ssl http2;`), MongoDB 8 as a replica set `rs0` with auth, Redis >= 7, `mongosh`, `mongodb-database-tools`, `rsync`, `openssl`, `restic` (Backups). The worker toolchain (Node, pandoc, Chromium) is in the image; about 2 GB per PDF job plus 2 GiB for similarity.
 - Disk: `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT` as separate directories under `/srv/qhhoj` owned by uid/gid 987 (none under `MEDIA_ROOT`).
 - TLS certificate for the site host; firewall: 80/443 public; `PORT` (3000) closed to everything but loopback (the api also binds 127.0.0.1 via `LISTEN_HOST`); `JUDGE_BRIDGE_PORT` from judge hosts only.
-
-## In-place on the shared host
-
-One-time steps, already performed on the production host; repeat them on a rebuild.
-
-1. Minecraft server stopped for good (2026-10-10): graceful `stop` in its `screen` session `minecraft-apio`; it had no autostart; files kept in `/root/minecraft-apio`. Also disabled as unused on this VM: `qhhoj.service` (the old failed `/root/start_qhhoj.sh`), ModemManager, udisks2, upower, multipathd, open-iscsi, thermald, gpu-manager, open-vm-tools, vgauth.
-2. podman 4.9.3 from the Ubuntu 24.04 packages, next to Docker. v2 containers use `--network host` only; Docker and its apps are untouched.
-3. MongoDB 8.0.32 (`mongodb-org`) from the mongodb.org noble repo. `/etc/mongod.conf`: `replSetName: rs0`, `bindIp: 127.0.0.1`, `storage.wiredTiger.engineConfig.cacheSizeGB: 2`, `keyFile: /etc/mongod.keyfile`, `authorization: enabled`. Users `admin` (root) and `qhhoj` (`readWrite` + `dbAdmin` on `qhhoj`, `clusterMonitor`); passwords in `/root/qhhoj-secrets/mongo.env` (mode 600), never in this repo.
-4. Redis is the host's existing one (6379). The old site uses db0/db1; v2 uses `REDIS_URL=redis://127.0.0.1:6379/4`.
-5. Judge bridge: `JUDGE_BRIDGE_PORT=9990` (the old DMOJ bridge holds 9999). `ufw allow from <judge-machine-ip> to any port 9990 proto tcp`; no other rule opens it. The judge machine's `config.toml` `bridge_url` and `nftables-judge.conf` `BRIDGE_PORT` use 9990 too.
-6. nginx: the old `qhhoj.com` server block lives in `/etc/nginx/sites-enabled/default` next to other domains' blocks. At the freeze back the file up (`cp -a /etc/nginx/sites-enabled/default /root/qhhoj-rollback/nginx-default`) and replace only that block with `deploy/nginx/qhhoj.conf` (the existing qhhoj.com certificate paths); leave every other block untouched; `nginx -t && systemctl reload nginx`. Cloudflare stays in front, so go-live needs no DNS change.
-7. Freeze of the old site: `supervisorctl stop` its programs (site, celery, celerybeat, bridged, wsevent) and `docker stop pcd` (the DMOJ judge). Other supervisor programs and containers stay running.
-
-8. Hosts: v2 serves only `qhhoj.com` (API at `https://qhhoj.com/api/`). The pre-cutover `v2.qhhoj.com` demo and `api-v2.qhhoj.com` API-only hosts were removed in 2026-10 (nginx blocks, certificates and DNS records).
 
 ## Cloudflare origin gate
 
@@ -35,7 +39,7 @@ The qhhoj server blocks answer 444 (close, no reply) to any TCP peer that is not
 
 ## First install
 
-1. Install the packages above (this host: see "In-place on the shared host").
+1. Install the packages above (this host: see "History: 2026-10 cutover", In-place on the shared host).
 2. Copy `deploy/` to the host (`scp -r deploy root@host:/root/qhhoj-deploy`) and run `bash /root/qhhoj-deploy/install-host.sh`. It is idempotent: creates the users `qhhoj` (uid/gid 987) and `deploy`, the directories (`/srv/qhhoj/*`, `/etc/qhhoj`, `/var/lib/qhhoj-deploy`), and installs the helper scripts, quadlets and sudoers; it never starts services. It refuses if uid/gid 987 is taken by another account (then rebuild the image with `--build-arg QHHOJ_UID=<free id>` and change `ID` in the script). Let nginx read the data group: `usermod -aG qhhoj www-data` (`nginx` on nginx.org packages), then restart nginx; the image entrypoint (`deploy/container/entrypoint.sh`, `umask 0027`) keeps new files group-readable and setgid keeps the group, nginx reads `/media/` through that group (without it every `/media/` request is 403). Only `media`, `problem-data` and `/srv/qhhoj` itself are group-readable (2750); `pdf-cache`, `contest-data` and `user-data` are owner-only (2700). The local judge `qhhoj-judge` (group `qhhoj`) reads `problem-data` through the group; remote judges read `PROBLEM_DATA_ROOT` through the NFS read export (step "Problem data over NFS"). nginx is in that group too, so never serve `problem-data` from an nginx location. For legacy rsync use `--chown=987:987 --chmod=D2750,F640`.
 3. `/etc/qhhoj/env` from `env.production.example` (mode 600; unquoted `KEY=value`, podman `--env-file` format); `ENCRYPTION_KEY`, `TOKEN_SECRET` by `openssl rand -hex 32`; `MONGO_URL` with the `qhhoj` user from `/root/qhhoj-secrets/mongo.env`; on the shared host `REDIS_URL=redis://127.0.0.1:6379/4`, `JUDGE_BRIDGE_PORT=9990`. Bridge TLS: `chown root:987 /etc/qhhoj/bridge-tls/key.pem && chmod 640` it ("Judge hosts" step 6 makes the pair).
 4. GHCR: CD logs in per deploy with the workflow's `GITHUB_TOKEN` (`qhhoj-deploy backend <tag> --token-stdin`), no token on the host. For a manual `qhhoj-deploy backend <tag>` without it: `podman login ghcr.io --authfile /etc/qhhoj/ghcr-auth.json` with a classic token limited to `read:packages` (fine-grained tokens cannot read GHCR), then `chmod 600` it.
@@ -44,22 +48,11 @@ The qhhoj server blocks answer 444 (close, no reply) to any TCP peer that is not
 7. First deploy: run the backend and frontend `deploy` workflows by hand (empty ref); until the nginx block swap the frontend deploy does a file check only (nginx does not serve v2 yet); `qhhoj-deploy status` shows both.
 8. On an empty database run `syncIndexes` before serving (the `.hint()` queries throw without them).
 
-### Judge switch
-
-Per judge machine, against the review stack (`qhhoj.target` running, bridge on 9990). The shared host's old judge is the container `pcd`, already stopped at the freeze; the judge-v2 machine is separate and has no old judge, so steps 1 and 2 apply only to a host that still runs a DMOJ judge.
-
-1. Old-DMOJ hosts only: save the running firewall for the rollback: `install -d -m 0700 /root/qhhoj-rollback && nft list ruleset > /root/qhhoj-rollback/ruleset.nft && { systemctl is-enabled nftables > /root/qhhoj-rollback/nftables-enabled 2>&1 || true; }`; it must exit 0, else stop: Rollback step 2 needs the saved ruleset (also note any other firewall unit, e.g. `systemctl is-active ufw`).
-2. Old-DMOJ hosts only: `systemctl disable --now <old DMOJ judge unit>`.
-3. Install and load the judge firewall ("Judge hosts" step 9; `nft -f` loads it even when `nftables.service` was already running), and check it is the live one: `nft list chain inet filter output | grep -q 'policy drop' && nft list chain inet filter output | grep -q 'dport { 2049, 9990 }' && echo firewall-ok` (if the bridge listens on another port, grep for that port instead of 9990).
-4. `systemctl enable --now qhhoj-judge`; `journalctl -u qhhoj-judge -n 20` shows `bridge session started` and the admin judge list shows the host online with its slots.
-5. Re-check the host: `deploy/judge/check-host.sh --bridge bridge.qhhoj.internal:9990` → every line `ok`, the egress check included (it was the one expected FAIL before the switch).
-6. Submit one AC, one WA and one CE on a known problem through the site and see the verdicts arrive live.
-
 ## Smoke checks
 
 - `curl -fsS https://HOST/api/internal/site` returns JSON; `curl -I https://HOST/some/spa/route` returns 200 with the HTML shell.
 - `curl -N https://HOST/api/internal/events/...` as a logged-in user prints a heartbeat within 15 s without delay (proves unbuffered).
-- Log in, open a problem, submit a solution; a judge grades it; the verdict appears live (in the review only once a judge is switched, Judge switch step 6).
+- Log in, open a problem, submit a solution; a judge grades it; the verdict appears live (during the cutover review only once a judge was switched).
 - A statement PDF renders (worker + Chromium + pandoc); an uploaded image shows from `/media/`.
 - `ss -ltn | grep 9990` is open locally but unreachable from outside the judge machine (ufw); `systemctl status qhhoj-*` all active.
 - `curl -sI https://HOST/s/nonexistent` is 404 (not the SPA shell: proves the `/s/` location); an integration key from outside its `allowedCidrs` is refused on `/api/sync/v1/...`.
@@ -176,13 +169,10 @@ Restore from the laptop (`export RESTIC_REPOSITORY=~/qhhoj-backups/restic RESTIC
 
 ## Rollback
 
-The rollback target is the old site with its DMOJ judge; there is no mixed state (new site with DMOJ judges, or old site with judge-v2).
+A bad release is undone at the deploy level; the old-site rollback of the cutover is in "History: 2026-10 cutover".
 
 - Deploy level (any time): `qhhoj-deploy rollback backend` or `rollback frontend`; `qhhoj-deploy status` shows the live versions. Releases are re-tagged images, so this is seconds.
-- Before go-live (no write has reached v2): `systemctl stop qhhoj.target`, restore the backed-up nginx file (`cp -a /root/qhhoj-rollback/nginx-default /etc/nginx/sites-enabled/default && nginx -t && systemctl reload nginx`), `supervisorctl start` the old programs (site, celery, celerybeat, bridged, wsevent), `docker start pcd`. Nothing was lost. Judge machine: `systemctl disable --now qhhoj-judge` first. A host that ran the old DMOJ judge before: restore the firewall saved in Judge switch step 1 (`nft flush ruleset && nft -f /root/qhhoj-rollback/ruleset.nft`; an empty saved file leaves no rules); if `/root/qhhoj-rollback/nftables-enabled` does not say `enabled`, `systemctl disable --now nftables`, else put the saved ruleset back as `/etc/nftables.conf`; re-enable any other firewall unit that was active; check `nft list ruleset | grep -c 'policy drop'` against `grep -c 'policy drop' /root/qhhoj-rollback/ruleset.nft`; then `systemctl enable --now <old DMOJ judge unit>`. Confirm the DMOJ judge shows online in the old site's judge list before reopening it.
-- After go-live: new-site writes exist only in Mongo. Decide quickly: either accept the loss and do the steps above (the old database is frozen, so it misses everything since the freeze), or fix forward. There is no reverse migration; submissions made on the new site are not replayed to the old one. On a different host the DNS switches back as well.
 - A bad judge-v2 release alone is not a site rollback: point `/opt/qhhoj-judge/current` at the previous release and restart (Judge connection).
-- Keep the old database, uploads, supervisor programs, the `pcd` container and the nginx backup unmodified until the rollback period (suggest 2 weeks, and at least one clean week of judge-v2) ends; then remove the old judge.
 
 ## Judge hosts
 
@@ -216,7 +206,7 @@ The step-by-step guide for whoever deploys a judge machine is judge-v2 `DEPLOY.m
    Site host: `install -d -m 0750 -o root -g 987 /etc/qhhoj/bridge-tls`, `install -m 0644 -o root -g root bridge.pem /etc/qhhoj/bridge-tls/cert.pem` and `install -m 0640 -o root -g 987 bridge.key /etc/qhhoj/bridge-tls/key.pem` (the bridge container runs as uid/gid 987, `deploy/quadlet/qhhoj-bridge.container`); `JUDGE_BRIDGE_TLS_CERT` and `JUDGE_BRIDGE_TLS_KEY` in `/etc/qhhoj/env` point at them (`deploy/env.production.example`). Judge hosts: `install -m 0644 judge-ca.pem /etc/qhhoj-judge/bridge-ca.pem` and resolve `bridge.qhhoj.internal` to the bridge's private address (`/etc/hosts`). `judge-ca.key` never leaves the offline store. Renew the bridge certificate before its 825 days end (same CA, no judge change): install the new pair as above, then `systemctl restart qhhoj-bridge` (the bridge reads the certificate only at boot; judges reconnect and resume their runs within the 30 s grace).
 7. Judge key: in the admin UI create the judge; the key is shown once. `install -m 0400 -o root -g root /dev/stdin /etc/qhhoj-judge/key` and paste it. Rotation later: rotate in the UI (the judge is disconnected), replace the file, `systemctl restart qhhoj-judge`.
 8. Install the release: `tar -xzf qhhoj-judge-<ver>.tar.gz -C /opt/qhhoj-judge/releases/ && mv /opt/qhhoj-judge/releases/qhhoj-judge-<ver> /opt/qhhoj-judge/releases/<ver>`; `(cd /opt/qhhoj-judge/releases/<ver> && sha256sum -c SHA256SUMS)`; `ln -sfn releases/<ver> /opt/qhhoj-judge/current`. Config: copy `deploy/judge/config.example.toml` to `/etc/qhhoj-judge/config.toml`, set `name` (the admin UI name), `bridge_url = "https://bridge.qhhoj.internal:9990"`, `[tls] server_name`, and leave `slots`/`cores` unset unless the host shares cores. Unit: `cp deploy/judge/qhhoj-judge.service /etc/systemd/system/ && systemctl daemon-reload`; on a host that still runs the old DMOJ judge, do not enable it before the switch (a reboot would start it next to the old judge, both using the isolate boxes): Judge switch step 4 enables it.
-9. Firewall (on a host that still runs the old DMOJ judge: at the switch, Judge switch step 3, after saving the old ruleset): `cp deploy/judge/nftables-judge.conf /etc/nftables.conf`, fill the addresses, `nft -c -f /etc/nftables.conf && nft -f /etc/nftables.conf && systemctl enable nftables` (load it explicitly: `enable --now` does not reload a running `nftables.service`), then `nft list chain inet filter output | grep 'policy drop'`. Egress only to the bridge port, NFS (2049) on the site host, DNS, NTP and the apt mirror; ingress only SSH from the admin network.
+9. Firewall (on a host that still runs the old DMOJ judge: at the switch, History, Judge switch step 3, after saving the old ruleset): `cp deploy/judge/nftables-judge.conf /etc/nftables.conf`, fill the addresses, `nft -c -f /etc/nftables.conf && nft -f /etc/nftables.conf && systemctl enable nftables` (load it explicitly: `enable --now` does not reload a running `nftables.service`), then `nft list chain inet filter output | grep 'policy drop'`. Egress only to the bridge port, NFS (2049) on the site host, DNS, NTP and the apt mirror; ingress only SSH from the admin network.
 10. Verify: `sudo -u qhhoj-judge /opt/qhhoj-judge/current/qhhoj-judge selftest --config /etc/qhhoj-judge/config.toml --require "$DAY_ONE_LANGUAGES"` with `DAY_ONE_LANGUAGES=C,C11,CLANG,CPP03,CPP11,CPP14,CPP17,CPP20,CPP23,CLANGX,PY3,PYPY3,PAS,JAVA,JAVA8,KOTLIN,RUBY,D,LUA,ADA,GAS64,TEXT` (judge-v2 CI `JUDGE_SUITE_REQUIRE`; BF is out: Ubuntu 24.04 ships no `bf` interpreter and it had 4 legacy submissions, so it is disabled; append `,SCRATCH` only if plan B Task 35's gate passed) → every line `ok`. Every host runs the same list: `run`'s `prune-languages --keep` (Migration week, `run` step 6) uses this list plus `OUTPUT`, so a language missing on one host is either fixed or dropped from the list on every host before the switch. `deploy/judge/check-host.sh --bridge bridge.qhhoj.internal:9990` → all `ok`; `systemctl show qhhoj-judge -p NoNewPrivileges` must print `NoNewPrivileges=no` (on systemd 255 a `RestrictAddressFamilies=` or similar line must not have implied it; if it prints `yes`, isolate cannot gain its setuid root and every run fails); then (only once the new bridge runs) `systemctl start qhhoj-judge`, `journalctl -u qhhoj-judge -n 20` shows `bridge session started`, the admin judge list shows the judge online with its slots, and an AC submission is graded. `curl -s 127.0.0.1:9464/metrics | grep judge_slots_busy` answers on the host.
 
 ## Judge connection
@@ -229,3 +219,40 @@ The step-by-step guide for whoever deploys a judge machine is judge-v2 `DEPLOY.m
 - Judges need no HTTP access to the site: file-only submissions come over `FetchSource`. Problem data is the read-only NFS mount of `PROBLEM_DATA_ROOT` ("Judge hosts" step 5).
 - Update a host: unpack the release into `/opt/qhhoj-judge/releases/<ver>`, `sha256sum -c SHA256SUMS`, `sudo -u qhhoj-judge .../qhhoj-judge selftest --config /etc/qhhoj-judge/config.toml`, `ln -sfn releases/<ver> /opt/qhhoj-judge/current`, `systemctl restart qhhoj-judge` (SIGTERM drains: no new work, running submissions finish for up to 120 s). Roll hosts one at a time, waiting for each to show online. Roll back a release by pointing `current` at the previous one and restarting.
 - Local development: `STACK_JUDGE=none npm run stack:up && npm run judge:v2:up` (CONTRIBUTING "Local judge").
+
+## History: 2026-10 cutover
+
+The old Django site was replaced on 2026-10-10. This is the one-time record; none of it is part of a normal release. Parts of it are still the way to rebuild the host.
+
+### In-place on the shared host
+
+One-time steps, already performed on the production host; repeat them on a rebuild.
+
+1. Minecraft server stopped for good (2026-10-10): graceful `stop` in its `screen` session `minecraft-apio`; it had no autostart; files kept in `/root/minecraft-apio`. Also disabled as unused on this VM: `qhhoj.service` (the old failed `/root/start_qhhoj.sh`), ModemManager, udisks2, upower, multipathd, open-iscsi, thermald, gpu-manager, open-vm-tools, vgauth.
+2. podman 4.9.3 from the Ubuntu 24.04 packages, next to Docker. v2 containers use `--network host` only; Docker and its apps are untouched.
+3. MongoDB 8.0.32 (`mongodb-org`) from the mongodb.org noble repo. `/etc/mongod.conf`: `replSetName: rs0`, `bindIp: 127.0.0.1`, `storage.wiredTiger.engineConfig.cacheSizeGB: 2`, `keyFile: /etc/mongod.keyfile`, `authorization: enabled`. Users `admin` (root) and `qhhoj` (`readWrite` + `dbAdmin` on `qhhoj`, `clusterMonitor`); passwords in `/root/qhhoj-secrets/mongo.env` (mode 600), never in this repo.
+4. Redis is the host's existing one (6379). The old site uses db0/db1; v2 uses `REDIS_URL=redis://127.0.0.1:6379/4`.
+5. Judge bridge: `JUDGE_BRIDGE_PORT=9990` (the old DMOJ bridge holds 9999). `ufw allow from <judge-machine-ip> to any port 9990 proto tcp`; no other rule opens it. The judge machine's `config.toml` `bridge_url` and `nftables-judge.conf` `BRIDGE_PORT` use 9990 too.
+6. nginx: the old `qhhoj.com` server block lives in `/etc/nginx/sites-enabled/default` next to other domains' blocks. At the freeze back the file up (`cp -a /etc/nginx/sites-enabled/default /root/qhhoj-rollback/nginx-default`) and replace only that block with `deploy/nginx/qhhoj.conf` (the existing qhhoj.com certificate paths); leave every other block untouched; `nginx -t && systemctl reload nginx`. Cloudflare stays in front, so go-live needs no DNS change.
+7. Freeze of the old site: `supervisorctl stop` its programs (site, celery, celerybeat, bridged, wsevent) and `docker stop pcd` (the DMOJ judge). Other supervisor programs and containers stay running.
+
+8. Hosts: v2 serves only `qhhoj.com` (API at `https://qhhoj.com/api/`). The pre-cutover `v2.qhhoj.com` demo and `api-v2.qhhoj.com` API-only hosts were removed in 2026-10 (nginx blocks, certificates and DNS records).
+
+### Judge switch
+
+Per judge machine, against the review stack (`qhhoj.target` running, bridge on 9990). The shared host's old judge is the container `pcd`, already stopped at the freeze; the judge-v2 machine is separate and has no old judge, so steps 1 and 2 apply only to a host that still runs a DMOJ judge.
+
+1. Old-DMOJ hosts only: save the running firewall for the rollback: `install -d -m 0700 /root/qhhoj-rollback && nft list ruleset > /root/qhhoj-rollback/ruleset.nft && { systemctl is-enabled nftables > /root/qhhoj-rollback/nftables-enabled 2>&1 || true; }`; it must exit 0, else stop: the Cutover rollback needs the saved ruleset (also note any other firewall unit, e.g. `systemctl is-active ufw`).
+2. Old-DMOJ hosts only: `systemctl disable --now <old DMOJ judge unit>`.
+3. Install and load the judge firewall ("Judge hosts" step 9; `nft -f` loads it even when `nftables.service` was already running), and check it is the live one: `nft list chain inet filter output | grep -q 'policy drop' && nft list chain inet filter output | grep -q 'dport { 2049, 9990 }' && echo firewall-ok` (if the bridge listens on another port, grep for that port instead of 9990).
+4. `systemctl enable --now qhhoj-judge`; `journalctl -u qhhoj-judge -n 20` shows `bridge session started` and the admin judge list shows the host online with its slots.
+5. Re-check the host: `deploy/judge/check-host.sh --bridge bridge.qhhoj.internal:9990` → every line `ok`, the egress check included (it was the one expected FAIL before the switch).
+6. Submit one AC, one WA and one CE on a known problem through the site and see the verdicts arrive live.
+
+### Cutover rollback
+
+The rollback target was the old site with its DMOJ judge; there was no mixed state (new site with DMOJ judges, or old site with judge-v2).
+
+- Before go-live (no write has reached v2): `systemctl stop qhhoj.target`, restore the backed-up nginx file (`cp -a /root/qhhoj-rollback/nginx-default /etc/nginx/sites-enabled/default && nginx -t && systemctl reload nginx`), `supervisorctl start` the old programs (site, celery, celerybeat, bridged, wsevent), `docker start pcd`. Nothing was lost. Judge machine: `systemctl disable --now qhhoj-judge` first. A host that ran the old DMOJ judge before: restore the firewall saved in Judge switch step 1 (`nft flush ruleset && nft -f /root/qhhoj-rollback/ruleset.nft`; an empty saved file leaves no rules); if `/root/qhhoj-rollback/nftables-enabled` does not say `enabled`, `systemctl disable --now nftables`, else put the saved ruleset back as `/etc/nftables.conf`; re-enable any other firewall unit that was active; check `nft list ruleset | grep -c 'policy drop'` against `grep -c 'policy drop' /root/qhhoj-rollback/ruleset.nft`; then `systemctl enable --now <old DMOJ judge unit>`. Confirm the DMOJ judge shows online in the old site's judge list before reopening it.
+- After go-live: new-site writes exist only in Mongo. Decide quickly: either accept the loss and do the steps above (the old database is frozen, so it misses everything since the freeze), or fix forward. There is no reverse migration; submissions made on the new site are not replayed to the old one. On a different host the DNS switches back as well.
+- Keep the old database, uploads, supervisor programs, the `pcd` container and the nginx backup unmodified until the rollback period (suggest 2 weeks, and at least one clean week of judge-v2) ends; then remove the old judge.

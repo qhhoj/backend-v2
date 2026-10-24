@@ -127,10 +127,10 @@ export class Problem {
   @Prop({ type: String, default: 'A', enum: TESTCASE_RESULT_VISIBILITIES })
   testcaseResultVisibility!: string;
   @Prop({ default: false }) allowViewFeedback!: boolean;
-  /** Stored for the migrator; editing and `mirrorRoot` computation belong to sub-project 6. */
+  /** Stored for the migrator; no editing route writes them and `mirrorRoot` is not computed. */
   @Prop({ type: UUID, default: null }) mirrorOf!: string | null;
   @Prop({ type: UUID, default: null }) mirrorRoot!: string | null;
-  /** Written by sub-project 2. */
+  /** Maintained by the submission-effects job. */
   @Prop({ default: 0 }) userCount!: number;
   @Prop({ default: 0 }) acRate!: number;
   /** Test data configuration (3b); null until the data editor or an import writes it. */

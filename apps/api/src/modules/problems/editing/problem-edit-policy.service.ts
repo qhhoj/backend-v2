@@ -232,7 +232,7 @@ export class ProblemEditPolicyService {
       );
   }
 
-  /** Every referenced catalog row and user must exist; `organizations` are unchecked until sub-project 5. */
+  /** Every referenced catalog row and user must exist; `organizations` are not checked here. */
   async assertReferences(dto: UpdateProblemDto): Promise<void> {
     const fields: Record<string, string[]> = {};
     const missing = (

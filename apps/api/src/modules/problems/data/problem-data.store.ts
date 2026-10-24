@@ -63,7 +63,7 @@ export class ProblemDataStore {
     return problem;
   }
 
-  /** Writes also need a non-mirror: a mirror's cases come from its source problem (sub-project 6). */
+  /** Writes also need a non-mirror: a mirror's cases come from its source problem. */
   async writableProblem(
     principal: Principal,
     code: string,

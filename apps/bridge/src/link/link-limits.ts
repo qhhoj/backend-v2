@@ -1,4 +1,4 @@
-/** Bounds of the judge link (spec §3.8); `Welcome.limits` tells the judge the ones it must respect. */
+/** Bounds of the judge link (`bridge-timings.ts` has the timings); `Welcome.limits` tells the judge the ones it must respect. */
 
 /** gRPC max receive per message; grpc-js refuses a larger one with RESOURCE_EXHAUSTED before the handler sees it. */
 export const MAX_MESSAGE_BYTES = 4 * 1024 * 1024;
