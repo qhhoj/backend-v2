@@ -9,6 +9,7 @@ import {
   Outcome,
   PROTOCOL_MINOR,
   Resume_Action,
+  Status,
 } from '@libs/judge-proto';
 import type { AssignmentRef } from '@libs/judge-proto';
 import { DEFAULT_BRIDGE_TIMINGS } from '../bridge-timings';
@@ -702,6 +703,38 @@ describe('JudgeSession', () => {
       );
       expect(warns.mock.calls).toEqual([
         [`j1 reports ${ErrorCode.ERROR_CODE_PROTOCOL}: bad second line`],
+      ]);
+    } finally {
+      warns.mockRestore();
+    }
+  });
+
+  it('logs a case reported with more points than its total, by run and position', async () => {
+    const ref = run(newId());
+    await holding(ref);
+    const warns = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      await receive(
+        JudgeMessage.fromPartial({
+          body: {
+            $case: 'cases',
+            cases: {
+              ref,
+              seq: 2,
+              cases: [
+                { position: 1, status: Status.STATUS_AC, points: 5, total: 1 },
+                { position: 2, status: Status.STATUS_AC, points: 1, total: 1 },
+              ],
+            },
+          },
+        }),
+      );
+      expect(warns.mock.calls).toEqual([
+        [
+          `Judge j1 reported more points than the case total for submission ${ref.submissionId} gen 1, case 1; clamped to the total`,
+        ],
       ]);
     } finally {
       warns.mockRestore();

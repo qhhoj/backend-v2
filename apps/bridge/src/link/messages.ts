@@ -178,6 +178,12 @@ function caseRowOf(reported: Case): SubmissionCase {
   };
 }
 
+/** Positions of cases reported with more points than their total (`caseRowsOf` clamps them). */
+export const overScoredPositions = (cases: Case[]): number[] =>
+  cases
+    .filter((reported) => measured(reported.points) > measured(reported.total))
+    .map((reported) => reported.position);
+
 /** Stored case rows; texts are clipped by UTF-8 bytes, a batch number 0 means "no batch", points are clamped to the case's total. */
 export function caseRowsOf(cases: Case[]): SubmissionCase[] {
   if (cases.length > MAX_CASES_PER_MESSAGE)

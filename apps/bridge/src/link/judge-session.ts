@@ -10,6 +10,7 @@ import {
 } from '@libs/judge-proto';
 import type {
   AssignmentRef,
+  CaseResults,
   Final,
   GenerateTests,
   GradingStarted,
@@ -34,6 +35,7 @@ import {
   helloOf,
   isRequeuedByJudge,
   loggableText,
+  overScoredPositions,
   refOf,
   seqOf,
 } from './messages';
@@ -384,13 +386,24 @@ export class JudgeSession implements DispatchTarget {
       }
       case 'started':
         return this.onStarted(body.started);
-      case 'cases': {
-        const rows = caseRowsOf(body.cases.cases);
-        return this.handleRun(body.cases, (key) => runs.cases(key, rows));
-      }
+      case 'cases':
+        return this.onCases(body.cases);
       case 'final':
         return this.onFinal(body.final);
     }
+  }
+
+  /** Points over a case's total are clamped (`caseRowsOf`) and logged, so a judge build that over-scores shows up by name. */
+  private async onCases(reported: CaseResults): Promise<void> {
+    const rows = caseRowsOf(reported.cases);
+    const over = overScoredPositions(reported.cases);
+    if (over.length)
+      this.logger.warn(
+        `Judge ${this.name} reported more points than the case total for submission ${reported.ref?.submissionId} gen ${reported.ref?.generation}, case ${over.join(', ')}; clamped to the total`,
+      );
+    await this.handleRun(reported, (key) =>
+      this.services.runs.cases(key, rows),
+    );
   }
 
   /** A stored Started names the case count: the run's deadline is re-armed from it. */
