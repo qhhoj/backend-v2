@@ -179,6 +179,13 @@ export const SETTINGS = {
       'Have I Been Pwned range API base URL; empty turns the breach check off.',
     secret: false,
   }),
+  'auth.sessionMaxDays': define({
+    type: integerType(1, 365),
+    default: 30,
+    description:
+      'Days a sign-in session lasts at most from its login, however often it is used (it also ends after 14 days unused); the user then signs in again.',
+    secret: false,
+  }),
   'auth.google': socialLogin('Google'),
   'auth.github': socialLogin('GitHub'),
   'auth.facebook': socialLogin('Facebook'),

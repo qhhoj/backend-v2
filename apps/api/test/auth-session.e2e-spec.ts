@@ -353,6 +353,33 @@ describe('auth session endpoints', () => {
     expect(session.user.username).toBe('victor');
   });
 
+  it('meters correct passwords per account, on login and on confirmation', async () => {
+    const owner = await createUser(api.users, {
+      username: 'looper',
+      email: 'looper@example.com',
+    });
+    const auth = api.app.get(AuthService);
+    for (let attempt = 0; attempt < 20; attempt++)
+      await auth.login(
+        'looper',
+        'correct horse battery',
+        `198.51.100.${attempt}`,
+        null,
+      );
+    await expect(
+      auth.login('looper', 'correct horse battery', '198.51.100.99', null),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
+    const context = {
+      principal: { userId: owner._id },
+      user: owner,
+    } as unknown as Parameters<AuthService['confirmPassword']>[0];
+    for (let attempt = 0; attempt < 20; attempt++)
+      await auth.confirmPassword(context, 'correct horse battery');
+    await expect(
+      auth.confirmPassword(context, 'correct horse battery'),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
+  });
+
   it('carries the personal appearance on the session user, null until it is set', async () => {
     const paula = await createUser(api.users, {
       username: 'paula',

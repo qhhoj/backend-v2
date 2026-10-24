@@ -22,7 +22,20 @@ import {
 import { secondFactorMethods } from '../two-factor/second-factor-methods';
 import { BannedError } from './banned.error';
 import type { Env } from '@libs/common';
-import { FAILURE_LIMIT, FAILURE_WINDOW_SECONDS } from './rate-limits';
+import {
+  FAILURE_LIMIT,
+  FAILURE_WINDOW_SECONDS,
+  SUCCESS_ACCOUNT_LIMIT,
+  SUCCESS_IP_LIMIT,
+} from './rate-limits';
+
+/** Correct-password budgets: counted on success and never given back, so a valid-credential loop cannot run PBKDF2 without limit. */
+const loginSuccessKeys = (ip: string, userId: string) => ({
+  ip: `login-success:ip:${ip}`,
+  account: `login-success:user:${userId}`,
+});
+const confirmSuccessKey = (userId: string) =>
+  `password-confirm-success:user:${userId}`;
 
 @Injectable()
 export class AuthService {
@@ -47,6 +60,7 @@ export class AuthService {
       ? `user:${user._id}`
       : `name:${username.normalize('NFKC').toLowerCase()}`;
     const failureKeys = [`login:ip:${ip}`, `login:${account}:ip:${ip}`];
+    await this.assertLoginSuccessBudget(ip, user?._id ?? null);
     // Reserve the attempt before verifying so concurrent bursts cannot exceed the limit.
     const release = await this.rateLimit.reserve(
       failureKeys,
@@ -65,6 +79,7 @@ export class AuthService {
         'Invalid username or password',
       );
     await release();
+    await this.countLoginSuccess(ip, user._id);
     this.assertLoginAllowed(user);
     const passwordPwned = await this.pwned.isPwned(password);
     // Compare-and-set: if the password changed since verification, keep the newer one.
@@ -78,6 +93,26 @@ export class AuthService {
       isPasswordPwned: passwordPwned,
       previousSessionId,
     });
+  }
+
+  /** Refused before any hash runs: per address always, per account once the name resolves. */
+  private async assertLoginSuccessBudget(
+    ip: string,
+    userId: string | null,
+  ): Promise<void> {
+    const keys = loginSuccessKeys(ip, userId ?? '');
+    await this.rateLimit.assertUnder([keys.ip], SUCCESS_IP_LIMIT);
+    if (userId)
+      await this.rateLimit.assertUnder([keys.account], SUCCESS_ACCOUNT_LIMIT);
+  }
+
+  private async countLoginSuccess(ip: string, userId: string): Promise<void> {
+    const keys = loginSuccessKeys(ip, userId);
+    await Promise.all(
+      [keys.ip, keys.account].map((key) =>
+        this.rateLimit.hit(key, FAILURE_WINDOW_SECONDS),
+      ),
+    );
   }
 
   assertLoginAllowed(user: UserDocument): void {
@@ -135,7 +170,12 @@ export class AuthService {
 
   /** Re-entry of the current password; shares the `password-confirm` failure budget across every caller. */
   async confirmPassword(auth: AuthContext, password: string): Promise<void> {
-    const failureKey = `password-confirm:user:${auth.principal.userId}`;
+    const { userId } = auth.principal;
+    const failureKey = `password-confirm:user:${userId}`;
+    await this.rateLimit.assertUnder(
+      [confirmSuccessKey(userId)],
+      SUCCESS_ACCOUNT_LIMIT,
+    );
     // Reserve the attempt before verifying, like login, so a stolen session cannot brute-force the current password.
     const release = await this.rateLimit.reserve(
       [failureKey],
@@ -160,6 +200,7 @@ export class AuthService {
         },
       );
     await release();
+    await this.rateLimit.hit(confirmSuccessKey(userId), FAILURE_WINDOW_SECONDS);
   }
 
   async changePassword(

@@ -68,6 +68,8 @@ export class User {
   @Prop({ default: false }) mute!: boolean;
   @Prop({ default: false }) isUnlisted!: boolean;
   @Prop({ type: String, default: null }) banReason!: string | null;
+  /** `isActive` when a moderator banned the account, so unbanning restores it; null outside a ban or for bans older than the field (unbanning activates those, as legacy did). */
+  @Prop({ type: Boolean, default: null }) isActiveBeforeBan!: boolean | null;
   @Prop({ default: true }) allowTagging!: boolean;
   @Prop({ type: Number, default: null }) rating!: number | null;
   @Prop({ default: '' }) userScript!: string;

@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { REDIS, execOrThrow } from '@libs/common';
+import { SettingsService } from '@libs/settings';
 import Redis from 'ioredis';
 import { randomToken, sha256 } from '../crypto';
 
@@ -9,6 +10,8 @@ export interface SessionData {
   passwordPwned: boolean;
   impersonatorId: string | null;
   csrf: string;
+  /** Login time (ms): the session ends `auth.sessionMaxDays` after it, however often it is used. */
+  createdAt: number;
   cookieIssuedAt: number;
   pendingTotpSecret: string | null;
   webauthnChallenge: string | null;
@@ -17,6 +20,7 @@ export interface SessionData {
 
 type StoredSession = Omit<
   SessionData,
+  | 'createdAt'
   | 'cookieIssuedAt'
   | 'pendingTotpSecret'
   | 'webauthnChallenge'
@@ -25,11 +29,13 @@ type StoredSession = Omit<
 
 export const SESSION_TTL_SECONDS = 14 * 24 * 60 * 60;
 export const COOKIE_REFRESH_MS = 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const sessionKey = (id: string) => `session:${sha256(id)}`;
 const userSessionsKey = (userId: string) => `user-sessions:${userId}`;
 
 // sessions stored before these fields existed lack them
 const withDefaults = (stored: string): SessionData => ({
+  createdAt: 0,
   cookieIssuedAt: 0,
   pendingTotpSecret: null,
   webauthnChallenge: null,
@@ -70,7 +76,11 @@ interface SessionScripts {
 
 @Injectable()
 export class SessionService {
-  constructor(@Inject(REDIS) private readonly redis: Redis) {
+  constructor(
+    @Inject(REDIS) private readonly redis: Redis,
+    @Inject(SettingsService)
+    private readonly settings: Pick<SettingsService, 'get'>,
+  ) {
     redis.defineCommand('sessionUpdate', { numberOfKeys: 1, lua: UPDATE_LUA });
     redis.defineCommand('sessionConsume', {
       numberOfKeys: 1,
@@ -82,6 +92,7 @@ export class SessionService {
     data: Omit<
       SessionData,
       | 'csrf'
+      | 'createdAt'
       | 'cookieIssuedAt'
       | 'pendingTotpSecret'
       | 'webauthnChallenge'
@@ -89,14 +100,17 @@ export class SessionService {
     >,
   ): Promise<{ id: string; session: SessionData }> {
     const id = randomToken();
+    const now = Date.now();
     const session: SessionData = {
       ...data,
       csrf: randomToken(),
-      cookieIssuedAt: Date.now(),
+      createdAt: now,
+      cookieIssuedAt: now,
       pendingTotpSecret: null,
       webauthnChallenge: null,
       webauthnRegistrationChallenge: null,
     };
+    await this.forgetExpired(data.userId);
     await execOrThrow(
       this.redis
         .multi()
@@ -106,13 +120,36 @@ export class SessionService {
     return { id, session };
   }
 
+  /** Sessions end by TTL without leaving the user's set: drop the members whose key is gone (a key is never reused, so a missing one never comes back). */
+  private async forgetExpired(userId: string): Promise<void> {
+    const members = await this.redis.smembers(userSessionsKey(userId));
+    if (!members.length) return;
+    const exists = await execOrThrow(
+      members.reduce(
+        (pipeline, member) => pipeline.exists(member),
+        this.redis.pipeline(),
+      ),
+    );
+    const expired = members.filter((_member, index) => exists[index] === 0);
+    if (expired.length)
+      await this.redis.srem(userSessionsKey(userId), ...expired);
+  }
+
+  /** Slides the 14-day expiry; a session past `auth.sessionMaxDays` since its login is destroyed instead. */
   async get(id: string): Promise<SessionData | null> {
     const stored = await this.redis.getex(
       sessionKey(id),
       'EX',
       SESSION_TTL_SECONDS,
     );
-    return stored ? withDefaults(stored) : null;
+    if (!stored) return null;
+    const session = withDefaults(stored);
+    // Stored before sessions recorded their login: the lifetime starts now.
+    if (!session.createdAt) return this.update(id, { createdAt: Date.now() });
+    const maxAgeMs = this.settings.get('auth.sessionMaxDays') * DAY_MS;
+    if (Date.now() - session.createdAt <= maxAgeMs) return session;
+    await this.destroy(id);
+    return null;
   }
 
   /** Atomic server-side merge; the sliding expiry is refreshed like on read. */

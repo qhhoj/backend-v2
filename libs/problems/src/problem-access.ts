@@ -42,11 +42,7 @@ function canEdit(
 ): boolean {
   if (!principal || !hasPermission(principal, 'judge.edit_own_problem'))
     return false;
-  if (
-    hasPermission(principal, 'judge.suggest_new_problem') &&
-    isSuggesting(problem)
-  )
-    return true;
+  // A suggester edits only suggestions they made or curate (`isEditor`), never the whole pool.
   if (
     hasPermission(principal, 'judge.edit_all_problem') ||
     (hasPermission(principal, 'judge.edit_public_problem') && problem.isPublic)
@@ -166,8 +162,6 @@ function editableFilter(
   ];
   if (hasPermission(principal, 'judge.edit_public_problem'))
     clauses.push({ isPublic: true });
-  if (hasPermission(principal, 'judge.suggest_new_problem'))
-    clauses.push({ isPublic: false, suggester: { $ne: null } });
   return { $or: clauses };
 }
 

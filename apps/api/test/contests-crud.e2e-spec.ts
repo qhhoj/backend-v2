@@ -111,6 +111,11 @@ describe('contest CRUD', () => {
       code: 'secret',
       isPublic: false,
     });
+    problems.tested = await createProblem(api, catalog, {
+      code: 'tested',
+      isPublic: false,
+      testers: [users.creator._id],
+    });
   });
   afterAll(() => api.teardown());
   beforeEach(async () => {
@@ -206,6 +211,11 @@ describe('contest CRUD', () => {
         'problems',
       ],
       [
+        'a private problem the creator only tests',
+        { problems: [{ problem: 'TESTED', points: 1 }] },
+        'problems',
+      ],
+      [
         'the same problem twice',
         {
           problems: [
@@ -224,6 +234,7 @@ describe('contest CRUD', () => {
       const withIds = JSON.parse(
         JSON.stringify(extra)
           .replace('PLACEHOLDER', problems.secret._id)
+          .replace('TESTED', problems.tested._id)
           .replaceAll('OPEN', problems.open._id),
       ) as object;
       expect(fieldsOf(await create('creator', withIds).expect(400))).toContain(

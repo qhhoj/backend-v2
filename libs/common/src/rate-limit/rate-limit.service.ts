@@ -25,6 +25,13 @@ export class RateLimitService {
     return Number((await this.redis.get(rateKey(key))) ?? 0);
   }
 
+  /** Throws the 429 when any key already holds `limit` hits; counts nothing (the caller hits once the work succeeded). */
+  async assertUnder(keys: string[], limit: number): Promise<void> {
+    const counts = await Promise.all(keys.map((key) => this.count(key)));
+    const overLimit = keys.filter((_key, index) => counts[index] >= limit);
+    if (overLimit.length > 0) throw await this.refusal(overLimit);
+  }
+
   /** Hits every key before the guarded work; over the limit throws (hits stay counted), else returns a release that gives the attempt back. */
   async reserve(
     keys: string[],

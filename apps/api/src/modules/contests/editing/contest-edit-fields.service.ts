@@ -4,7 +4,7 @@ import type { Principal } from '@libs/auth';
 import { AppError, invalidField, unique } from '@libs/common';
 import { FormatConfigError, parseFormatConfig } from '@libs/contests';
 import { uuidStr } from '@libs/database';
-import type { Contest, ContestProblem } from '@libs/database';
+import type { Contest, ContestProblem, Problem } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
@@ -210,6 +210,19 @@ function organizationChange(
   return { before, after };
 }
 
+/**
+ * A contest shows its problems to every participant, so seeing a problem is not enough to add one: the editor must
+ * edit it, or it must already be public to everyone; `judge.edit_all_contest` adds any.
+ */
+function usableInContest(principal: Principal, problem: Problem): boolean {
+  const view = ProblemAccess.accessView(problem);
+  return (
+    hasPermission(principal, 'judge.edit_all_contest') ||
+    ProblemAccess.isSitePublic(view) ||
+    ProblemAccess.canEdit(principal, view)
+  );
+}
+
 @Injectable()
 export class ContestEditFieldsService {
   constructor(
@@ -228,7 +241,11 @@ export class ContestEditFieldsService {
     assertNoForbiddenNulls(dto);
     const fields = fieldsWithoutLookups(dto);
     if (dto.problems !== undefined)
-      fields.problems = await this.contestProblems(principal, dto.problems);
+      fields.problems = await this.contestProblems(
+        principal,
+        dto.problems,
+        current,
+      );
     if (dto.description !== undefined)
       fields.descriptionHtml = renderField('description', dto.description);
     Object.assign(fields, rulesFields(dto, current));
@@ -319,10 +336,11 @@ export class ContestEditFieldsService {
         throw invalidField(field, 'Unknown user.');
   }
 
-  /** Each problem once, existing and visible to the editor; `order` is the request's order. */
+  /** Each problem once and existing; a problem not yet in the contest must be one the editor may put in it (`usableInContest`); `order` is the request's order. */
   private async contestProblems(
     principal: Principal,
     problems: ContestProblemDto[],
+    current: ContestDocument | null,
   ): Promise<ContestProblem[]> {
     const ids = problems.map((entry) => entry.problem);
     if (unique(ids).length !== ids.length)
@@ -333,16 +351,12 @@ export class ContestEditFieldsService {
         problem,
       ]),
     );
+    const kept = new Set(
+      (current?.problems ?? []).map((entry) => uuidStr(entry.problem)),
+    );
     for (const id of ids) {
       const problem = found.get(id);
-      if (
-        !problem ||
-        !ProblemAccess.canSee(
-          principal,
-          ProblemAccess.accessView(problem),
-          null,
-        )
-      )
+      if (!problem || !(kept.has(id) || usableInContest(principal, problem)))
         throw invalidField('problems', 'Unknown problem.');
     }
     return problems.map((entry, order) => ({

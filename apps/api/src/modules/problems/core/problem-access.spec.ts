@@ -111,10 +111,10 @@ describe('ProblemAccess.canEdit', () => {
       false,
     ],
     [
-      'suggest_new_problem + edit_own edits suggestions',
+      "suggest_new_problem + edit_own never edits another's suggestion",
       'suggesterEditor',
       view({ isPublic: false, suggester: OTHER }),
-      true,
+      false,
     ],
   ])('%s', (_name, who, problem, expected) =>
     expect(ProblemAccess.canEdit(PRINCIPALS[who], problem)).toBe(expected),

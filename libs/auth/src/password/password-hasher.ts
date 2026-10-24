@@ -1,7 +1,13 @@
 import { pbkdf2, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
+import { concurrencyLimit } from './concurrency-limit';
 
-const pbkdf2Async = promisify(pbkdf2);
+/** PBKDF2 runs on libuv's pool (4 threads by default), shared with file, DNS and zlib work: password checks never take more than half of it. */
+const MAX_CONCURRENT_HASHES = 2;
+const withHashSlot = concurrencyLimit(MAX_CONCURRENT_HASHES);
+const derive = promisify(pbkdf2);
+const pbkdf2Async = (...args: Parameters<typeof derive>) =>
+  withHashSlot(() => derive(...args));
 const ALGORITHMS = new Map([
   ['pbkdf2_sha256', { digest: 'sha256', keyLength: 32 }],
   ['pbkdf2_sha1', { digest: 'sha1', keyLength: 20 }],

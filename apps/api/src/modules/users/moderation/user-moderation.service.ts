@@ -13,7 +13,7 @@ export class UserModerationService {
     private readonly revisions: RevisionsRepository,
   ) {}
 
-  /** Legacy `Profile.ban_user`, plus every session revoked (the guard also rejects inactive users on the next request). */
+  /** Legacy `Profile.ban_user`, plus every session revoked (the guard also rejects inactive users on the next request); the active flag is remembered for `unban`. Audit-logged as a `user` revision. */
   async ban(
     principal: Principal,
     username: string,
@@ -30,25 +30,53 @@ export class UserModerationService {
         displayRank: 'banned',
         isUnlisted: true,
         isActive: false,
+        isActiveBeforeBan: user.isActive,
       }))
     )
       throw new AppError('conflict', 409, 'That user is already banned');
     await this.sessions.destroyAllForUser(user._id);
+    await this.auditBan(principal, user, 'ban', {
+      reason,
+      isActive: false,
+    });
   }
 
-  /** Legacy `Profile.unban_user`: restores rank `user`, listed and active whatever the user was before the ban. */
+  /** Legacy `Profile.unban_user`: restores rank `user` and listed; the account is active again only if it was before the ban (a pending signup or a deactivated account stays inactive). Audit-logged. */
   async unban(principal: Principal, username: string): Promise<void> {
     const user = await this.target(principal, username);
+    const isActive = user.isActiveBeforeBan ?? true;
     if (
       user.banReason === null ||
       !(await this.users.updateIfBanReason(user._id, user.banReason, {
         banReason: null,
         displayRank: 'user',
         isUnlisted: false,
-        isActive: true,
+        isActive,
+        isActiveBeforeBan: null,
       }))
     )
       throw new AppError('conflict', 409, 'That user is not banned');
+    await this.auditBan(principal, user, 'unban', { reason: null, isActive });
+  }
+
+  /** One `user` revision per ban or unban; the comment is the reason set or lifted. */
+  private async auditBan(
+    principal: Principal,
+    user: UserDocument,
+    action: 'ban' | 'unban',
+    after: { reason: string | null; isActive: boolean },
+  ): Promise<void> {
+    await this.revisions.append({
+      entity: 'user',
+      entityId: user._id,
+      action,
+      userId: principal.userId,
+      changes: {
+        banReason: { before: user.banReason, after: after.reason },
+        isActive: { before: user.isActive, after: after.isActive },
+      },
+      comment: after.reason ?? user.banReason ?? '',
+    });
   }
 
   /** Recovery for a locked-out user: removes TOTP and every security key, then signs the user out everywhere. Audit-logged as a `user` revision. */
