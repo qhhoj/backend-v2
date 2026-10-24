@@ -42,17 +42,23 @@ export function pythonRound(value: number, digits: number): number {
 /** Within float noise of the total counts as every point earned. */
 const FULL_EPSILON = 1e-9;
 
+/** Every point of `total` earned, up to float noise. */
+export const earnedAll = (points: number, total: number): boolean =>
+  points >= total - FULL_EPSILON;
+
+/** The largest value with `decimals` decimals strictly below `total`, and 0 at least. */
+const stepBelow = (total: number, decimals: number): number =>
+  Math.max(0, Math.round(total * 10 ** decimals) - 1) / 10 ** decimals;
+
 /** Sums to one decimal like legacy, except that only every point earned reaches the total: a near miss (9.96 of 10) stays a tenth below it, and a full sum takes the rounded total exactly. */
 function roundedSums(
   points: number,
   total: number,
 ): Pick<CaseTotals, 'casePoints' | 'caseTotal'> {
   const caseTotal = pythonRound(total, 1);
-  if (points >= total - FULL_EPSILON)
-    return { casePoints: caseTotal, caseTotal };
-  const tenthBelowTotal = Math.max(0, Math.round(caseTotal * 10) - 1) / 10;
+  if (earnedAll(points, total)) return { casePoints: caseTotal, caseTotal };
   return {
-    casePoints: Math.min(pythonRound(points, 1), tenthBelowTotal),
+    casePoints: Math.min(pythonRound(points, 1), stepBelow(caseTotal, 1)),
     caseTotal,
   };
 }
@@ -100,7 +106,11 @@ export function gradeCases(cases: readonly GradableCase[]): CaseTotals {
 /** Decimals a submission's points (and an ioi16 cell) keep: legacy `round(…, 3)`. */
 export const POINTS_DECIMALS = 3;
 
-/** Legacy: `round(casePoints / caseTotal × problem.points, 3)`, and 0 for a non-partial problem unless the cases earned their whole total (as `IS_SOLVED`; the 3-decimal rounding alone may reach full marks). The problem-rescore job uses this too. */
+/** Points already rounded to `POINTS_DECIMALS` for a result short of full: at most 0.001 below `fullPoints`, so rounding alone never gives full marks. */
+export const partialPoints = (points: number, fullPoints: number): number =>
+  Math.min(points, stepBelow(fullPoints, POINTS_DECIMALS));
+
+/** Legacy `round(casePoints / caseTotal × problem.points, 3)`, except that only cases earning their whole total (as `IS_SOLVED`) reach the problem's points: a near miss stays below them (`partialPoints`). A non-partial problem scores 0 for anything less. The problem-rescore job uses this too. */
 export function submissionPoints(
   casePoints: number,
   caseTotal: number,
@@ -111,5 +121,6 @@ export function submissionPoints(
     caseTotal > 0
       ? pythonRound((casePoints / caseTotal) * problemPoints, POINTS_DECIMALS)
       : 0;
-  return isPartial || casePoints >= caseTotal ? points : 0;
+  if (casePoints >= caseTotal) return points;
+  return isPartial ? partialPoints(points, problemPoints) : 0;
 }
