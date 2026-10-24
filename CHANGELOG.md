@@ -1,5 +1,21 @@
 # qhhoj-backend
 
+## 2.36.2
+
+### Patch Changes
+
+- 96341a9: bridge: the Accepted window of an Assign is timed through an injectable `AcceptClock` (`ACCEPT_CLOCK`; production keeps one real `acceptMs` timer per Assign). The conformance runner uses a manual clock, so the accept-timeout scenarios (28, 28b, 28c) no longer depend on host timing.
+- 4c33348: Meter correct passwords atomically (one per-account budget for login and confirmation, plus per address on login), cap concurrent PBKDF2 hashes at 2 and refuse a check that waited 20 s for a slot with 429; contests admit only problems the editor edits, site-public ones, or members-only problems of organizations the contest is private to and the editor administers; suggesters edit only their own suggestions; unban restores the pre-ban active flag and ban/unban are audited; sessions have an absolute lifetime (`auth.sessionMaxDays`) and expired members leave the user's session set.
+- 395f682: Deploy and host hardening: deploys only from main to commits on main, deploy user restricted to its dispatcher, problem-data owner-only with per-user ACLs, HSTS one year, current CSP hash, ACME gate exemption on port 80 only, scratch mongod on unix sockets only, CI without dependency install scripts.
+- 2d571ff: bridge judging fixes:
+
+  - `RETRY` DATA_UNAVAILABLE, RUNTIME_MISSING, SANDBOX_FAILURE: requeued with a jittered backoff outside the 3-RETRY cap, held while the problem's data is written, shown as `waitingReason`, IE after 30 minutes; another requeue starts the wait over.
+  - Per-case jury time (judge proto minor 4) is stored.
+  - A Final whose store fails is retried in the session; if it never lands the slot is freed and the row requeued (free twice, then it spends a RETRY).
+  - Case points are clamped to the case total, and the clamp is logged.
+  - Judge-reported error text is sanitized before logging.
+  - A run whose Final is being stored is not voided or timed out, so it no longer leaks a judge slot.
+
 ## 2.36.1
 
 ### Patch Changes
