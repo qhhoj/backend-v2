@@ -215,7 +215,7 @@ export class RunsService {
     return written.outcome;
   }
 
-  /** The judge refused the run as unsupported: requeued without spending a RETRY, never again offered to that judge build (the dispatcher reads `refusedBy`). A row every connected judge refused stays QU, visibly waiting for a judge that can grade it. */
+  /** The judge refused the run as unsupported: requeued without spending a RETRY, not offered to that judge build again until the problem's data changes (the dispatcher reads `refusedBy`). A row every connected judge refused stays QU, visibly waiting for a judge that can grade it. */
   async refused(key: RunKey, judge: RefusingJudge): Promise<WriteOutcome> {
     const written = await this.writes.refuse(key, judge);
     if (written.outcome !== 'applied') return written.outcome;

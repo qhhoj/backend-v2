@@ -4,9 +4,11 @@ import {
   RETRY_LIMIT_MESSAGE,
   RunWritesRepository,
 } from '../src/submissions/run-writes.repository';
+import { canJudge } from '../src/dispatch/slots';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import type { RunKey } from '../src/submissions/write-outcome';
 import { seedCatalog, seedProblem, seedSubmission } from './fixtures';
+import { RecordingJudge } from './recording-judge';
 import type { BridgeCatalog } from './fixtures';
 import { setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
@@ -245,9 +247,9 @@ describe('Run writes (seq compare-and-set)', () => {
     });
   });
 
-  it('requeues a refusal without spending a RETRY, keeps it from that judge build, and re-acks its replay', async () => {
+  it('requeues a refusal without spending a RETRY, keeps it from that judge build until a data save, and re-acks its replay', async () => {
     const run = await claimed();
-    const refusing = { name: JUDGE, build: 'v1' };
+    const refusing = { name: JUDGE, build: 'v1', dataVersion: 0 };
     let key = run.key(2);
     for (let refusal = 0; refusal < 3; refusal += 1) {
       const [queued] = await repository.loadQueued([run.id]);
@@ -268,7 +270,17 @@ describe('Run writes (seq compare-and-set)', () => {
     expect((await writes.refuse(key, refusing)).outcome).toBe('duplicate');
     const [queued] = await repository.loadQueued([run.id]);
     expect(queued.refusedBy).toEqual([refusing]);
-    const claim = await repository.claimRun(queued, JUDGE);
+    const judge = Object.assign(new RecordingJudge(JUDGE), { build: 'v1' });
+    expect(canJudge(judge, queued)).toBe(false);
+    // the author fixes the data: the refusal was made against the old version
+    const { problem } = await stored(run.id);
+    await bridge.problems.updateOne(
+      { _id: problem },
+      { $inc: { dataVersion: 1 } },
+    );
+    const [fixed] = await repository.loadQueued([run.id]);
+    expect(canJudge(judge, fixed)).toBe(true);
+    const claim = await repository.claimRun(fixed, JUDGE);
     if (!claim || !('request' in claim)) throw new Error('not claimed');
     const retried = { ref: claim.request.ref, judgeName: JUDGE, seq: 1 };
     await writes.accept(retried);

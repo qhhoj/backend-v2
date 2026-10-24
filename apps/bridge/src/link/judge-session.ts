@@ -400,7 +400,7 @@ export class JudgeSession implements DispatchTarget {
       this.services.dispatch.runStarted(this, handled.ref, caseCount);
   }
 
-  /** The Final is acked only after its write and graded job; the slot is then free. A RETRY frees it with a ban on this judge for the row until the next resync tick (a refusal bans this judge build for good, `refusedBy`), unless the user aborted the run (`honourAbort`). A winding run's Final writes nothing and frees its slot; a stale Final (the row moved on) ends the run too; a Final resent for a run that already ended is re-acked. */
+  /** The Final is acked only after its write and graded job; the slot is then free. A RETRY frees it with a ban on this judge for the row until the next resync tick (a refusal bans this judge build until the problem's data changes, `refusedBy`), unless the user aborted the run (`honourAbort`). A winding run's Final writes nothing and frees its slot; a stale Final (the row moved on) ends the run too; a Final resent for a run that already ended is re-acked. */
   private async onFinal(final: Final): Promise<void> {
     const received = finalReportOf(final);
     const ref = refOf(final.ref);
@@ -421,12 +421,16 @@ export class JudgeSession implements DispatchTarget {
     }
   }
 
-  /** A refusal names this judge build; every other Final is written as it stands. */
+  /** A refusal names this judge build and the data version it refused; every other Final is written as it stands. */
   private settle(key: RunKey, report: FinalReport): Promise<WriteOutcome> {
     const { kind } = report;
-    return kind === 'refused'
-      ? this.services.runs.refused(key, { name: this.name, build: this.build })
-      : this.services.runs.final(key, { ...report, kind });
+    if (kind !== 'refused')
+      return this.services.runs.final(key, { ...report, kind });
+    return this.services.runs.refused(key, {
+      name: this.name,
+      build: this.build,
+      dataVersion: report.dataVersionUsed,
+    });
   }
 
   /** A RETRY or refusal that crosses the user's abort ends the run AB, as the abort would have: requeued, it would be graded on another judge. */
@@ -437,7 +441,7 @@ export class JudgeSession implements DispatchTarget {
     )
       return report;
     this.logger.warn(
-      `Judge ${this.name} answered RETRY for submission ${ref.submissionId} gen ${ref.generation} after its abort; ended as aborted: ${loggableText(report.log)}`,
+      `Judge ${this.name} ${report.kind === 'refused' ? 'refused' : 'answered RETRY for'} submission ${ref.submissionId} gen ${ref.generation} after its abort; ended as aborted: ${loggableText(report.log)}`,
     );
     return { ...report, kind: 'aborted' };
   }

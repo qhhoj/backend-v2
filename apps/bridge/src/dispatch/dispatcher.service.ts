@@ -49,7 +49,8 @@ const isSameEntry = (left: QueuedSubmission, right: QueuedSubmission) =>
   left.bannedJudges.join() === right.bannedJudges.join() &&
   left.retryBannedJudges.join() === right.retryBannedJudges.join() &&
   left.requiredFeatures.join() === right.requiredFeatures.join() &&
-  JSON.stringify(left.refusedBy) === JSON.stringify(right.refusedBy);
+  JSON.stringify(left.refusedBy) === JSON.stringify(right.refusedBy) &&
+  left.dataVersion === right.dataVersion;
 
 /** A session between Hello and `register`: it holds the runs it resumed; `plan` is open until its Welcome goes out. */
 interface Resuming {
@@ -377,13 +378,20 @@ export class DispatcherService {
     this.queued.set(entry.id, entry);
   }
 
-  /** Resync tick: a queued entry takes the judge features its problem needs now (a sync or a data edit may have changed them since the row was read); its other fields stay, as some come only from a command. */
+  /** Resync tick: a queued entry takes the judge features its problem needs now and its data version (a sync or a data edit may have changed them since the row was read; a new version lifts older refusals); its other fields stay, as some come only from a command. */
   async refreshRequiredFeatures(rows: QueuedSubmission[]): Promise<void> {
     const changed = rows.flatMap((row) => {
       const queued = this.queued.get(row.id);
       return queued &&
-        queued.requiredFeatures.join() !== row.requiredFeatures.join()
-        ? [{ ...queued, requiredFeatures: row.requiredFeatures }]
+        (queued.requiredFeatures.join() !== row.requiredFeatures.join() ||
+          queued.dataVersion !== row.dataVersion)
+        ? [
+            {
+              ...queued,
+              requiredFeatures: row.requiredFeatures,
+              dataVersion: row.dataVersion,
+            },
+          ]
         : [];
     });
     if (!changed.length) return;
