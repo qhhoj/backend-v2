@@ -66,7 +66,7 @@ export class OrganizationViewerResponse {
   canCreateProblem!: boolean;
   /** The viewer may create contests for the organization (`POST /organizations/{slug}/contests`): an administrator holding `judge.create_private_contest`. */
   canCreateContest!: boolean;
-  /** The viewer's pending join request else null. */
+  /** The viewer's pending join request, else null. */
   pendingRequestId!: string | null;
 }
 
