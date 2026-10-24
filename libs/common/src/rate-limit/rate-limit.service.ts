@@ -25,11 +25,29 @@ export class RateLimitService {
     return Number((await this.redis.get(rateKey(key))) ?? 0);
   }
 
-  /** Throws the 429 when any key already holds `limit` hits; counts nothing (the caller hits once the work succeeded). */
-  async assertUnder(keys: string[], limit: number): Promise<void> {
-    const counts = await Promise.all(keys.map((key) => this.count(key)));
-    const overLimit = keys.filter((_key, index) => counts[index] >= limit);
-    if (overLimit.length > 0) throw await this.refusal(overLimit);
+  /**
+   * Hits every key before the guarded work, each against its own limit; over any limit gives every hit back and throws,
+   * else returns a release that gives them back. Unlike `reserve`, a refusal costs nothing, so callers can claim a
+   * budget that only finished work keeps.
+   */
+  async claim(
+    budgets: ReadonlyArray<{ key: string; limit: number }>,
+    windowSeconds: number,
+  ): Promise<() => Promise<void>> {
+    const keys = budgets.map(({ key }) => key);
+    const counts = await Promise.all(
+      keys.map((key) => this.hit(key, windowSeconds)),
+    );
+    const release = async () => {
+      await Promise.all(keys.map((key) => this.release(key)));
+    };
+    const overLimit = keys.filter(
+      (_key, index) => counts[index] > budgets[index].limit,
+    );
+    if (overLimit.length === 0) return release;
+    const refusal = await this.refusal(overLimit);
+    await release();
+    throw refusal;
   }
 
   /** Hits every key before the guarded work; over the limit throws (hits stay counted), else returns a release that gives the attempt back. */

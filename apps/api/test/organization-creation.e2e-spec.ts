@@ -5,6 +5,7 @@ import type { Contest } from '@libs/database';
 import { createContest, hoursFromNow } from './contest-fixtures';
 import {
   authed,
+  createProblem,
   createUserWith,
   loginAs,
   seedCatalog,
@@ -316,6 +317,33 @@ describe('creating problems and contests for an organization', () => {
         .expect(403)
         .expect(errorCode('forbidden'));
       expect(await api.contests.findOne({ key: `kt_${who}` })).toBeNull();
+    });
+
+    it("lets an administrator put the organization's members-only problems in its contest, but not another organization's", async () => {
+      const membersOnly = (code: string, organization: string) =>
+        createProblem(api, catalog, {
+          code,
+          isPublic: true,
+          isOrganizationPrivate: true,
+          organizations: [organization],
+        });
+      const own = await membersOnly('thptdemo_own', organizationId);
+      const foreign = await membersOnly(
+        'otherorg_foreign',
+        otherOrganizationId,
+      );
+      const withProblem = (key: string, problem: { _id: string }) =>
+        contestBody(key, { problems: [{ problem: problem._id, points: 100 }] });
+      await createContestAs(
+        'teacher',
+        'thpt-demo',
+        withProblem('thptdemo_own_kt', own),
+      ).expect(201);
+      await createContestAs(
+        'teacher',
+        'thpt-demo',
+        withProblem('thptdemo_foreign_kt', foreign),
+      ).expect(400);
     });
 
     it('still refuses the site-wide create without judge.add_contest', async () => {

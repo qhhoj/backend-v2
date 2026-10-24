@@ -107,6 +107,18 @@ export class OrganizationCreationRights {
     );
   }
 
+  /** Whether every one of these ids is a live organization the viewer administers (`OrganizationAccess.canAdminister`). */
+  administersEach(
+    principal: Principal,
+    organizationIds: readonly string[],
+  ): Promise<boolean> {
+    return this.allowsInEach(
+      principal,
+      organizationIds,
+      OrganizationAccess.canAdminister,
+    );
+  }
+
   /** The slug of the first live organization in list order, whose prefix an organization problem's code carries; null for none. */
   async firstSlug(organizationIds: readonly string[]): Promise<string | null> {
     if (!organizationIds.length) return null;

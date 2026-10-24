@@ -353,31 +353,33 @@ describe('auth session endpoints', () => {
     expect(session.user.username).toBe('victor');
   });
 
-  it('meters correct passwords per account, on login and on confirmation', async () => {
+  it('meters correct passwords per account, shared by login and confirmation, even in a concurrent burst', async () => {
     const owner = await createUser(api.users, {
       username: 'looper',
       email: 'looper@example.com',
     });
     const auth = api.app.get(AuthService);
-    for (let attempt = 0; attempt < 20; attempt++)
-      await auth.login(
-        'looper',
-        'correct horse battery',
-        `198.51.100.${attempt}`,
-        null,
-      );
-    await expect(
-      auth.login('looper', 'correct horse battery', '198.51.100.99', null),
-    ).rejects.toMatchObject({ code: 'rate_limited' });
     const context = {
       principal: { userId: owner._id },
       user: owner,
     } as unknown as Parameters<AuthService['confirmPassword']>[0];
-    for (let attempt = 0; attempt < 20; attempt++)
-      await auth.confirmPassword(context, 'correct horse battery');
+    const password = 'correct horse battery';
+    // a wrong password gives its claim back
     await expect(
-      auth.confirmPassword(context, 'correct horse battery'),
-    ).rejects.toMatchObject({ code: 'rate_limited' });
+      auth.login('looper', 'wrong password', '198.51.100.200', null),
+    ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    const results = await Promise.allSettled([
+      ...Array.from({ length: 15 }, (_unused, index) =>
+        auth.login('looper', password, `198.51.100.${index}`, null),
+      ),
+      ...Array.from({ length: 15 }, () =>
+        auth.confirmPassword(context, password),
+      ),
+    ]);
+    const refused = results.filter((result) => result.status === 'rejected');
+    expect(results.length - refused.length).toBe(20);
+    for (const result of refused)
+      expect(result.reason).toMatchObject({ code: 'rate_limited' });
   });
 
   it('carries the personal appearance on the session user, null until it is set', async () => {

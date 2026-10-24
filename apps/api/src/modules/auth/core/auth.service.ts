@@ -29,13 +29,16 @@ import {
   SUCCESS_IP_LIMIT,
 } from './rate-limits';
 
-/** Correct-password budgets: counted on success and never given back, so a valid-credential loop cannot run PBKDF2 without limit. */
-const loginSuccessKeys = (ip: string, userId: string) => ({
-  ip: `login-success:ip:${ip}`,
-  account: `login-success:user:${userId}`,
+/** Correct passwords of one account (login and confirmation share it), claimed before the hash and kept only on success: a valid-credential loop cannot run PBKDF2 without limit, and nobody else can spend it. */
+const passwordSuccessBudget = (userId: string) => ({
+  key: `password-success:user:${userId}`,
+  limit: SUCCESS_ACCOUNT_LIMIT,
 });
-const confirmSuccessKey = (userId: string) =>
-  `password-confirm-success:user:${userId}`;
+const loginSuccessIpBudget = (ip: string) => ({
+  key: `login-success:ip:${ip}`,
+  limit: SUCCESS_IP_LIMIT,
+});
+type Budget = { key: string; limit: number };
 
 @Injectable()
 export class AuthService {
@@ -60,17 +63,13 @@ export class AuthService {
       ? `user:${user._id}`
       : `name:${username.normalize('NFKC').toLowerCase()}`;
     const failureKeys = [`login:ip:${ip}`, `login:${account}:ip:${ip}`];
-    await this.assertLoginSuccessBudget(ip, user?._id ?? null);
-    // Reserve the attempt before verifying so concurrent bursts cannot exceed the limit.
-    const release = await this.rateLimit.reserve(
-      failureKeys,
-      FAILURE_LIMIT,
-      FAILURE_WINDOW_SECONDS,
-    );
-
-    const passwordValid = await verifyPassword(
-      password,
-      user?.password ?? DUMMY_PASSWORD_HASH,
+    const successBudgets = [
+      loginSuccessIpBudget(ip),
+      ...(user ? [passwordSuccessBudget(user._id)] : []),
+    ];
+    const passwordValid = await this.verifyMetered(
+      { failureKeys, successBudgets },
+      () => verifyPassword(password, user?.password ?? DUMMY_PASSWORD_HASH),
     );
     if (!user || !passwordValid)
       throw new AppError(
@@ -78,8 +77,6 @@ export class AuthService {
         401,
         'Invalid username or password',
       );
-    await release();
-    await this.countLoginSuccess(ip, user._id);
     this.assertLoginAllowed(user);
     const passwordPwned = await this.pwned.isPwned(password);
     // Compare-and-set: if the password changed since verification, keep the newer one.
@@ -95,24 +92,38 @@ export class AuthService {
     });
   }
 
-  /** Refused before any hash runs: per address always, per account once the name resolves. */
-  private async assertLoginSuccessBudget(
-    ip: string,
-    userId: string | null,
-  ): Promise<void> {
-    const keys = loginSuccessKeys(ip, userId ?? '');
-    await this.rateLimit.assertUnder([keys.ip], SUCCESS_IP_LIMIT);
-    if (userId)
-      await this.rateLimit.assertUnder([keys.account], SUCCESS_ACCOUNT_LIMIT);
-  }
-
-  private async countLoginSuccess(ip: string, userId: string): Promise<void> {
-    const keys = loginSuccessKeys(ip, userId);
-    await Promise.all(
-      [keys.ip, keys.account].map((key) =>
-        this.rateLimit.hit(key, FAILURE_WINDOW_SECONDS),
-      ),
+  /**
+   * Both budgets are taken before the hash, so concurrent attempts cannot race past either: failures (`reserve`) are
+   * given back on a correct password, correct passwords (`claim`) on a wrong one; a check that fails to run (hash queue
+   * full) gives both back.
+   */
+  private async verifyMetered(
+    budgets: { failureKeys: string[]; successBudgets: Budget[] },
+    verify: () => Promise<boolean>,
+  ): Promise<boolean> {
+    const releaseFailure = await this.rateLimit.reserve(
+      budgets.failureKeys,
+      FAILURE_LIMIT,
+      FAILURE_WINDOW_SECONDS,
     );
+    let releaseSuccess: () => Promise<void>;
+    try {
+      releaseSuccess = await this.rateLimit.claim(
+        budgets.successBudgets,
+        FAILURE_WINDOW_SECONDS,
+      );
+    } catch (error) {
+      await releaseFailure();
+      throw error;
+    }
+    try {
+      const valid = await verify();
+      await (valid ? releaseFailure() : releaseSuccess());
+      return valid;
+    } catch (error) {
+      await Promise.all([releaseFailure(), releaseSuccess()]);
+      throw error;
+    }
   }
 
   assertLoginAllowed(user: UserDocument): void {
@@ -168,21 +179,18 @@ export class AuthService {
     };
   }
 
-  /** Re-entry of the current password; shares the `password-confirm` failure budget across every caller. */
+  /** Re-entry of the current password; shares the `password-confirm` failure budget across every caller, and the correct-password budget with login. */
   async confirmPassword(auth: AuthContext, password: string): Promise<void> {
     const { userId } = auth.principal;
-    const failureKey = `password-confirm:user:${userId}`;
-    await this.rateLimit.assertUnder(
-      [confirmSuccessKey(userId)],
-      SUCCESS_ACCOUNT_LIMIT,
+    // Reserved before verifying, like login, so a stolen session cannot brute-force the current password.
+    const passwordValid = await this.verifyMetered(
+      {
+        failureKeys: [`password-confirm:user:${userId}`],
+        successBudgets: [passwordSuccessBudget(userId)],
+      },
+      () => verifyPassword(password, auth.user.password),
     );
-    // Reserve the attempt before verifying, like login, so a stolen session cannot brute-force the current password.
-    const release = await this.rateLimit.reserve(
-      [failureKey],
-      FAILURE_LIMIT,
-      FAILURE_WINDOW_SECONDS,
-    );
-    if (!(await verifyPassword(password, auth.user.password)))
+    if (!passwordValid)
       throw new AppError(
         'invalid_credentials',
         400,
@@ -199,8 +207,6 @@ export class AuthService {
           ],
         },
       );
-    await release();
-    await this.rateLimit.hit(confirmSuccessKey(userId), FAILURE_WINDOW_SECONDS);
   }
 
   async changePassword(
