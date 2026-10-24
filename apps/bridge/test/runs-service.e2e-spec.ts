@@ -1,4 +1,6 @@
+import Redis from 'ioredis';
 import { TEST_REDIS_URL } from '@libs/common/testing';
+import { problemDataLockKey } from '@libs/problems';
 import type { SubmissionCase } from '@libs/database';
 import { recordSubmissionEvents } from '@libs/judging/testing';
 import type { AssignmentRef } from '@libs/judge-proto';
@@ -209,5 +211,22 @@ describe('RunsService (events and graded jobs of a run)', () => {
     expect((await stored(absent._id)).pinnedJudge).toBeNull();
     expect((await stored(recent._id)).pinnedJudge).toBe('gone');
     expect((await stored(present._id)).pinnedJudge).toBe('here');
+  });
+
+  it("holds the claim of a row waiting for its problem's data while that data is being written", async () => {
+    const { id, problem, key } = await newRun();
+    await runs.accepted(key(1));
+    await runs.deferred(key(2), 'data', 'DataUnavailable');
+    const [queued] = await repository.loadQueued([id]);
+    const redis = new Redis(TEST_REDIS_URL);
+    try {
+      await redis.set(problemDataLockKey(problem.code), 'writer');
+      expect(await runs.claim(queued, JUDGE)).toBeNull();
+      expect(await stored(id)).toMatchObject({ status: 'QU' });
+      await redis.del(problemDataLockKey(problem.code));
+      expect(await runs.claim(queued, JUDGE)).not.toBeNull();
+    } finally {
+      await redis.quit();
+    }
   });
 });

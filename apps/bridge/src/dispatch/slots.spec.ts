@@ -42,6 +42,8 @@ const queued = (extra: Partial<QueuedSubmission> = {}): QueuedSubmission => ({
   retryBannedJudges: [],
   requiredFeatures: [],
   refusedBy: [],
+  retryAfter: 0,
+  waitsForData: false,
   ...extra,
 });
 
@@ -93,6 +95,14 @@ describe('canJudge', () => {
     expect(canJudge(judge('a'), refused)).toBe(false);
     expect(canJudge(judge('a', { build: 'v2' }), refused)).toBe(true);
     expect(canJudge(judge('b'), refused)).toBe(true);
+  });
+  it('offers a deferred submission to no judge, even the pinned one, until its backoff is over', () => {
+    const backingOff = queued({ retryAfter: Date.now() + 60_000 });
+    expect(canJudge(judge('a'), backingOff)).toBe(false);
+    expect(canJudge(judge('a'), { ...backingOff, judgeName: 'a' })).toBe(false);
+    expect(
+      canJudge(judge('a'), { ...backingOff, retryAfter: Date.now() }),
+    ).toBe(true);
   });
   it('needs every feature the problem asks for, even from the judge it is pinned to', () => {
     const needs = queued({ requiredFeatures: [INTERACTIVE_CHECKER_FEATURE] });

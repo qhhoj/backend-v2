@@ -8,6 +8,7 @@ export class RecordingJudge implements DispatchTarget {
   readonly id = newId();
   readonly inFlight = new Map<string, number>();
   readonly winding = new Set<string>();
+  readonly settling = new Set<string>();
   readonly generations = new Set<string>();
   features: ReadonlySet<string> = new Set();
   build = 'test';

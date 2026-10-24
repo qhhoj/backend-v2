@@ -1,5 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import type { CaseStatus, Submission, SubmissionCase } from '@libs/database';
+import type {
+  CaseStatus,
+  DeferralReason,
+  Submission,
+  SubmissionCase,
+} from '@libs/database';
 import { batchSummaries, SOURCE_ACCESS } from '../submission-access';
 import type {
   CaseVisibility,
@@ -68,17 +73,31 @@ const caseResponse = (
 
 export const SUBMISSION_WAITING_REASONS = [
   'waiting_for_capable_judge',
+  'waiting_for_problem_data',
+  'waiting_for_judge_runtime',
+  'waiting_for_judge_sandbox',
 ] as const;
 export type SubmissionWaitingReason =
   (typeof SUBMISSION_WAITING_REASONS)[number];
 
-/** A queued row some Judge refused as unsupported waits for one that can grade it (a capable connected Judge takes it at once). Rows stored before `refusedBy` existed have none. */
+const DEFERRAL_WAITING_REASON: Record<DeferralReason, SubmissionWaitingReason> =
+  {
+    data: 'waiting_for_problem_data',
+    runtime: 'waiting_for_judge_runtime',
+    sandbox: 'waiting_for_judge_sandbox',
+  };
+
+/** A queued row a Judge could not run for a transient reason waits for it to clear; one some Judge refused as unsupported waits for one that can grade it (a capable connected Judge takes it at once). Rows stored before `refusedBy` and `deferral` existed have neither. */
 const waitingReasonOf = (
   submission: Submission,
-): SubmissionWaitingReason | null =>
-  submission.status === 'QU' && (submission.refusedBy ?? []).length > 0
+): SubmissionWaitingReason | null => {
+  if (submission.status !== 'QU') return null;
+  if (submission.deferral)
+    return DEFERRAL_WAITING_REASON[submission.deferral.reason];
+  return (submission.refusedBy ?? []).length > 0
     ? 'waiting_for_capable_judge'
     : null;
+};
 
 /** What the viewer may do here; each flag is the rule its action endpoint checks. All false for visitors. */
 export class SubmissionViewerResponse implements SubmissionActions {
@@ -119,7 +138,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
   /** Whether `GET /submissions/{id}/source` will answer: `granted`; `sign_in` for visitors; `solve_first` until the viewer solves the problem; `hidden` otherwise. Without source access, cases carry no feedback or output. */
   @ApiProperty({ enum: SOURCE_ACCESS, enumName: 'SubmissionSourceAccess' })
   sourceAccess!: SourceAccess;
-  /** Why a queued submission is not being judged: `waiting_for_capable_judge` once a Judge refused it as unsupported (it stays queued until a Judge that can grade it is connected; the missing feature is not reported yet); null otherwise. */
+  /** Why a queued submission is not being judged: `waiting_for_problem_data`, `waiting_for_judge_runtime` or `waiting_for_judge_sandbox` while a Judge could not run it for that transient reason (it is retried with a backoff, and ends Internal Error after about 30 minutes); `waiting_for_capable_judge` once a Judge refused it as unsupported (it stays queued until a Judge that can grade it is connected; the missing feature is not reported yet); null otherwise. */
   @ApiProperty({
     enum: SUBMISSION_WAITING_REASONS,
     enumName: 'SubmissionWaitingReason',

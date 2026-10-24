@@ -15,6 +15,7 @@ class Target implements DispatchTarget {
   readonly id = newId();
   readonly inFlight = new Map<string, number>();
   readonly winding = new Set<string>();
+  readonly settling = new Set<string>();
   readonly generations = new Set<string>();
   features: ReadonlySet<string> = new Set();
   build = 'test';
@@ -73,6 +74,8 @@ const entry = (fields: Partial<QueuedSubmission> = {}): QueuedSubmission => ({
   retryBannedJudges: [],
   requiredFeatures: [],
   refusedBy: [],
+  retryAfter: 0,
+  waitsForData: false,
   ...fields,
 });
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -946,5 +949,22 @@ describe('DispatcherService', () => {
     expect(judge.winding.size).toBe(0);
     expect(dispatcher.heldIds()).toEqual([]);
     expect(judge.assigned).toHaveLength(2);
+  });
+
+  it('keeps a run whose Final is being stored when a resync reads the row its RETRY just requeued: no Abort, no winding slot', async () => {
+    const judge = await online(new Target('j1', 1));
+    const submission = entry();
+    await queue(submission);
+    const ref = { submissionId: submission.id, generation: 1 };
+    judge.settling.add(`${submission.id}.1`);
+    await dispatcher.enqueue([{ ...submission, generation: 1 }]);
+    expect(judge.aborted).toEqual([]);
+    expect(judge.winding.size).toBe(0);
+    judge.settling.clear();
+    await dispatcher.runEnded(judge, ref, { retried: true });
+    await dispatcher.clearRetryBans();
+    expect(judge.assigned.map((request) => request.ref.generation)).toEqual([
+      1, 2,
+    ]);
   });
 });

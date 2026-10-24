@@ -4,11 +4,12 @@ import {
   RETRY_LIMIT_MESSAGE,
   RunWritesRepository,
 } from '../src/submissions/run-writes.repository';
+import { DEFERRAL_LIMIT_MESSAGE } from '../src/submissions/deferral';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import type { RunKey } from '../src/submissions/write-outcome';
 import { seedCatalog, seedProblem, seedSubmission } from './fixtures';
 import type { BridgeCatalog } from './fixtures';
-import { setupBridgeTest } from './setup';
+import { FAST_TIMINGS, setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
 
 const JUDGE = 'judge-01';
@@ -276,6 +277,49 @@ describe('Run writes (seq compare-and-set)', () => {
       await writes.retry({ ...retried, seq: 2 }, 'sandbox failed'),
     ).toMatchObject({ outcome: 'applied', requeued: true });
     expect(await stored(run.id)).toMatchObject({ status: 'QU', retryCount: 1 });
+  });
+
+  it('defers a transient RETRY without spending a RETRY, holds it back, re-acks its replay, and fails it as IE once the deferral window is over', async () => {
+    const run = await claimed();
+    await writes.accept(run.key(1));
+    const first = new Date();
+    const data = { reason: 'data', log: 'DataUnavailable' } as const;
+    expect(await writes.defer(run.key(2), data, first)).toMatchObject({
+      outcome: 'applied',
+      requeued: true,
+    });
+    expect(await stored(run.id)).toMatchObject({
+      status: 'QU',
+      retryCount: 0,
+      judgedOn: null,
+      deferral: { reason: 'data', since: first, count: 1 },
+    });
+    expect((await writes.defer(run.key(2), data, first)).outcome).toBe(
+      'duplicate',
+    );
+    const [queued] = await repository.loadQueued([run.id]);
+    expect(queued).toMatchObject({
+      waitsForData: true,
+      retryAfter: first.getTime() + FAST_TIMINGS.deferralBackoffMs,
+    });
+    const claim = await repository.claimRun(queued, JUDGE);
+    if (!claim || !('request' in claim)) throw new Error('not claimed');
+    const again = { ref: claim.request.ref, judgeName: JUDGE, seq: 1 };
+    await writes.accept(again);
+    const late = new Date(first.getTime() + FAST_TIMINGS.deferralWindowMs);
+    expect(
+      await writes.defer(
+        { ...again, seq: 2 },
+        { reason: 'sandbox', log: 'SandboxFailure' },
+        late,
+      ),
+    ).toMatchObject({ outcome: 'applied', requeued: false });
+    expect(await stored(run.id)).toMatchObject({
+      status: 'IE',
+      result: 'IE',
+      retryCount: 0,
+      error: `${DEFERRAL_LIMIT_MESSAGE.sandbox}: SandboxFailure`,
+    });
   });
 
   it('counts a row without retryCount (a migrated one) as zero RETRYs', async () => {

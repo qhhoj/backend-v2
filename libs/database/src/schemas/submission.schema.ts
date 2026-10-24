@@ -105,6 +105,23 @@ export class RefusingJudge {
 }
 export const RefusingJudgeSchema = SchemaFactory.createForClass(RefusingJudge);
 
+/** Why a Judge could not run the Submission for now (`Final{RETRY}` DATA_UNAVAILABLE, RUNTIME_MISSING, SANDBOX_FAILURE): its data was not there yet, the runtime is missing, the sandbox failed. */
+export const DEFERRAL_REASONS = ['data', 'runtime', 'sandbox'] as const;
+export type DeferralReason = (typeof DEFERRAL_REASONS)[number];
+
+/** The Submission waits on a transient judge problem: requeued with a backoff, never counted in `retryCount`; IE only once the wait has lasted the bridge's deferral window. */
+@Schema({ _id: false })
+export class JudgeDeferral {
+  @Prop({ type: String, required: true, enum: DEFERRAL_REASONS })
+  reason!: DeferralReason;
+  /** The first deferral since the last rejudge: the window is counted from it. */
+  @Prop({ type: Date, required: true }) since!: Date;
+  @Prop({ required: true }) count!: number;
+  /** No judge is offered it before this. */
+  @Prop({ type: Date, required: true }) retryAfter!: Date;
+}
+export const JudgeDeferralSchema = SchemaFactory.createForClass(JudgeDeferral);
+
 @Schema({ ...baseSchemaOptions, collection: 'submissions' })
 export class Submission {
   @IdProp() _id!: string;
@@ -147,8 +164,11 @@ export class Submission {
   @Prop({ default: 0 }) judgeSeq!: number;
   /** The problem data version the judge graded with (`Final.dataVersionUsed`, 0 = unstamped data); null until a judge finished it. */
   @Prop({ type: Number, default: null }) judgedDataVersion!: number | null;
-  /** `Final{RETRY}` answers since the last rejudge (the judge could not run it: data not visible yet, runtime missing, sandbox failure); the third is IE. */
+  /** `Final{RETRY}` answers with no transient reason since the last rejudge (the judge failed it); the third is IE. Transient ones are `deferral`, refusals `refusedBy`. */
   @Prop({ default: 0 }) retryCount!: number;
+  /** The transient wait since the last rejudge (data not there yet, runtime missing, sandbox failure); null when there was none. */
+  @Prop({ type: JudgeDeferralSchema, default: null })
+  deferral!: JudgeDeferral | null;
   /** Judge builds that refused it as unsupported since the last rejudge; never counted in `retryCount`. While it is QU with any, it waits for a Judge that can grade it. */
   @Prop({ type: [RefusingJudgeSchema], default: [] })
   refusedBy!: RefusingJudge[];

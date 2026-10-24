@@ -197,7 +197,7 @@ describe('judge link messages', () => {
     );
   });
 
-  it('reads a Final: outcome, clipped log, data version; an unknown outcome is a protocol error', () => {
+  it('reads a Final: outcome, clipped log, data version, a RETRY by its reason (refusal, transient deferral, failure); an unknown outcome is a protocol error', () => {
     expect(
       finalReportOf(
         Final.fromPartial({
@@ -215,6 +215,25 @@ describe('judge link messages', () => {
         }),
       ).kind,
     ).toBe('refused');
+    const retryWith = (reason: RetryReason) =>
+      finalReportOf(
+        Final.fromPartial({ outcome: Outcome.OUTCOME_RETRY, reason }),
+      );
+    expect(retryWith(RetryReason.RETRY_REASON_DATA_UNAVAILABLE)).toEqual({
+      kind: 'deferred',
+      reason: 'data',
+      log: '',
+      dataVersionUsed: 0,
+    });
+    expect(retryWith(RetryReason.RETRY_REASON_RUNTIME_MISSING)).toMatchObject({
+      kind: 'deferred',
+      reason: 'runtime',
+    });
+    expect(retryWith(RetryReason.RETRY_REASON_SANDBOX_FAILURE)).toMatchObject({
+      kind: 'deferred',
+      reason: 'sandbox',
+    });
+    expect(retryWith(RetryReason.RETRY_REASON_UNSPECIFIED).kind).toBe('retry');
     expect(() => finalReportOf(Final.fromPartial({}))).toThrow(ProtocolError);
   });
 

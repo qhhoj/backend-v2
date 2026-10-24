@@ -209,6 +209,8 @@ export class SubmissionsRepository {
           retryBannedJudges: [],
           requiredFeatures: problem.requiredFeatures,
           refusedBy: row.refusedBy ?? [],
+          retryAfter: row.deferral?.retryAfter.getTime() ?? 0,
+          waitsForData: row.deferral?.reason === 'data',
         },
       ];
     });
@@ -227,6 +229,7 @@ export class SubmissionsRepository {
           judgeGeneration: 1,
           pinnedJudge: 1,
           refusedBy: 1,
+          deferral: 1,
         },
       )
       .sort({ priority: 1, _id: 1 })

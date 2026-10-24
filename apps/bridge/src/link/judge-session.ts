@@ -109,6 +109,7 @@ export class JudgeSession implements DispatchTarget {
   readonly inFlight = new Map<string, number>();
   /** Runs the dispatcher let go of that the judge has not ended yet (`windingKey`s); they keep a slot until their `Final`. */
   readonly winding = new Set<string>();
+  readonly settling = new Set<string>();
   /** Test generations it holds, by generation id. */
   readonly generations = new Set<string>();
   readonly finished: Promise<void>;
@@ -411,22 +412,32 @@ export class JudgeSession implements DispatchTarget {
       return this.replayedFinal(ref, seqOf(final.seq), received);
     const report = this.honourAbort(ref, received);
     let handled: Handled | null;
+    this.settling.add(windingKey(ref));
     try {
       handled = await this.handleRun(final, (key) =>
         this.storeFinal(key, report),
       );
     } catch (error) {
+      this.settling.delete(windingKey(ref));
       if (error instanceof ProtocolError || this.isClosed) throw error;
       return this.finalNotStored(ref, error as Error);
     }
-    if (handled?.outcome === 'stale')
-      return this.services.dispatch.windingEnded(this, handled.ref);
-    if (handled?.outcome === 'applied' || handled?.outcome === 'duplicate') {
-      remember(this.ended, windingKey(handled.ref));
-      await this.services.dispatch.runEnded(this, handled.ref, {
-        retried: isRequeuedByJudge(report) && handled.outcome === 'applied',
-      });
-    }
+    this.settling.delete(windingKey(ref));
+    if (handled) await this.runOver(handled, report);
+  }
+
+  /** A stored (or already stored) Final ends the run and frees its slot; a stale one ends its winding. */
+  private async runOver(
+    { ref, outcome }: Handled,
+    report: FinalReport,
+  ): Promise<void> {
+    if (outcome === 'stale')
+      return this.services.dispatch.windingEnded(this, ref);
+    if (outcome !== 'applied' && outcome !== 'duplicate') return;
+    remember(this.ended, windingKey(ref));
+    await this.services.dispatch.runEnded(this, ref, {
+      retried: isRequeuedByJudge(report) && outcome === 'applied',
+    });
   }
 
   /** judge-v2 sends a Final once per session and nothing asks for it again, so its write is retried here (with doubling waits) until it is stored, the session ends or the tries run out. Every try is idempotent: the seq compare-and-set turns a write that did land into `duplicate`. */
@@ -462,12 +473,17 @@ export class JudgeSession implements DispatchTarget {
     await this.services.dispatch.finalNotStored(this, ref);
   }
 
-  /** A refusal names this judge build; every other Final is written as it stands. */
+  /** A refusal names this judge build, a deferral its reason; every other Final is written as it stands. */
   private settle(key: RunKey, report: FinalReport): Promise<WriteOutcome> {
-    const { kind } = report;
-    return kind === 'refused'
-      ? this.services.runs.refused(key, { name: this.name, build: this.build })
-      : this.services.runs.final(key, { ...report, kind });
+    const { runs } = this.services;
+    switch (report.kind) {
+      case 'refused':
+        return runs.refused(key, { name: this.name, build: this.build });
+      case 'deferred':
+        return runs.deferred(key, report.reason, report.log);
+      default:
+        return runs.final(key, { ...report, kind: report.kind });
+    }
   }
 
   /** A RETRY or refusal that crosses the user's abort ends the run AB, as the abort would have: requeued, it would be graded on another judge. */
@@ -480,7 +496,8 @@ export class JudgeSession implements DispatchTarget {
     this.logger.warn(
       `Judge ${this.name} answered RETRY for submission ${ref.submissionId} gen ${ref.generation} after its abort; ended as aborted: ${loggableText(report.log)}`,
     );
-    return { ...report, kind: 'aborted' };
+    const { log, dataVersionUsed } = report;
+    return { kind: 'aborted', log, dataVersionUsed };
   }
 
   /** The judge resent the Final of a run it already got an ack for (it may not have seen the ack): the write finds it stored, the ack goes out again; the slot was freed the first time. Anything else is treated as an unheld ref (`applied` cannot happen: the stored Final already advanced `judgeSeq` past this seq's filter). */

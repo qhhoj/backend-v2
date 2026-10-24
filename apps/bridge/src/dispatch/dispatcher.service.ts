@@ -49,7 +49,9 @@ const isSameEntry = (left: QueuedSubmission, right: QueuedSubmission) =>
   left.bannedJudges.join() === right.bannedJudges.join() &&
   left.retryBannedJudges.join() === right.retryBannedJudges.join() &&
   left.requiredFeatures.join() === right.requiredFeatures.join() &&
-  JSON.stringify(left.refusedBy) === JSON.stringify(right.refusedBy);
+  JSON.stringify(left.refusedBy) === JSON.stringify(right.refusedBy) &&
+  left.retryAfter === right.retryAfter &&
+  left.waitsForData === right.waitsForData;
 
 /** A session between Hello and `register`: it holds the runs it resumed; `plan` is open until its Welcome goes out. */
 interface Resuming {
@@ -459,13 +461,14 @@ export class DispatcherService {
     this.queued.set(submission.id, submission);
   }
 
-  /** The row is QU at `generation`, so a run of that generation or older still held (live, resumed by a handshaking session, or in grace) is void: the judge is told to stop, and the slot comes back with its `Final{ABORTED}` (`winding`). A newer run (claimed after the row was read) or a claim in flight is kept. */
+  /** The row is QU at `generation`, so a run of that generation or older still held (live, resumed by a handshaking session, or in grace) is void: the judge is told to stop, and the slot comes back with its `Final{ABORTED}` (`winding`). A newer run (claimed after the row was read), a claim in flight, and a run whose Final is being stored (`settling`: a RETRY's own requeue read by a resync tick before the session ended the run) are kept. */
   private voidOlderRuns(submission: QueuedSubmission): void {
     this.grace.discard(submission.id, submission.generation);
     for (const judge of this.sessions()) {
       const generation = judge.inFlight.get(submission.id);
       if (!generation || generation > submission.generation) continue;
       const ref = { submissionId: submission.id, generation };
+      if (judge.settling.has(windingKey(ref))) continue;
       this.windDown(judge, ref);
       this.sendAbort(judge, ref);
     }

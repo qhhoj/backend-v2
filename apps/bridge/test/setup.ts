@@ -44,6 +44,9 @@ export const FAST_TIMINGS: BridgeTimings = {
   externalSubmitGapMs: 0,
   generationGraceMs: 60_000,
   finalWriteRetryMs: 20,
+  deferralBackoffMs: 0,
+  deferralMaxBackoffMs: 0,
+  deferralWindowMs: 600_000,
 };
 
 export async function setupBridgeTest({

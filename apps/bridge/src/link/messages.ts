@@ -3,7 +3,11 @@ import {
   MAX_CASE_FEEDBACK_LENGTH,
   MAX_CASE_TEXT_LENGTH,
 } from '@libs/database';
-import type { CaseStatus, SubmissionCase } from '@libs/database';
+import type {
+  CaseStatus,
+  DeferralReason,
+  SubmissionCase,
+} from '@libs/database';
 import { JudgeMessage, Outcome, RetryReason, Status } from '@libs/judge-proto';
 import type {
   AssignmentRef,
@@ -22,6 +26,7 @@ import {
   MAX_RUNTIMES,
   MAX_SLOTS,
 } from './link-limits';
+import { deferralReasonOf } from '../submissions/deferral';
 import { ProtocolError, tooLarge } from './protocol-error';
 
 /** A judge message and its encoded size; the size is known only in the deserializer. */
@@ -182,32 +187,41 @@ export function caseRowsOf(cases: Case[]): SubmissionCase[] {
   return cases.map(caseRowOf);
 }
 
-/** `refused`: a RETRY with reason UNSUPPORTED, the judge cannot grade this kind of submission (a refusal, not a failure; the feature it lacks is not on the wire). */
+/** `refused`: a RETRY with reason UNSUPPORTED, the judge cannot grade this kind of submission (a refusal, not a failure; the feature it lacks is not on the wire). `deferred`: a RETRY with a transient reason (`deferralReasonOf`); the row waits and retries. `retry`: any other RETRY, a failure that counts toward the RETRY cap. */
 export type FinalKind =
   | 'graded'
   | 'compile-error'
   | 'internal-error'
   | 'aborted'
   | 'retry'
-  | 'refused';
+  | 'refused'
+  | 'deferred';
 
-export interface FinalReport {
-  kind: FinalKind;
+interface FinalFields {
   /** Compile log, internal error message or retry reason, clipped to 64 KiB. */
   log: string;
   dataVersionUsed: number;
 }
 
-/** RETRY and refusal: the judge could not run it, so the row goes back to the queue. */
-export const isRequeuedByJudge = (report: FinalReport): boolean =>
-  report.kind === 'retry' || report.kind === 'refused';
+export type FinalReport =
+  | (FinalFields & { kind: Exclude<FinalKind, 'deferred'> })
+  | (FinalFields & { kind: 'deferred'; reason: DeferralReason });
 
-/** A Final the run's row takes as it stands; a refusal also names the refusing judge build (`RunsService.refused`). */
-export type RunFinalReport = FinalReport & {
-  kind: Exclude<FinalKind, 'refused'>;
+/** RETRY, refusal and deferral: the judge could not run it, so the row goes back to the queue. */
+export const isRequeuedByJudge = (report: FinalReport): boolean =>
+  report.kind === 'retry' ||
+  report.kind === 'refused' ||
+  report.kind === 'deferred';
+
+/** A Final the run's row takes as it stands; a refusal also names the refusing judge build (`RunsService.refused`), a deferral its reason (`RunsService.deferred`). */
+export type RunFinalReport = FinalFields & {
+  kind: Exclude<FinalKind, 'refused' | 'deferred'>;
 };
 
-const FINAL_KIND: ReadonlyMap<Outcome, FinalKind> = new Map([
+const FINAL_KIND: ReadonlyMap<
+  Outcome,
+  Exclude<FinalKind, 'refused' | 'deferred'>
+> = new Map([
   [Outcome.OUTCOME_GRADED, 'graded'],
   [Outcome.OUTCOME_COMPILE_ERROR, 'compile-error'],
   [Outcome.OUTCOME_INTERNAL_ERROR, 'internal-error'],
@@ -215,14 +229,24 @@ const FINAL_KIND: ReadonlyMap<Outcome, FinalKind> = new Map([
   [Outcome.OUTCOME_RETRY, 'retry'],
 ]);
 
+/** A RETRY by its reason: a refusal, a deferral, or a failure. */
+function retryReport(reason: RetryReason, fields: FinalFields): FinalReport {
+  if (reason === RetryReason.RETRY_REASON_UNSUPPORTED)
+    return { ...fields, kind: 'refused' };
+  const deferral = deferralReasonOf(reason);
+  return deferral
+    ? { ...fields, kind: 'deferred', reason: deferral }
+    : { ...fields, kind: 'retry' };
+}
+
 export function finalReportOf(final: Final): FinalReport {
   const kind = FINAL_KIND.get(final.outcome);
   if (!kind) throw new ProtocolError('a Final with no known outcome');
-  const isRefusal =
-    kind === 'retry' && final.reason === RetryReason.RETRY_REASON_UNSUPPORTED;
-  return {
-    kind: isRefusal ? 'refused' : kind,
+  const fields = {
     log: clipBytes(final.log, MAX_LOG_BYTES),
     dataVersionUsed: final.dataVersionUsed,
   };
+  return kind === 'retry'
+    ? retryReport(final.reason, fields)
+    : { ...fields, kind };
 }
