@@ -18,7 +18,7 @@ export const JOB_RETRY = {
 export const SUBMISSION_GRADED_QUEUE = 'submission-graded';
 export const SUBMISSION_GRADED_JOB = 'graded';
 
-/** One per finished submission (D, CE, IE, AB) and per reject; 2b recomputes the user's points, the problem's stats and the solved sets from it. */
+/** One per finished submission (D, CE, IE, AB) and per reject; the submission-effects job recomputes the user's points, the problem's stats and the solved sets from it. */
 export interface SubmissionGradedJob {
   submissionId: string;
   userId: string;

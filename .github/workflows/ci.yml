@@ -33,6 +33,8 @@ jobs:
       - run: pip install pyyaml==6.0.3
       - run: npm ci
       - run: npm run lint
+      # No plan, task or preflight ids in source comments.
+      - run: bash scripts/lint/check-plan-ids.sh
       - run: npm run typecheck
       # The vendored judge-v2 proto matches proto.lock.json and the committed TypeScript is current.
       - run: npm run judge-proto:check

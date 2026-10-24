@@ -9,7 +9,7 @@ export interface ProblemEventMap {
   statementChanged: [problemId: string];
 }
 
-/** In-process notifications for other modules (3b data dir and PDF cache, 2 rescore, 5 webhooks); listeners run synchronously after the write, and a throwing listener is logged without failing the write or skipping the others. */
+/** In-process notifications for other modules (data dir and PDF cache, rescore, webhooks); listeners run synchronously after the write, and a throwing listener is logged without failing the write or skipping the others. */
 @Injectable()
 export class ProblemEvents {
   private readonly logger = new Logger(ProblemEvents.name);

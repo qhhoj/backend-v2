@@ -108,7 +108,7 @@ export class Contest {
   @Prop({ type: [UUID], default: [] }) bannedUsers!: string[];
   /** Judge names (judges are never renamed; commands and dispatch use names). */
   @Prop({ type: [String], default: [] }) bannedJudges!: string[];
-  /** sha256 hex; checked by the public ranking links (4b). */
+  /** sha256 hex; checked by the public ranking links. */
   @Prop({ type: String, default: null, match: SHA256_HEX })
   rankingAccessCodeHash!: string | null;
   @Prop({ type: String, default: 'V', enum: SCOREBOARD_VISIBILITIES })

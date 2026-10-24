@@ -89,7 +89,7 @@ export class ProblemLifecycleService {
     await this.notifyEffects(problem, 'deleted');
   }
 
-  /** The contest check above and `markDeleted` are two steps, so a contest edit can add the problem between them (preflight M12): check again and undo. */
+  /** The contest check above and `markDeleted` are two steps, so a contest edit can add the problem between them: check again and undo. */
   private async rollBackIfAdded(problem: ProblemDocument): Promise<void> {
     if (!(await this.contests.isProblemInAnyContest(problem._id))) return;
     await this.problems.restore(problem._id);

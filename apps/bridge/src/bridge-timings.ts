@@ -27,7 +27,7 @@ export interface BridgeTimings {
 
 export const BRIDGE_TIMINGS = Symbol('BRIDGE_TIMINGS');
 
-/** Spec §3.8: Hello 15 s, idle 60 s, a ping every 10 s, Accepted 20 s, resync 30 s, resume grace 30 s. */
+/** Judge link timings: Hello 15 s, idle 60 s, a ping every 10 s, Accepted 20 s, resync 30 s, resume grace 30 s. */
 export const DEFAULT_BRIDGE_TIMINGS: BridgeTimings = {
   handshakeMs: 15_000,
   idleMs: 60_000,

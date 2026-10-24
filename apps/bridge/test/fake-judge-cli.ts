@@ -52,7 +52,7 @@ async function passGate(stage: 'ack' | 'begin' | 'end'): Promise<void> {
   while (await exists(gate)) await sleep(GATE_POLL_MS);
 }
 
-/** Runs the bridge aborted; each answers Final ABORTED, accepted or not, as judge-v2 does (preflight C2: the bridge frees the slot on it). */
+/** Runs the bridge aborted; each answers Final ABORTED, accepted or not, as judge-v2 does (the bridge frees the slot on it). */
 const aborted = new Set<string>();
 
 async function grade(judge: FakeJudge, assign: Assign): Promise<void> {

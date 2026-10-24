@@ -21,7 +21,7 @@ export type EffectsProblem = Pick<
 
 export type ProblemStats = Pick<Problem, 'userCount' | 'acRate'>;
 
-/** Every Mongo read and write of the effects, the sweep and the rescore (Task 4 adds its own rows). Recomputes read, never increment. */
+/** Every Mongo read and write of the effects, the sweep and the rescore. Recomputes read, never increment. */
 @Injectable()
 export class SubmissionEffectsRepository {
   constructor(

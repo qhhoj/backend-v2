@@ -150,7 +150,7 @@ export async function setupBridgeTest({
     },
     /** The port the current module's judge server listens on (`JUDGE_BRIDGE_PORT=0`). */
     judgePort: () => current.get(JudgeLinkServer).port(),
-    /** Nothing consumes the queue in 2a, so every job waits. */
+    /** The test module runs no graded-job consumer, so every job waits. */
     gradedJobs: async (): Promise<SubmissionGradedJob[]> =>
       (await graded().getJobs(['waiting'])).map((job) => job.data),
     /** Empties every collection and the Redis db; only between `stop()` and `start()` (conformance scenarios), so no timer of a running bridge sees it. */

@@ -50,7 +50,7 @@ export class SyncModule implements OnApplicationBootstrap {
     @Inject(ENV) private readonly env: Pick<Env, 'trustProxy'>,
   ) {}
 
-  /** Behind a proxy without `TRUST_PROXY`, `request.ip` is the proxy's address, so a client's CIDR check sees the proxy instead of the client (preflight M15). */
+  /** Behind a proxy without `TRUST_PROXY`, `request.ip` is the proxy's address, so a client's CIDR check sees the proxy instead of the client. */
   async onApplicationBootstrap(): Promise<void> {
     if (this.env.trustProxy !== false) return;
     if (!(await this.clients.countActive())) return;
