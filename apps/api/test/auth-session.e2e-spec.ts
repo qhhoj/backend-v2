@@ -411,6 +411,9 @@ describe('auth session endpoints', () => {
       null,
     );
     expect(session.user.username).toBe('wendy');
+    await expect(
+      auth.login('wendy', 'wrong password', '2001:db8:48:40::1', null),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
   });
 
   it('locks only the mistyped username on a shared address, never the whole classroom', async () => {
