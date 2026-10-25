@@ -6,7 +6,7 @@ import { context, row } from './scoring-fixtures';
 /**
  * A: 50 at +10m, 100 at +20m, 30 at +30m (worse but latest).
  * B: 0 at +5m.
- * C: 10 at -10m (before the participation start).
+ * C: 10 at -10m (before the participation start: timed at 0).
  */
 const rows = () => [
   row('A', 10, 50),
@@ -20,21 +20,21 @@ describe('default (legacy DefaultContestFormat)', () => {
   it('times each problem by its latest submission, best points, cumtime over scored problems clamped at 0', () => {
     expect(defaultFormat.score(rows(), {}, context())).toEqual({
       score: 110,
-      // A: 1800 (latest, not the best's 1200) + C: -600; B scores nothing.
-      cumtime: 1200,
+      // A: 1800 (latest, not the best's 1200) + C: 0; B scores nothing.
+      cumtime: 1800,
       tiebreaker: 0,
       formatData: {
         A: { time: 1800, points: 100 },
         B: { time: 300, points: 0 },
-        C: { time: -600, points: 10 },
+        C: { time: 0, points: 10 },
       },
       frozenScore: 110,
-      frozenCumtime: 1200,
+      frozenCumtime: 1800,
       frozenTiebreaker: 0,
       frozenFormatData: {
         A: { time: 1800, points: 100 },
         B: { time: 300, points: 0 },
-        C: { time: -600, points: 10 },
+        C: { time: 0, points: 10 },
       },
     });
   });
@@ -86,17 +86,17 @@ describe('ioi (legacy LegacyIOIContestFormat, "IOI (pre-2016)")', () => {
   it.each([
     // Best points per problem, timed at the first submission reaching them (A: +20m, not +30m).
     [{ cumtime: false, lastScoreAltering: false }, 0, 0],
-    [{ cumtime: true, lastScoreAltering: false }, 600, 0],
+    [{ cumtime: true, lastScoreAltering: false }, 1200, 0],
     // Without cumtime, legacy puts the last score-altering time in cumtime too.
     [{ cumtime: false, lastScoreAltering: true }, 1200, 1200],
-    [{ cumtime: true, lastScoreAltering: true }, 600, 1200],
+    [{ cumtime: true, lastScoreAltering: true }, 1200, 1200],
   ])('with %p: cumtime %p, tiebreaker %p', (config, cumtime, tiebreaker) => {
     const score = ioiFormat.score(rows(), config, context());
     expect(score).toMatchObject({ score: 110, cumtime, tiebreaker });
     expect(score.formatData).toEqual({
       A: { points: 100, time: 1200 },
       B: { points: 0, time: 0 },
-      C: { points: 10, time: -600 },
+      C: { points: 10, time: 0 },
     });
   });
 

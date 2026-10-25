@@ -15,7 +15,7 @@ import {
   validationPipe,
   withRedisLock,
 } from '@libs/common';
-import { contestPhase, LIVE } from '@libs/contests';
+import { contestPhase, LIVE, SPECTATE } from '@libs/contests';
 import { isLanguageActive, SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
 import type { Language } from '@libs/database';
 import {
@@ -23,6 +23,7 @@ import {
   submissionEvent,
   SubmissionEventsService,
 } from '@libs/judging';
+import { ContestAccess } from '../../contests/core/contest-access';
 import { ParticipationsRepository } from '../../contests/core/participations.repository';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
 import type { CurrentParticipation } from '../../contests/core/current-contest.service';
@@ -103,6 +104,19 @@ function assertExternalAllowed(
 }
 
 /** Legacy `ProblemSubmit.form_valid`; inside a current contest that lists the problem the submission is a contest submission (priority 0, lock, pretests, `maxSubmissions`, FSO pending). */
+/** Authors, curators, testers and contest editors (`judge.edit_all_contest`, or `edit_own_contest` as author or curator). */
+const isContestStaff = (
+  principal: Principal,
+  contest: CurrentParticipation['contest'],
+): boolean => {
+  const view = ContestAccess.accessView(contest);
+  return (
+    ContestAccess.isEditor(principal, view) ||
+    ContestAccess.isTester(principal, view) ||
+    ContestAccess.canEdit(principal, view)
+  );
+};
+
 @Injectable()
 export class SubmissionCreateService {
   constructor(
@@ -196,6 +210,7 @@ export class SubmissionCreateService {
         draft.language.key,
       );
     const plan = this.contestPlan(
+      principal,
       await this.currentContest.current(principal),
       draft.problem._id,
       new Date(),
@@ -304,8 +319,9 @@ export class SubmissionCreateService {
     }
   }
 
-  /** Legacy `form_valid` in a contest: only when the current contest lists the problem. */
+  /** Legacy `form_valid` in a contest: only when the current contest lists the problem. A spectator who is not contest staff (a contestant whose window ended) cannot submit to it until the contest ends (403 `spectator_cannot_submit`), then submits as practice; contest staff keep contest submissions on their spectator row (hidden, no standings effect), as in legacy. */
   private contestPlan(
+    principal: Principal,
     current: CurrentParticipation | null,
     problemId: string,
     now: Date,
@@ -315,6 +331,18 @@ export class SubmissionCreateService {
     );
     if (!current || !entry) return null;
     const { contest, participation } = current;
+    if (
+      participation.virtual === SPECTATE &&
+      !isContestStaff(principal, contest)
+    ) {
+      if (contestPhase(contest, now) !== 'ended')
+        throw new AppError(
+          'spectator_cannot_submit',
+          403,
+          'Spectators cannot submit during the contest',
+        );
+      return null;
+    }
     const isPretest = contest.runPretestsOnly && entry.isPretested;
     const isFinalFormat = contest.formatName === 'final_submission';
     const finalOnly = isFinalFormat && contestPhase(contest, now) !== 'ended';

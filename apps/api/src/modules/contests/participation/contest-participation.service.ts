@@ -411,7 +411,7 @@ export class ContestParticipationService {
     void notifyContestRescore(this.rescores, contest._id, this.logger);
   }
 
-  /** Legacy `check_ban`, off unless the `contest.banAfterDisqualifications` setting is above 0: at the threshold the account is banned (and unlisted, and signed out: `isActive` is what the session guard checks); below it, only this ban is lifted. */
+  /** Legacy `check_ban`, off unless the `contest.banAfterDisqualifications` setting is above 0: at the threshold the account is banned (and unlisted, and signed out: `isActive` is what the session guard checks); below it, only this ban is lifted, and the account is active again only if it was before the ban (as a manual unban). */
   private async checkCheatingBan(userId: string): Promise<void> {
     const limit = this.settings.get('contest.banAfterDisqualifications');
     if (!limit) return;
@@ -426,13 +426,15 @@ export class ContestParticipationService {
         displayRank: 'banned',
         isUnlisted: true,
         isActive: false,
+        isActiveBeforeBan: user.isActive,
       });
     else if (count < limit && user.banReason === CONTEST_CHEATING_BAN_REASON)
       await this.users.updateIfBanReason(userId, CONTEST_CHEATING_BAN_REASON, {
         banReason: null,
         displayRank: 'user',
         isUnlisted: false,
-        isActive: true,
+        isActive: user.isActiveBeforeBan ?? true,
+        isActiveBeforeBan: null,
       });
   }
 

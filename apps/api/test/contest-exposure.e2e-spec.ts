@@ -126,3 +126,33 @@ describe('P3-1 public heatmap', () => {
     expect(Object.values(activity.days)).toEqual([]);
   });
 });
+
+describe('public heatmap and problem visibility', () => {
+  it('counts practice submissions on public problems only, as solved does', async () => {
+    const practiser = await createUserWith(api, 'practiser32', {});
+    const problems = await Promise.all([
+      createProblem(api, catalog, { code: 'heat32_public' }),
+      createProblem(api, catalog, { code: 'heat32_private', isPublic: false }),
+      createProblem(api, catalog, {
+        code: 'heat32_members',
+        isOrganizationPrivate: true,
+      }),
+    ]);
+    for (const problem of problems)
+      await api.submissions.create({
+        user: practiser._id,
+        problem: problem._id,
+        language: catalog.languages.cpp,
+        status: 'D',
+        result: 'WA',
+        date: new Date(),
+      });
+    const activity = dataOf<ActivityResponse>(
+      await api
+        .http()
+        .get('/api/internal/users/practiser32/activity?timezone=UTC')
+        .expect(200),
+    );
+    expect(Object.values(activity.days)).toEqual([1]);
+  });
+});

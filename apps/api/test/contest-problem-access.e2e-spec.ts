@@ -248,7 +248,7 @@ describe('contest-only problem access', () => {
     expect(await hasEditorial()).toBe(true);
   });
 
-  it('hides testcaseVisibility C output while in a contest only', async () => {
+  it('hides testcaseVisibility C output while in a contest, and on a contest submission until its contest ends', async () => {
     const outputProblem = await createProblem(api, catalog, {
       code: 'c_output',
       testcaseVisibility: 'C',
@@ -274,16 +274,33 @@ describe('contest-only problem access', () => {
       language: catalog.languages.cpp,
       cases,
     });
-    const firstCase = async () =>
+    const firstCase = async (id = stored._id) =>
       dataOf<{ cases: Array<Record<string, unknown>> }>(
         await authed(
-          api.http().get(`/api/internal/submissions/${stored._id}`),
+          api.http().get(`/api/internal/submissions/${id}`),
           session,
         ).expect(200),
       ).cases[0];
     await makeCurrent(api, userId, null);
     expect(await firstCase()).toMatchObject({ output: '42' });
-    await enter((await createContest(api))._id);
+    const contest = await createContest(api, {
+      problems: [contestProblem(outputProblem._id, 0)],
+    });
+    await enter(contest._id);
     expect(await firstCase()).not.toHaveProperty('output');
+    const inContest = await seedSubmission(api, {
+      user: userId,
+      problem: outputProblem._id,
+      language: catalog.languages.cpp,
+      contest: contest._id,
+      cases,
+    });
+    await makeCurrent(api, userId, null);
+    expect(await firstCase(inContest._id)).not.toHaveProperty('output');
+    await api.contests.updateOne(
+      { _id: contest._id },
+      { endTime: hoursFromNow(-0.5) },
+    );
+    expect(await firstCase(inContest._id)).toMatchObject({ output: '42' });
   });
 });

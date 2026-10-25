@@ -796,3 +796,13 @@ afterAll(() => api.teardown());
     );
   });
 }
+
+describe('GET /api/internal/site', () => {
+  afterEach(() => api.setSetting('site.timeZone', 'Asia/Ho_Chi_Minh'));
+
+  it('serves the site time zone setting, so the app reads and types dates in it', async () => {
+    await api.setSetting('site.timeZone', 'Asia/Tokyo');
+    const response = await api.http().get('/api/internal/site').expect(200);
+    expect(dataOf(response)).toMatchObject({ timeZone: 'Asia/Tokyo' });
+  });
+});
