@@ -386,6 +386,36 @@ describe('auth session endpoints', () => {
     expect(session.user.username).toBe('victor');
   });
 
+  it('caps failures per account across the /64s of one IPv6 /48, without locking the account from another network', async () => {
+    await createUser(api.users, {
+      username: 'wendy',
+      email: 'wendy@example.com',
+    });
+    const auth = api.app.get(AuthService);
+    const codes: string[] = [];
+    for (let subnet = 0; subnet < 40; subnet++)
+      codes.push(
+        await auth
+          .login('wendy', 'wrong password', `2001:db8:48:${subnet}::1`, null)
+          .then(
+            () => 'signed_in',
+            (error: AppError) => error.code,
+          ),
+      );
+    expect(codes.slice(0, 30)).toEqual(Array(30).fill('invalid_credentials'));
+    expect(codes.slice(30)).toEqual(Array(10).fill('rate_limited'));
+    const session = await auth.login(
+      'wendy',
+      'correct horse battery',
+      '2001:db8:49:1::1',
+      null,
+    );
+    expect(session.user.username).toBe('wendy');
+    await expect(
+      auth.login('wendy', 'wrong password', '2001:db8:48:40::1', null),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
+  });
+
   it('locks only the mistyped username on a shared address, never the whole classroom', async () => {
     const auth = api.app.get(AuthService);
     const classroom = '192.0.2.10';

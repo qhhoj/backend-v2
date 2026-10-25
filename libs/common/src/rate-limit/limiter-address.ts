@@ -55,15 +55,20 @@ export function limiterAddress(ip: string | undefined): string {
 }
 
 /**
- * The network of `limiterAddress`'s address, for fairness between networks: an IPv4 address's /24
- * (`203.0.113.0/24`) and an IPv6 address's /48 (`2001:db8:1::/48`), the most one site or tunnel is handed.
- * Anything else is returned unchanged (a missing address as `''`).
+ * The network of `limiterAddress`'s address: an IPv6 address's /48 (`2001:db8:1::/48`), the most one site or tunnel is
+ * handed, and an IPv4 address's /24 (`203.0.113.0/24`), for fairness between networks. With `ipv4: 'address'` an IPv4
+ * address stays itself, for budgets a whole /24 (a carrier's shared pool) must not spend together. Anything else is
+ * returned unchanged (a missing address as `''`).
  */
-export function limiterNetwork(ip: string | undefined): string {
+export function limiterNetwork(
+  ip: string | undefined,
+  { ipv4 = 'subnet' }: { ipv4?: 'subnet' | 'address' } = {},
+): string {
   const text = ip ?? '';
   const parsed = parseAddress(text);
   if (!parsed) return text;
-  return 'ipv4' in parsed
-    ? `${parsed.ipv4.slice(0, 3).join('.')}.0/24`
-    : ipv6Prefix(parsed.ipv6, 48);
+  if ('ipv6' in parsed) return ipv6Prefix(parsed.ipv6, 48);
+  return ipv4 === 'address'
+    ? parsed.ipv4.join('.')
+    : `${parsed.ipv4.slice(0, 3).join('.')}.0/24`;
 }

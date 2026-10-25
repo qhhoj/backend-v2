@@ -17,6 +17,7 @@ import {
   AppError,
   ENV,
   limiterAddress,
+  limiterNetwork,
   RateLimitService,
   ValidationFailedError,
 } from '@libs/common';
@@ -26,6 +27,7 @@ import type { Env } from '@libs/common';
 import {
   FAILURE_IP_LIMIT,
   FAILURE_LIMIT,
+  FAILURE_NETWORK_LIMIT,
   FAILURE_WINDOW_SECONDS,
   SUCCESS_ACCOUNT_LIMIT,
   SUCCESS_IP_LIMIT,
@@ -64,13 +66,18 @@ export class AuthService {
     const user = await this.users.findByUsername(username);
     const address = limiterAddress(ip);
     // The tight budget is per (account, address): typos lock only that username from that address, and failures from
-    // elsewhere never lock the owner out; the address ceiling brakes spraying across many usernames.
+    // elsewhere never lock the owner out; the per-(account, network) budget caps one site's addresses together, and the
+    // address ceiling brakes spraying across many usernames.
     const account = user
       ? `user:${user._id}`
       : `name:${username.normalize('NFKC').toLowerCase()}`;
     const failureBudgets = [
       { key: `login:ip:${address}`, limit: FAILURE_IP_LIMIT },
       { key: `login:${account}:ip:${address}`, limit: FAILURE_LIMIT },
+      {
+        key: `login:${account}:net:${limiterNetwork(ip, { ipv4: 'address' })}`,
+        limit: FAILURE_NETWORK_LIMIT,
+      },
     ];
     const successBudgets = [
       loginSuccessIpBudget(address),
