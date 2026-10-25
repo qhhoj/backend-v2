@@ -197,15 +197,27 @@ export class DispatcherService {
     await this.offerWork(judge);
   }
 
-  /** The session could not store the run's Final (Mongo kept failing). The judge already finished the run, so its slot is free at once (never `winding`: no Final follows). The row goes back to the queue, free twice since the last rejudge, then spending a RETRY each, IE once those are spent (`RunsService.requeueUnstored`); if that write fails too, the resync's stranded-run reset requeues it, as no session holds it any more. */
+  /** The session could not store the run's Final (Mongo kept failing). The judge already finished the run, so its slot is free at once (never `winding`: no Final follows). A run the user aborted ends AB (held in grace again while that write fails); any other goes back to the queue (`requeueUnstored`). */
   async finalNotStored(
     judge: DispatchTarget,
     ref: AssignmentRef,
   ): Promise<void> {
     if (judge.inFlight.get(ref.submissionId) !== ref.generation) return;
+    const abortRequested = this.abortsRequested.has(windingKey(ref));
     judge.inFlight.delete(ref.submissionId);
     this.abortsRequested.delete(windingKey(ref));
     this.clearDeadline(ref);
+    if (abortRequested)
+      await this.graceExpired({ ref, judgeName: judge.name, abortRequested });
+    else await this.requeueUnstored(judge, ref);
+    await this.offerWork(judge);
+  }
+
+  /** Back to the queue, free twice since the last rejudge, then spending a RETRY each, IE once those are spent (`RunsService.requeueUnstored`); if that write fails too, the resync's stranded-run reset requeues it, as no session holds it any more. */
+  private async requeueUnstored(
+    judge: DispatchTarget,
+    ref: AssignmentRef,
+  ): Promise<void> {
     try {
       if (await this.runs.requeueUnstored(ref, judge.name))
         await this.dispatchRequeued(ref.submissionId);
@@ -214,7 +226,6 @@ export class DispatcherService {
         `Requeuing submission ${runOf(ref)} after its lost Final failed, the resync requeues it: ${(error as Error).message}`,
       );
     }
-    await this.offerWork(judge);
   }
 
   /** Whether the api aborted this held run: its judge's Final RETRY then ends it AB instead of requeuing it. */

@@ -1011,6 +1011,18 @@ describe('DispatcherService', () => {
     expect(judge.assigned).toHaveLength(2);
   });
 
+  it('ends a user-aborted run as AB when its Final was not stored, without handing it out again', async () => {
+    const judge = await online(new Target('j1', 1));
+    const submission = entry();
+    await queue(submission);
+    const ref = { submissionId: submission.id, generation: 1 };
+    dispatcher.abort(submission.id);
+    await dispatcher.finalNotStored(judge, ref);
+    expect(expired).toEqual([{ ref, abortRequested: true }]);
+    expect(judge.assigned).toHaveLength(1);
+    expect(judge.inFlight.size).toBe(0);
+  });
+
   it('keeps a run whose Final is being stored when a resync reads the row its RETRY just requeued: no Abort, no winding slot', async () => {
     const judge = await online(new Target('j1', 1));
     const submission = entry();

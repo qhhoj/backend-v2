@@ -90,6 +90,7 @@ type ClaimedSubmission = Pick<
 interface JudgingInputs {
   problem: Pick<
     Problem,
+    | 'code'
     | 'timeLimit'
     | 'memoryLimit'
     | 'partial'
@@ -103,9 +104,14 @@ interface JudgingInputs {
   contestMeta: ContestMeta | undefined;
 }
 
-/** What a claimed run adds to `JudgingInputs`. */
-interface RunInputs extends JudgingInputs {
+/** The code and data version judges know a problem's data by: its mirror root's for a mirror. */
+interface JudgedData {
+  problemCode: string;
   dataVersion: number;
+}
+
+/** What a claimed run adds to `JudgingInputs`: the judged data read at the claim, so a rename while the row was queued reaches the Assign. */
+interface RunInputs extends JudgingInputs, JudgedData {
   fileOnly: boolean;
   sourceSize: number;
 }
@@ -132,7 +138,7 @@ function assignRequest(
   const limit = languageLimitOf(problem, submission.language);
   return {
     ref: { submissionId: queued.id, generation: submission.judgeGeneration },
-    problemCode: queued.problemCode,
+    problemCode: inputs.problemCode,
     dataVersion: inputs.dataVersion,
     languageKey: queued.languageKey,
     source: inputs.source,
@@ -457,24 +463,27 @@ export class SubmissionsRepository {
     const inputs = await this.loadJudgingInputs(submissionId, submission);
     if (!inputs) return null;
     const fileOnly = inputs.language?.fileOnly ?? false;
-    const [dataVersion, sourceSize] = await Promise.all([
-      this.judgedDataVersion(inputs.problem),
+    const [judged, sourceSize] = await Promise.all([
+      this.judgedDataOf(inputs.problem),
       this.sourceSizeOf(inputs.source, fileOnly),
     ]);
-    return sourceSize === null
+    return judged === null || sourceSize === null
       ? null
-      : { ...inputs, dataVersion, fileOnly, sourceSize };
+      : { ...inputs, ...judged, fileOnly, sourceSize };
   }
 
-  /** A mirror is judged with its root's data, so it carries the root's version. */
-  private async judgedDataVersion(
-    problem: Pick<Problem, 'dataVersion' | 'mirrorRoot'>,
-  ): Promise<number> {
-    if (!problem.mirrorRoot) return problem.dataVersion ?? 0;
-    const root = await this.problems
-      .findById(problem.mirrorRoot, { dataVersion: 1 })
-      .lean();
-    return root?.dataVersion ?? 0;
+  /** A mirror is judged with its root's data, so it carries the root's code and version; null when that root is gone. */
+  private async judgedDataOf(
+    problem: Pick<Problem, 'code' | 'dataVersion' | 'mirrorRoot'>,
+  ): Promise<JudgedData | null> {
+    const judged = problem.mirrorRoot
+      ? await this.problems
+          .findById(problem.mirrorRoot, { code: 1, dataVersion: 1 })
+          .lean()
+      : problem;
+    return judged
+      ? { problemCode: judged.code, dataVersion: judged.dataVersion ?? 0 }
+      : null;
   }
 
   /** Bytes of an inline source, or of the uploaded file (a regular file under MEDIA_ROOT/submission_file); null when the file is not there. */
@@ -524,6 +533,7 @@ export class SubmissionsRepository {
       await Promise.all([
         this.problems
           .findById(submission.problem, {
+            code: 1,
             timeLimit: 1,
             memoryLimit: 1,
             partial: 1,

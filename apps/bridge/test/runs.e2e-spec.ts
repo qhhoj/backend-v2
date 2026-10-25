@@ -180,6 +180,21 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
     });
   });
 
+  it('assigns under the code the problem has at the claim, not the one the queued entry was read with', async () => {
+    const { problem, queued } = await queuedRow({ dataVersion: 3 });
+    // renamed while the row waited in the bridge queue (the data directory moves with the code)
+    const renamed = nextCode();
+    await bridge.problems.updateOne(
+      { _id: problem._id },
+      { $set: { code: renamed } },
+    );
+    const claim = await repository.claimRun(queued, JUDGE);
+    expect(claim && 'request' in claim && claim.request).toMatchObject({
+      problemCode: renamed,
+      dataVersion: 3,
+    });
+  });
+
   it("asks for the judge features its (root's) data needs: a Polygon interactive checker, checker headers, or interactor percentages", async () => {
     const interactive = await seedProblem(bridge, catalog, {
       code: nextCode(),
