@@ -122,8 +122,8 @@ describe('External judge routes', () => {
       const user = await createUserWith(api, name, extra);
       return { user, session: await loginAs(api, user._id) };
     };
-    admin = (await session('admin', { permissions: ['judge.change_settings'] }))
-      .session;
+    // The external judge settings are superuser-only (decision 416).
+    admin = (await session('admin', { isSuperuser: true })).session;
     const editorLogin = await session('editor', {
       permissions: ['judge.edit_own_problem'],
     });

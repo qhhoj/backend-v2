@@ -38,6 +38,7 @@ import { ContestsRepository } from '../core/contests.repository';
 import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
 import { CurrentContestService } from '../core/current-contest.service';
+import { FeedKeysRepository } from '../feed/feed-keys.repository';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
 import type {
   BulkDisqualifyDto,
@@ -116,6 +117,7 @@ export class ContestParticipationService {
     @Inject(REDIS) private readonly redis: Redis,
     private readonly settings: SettingsService,
     private readonly sessions: SessionService,
+    private readonly feedKeys: FeedKeysRepository,
   ) {}
 
   async register(
@@ -449,8 +451,10 @@ export class ContestParticipationService {
         isActiveBeforeBan: user.isActive,
         apiTokenHash: null,
       })
-    )
+    ) {
       await this.sessions.destroyAllForUser(user._id);
+      await this.feedKeys.revokeMintedBy(user._id, new Date());
+    }
   }
 
   async leave(principal: Principal, key: string): Promise<void> {

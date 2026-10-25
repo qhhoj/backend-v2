@@ -52,11 +52,15 @@ describe('contest event feed', () => {
   const users: Record<string, { _id: string }> = {};
   const problems: Array<{ _id: string }> = [];
   const url = (contest: Contest) => contestUrl(contest.key, '/feed');
-  const mint = async (contest: Contest, body: object = {}) =>
+  const mint = async (
+    contest: Contest,
+    body: object = {},
+    session = sessions.editor,
+  ) =>
     dataOf<MintedFeedKeyResponse>(
       await authed(
         api.http().post(contestUrl(contest.key, '/feed-key')).send(body),
-        sessions.editor,
+        session,
       ).expect(201),
     ).key;
   const fetchFeed = async (
@@ -257,6 +261,45 @@ describe('contest event feed', () => {
       .set('X-Forwarded-For', '198.51.100.99')
       .expect(429);
     expect(locked.status).toBe(429);
+  });
+
+  it('refuses a key whose owner was banned or deactivated, also once the account is back', async () => {
+    const owner = await createUserWith(api, 'feed-owner', {
+      permissions: ['judge.edit_own_contest'],
+    });
+    const moderator = await createUserWith(api, 'feed-moderator', {
+      permissions: [
+        'judge.ban_user',
+        'judge.change_profile',
+        'auth.change_user',
+      ],
+    });
+    const { contest } = await seed({ authors: [owner._id] });
+    const moderation = await loginAs(api, moderator._id);
+    const moderate = (action: string) =>
+      authed(
+        api.http().post(`/api/internal/users/feed-owner/${action}`),
+        moderation,
+      )
+        .send({ reason: 'test ban' })
+        .expect(204);
+    const setActive = (isActive: boolean) =>
+      authed(
+        api.http().patch('/api/internal/admin/users/feed-owner/profile'),
+        moderation,
+      )
+        .send({ isActive })
+        .expect(200);
+    const refused = (key: string) =>
+      api.http().get(url(contest)).set('Authorization', basic(key)).expect(401);
+    const banned = await mint(contest, {}, await loginAs(api, owner._id));
+    await moderate('ban');
+    await moderate('unban');
+    await refused(banned);
+    const deactivated = await mint(contest, {}, await loginAs(api, owner._id));
+    await setActive(false);
+    await setActive(true);
+    await refused(deactivated);
   });
 
   it('cuts the feed at the freeze until the key is released, the contest unfreezes, or the key is live', async () => {

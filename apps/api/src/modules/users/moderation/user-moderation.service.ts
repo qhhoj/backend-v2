@@ -4,6 +4,7 @@ import type { Principal, UserDocument } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { CONTEST_CHEATING_BAN_REASON } from '../../contests/participation/contest-participation.service';
+import { FeedKeysRepository } from '../../contests/feed/feed-keys.repository';
 
 @Injectable()
 export class UserModerationService {
@@ -11,9 +12,10 @@ export class UserModerationService {
     private readonly users: UsersRepository,
     private readonly sessions: SessionService,
     private readonly revisions: RevisionsRepository,
+    private readonly feedKeys: FeedKeysRepository,
   ) {}
 
-  /** Legacy `Profile.ban_user`, plus every session and the API token revoked (the guard also rejects inactive users on the next request), so an unban brings neither back; the active flag is remembered for `unban`. Audit-logged as a `user` revision. */
+  /** Legacy `Profile.ban_user`, plus every session, the API token and the contest feed keys the user minted revoked (the guard also rejects inactive users on the next request), so an unban brings none of them back; the active flag is remembered for `unban`. Audit-logged as a `user` revision. */
   async ban(
     principal: Principal,
     username: string,
@@ -36,6 +38,7 @@ export class UserModerationService {
     )
       throw new AppError('conflict', 409, 'That user is already banned');
     await this.sessions.destroyAllForUser(user._id);
+    await this.feedKeys.revokeMintedBy(user._id, new Date());
     await this.auditBan(principal, user, 'ban', {
       reason,
       isActive: false,

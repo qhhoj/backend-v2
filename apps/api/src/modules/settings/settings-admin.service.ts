@@ -13,27 +13,21 @@ import {
 import type { SettingKey } from '@libs/settings';
 import { SettingResponse } from './dto/setting.response';
 import { SettingRevisionResponse } from './dto/setting-revision.response';
-
-/** Decision 416: `judge.change_settings` is operator-grade, but these keys hold mail credentials, sign-in and the role every organization admin gets, so only a superuser may change them. */
-const isSuperuserOnly = (key: SettingKey): boolean =>
-  key === 'mail.smtpUrl' ||
-  key === 'organization.adminRoleId' ||
-  key.startsWith('auth.');
-
-const superuserOnly = () => {
-  const message = 'Only a superuser may change this setting';
-  return new AppError('forbidden', 403, message, undefined, undefined, {
-    issues: [{ field: 'key', code: 'superuser_only', message }],
-  });
-};
+import {
+  assertSettingAccess,
+  isSettingVisibleTo,
+} from './superuser-only-settings';
 
 @Injectable()
 export class SettingsAdminService {
   constructor(private readonly settings: SettingsService) {}
 
-  async list(): Promise<SettingResponse[]> {
+  /** Superuser-only keys are left out for other users. */
+  async list(actor: Principal): Promise<SettingResponse[]> {
     const rows = await this.settings.rows();
-    return SETTING_KEYS.map((key) => this.view(key, rows.get(key)));
+    return SETTING_KEYS.filter((key) => isSettingVisibleTo(key, actor)).map(
+      (key) => this.view(key, rows.get(key)),
+    );
   }
 
   async update(
@@ -41,7 +35,7 @@ export class SettingsAdminService {
     value: unknown,
     actor: Principal,
   ): Promise<SettingResponse> {
-    const known = this.writable(key, actor);
+    const known = this.accessible(key, actor);
     try {
       await this.settings.set(known, value, actor.userId);
     } catch (error) {
@@ -58,7 +52,7 @@ export class SettingsAdminService {
     revisionId: string,
     actor: Principal,
   ): Promise<SettingResponse> {
-    const known = this.writable(key, actor);
+    const known = this.accessible(key, actor);
     const revision = await this.settings.revisionOf(known, revisionId);
     if (!revision) throw new AppError('not_found', 404, 'No such revision');
     const value = restorableValue(definitionOf(known)!, revision.before);
@@ -71,9 +65,14 @@ export class SettingsAdminService {
     return this.update(known, value, actor);
   }
 
-  async revisions(key: string, page: number, pageSize: number) {
+  async revisions(
+    key: string,
+    actor: Principal,
+    page: number,
+    pageSize: number,
+  ) {
     const { items, total } = await this.settings.revisionsOf(
-      this.known(key),
+      this.accessible(key, actor),
       page,
       pageSize,
     );
@@ -96,9 +95,9 @@ export class SettingsAdminService {
     return key as SettingKey;
   }
 
-  private writable(key: string, actor: Principal): SettingKey {
+  private accessible(key: string, actor: Principal): SettingKey {
     const known = this.known(key);
-    if (isSuperuserOnly(known) && !actor.isSuperuser) throw superuserOnly();
+    assertSettingAccess(known, actor);
     return known;
   }
 

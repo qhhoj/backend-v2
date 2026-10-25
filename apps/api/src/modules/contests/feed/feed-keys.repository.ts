@@ -63,6 +63,16 @@ export class FeedKeysRepository {
     return modifiedCount;
   }
 
+  /** Every unrevoked key `userId` minted, in any contest: a ban ends them, so an unban does not bring them back. */
+  async revokeMintedBy(userId: string, now: Date): Promise<void> {
+    await this.keys
+      .updateMany(
+        { createdBy: userId, revokedAt: null },
+        { $set: { revokedAt: now } },
+      )
+      .exec();
+  }
+
   /** Idempotent: a key released already keeps its first release time. */
   async release(keyId: string, now: Date): Promise<void> {
     await this.keys
