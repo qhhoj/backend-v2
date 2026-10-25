@@ -62,6 +62,7 @@ export const CLONE_COPIED_FIELDS = [
   'organizations',
   'isManuallyManaged',
   'isFullMarkup',
+  'isDescriptionMarkupTrusted',
   'typeIds',
   'groupId',
   'licenseId',

@@ -52,7 +52,9 @@ export class BlogEditingController {
    * edit. Authors can only be changed with `judge.edit_all_post`, and the flag
    * and staff fields follow the permissions listed for creating. A revision
    * records the difference. Hiding or showing a post alone with
-   * `judge.edit_all_post` skips the write limit and the contest lock.
+   * `judge.edit_all_post` skips the write limit and the contest lock. A post
+   * that a `judge.edit_all_post` holder other than its authors hid becomes
+   * visible again only through `judge.edit_all_post` (403 otherwise).
    */
   @Patch(':id')
   edit(

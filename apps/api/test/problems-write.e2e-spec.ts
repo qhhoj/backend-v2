@@ -391,7 +391,7 @@ afterAll(() => api.teardown());
       expect(readFileSync(join(leftover, '.data-version'), 'utf8')).toBe('7\n');
       rmSync(leftover, { recursive: true, force: true });
     });
-    it('emits publicityChanged with the suggester and re-renders every statement when isFullMarkup flips', async () => {
+    it('emits publicityChanged with the suggester and renders statement text unsanitized only from a problem_full_markup writer', async () => {
       const problem = await createProblem(api, catalog, {
         code: 'flip',
         isPublic: false,
@@ -420,6 +420,12 @@ afterAll(() => api.teardown());
       ]);
       let stored = (await api.problems.findOne({ code: 'flip' }))!;
       expect(stored.descriptionHtml).toContain('<script>');
+      // Stored without a writer holding the permission: the flip keeps it sanitized.
+      expect(stored.translations[0].descriptionHtml).not.toContain('<script>');
+      await authed(api.http().put(`${PROBLEMS}/flip/translations/vi`), admin)
+        .send({ name: 'Lật', description: '<script>1</script>' })
+        .expect(204);
+      stored = (await api.problems.findOne({ code: 'flip' }))!;
       expect(stored.translations[0].descriptionHtml).toContain('<script>');
       await authed(api.http().patch(`${PROBLEMS}/flip`), admin)
         .send({ isFullMarkup: false })

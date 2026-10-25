@@ -27,7 +27,12 @@ import {
 import { ProblemEvents } from '../core/problem.events';
 import { problemChargeSubject } from '../quota/problem-charge-subject';
 import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';
-import { renderField, styleOf } from './problem-markup';
+import {
+  isTrustedMarkupWriter,
+  markupTrustAfterSave,
+  renderField,
+  styleOf,
+} from './problem-markup';
 import {
   ProblemsRepository,
   type ProblemDocument,
@@ -56,11 +61,43 @@ interface ProblemEdit {
   isStatementRerendered: boolean;
 }
 
-/** Renders into `fields` (mutating it): the description when it or the markup mode changed, and every translation when the mode flipped; true when anything was rendered. */
+/** The description's trust after this edit (see `markupTrustAfterSave`); a description left out keeps its trust. */
+function descriptionTrustAfterEdit(
+  fields: ProblemFields,
+  original: ProblemDocument,
+  isWriterTrusted: boolean,
+): boolean {
+  const wasTrusted = original.isDescriptionMarkupTrusted ?? false;
+  if (fields.description === undefined) return wasTrusted;
+  return markupTrustAfterSave({
+    isWriterTrusted,
+    isTextChanged: fields.description !== original.description,
+    wasTrusted,
+  });
+}
+
+/** Every translation rendered again for the markup `mode`, each by its own trust. */
+const rerenderedTranslations = (
+  translations: Problem['translations'],
+  mode: Pick<Problem, 'isFullMarkup'>,
+): Problem['translations'] =>
+  translations.map((translation) => ({
+    ...translation,
+    descriptionHtml: renderField(
+      translation.description,
+      styleOf(mode, translation.isMarkupTrusted ?? false),
+      'translations',
+    ),
+  }));
+
+/** Renders into `fields` (mutating it): the description when it, its trust or the markup mode changed, and every translation (each by its own trust) when the mode flipped; true when anything was rendered. */
 function renderStatementsInto(
   fields: ProblemFields,
   original: ProblemDocument,
-  translations: Problem['translations'],
+  {
+    translations,
+    isWriterTrusted,
+  }: { translations: Problem['translations']; isWriterTrusted: boolean },
 ): boolean {
   const isMarkupFlipped =
     fields.isFullMarkup !== undefined &&
@@ -68,24 +105,27 @@ function renderStatementsInto(
   const isDescriptionChanged =
     fields.description !== undefined &&
     fields.description !== original.description;
-  if (!isDescriptionChanged && !isMarkupFlipped) return false;
-  const style = styleOf({
-    isFullMarkup: fields.isFullMarkup ?? original.isFullMarkup,
-  });
+  const isDescriptionTrusted = descriptionTrustAfterEdit(
+    fields,
+    original,
+    isWriterTrusted,
+  );
+  const wasTrusted = original.isDescriptionMarkupTrusted ?? false;
+  if (
+    !isDescriptionChanged &&
+    !isMarkupFlipped &&
+    isDescriptionTrusted === wasTrusted
+  )
+    return false;
+  const mode = { isFullMarkup: fields.isFullMarkup ?? original.isFullMarkup };
+  fields.isDescriptionMarkupTrusted = isDescriptionTrusted;
   fields.descriptionHtml = renderField(
     fields.description ?? original.description,
-    style,
+    styleOf(mode, isDescriptionTrusted),
     'description',
   );
   if (isMarkupFlipped)
-    fields.translations = translations.map((translation) => ({
-      ...translation,
-      descriptionHtml: renderField(
-        translation.description,
-        style,
-        'translations',
-      ),
-    }));
+    fields.translations = rerenderedTranslations(translations, mode);
   return true;
 }
 
@@ -156,12 +196,17 @@ export class ProblemEditingService {
     fields: ProblemFields,
     mode: 'create' | 'suggest',
   ): Promise<ProblemDocument> {
+    const isDescriptionMarkupTrusted = isTrustedMarkupWriter(principal);
     return withCodeTaken(() =>
       this.repository.create({
         ...fields,
+        isDescriptionMarkupTrusted,
         descriptionHtml: renderField(
           fields.description ?? '',
-          styleOf({ isFullMarkup: fields.isFullMarkup ?? false }),
+          styleOf(
+            { isFullMarkup: fields.isFullMarkup ?? false },
+            isDescriptionMarkupTrusted,
+          ),
           'description',
         ),
         date: fields.date ?? new Date(),
@@ -215,11 +260,10 @@ export class ProblemEditingService {
     });
     await this.policy.assertReferences(problemDto);
     await this.assertDataDirectoryFree(fields, original);
-    const isStatementRerendered = renderStatementsInto(
-      fields,
-      original,
-      originalJson.translations as Problem['translations'],
-    );
+    const isStatementRerendered = renderStatementsInto(fields, original, {
+      translations: originalJson.translations as Problem['translations'],
+      isWriterTrusted: isTrustedMarkupWriter(principal),
+    });
     const updated = await this.save(principal, original, fields);
     const changes = fieldDiff(
       withoutRenderedHtml(originalJson),

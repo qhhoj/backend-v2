@@ -1,3 +1,5 @@
+import { hasPermission } from '@libs/auth';
+import type { Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
 import type { Problem } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
@@ -19,7 +21,27 @@ export function renderField(
   }
 }
 
-/** The one place that maps a problem to its statement render style. */
-export function styleOf(problem: Pick<Problem, 'isFullMarkup'>): RenderStyle {
-  return problem.isFullMarkup ? 'problem-full' : 'problem';
+/** The one place that maps a statement text to its render style: unsanitized (`problem-full`) only on a full-markup problem and only for text whose writer held `judge.problem_full_markup` (`isMarkupTrusted`). */
+export function styleOf(
+  problem: Pick<Problem, 'isFullMarkup'>,
+  isMarkupTrusted: boolean,
+): RenderStyle {
+  return problem.isFullMarkup && isMarkupTrusted ? 'problem-full' : 'problem';
+}
+
+/** Text written by a holder of `judge.problem_full_markup` is trusted: it may render unsanitized. */
+export const isTrustedMarkupWriter = (principal: Principal): boolean =>
+  hasPermission(principal, 'judge.problem_full_markup');
+
+/** Whether a statement text is trusted after a save: changed text takes its writer's permission; unchanged text stays trusted, and a writer holding the permission who saves it vouches for it. */
+export function markupTrustAfterSave({
+  isWriterTrusted,
+  isTextChanged,
+  wasTrusted,
+}: {
+  isWriterTrusted: boolean;
+  isTextChanged: boolean;
+  wasTrusted: boolean;
+}): boolean {
+  return isTextChanged ? isWriterTrusted : wasTrusted || isWriterTrusted;
 }

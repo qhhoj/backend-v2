@@ -8,7 +8,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isAllowedRequest } from './local-file-policy';
+import { isAllowedRequest, statementMediaPaths } from './local-file-policy';
 
 describe('isAllowedRequest', () => {
   const base = mkdtempSync(join(tmpdir(), 'qhhoj-policy-'));
@@ -45,5 +45,27 @@ describe('isAllowedRequest', () => {
     ['a malformed url', () => 'not a url'],
   ])('rejects %s', async (_label, url) => {
     expect(await isAllowedRequest(url(), [allowed, page])).toBe(false);
+  });
+});
+
+describe('statementMediaPaths', () => {
+  const mediaRoot = mkdtempSync(join(tmpdir(), 'qhhoj-media-'));
+  const fileIn = (folder: string) => join(mediaRoot, folder, 'file.png');
+  beforeAll(() => {
+    for (const folder of ['images', 'martor', 'submission_file', 'pdf']) {
+      mkdirSync(join(mediaRoot, folder));
+      writeFileSync(fileIn(folder), 'x');
+    }
+  });
+  afterAll(() => rmSync(mediaRoot, { recursive: true, force: true }));
+
+  it('lets a statement load its image folders only, never submission files', async () => {
+    const allowed = statementMediaPaths(mediaRoot);
+    const loads = async (folder: string) =>
+      isAllowedRequest(pathToFileURL(fileIn(folder)).href, allowed);
+    expect(await loads('images')).toBe(true);
+    expect(await loads('martor')).toBe(true);
+    expect(await loads('submission_file')).toBe(false);
+    expect(await loads('pdf')).toBe(false);
   });
 });

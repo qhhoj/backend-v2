@@ -27,7 +27,7 @@ describe('user activity rules', () => {
     expect(
       redactCredentials('https://oj.example/public-rankings/abc/extra'),
     ).toBe('https://oj.example/public-rankings/:token/extra');
-    for (const route of ['reset-password', 'activate'])
+    for (const route of ['public-ranking', 'reset-password', 'activate'])
       expect(redactCredentials(`https://oj.example/${route}/live-secret`)).toBe(
         `https://oj.example/${route}/:token`,
       );

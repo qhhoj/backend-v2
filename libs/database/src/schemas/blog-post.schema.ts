@@ -15,6 +15,8 @@ export class BlogPost {
   @Prop({ type: UUID, default: null }) organization!: string | null;
   /** Authors self-publish (legacy). */
   @Prop({ default: false }) visible!: boolean;
+  /** Set when `judge.edit_all_post` hides a post it does not author; while set, only `judge.edit_all_post` makes the post visible again. */
+  @Prop({ default: false }) isHiddenByModerator!: boolean;
   @Prop({ default: false }) sticky!: boolean;
   /** Shown on the homepage newsfeed. */
   @Prop({ default: false }) globalPost!: boolean;

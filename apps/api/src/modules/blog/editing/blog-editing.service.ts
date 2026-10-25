@@ -173,9 +173,10 @@ export class BlogEditingService {
       throw forbidden('Muted users cannot edit posts');
     this.assertFlags(principal, dto, post);
     this.assertStaffFields(principal, dto, post);
+    const hideMark = this.moderatorHideMark(principal, dto, post);
     if (!moderation) await this.reserveWrite(principal);
     const { authorIds, content, summary, publishOn, ...fields } = dto;
-    const changes: Partial<BlogPost> = { ...fields };
+    const changes: Partial<BlogPost> = { ...fields, ...hideMark };
     if (publishOn !== undefined) changes.publishOn = new Date(publishOn);
     if (content !== undefined)
       Object.assign(changes, this.renderedContent(content));
@@ -253,6 +254,27 @@ export class BlogEditingService {
         'judge.pin_post',
         'Pinning a post needs pin_post',
       );
+  }
+
+  /** A moderator's hide sticks: `edit_all_post` hiding a post it does not author marks it, and only `edit_all_post` makes a marked post visible again (clearing the mark). */
+  private moderatorHideMark(
+    principal: Principal,
+    dto: Pick<UpdatePostDto, 'visible'>,
+    post: Pick<BlogPost, 'authors' | 'isHiddenByModerator'>,
+  ): Partial<Pick<BlogPost, 'isHiddenByModerator'>> {
+    const isModerator = hasPermission(principal, 'judge.edit_all_post');
+    if (dto.visible === true && post.isHiddenByModerator) {
+      if (!isModerator)
+        throw forbidden(
+          'A moderator hid this post; only edit_all_post makes it visible again',
+        );
+      return { isHiddenByModerator: false };
+    }
+    const isModeratorHide =
+      dto.visible === false &&
+      isModerator &&
+      !post.authors.map(uuidStr).includes(principal.userId);
+    return isModeratorHide ? { isHiddenByModerator: true } : {};
   }
 
   /** `summary` and `ogImage` are staff fields: changing them needs `edit_all_post`. */

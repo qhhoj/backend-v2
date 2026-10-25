@@ -23,8 +23,13 @@ export const stripQuery = (url: string): string => {
   );
 };
 
-/** Routes whose last segment is a link credential (ranking link, password reset and activation emails): staff who read the log must not learn it. ONE list, for both the API path (`/api/internal/public-rankings/<token>`) and the SPA route that arrives as `Referer` (`/reset-password/<token>`). Add new link-credential routes here. Anchored after the origin so `/api/internal/auth/activate/resend` is left alone. */
-const CREDENTIAL_ROUTES = ['public-rankings', 'reset-password', 'activate'];
+/** Routes whose last segment is a link credential (ranking link, password reset and activation emails): staff who read the log must not learn it. ONE list, for both the API path (`/api/internal/public-rankings/<token>`) and the SPA route that arrives as `Referer` (`/reset-password/<token>`, and the legacy `/public-ranking/<token>` alias). Add new link-credential routes here. Anchored after the origin so `/api/internal/auth/activate/resend` is left alone. */
+const CREDENTIAL_ROUTES = [
+  'public-rankings',
+  'public-ranking',
+  'reset-password',
+  'activate',
+];
 const CREDENTIAL_ROUTE = new RegExp(
   `^((?:https?://[^/]+)?(?:/api/internal)?/(?:${CREDENTIAL_ROUTES.join('|')})/)[^/]+`,
   'i',

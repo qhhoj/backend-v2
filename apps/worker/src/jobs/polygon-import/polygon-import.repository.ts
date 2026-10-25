@@ -163,7 +163,12 @@ function statementFields(
     name: imported.name,
     description: imported.description,
     descriptionHtml: imported.descriptionHtml,
-    translations: imported.translations,
+    // Imported text renders sanitized and stays untrusted, whoever started the import.
+    isDescriptionMarkupTrusted: false,
+    translations: imported.translations.map((translation) => ({
+      ...translation,
+      isMarkupTrusted: false,
+    })),
     timeLimit: imported.timeLimit,
     memoryLimit: imported.memoryLimit,
     partial: imported.partial,
