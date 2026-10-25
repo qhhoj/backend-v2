@@ -12,6 +12,7 @@ import {
   ENV,
   limiterAddress,
   RateLimitService,
+  STREAM_ROUTE,
 } from '@libs/common';
 import { uuidStr, type IntegrationScope } from '@libs/database';
 import {
@@ -81,6 +82,7 @@ export class AuthGuard implements CanActivate {
     await this.authenticateAndRefreshCookie(
       request,
       http.getResponse<FastifyReply>(),
+      readRouteMetadata<boolean>(STREAM_ROUTE) === true,
     );
     if (readRouteMetadata<boolean>(PUBLIC_ROUTE)) return true;
     const { auth } = request;
@@ -194,16 +196,17 @@ export class AuthGuard implements CanActivate {
       throw new AppError('csrf_failed', 403, 'Cross-origin request rejected');
   }
 
-  /** Sets `request.auth` before the cookie refresh, so a failed refresh still leaves the request attributed. */
+  /** Sets `request.auth` before the cookie refresh, so a failed refresh still leaves the request attributed. A stream route skips the refresh: its reply is hijacked, so the cookie would never be sent while the day's refresh was spent. */
   private async authenticateAndRefreshCookie(
     request: FastifyRequest,
     reply: FastifyReply,
+    isStream: boolean,
   ): Promise<void> {
     request.auth =
       (await this.fromBearer(request)) ??
       (await this.fromSession(request)) ??
       undefined;
-    await this.refreshCookie(reply, request.auth);
+    if (!isStream) await this.refreshCookie(reply, request.auth);
   }
 
   /** A `@SessionOnly()` route refuses API tokens, except a superuser's on a route marked `@AllowSuperuserToken()`; superuser is read from the principal built from the user row. */

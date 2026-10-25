@@ -1,6 +1,6 @@
 import type Redis from 'ioredis';
 import { AppError } from '../errors/app.error';
-import { withRedisLock } from './redis-lock';
+import { RENEW_LOCK_SCRIPT, withRedisLock } from './redis-lock';
 
 const lock = { key: 'k', ttlSeconds: 5, busyMessage: 'Busy, retry' };
 
@@ -54,6 +54,35 @@ describe('withRedisLock', () => {
     });
     expect(set.mock.calls.length).toBeGreaterThan(1);
     expect(work).not.toHaveBeenCalled();
+  });
+
+  it('with renew, extends the lock while the work runs and stops once it ends', async () => {
+    jest.useFakeTimers();
+    try {
+      const evalMock = jest.fn().mockResolvedValue(1);
+      const redis = {
+        set: jest.fn().mockResolvedValue('OK'),
+        eval: evalMock,
+      } as unknown as Redis;
+      const work = withRedisLock(
+        redis,
+        { ...lock, renew: true },
+        () =>
+          new Promise<string>((resolve) => setTimeout(resolve, 5000, 'done')),
+      );
+      await jest.advanceTimersByTimeAsync(4900);
+      const renewals = evalMock.mock.calls.filter(
+        ([script]) => script === RENEW_LOCK_SCRIPT,
+      );
+      expect(renewals.length).toBeGreaterThanOrEqual(2);
+      await jest.advanceTimersByTimeAsync(200);
+      await expect(work).resolves.toBe('done');
+      const after = evalMock.mock.calls.length;
+      await jest.advanceTimersByTimeAsync(10_000);
+      expect(evalMock.mock.calls.length).toBe(after);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('without waitSeconds, tries the lock exactly once', async () => {

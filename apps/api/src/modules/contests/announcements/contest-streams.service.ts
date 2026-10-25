@@ -54,11 +54,8 @@ export class ContestStreamsService implements EventChannel {
     if (this.open >= this.limits.contestTotal)
       throw new AppError('rate_limited', 429, 'Too many open event streams');
     const principal = optionalPrincipal(auth);
-    // A session short of its 2FA or password gate still counts against its user's cap.
-    const release = this.hub.reserve(
-      request.ip,
-      auth?.principal.userId ?? null,
-    );
+    // A session short of its 2FA or password gate is a visitor: it never uses its user's cap.
+    const release = this.hub.reserve(request.ip, principal?.userId ?? null);
     try {
       const contest = await this.contestViewers.visibleContest(principal, key);
       const entry = this.hub.open(reply, release, {

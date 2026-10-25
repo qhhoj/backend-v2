@@ -75,6 +75,16 @@ describe('user activity capture', () => {
       expect(everything).not.toContain(secret);
   });
 
+  it('records a session short of 2FA as a visitor and leaves the account untouched', async () => {
+    const user = await createUserWith(api, 'pending');
+    const session = await loginAs(api, user._id, { twoFaPassed: false });
+    await authed(visit(), session).expect(200);
+    await capture.flush();
+    const [row] = await rows();
+    expect(row.userId).toBeNull();
+    expect((await api.users.findById(user._id).lean())?.ip).toBeNull();
+  });
+
   it('upserts one session per visitor with device details', async () => {
     const user = await createUserWith(api, 'visitor');
     const session = await loginAs(api, user._id);

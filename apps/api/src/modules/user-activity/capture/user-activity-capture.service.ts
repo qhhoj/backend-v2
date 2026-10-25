@@ -3,6 +3,7 @@ import type { OnModuleInit } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
+import { optionalPrincipal } from '@libs/auth';
 import { execOrThrow, REDIS } from '@libs/common';
 import {
   ACCESS_WRITE_SECONDS,
@@ -70,7 +71,10 @@ export class UserActivityCaptureService implements OnModuleInit {
       if (!isTrackedPath(path)) return;
       const { auth } = request;
       // While impersonating, the action belongs to the superuser, not to the account shown.
-      const userId = auth?.session?.impersonatorId ?? auth?.user._id ?? null;
+      // A session short of its 2FA or password gate is a visitor.
+      const userId = optionalPrincipal(auth)
+        ? (auth?.session?.impersonatorId ?? auth?.user._id ?? null)
+        : null;
       const userAgent = (request.headers['user-agent'] ?? '').slice(
         0,
         ACTIVITY_TEXT_MAX,

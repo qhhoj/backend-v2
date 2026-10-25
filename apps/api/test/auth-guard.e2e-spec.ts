@@ -2,7 +2,7 @@ import { Controller, Get, Post } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import Redis from 'ioredis';
 import type { Model } from 'mongoose';
-import { REDIS } from '@libs/common';
+import { ApiEventStream, REDIS } from '@libs/common';
 import {
   AllowBeforeTwoFactor,
   AllowSuperuserToken,
@@ -34,6 +34,11 @@ import {
   TEST_ENV,
 } from './setup';
 
+class GuardedFrame {
+  event = 'x';
+  data = '';
+}
+
 @Controller('guarded')
 class GuardedController {
   @Public() @Get('public') open() {
@@ -47,6 +52,12 @@ class GuardedController {
   }
   @Post('private') write() {
     return 'written';
+  }
+  @Public()
+  @ApiEventStream(GuardedFrame)
+  @Get('stream')
+  stream() {
+    return 'stream';
   }
   @Get('context') context(@CurrentAuth() auth: AuthContext) {
     return { viaToken: auth.viaToken, hasSession: auth.sessionId !== null };
@@ -380,6 +391,37 @@ describe('AuthGuard', () => {
       .set('Origin', 'https://evil.example')
       .expect(403)
       .expect(errorCode('csrf_failed'));
+  });
+  it('answers a too deeply nested body with 400 and the standard issues list', async () => {
+    let body: unknown = {};
+    for (let depth = 0; depth < 40; depth += 1) body = { a: body };
+    const response = await api
+      .http()
+      .post('/guarded/public-write')
+      .send(body as object)
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    const { error } = response.body as {
+      error: { issues: Array<{ code: string }> };
+    };
+    expect(error.issues[0].code).toBe('validation_failed');
+  });
+  it('leaves the daily cookie refresh to the next normal request when a stream route is hit first', async () => {
+    const { id } = await login();
+    const issuedAt = Date.now() - STALE_COOKIE_AGE_MS;
+    await api.sessions.update(id, { cookieIssuedAt: issuedAt });
+    await api
+      .http()
+      .get('/guarded/stream')
+      .set('Cookie', sessionCookie(id))
+      .expect(200);
+    expect((await api.sessions.get(id))?.cookieIssuedAt).toBe(issuedAt);
+    const next = await api
+      .http()
+      .get('/guarded/private')
+      .set('Cookie', sessionCookie(id))
+      .expect(200);
+    expect(String(next.headers['set-cookie'])).toContain(`qhhoj_session=${id}`);
   });
   it('re-issues the session cookie once a day of activity has passed', async () => {
     const { id } = await login();

@@ -1,5 +1,7 @@
 import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type Redis from 'ioredis';
+import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import { newId } from '@libs/database';
 import type { Submission, SubmissionStatus } from '@libs/database';
@@ -9,6 +11,10 @@ import {
   SubmissionEventsService,
 } from '@libs/judging';
 import type { SubmissionEventType } from '@libs/judging';
+import {
+  VISITOR_DETAIL_LIMIT,
+  visitorDetailKey,
+} from '../src/modules/submissions/core/rate-limits';
 import { SubmissionsRepository } from '../src/modules/submissions/core/submissions.repository';
 import { SubmissionsService } from '../src/modules/submissions/core/submissions.service';
 import { STREAM_LIMITS } from '../src/modules/events/stream-limits';
@@ -276,6 +282,26 @@ describe('submission event streams', () => {
       expect((await open(null, EVENTS)).status).toBe(200);
     const overIp = await open(null, EVENTS);
     expect(overIp.status).toBe(429);
+  });
+
+  it('treats a session short of 2FA as a visitor: no user cap, and the visitor detail limit applies to every visitor stream', async () => {
+    const submission = await seed('stream_a');
+    const path = `${EVENTS}/${submission._id}`;
+    const pending = await loginAs(api, ids.owner, { twoFaPassed: false });
+    sessions['pending'] = pending;
+    // perUser is 2: a pending session would be refused on its third stream if it used the user's cap.
+    for (let count = 0; count < 3; count += 1)
+      expect((await open('pending', path)).status).toBe(200);
+    const redis = api.app.get<Redis>(REDIS);
+    const [key] = await redis.keys(`rate:${visitorDetailKey('*')}`);
+    await redis.set(key, VISITOR_DETAIL_LIMIT, 'KEEPTTL');
+    try {
+      expect((await open(null, path)).status).toBe(429);
+      expect((await open('pending', path)).status).toBe(429);
+      expect((await open('other', path)).status).toBe(200);
+    } finally {
+      await redis.del(key);
+    }
   });
 
   it('closes a stream once its session ends or its problem becomes invisible', async () => {
