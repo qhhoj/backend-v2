@@ -112,7 +112,12 @@ describe('deleting a contest', () => {
       sessions[who],
     );
 
-  it('refuses an editor without judge.edit_all_contest a contest with participations', async () => {
+  it('refuses an editor without judge.edit_all_contest a contest with live or virtual participations, not one with only spectators', async () => {
+    const previewed = await ownedContest({ isVisible: false });
+    await joinParticipation(api, previewed._id, users.editor._id, {
+      virtual: -1,
+    });
+    await remove(previewed.key, previewed.key).expect(204);
     const contest = await ownedContest({ isVisible: false });
     await joinParticipation(api, contest._id, users.alice._id);
     const refused = await remove(contest.key, contest.key);

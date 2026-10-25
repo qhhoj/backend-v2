@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { SPECTATE } from '@libs/contests';
 import {
   Contest,
   ContestAnnouncement,
@@ -61,10 +62,12 @@ export class ContestRemovalRepository {
     return (await this.ratings.exists({ contest: contestId }).exec()) !== null;
   }
 
-  /** Through the `{contest, user, virtual}` index. */
+  /** Live or virtual rows (spectator rows hold no results), through the `{contest, virtual}` index. */
   async hasParticipations(contestId: string): Promise<boolean> {
     return (
-      (await this.participations.exists({ contest: contestId }).exec()) !== null
+      (await this.participations
+        .exists({ contest: contestId, virtual: { $ne: SPECTATE } })
+        .exec()) !== null
     );
   }
 

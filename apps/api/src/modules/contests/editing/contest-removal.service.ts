@@ -42,7 +42,7 @@ export class ContestRemovalService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  /** Editors only, with the key typed again (`confirm`); a visible, rated or still-judging contest, and one with participations unless the caller has `judge.edit_all_contest`, is refused with 409 `contest_not_deletable`. */
+  /** Editors only, with the key typed again (`confirm`); a visible, rated or still-judging contest, and one with live or virtual participations unless the caller has `judge.edit_all_contest`, is refused with 409 `contest_not_deletable`. */
   async remove(
     principal: Principal,
     key: string,
