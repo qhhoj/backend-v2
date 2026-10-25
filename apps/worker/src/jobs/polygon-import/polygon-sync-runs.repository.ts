@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { PolygonSyncRun, Problem } from '@libs/database';
+import { PolygonSyncRun } from '@libs/database';
 import type { PolygonSyncStep } from '@libs/database';
 import type { PolygonImportJob, PolygonSource } from '@libs/problems';
 import type { Model } from 'mongoose';
@@ -51,7 +51,6 @@ export class PolygonSyncRunsRepository {
   constructor(
     @InjectModel(PolygonSyncRun.name)
     private readonly runs: Model<PolygonSyncRun>,
-    @InjectModel(Problem.name) private readonly problems: Model<Problem>,
   ) {}
 
   async record(
@@ -61,17 +60,9 @@ export class PolygonSyncRunsRepository {
   ): Promise<void> {
     if (!job.polygon) return;
     const problem =
-      outcome.result === 'ok'
-        ? outcome.problemId
-        : await this.problemIdOf(job.code);
+      outcome.result === 'ok' ? outcome.problemId : (job.problemId ?? null);
     await this.runs.create(
       syncRunOf(jobId, { ...job, polygon: job.polygon }, outcome, problem),
     );
-  }
-
-  /** Deliberately S: a failed sync of a problem deleted meanwhile still belongs to its history. */
-  private async problemIdOf(code: string): Promise<string | null> {
-    const row = await this.problems.findOne({ code }, { _id: 1 }).lean().exec();
-    return row?._id ?? null;
   }
 }

@@ -144,9 +144,9 @@ export class ProblemImportsService {
     return job && !(await removeDelayedAutoSync(job)) ? job : null;
   }
 
-  /** The id of the queued or running import (a sync too) into `code`; null when none. */
-  async unfinishedJobIdOf(code: string): Promise<string | null> {
-    return (await unfinishedJobOf(this.queue, code))?.id ?? null;
+  /** The id of the queued or running import (a sync too) into the problem; null when none. */
+  async unfinishedJobIdOf(problemId: string): Promise<string | null> {
+    return (await unfinishedJobOf(this.queue, problemId))?.id ?? null;
   }
 
   /** A job the caller may not read gets the same 404 as an unknown id. */
@@ -178,15 +178,18 @@ export class ProblemImportsService {
     );
   }
 
-  /** The requester or a superuser; an update (a sync too) also anyone who may import into its problem, so the problem's page can follow a sync someone else started. */
+  /** The requester or a superuser; an update (a sync too) also anyone who may import into its problem (found by id, so a code reused after a rename never matches), so the problem's page can follow a sync someone else started. */
   private async mayRead(
     principal: AuthContext['principal'],
     job: ImportJob,
   ): Promise<boolean> {
     if (job.data.requesterId === principal.userId || principal.isSuperuser)
       return true;
-    if (job.data.mode !== 'update') return false;
-    return this.importableProblem(principal, job.data.code).then(
+    const { mode, problemId } = job.data;
+    if (mode !== 'update' || !problemId) return false;
+    const problem = await this.repository.findById(problemId);
+    if (!problem) return false;
+    return this.importableProblem(principal, problem.code).then(
       () => true,
       () => false,
     );
@@ -205,6 +208,7 @@ export class ProblemImportsService {
       return {
         ...options,
         curators: uniqueIfAny(query.curators),
+        problemId: problem._id,
         isFullMarkup: problem.isFullMarkup,
         expectedDataVersion: problem.dataVersion ?? 0,
       };

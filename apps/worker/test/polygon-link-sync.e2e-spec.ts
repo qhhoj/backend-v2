@@ -356,6 +356,13 @@ describe('Polygon link, sync and auto-sync', () => {
       failedStep: 'checking',
       error: 'problem with code never_linked not found',
     });
+    const renamedId = newId();
+    const renamedAway = await runJob({
+      ...syncJob('never_linked', { packageId: 11, revision: 4 }, 99),
+      problemId: renamedId,
+    });
+    const row = await runs.findOne({ jobId: renamedAway.jobId }).lean();
+    expect(String(row?.problem)).toBe(renamedId);
     const zipRun = await runJob({
       ...linkJob('zip_missing', 1),
       mode: 'update',
@@ -836,9 +843,10 @@ describe('Polygon link, sync and auto-sync', () => {
     polygon.reply('problem.package', {
       failed: 'packageId: Package is not full',
     });
-    const { error, failedStep, jobId } = await runJob(
-      syncJob('broken', { packageId: 12, revision: 5 }, before.dataVersion),
-    );
+    const { error, failedStep, jobId } = await runJob({
+      ...syncJob('broken', { packageId: 12, revision: 5 }, before.dataVersion),
+      problemId: String(before._id),
+    });
     expect(error).toBe(
       `${POLYGON_ERROR_PREFIX}Polygon: problem.package for package 12 of problem 4242 (type linux): packageId: Package is not full`,
     );

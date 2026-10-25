@@ -967,8 +967,11 @@ describe('PolygonImportProcessor', () => {
       const failing = jest
         .spyOn(dataFiles, method)
         .mockRejectedValueOnce(new Error('EACCES: /data/problems/lost'));
+      mkdirSync(worker.pdfCacheRoot, { recursive: true });
+      writeFileSync(join(worker.pdfCacheRoot, 'tail.en.pdf'), 'stale');
       const result = await processor.process(job({ code: 'tail' }));
       failing.mockRestore();
+      expect(existsSync(join(worker.pdfCacheRoot, 'tail.en.pdf'))).toBe(false);
       const imported = await worker.problems.countDocuments({ code: 'tail' });
       await worker.problems.deleteOne({ code: 'tail' });
       rmSync(dataDirectory('tail'), { recursive: true, force: true });

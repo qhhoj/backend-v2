@@ -64,7 +64,13 @@ describe('hasNewReadyPackage', () => {
 describe('syncJobOf', () => {
   it('is an update naming no catalog field, with the link options (its testcase limit too) and the given package', () => {
     const job = syncJobOf(
-      { code: 'sum', isFullMarkup: false, dataVersion: 7, polygonLink: link },
+      {
+        _id: 'p1',
+        code: 'sum',
+        isFullMarkup: false,
+        dataVersion: 7,
+        polygonLink: link,
+      },
       {
         id: 11,
         revision: 4,
@@ -77,6 +83,7 @@ describe('syncJobOf', () => {
       requesterId: 'requester',
       code: 'sum',
       mode: 'update',
+      problemId: 'p1',
       isFullMarkup: false,
       mainStatementLanguage: 'english',
       statementLanguages: { vietnamese: 'vi' },

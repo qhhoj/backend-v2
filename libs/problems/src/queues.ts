@@ -53,6 +53,8 @@ export interface PolygonImportJob extends ImportOptions {
   requesterId: string;
   code: string;
   mode: 'create' | 'update';
+  /** Update only: the id of the problem the job writes; reads and history follow it, not the code (a rename frees the code for another problem). */
+  problemId?: string;
   /** Catalog fields: on create an absent one takes the default (oldest group and type, languages included in problems, 800 points, nobody); on update an absent one keeps the problem's current value. */
   authors?: string[];
   curators?: string[];

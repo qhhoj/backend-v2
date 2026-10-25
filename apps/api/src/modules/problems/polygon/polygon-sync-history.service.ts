@@ -20,16 +20,19 @@ export class PolygonSyncHistoryService {
     private readonly users: UsersRepository,
   ) {}
 
-  /** Every problem's runs name problems the caller may not edit, so the whole history needs `judge.edit_all_problem`. */
+  /** Every problem's runs name problems the caller may not edit, so the whole history needs `judge.edit_all_problem` on top of `judge.edit_own_problem`, as editing every problem does. */
   async all(
     auth: AuthContext,
     query: PolygonSyncRunsQueryDto,
   ): Promise<Paginated<PolygonSyncRunResponse>> {
-    if (!hasPermission(auth.principal, 'judge.edit_all_problem'))
+    if (
+      !hasPermission(auth.principal, 'judge.edit_own_problem') ||
+      !hasPermission(auth.principal, 'judge.edit_all_problem')
+    )
       throw new AppError(
         'forbidden',
         403,
-        'The whole sync history requires judge.edit_all_problem',
+        'The whole sync history requires judge.edit_own_problem and judge.edit_all_problem',
       );
     return this.page(undefined, query);
   }
