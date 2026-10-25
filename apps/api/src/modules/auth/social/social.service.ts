@@ -219,7 +219,7 @@ export class SocialService {
         extraData: {},
       }))
     ) {
-      await this.endCreatorCredentials(match);
+      await this.endEarlierCredentials(match);
       return this.login(match, previousSessionId);
     }
 
@@ -241,10 +241,10 @@ export class SocialService {
     };
   }
 
-  /** An account never signed in to may have been registered by someone else with this address: its password, sessions and API token go, so only the provider identity opens it until a password is set with the reset form. */
-  private async endCreatorCredentials(user: UserDocument): Promise<void> {
-    if (user.lastLogin !== null) return;
-    await this.users.update(user._id, { password: unusablePasswordHash() });
+  /** An auto-linked account may have been registered by someone else with this address: its other sessions and API token always end; one never signed in to also loses its password until one is set with the reset form. */
+  private async endEarlierCredentials(user: UserDocument): Promise<void> {
+    if (user.lastLogin === null)
+      await this.users.update(user._id, { password: unusablePasswordHash() });
     await this.auth.logoutAll(user._id);
   }
 

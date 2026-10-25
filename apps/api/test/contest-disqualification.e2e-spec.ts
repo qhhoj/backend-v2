@@ -148,6 +148,9 @@ describe('disqualification', () => {
       displayRank: 'banned',
       apiTokenHash: null,
     });
+    // Ended by the ban itself, before any request could touch it.
+    const sessionId = session.cookie.replace('qhhoj_session=', '');
+    expect(await api.sessions.get(sessionId)).toBeNull();
     await authed(
       api.http().get('/api/internal/contests/current'),
       session,
@@ -161,11 +164,6 @@ describe('disqualification', () => {
       displayRank: 'user',
       isActive: true,
     });
-    // The ban ended the session: lifting it does not bring it back.
-    await authed(
-      api.http().get('/api/internal/contests/current'),
-      session,
-    ).expect(401);
     await api.users.updateOne({ _id: repeat._id }, { banReason: 'Spam' });
     await disqualify(first.contest.key, first.participation._id, true).expect(
       201,

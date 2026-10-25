@@ -151,14 +151,16 @@ describe('social login', () => {
     expect((await api.users.findOne())!.lastLogin).not.toBeNull();
   });
 
-  it('links a verified email of exactly one active user and logs in; a never-signed-in account loses its earlier credentials', async () => {
+  it('links a verified email of exactly one active user and logs in, ending its other sessions and API token; a never-signed-in account also loses its password', async () => {
     const created = await createUser(api.users, { apiTokenHash: 'earlier' });
     const earlier = await loginAs(api, created._id);
     const kept = await createUser(api.users, {
       username: 'bob',
       email: 'bob@example.com',
       lastLogin: new Date(),
+      apiTokenHash: 'earlier',
     });
+    const keptEarlier = await loginAs(api, kept._id);
     github.identities.set('code-1', {
       uid: 'g-9',
       email: 'ALICE@example.com',
@@ -188,7 +190,13 @@ describe('social login', () => {
       code: 'code-2',
       slug: 'google',
     }).expect('location', `${SITE}/`);
-    expect((await api.users.findById(kept._id))!.socialAuth).toHaveLength(1);
+    expect(await api.users.findById(kept._id)).toMatchObject({
+      socialAuth: [expect.objectContaining({ uid: 'go-9' })],
+      apiTokenHash: null,
+    });
+    await authed(api.http().get('/api/internal/auth/me'), keptEarlier).expect(
+      401,
+    );
     await passwordLogin('bob').expect(200);
   });
 
