@@ -274,7 +274,7 @@ describe('social login', () => {
       },
     );
 
-    it('stops working on an account from before the flag once the boot backfill ran', async () => {
+    it('stops working on an account from before the flag once the boot backfill ran, which also flags never-activated migrated accounts and keeps updatedAt', async () => {
       await createUser(api.users, {
         username: 'squatter',
         email: 'owner@gmail.test',
@@ -285,11 +285,26 @@ describe('social login', () => {
         email: 'veteran@example.com',
         dateJoined: new Date('2020-01-01T00:00:00Z'),
       });
+      const unactivated = await createUser(api.users, {
+        username: 'dormant',
+        email: 'dormant@example.com',
+        dateJoined: new Date('2020-01-01T00:00:00Z'),
+        isActive: false,
+      });
+      const stored = async (id: string) =>
+        (await api.users.findById(id).lean<{
+          passwordSetBeforeVerification?: boolean;
+          updatedAt: Date;
+        }>())!;
+      const editedAt = (await stored(migrated._id)).updatedAt;
       await api.app.get(PasswordVerificationBackfillService).backfill();
+      expect(await stored(migrated._id)).toMatchObject({
+        passwordSetBeforeVerification: false,
+        updatedAt: editedAt,
+      });
       expect(
-        (await api.users.findById(migrated._id).lean())!
-          .passwordSetBeforeVerification,
-      ).toBe(false);
+        (await stored(unactivated._id)).passwordSetBeforeVerification,
+      ).toBe(true);
       for (const password of await signInThenAutoLink(false))
         await passwordLogin(password).expect(401);
     });
