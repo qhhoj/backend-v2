@@ -1,5 +1,13 @@
 # qhhoj-backend
 
+## 2.36.5
+
+### Patch Changes
+
+- ca09417: Login failures lock only the mistyped username on a shared address (per-address ceiling 300, refused attempts uncounted); suggesters read submission sources only on problems they may edit.
+- c3b5505: A near miss no longer rounds up to full points: only a submission that earned every case point scores the problem's (or contest problem's) full points.
+- bfa5fc8: RUNBOOK and env example: v2 uses its own Redis instance (`redis-qhhoj.service`, port 6380, ACL user `qhhoj`, db 0) instead of the shared host Redis.
+
 ## 2.36.4
 
 ### Patch Changes
