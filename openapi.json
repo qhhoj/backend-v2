@@ -533,7 +533,7 @@
             "type": "array"
           },
           "comment": {
-            "description": "The writer's free-text note, often empty.",
+            "description": "The writer's free-text note, often empty; empty too when you lack the permission of the record's kind.",
             "type": "string"
           },
           "id": {
@@ -17662,7 +17662,7 @@
   "paths": {
     "/api/internal/admin/audit": {
       "get": {
-        "description": "Requires `judge.change_settings`. The global change log: every write that already leaves a record (the `revisions` rows of problems, contests, users, organizations, posts, comments, pages, catalogs, submission locks and batch rejudges, and setting changes), newest first, 50 per page (`limit` 1-50). Each entry names the actor, the action, the object (with a label and whether it still exists) and the changed field names; values are never returned. Filters: `actor` (exact username; unknown gives an empty page), `type`, and a `from`/`to` time range. Page with `before` = the previous page's `nextBefore`. Reads are not logged.",
+        "description": "Requires `judge.change_settings`. The global change log: every write that already leaves a record (the `revisions` rows of problems, contests, users, organizations, posts, comments, pages, catalogs, submission locks and batch rejudges, and setting changes), newest first, 50 per page (`limit` 1-50). Each entry names the actor, the action, the object (with a label and whether it still exists) and the changed field names; values are never returned, and the note (`comment`) of a `user`, `problem`, `contest` or `contestParticipation` record is empty unless you also hold `auth.change_user`, `judge.edit_all_problem` or `judge.edit_all_contest` respectively. Records of superuser-only settings (decision 416) are left out unless you are a superuser. Filters: `actor` (exact username; unknown gives an empty page), `type`, and a `from`/`to` time range. Page with `before` = the previous page's `nextBefore`. Reads are not logged.",
         "operationId": "AuditController_list",
         "parameters": [
           {
@@ -20417,7 +20417,7 @@
     },
     "/api/internal/admin/user-activity/anonymous": {
       "delete": {
-        "description": "Requires `judge.can_see_user_activity`. Deletes all activity log rows and sessions of signed-out visitors; the deletion is written to the server log with the acting staff member. Returns 204.",
+        "description": "Requires `judge.can_see_user_activity`. Needs a browser session (API tokens get 403) and not impersonating. Deletes all activity log rows and sessions of signed-out visitors; the deletion is written to the server log and recorded as a `user` revision (`delete_anonymous_activity`) on your account. Returns 204.",
         "operationId": "UserActivityStaffController_deleteAnonymous",
         "parameters": [],
         "responses": {
@@ -20714,7 +20714,7 @@
     },
     "/api/internal/admin/user-activity/users/{username}": {
       "delete": {
-        "description": "Requires `judge.can_see_user_activity`. Deletes the user's activity log rows and their stored sessions; the deletion is written to the server log with the acting staff member. 404 `not_found` for an unknown user. Returns 204.",
+        "description": "Requires `judge.can_see_user_activity`. Needs a browser session (API tokens get 403) and not impersonating. Deletes the user's activity log rows and their stored sessions; the deletion is written to the server log and recorded as a `user` revision (`delete_activity`) with the counts. 403 `forbidden` when the target is yourself or a superuser and you are not a superuser; 404 `not_found` for an unknown user. Returns 204.",
         "operationId": "UserActivityStaffController_deleteUser",
         "parameters": [
           {
