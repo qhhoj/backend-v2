@@ -381,6 +381,57 @@ describe('contest participation', () => {
       expect(await pointerOf('erin')).toBe(joined.id);
     });
 
+    it('stops counting a spectator pointer once the user leaves the contest staff, keeping a contestant pointer', async () => {
+      const contest = await createContest(api, {
+        testers: [users.tester._id, users.carol._id],
+      });
+      const spectating = dataOf<ParticipationSummaryResponse>(
+        await post('tester', contest.key, 'join').expect(201),
+      );
+      expect(spectating.virtual).toBe(-1);
+      const live = await joinParticipation(api, contest._id, users.carol._id);
+      await makeCurrent(api, users.carol._id, live._id);
+      await api.contests.updateOne({ _id: contest._id }, { testers: [] });
+      const inContestOf = async (who: string) =>
+        dataOf<ContestDetailResponse>(
+          await authed(
+            api.http().get(contestUrl(contest.key)),
+            sessions[who],
+          ).expect(200),
+        ).viewer.inContest;
+      expect(await inContestOf('tester')).toBe(false);
+      expect(
+        dataOf<CurrentParticipationResponse | null>(
+          await authed(
+            api.http().get('/api/internal/contests/current'),
+            sessions.tester,
+          ).expect(200),
+        ),
+      ).toBeNull();
+      expect(await pointerOf('tester')).toBeNull();
+      expect(await inContestOf('carol')).toBe(true);
+      expect(await pointerOf('carol')).toBe(uuidStr(live._id));
+      // A registration is a live row that has not ended: it does not keep a removed tester spectating.
+      const upcoming = await createContest(api, {
+        startTime: hoursFromNow(2),
+        endTime: hoursFromNow(5),
+        testers: [users.frank._id],
+      });
+      await joinParticipation(api, upcoming._id, users.frank._id, {
+        isRegistered: true,
+      });
+      await post('frank', upcoming.key, 'join').expect(201);
+      await api.contests.updateOne({ _id: upcoming._id }, { testers: [] });
+      expect(
+        dataOf<ContestDetailResponse>(
+          await authed(
+            api.http().get(contestUrl(upcoming.key)),
+            sessions.frank,
+          ).expect(200),
+        ).problems,
+      ).toBeNull();
+    });
+
     it('reports the current participation and clears it once it ended or became invisible', async () => {
       const current = () =>
         authed(api.http().get('/api/internal/contests/current'), sessions.dave);

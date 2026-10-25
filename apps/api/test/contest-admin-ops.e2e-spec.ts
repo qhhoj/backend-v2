@@ -35,6 +35,7 @@ beforeAll(async () => {
   const roles: Array<[string, Partial<User>]> = [
     ['alice', {}],
     ['editor', { permissions: ['judge.edit_own_contest'] }],
+    ['staff', { permissions: ['judge.edit_all_contest'] }],
     [
       'judge',
       {
@@ -105,11 +106,27 @@ describe('rejudging one contest problem', () => {
 });
 
 describe('deleting a contest', () => {
-  const remove = (key: string, confirm: string) =>
+  const remove = (key: string, confirm: string, who = 'editor') =>
     authed(
       api.http().delete(contestUrl(key, `?confirm=${confirm}`)),
-      sessions.editor,
+      sessions[who],
     );
+
+  it('refuses an editor without judge.edit_all_contest a contest with live or virtual participations, not one with only spectators', async () => {
+    const previewed = await ownedContest({ isVisible: false });
+    await joinParticipation(api, previewed._id, users.editor._id, {
+      virtual: -1,
+    });
+    await remove(previewed.key, previewed.key).expect(204);
+    const contest = await ownedContest({ isVisible: false });
+    await joinParticipation(api, contest._id, users.alice._id);
+    const refused = await remove(contest.key, contest.key);
+    expect([refused.status, errorCode(refused)]).toEqual([
+      409,
+      'contest_not_deletable',
+    ]);
+    expect(await api.contests.exists({ _id: contest._id })).not.toBeNull();
+  });
 
   it('refuses a wrong confirmation, a visible contest and a rated one', async () => {
     const hidden = await ownedContest({ isVisible: false });
@@ -161,7 +178,7 @@ describe('deleting a contest', () => {
       contestDataPath(api.contestDataRoot, contest._id),
     ];
     for (const zip of zips) writeFileSync(zip, 'zip bytes');
-    await remove(contest.key, contest.key).expect(204);
+    await remove(contest.key, contest.key, 'staff').expect(204);
     expect(zips.filter((zip) => existsSync(zip))).toEqual([]);
     expect(await api.contests.exists({ _id: contest._id })).toBeNull();
     expect(

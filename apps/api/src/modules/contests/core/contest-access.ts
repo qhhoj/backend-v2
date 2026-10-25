@@ -64,6 +64,15 @@ const isEditor = (principal: Principal | null, contest: ContestAccessView) =>
     contest.curators.includes(principal.userId));
 const isTester = (principal: Principal | null, contest: ContestAccessView) =>
   principal !== null && contest.testers.includes(principal.userId);
+/** A spectator row (virtual −1) keeps its user in the contest while they are on its staff lists (`isEditor`, `isTester`), or when it continues their own live run that has ended (`hasEndedLiveRow`: a contestant whose time ran out; a registration or a running live row does not count). */
+const keepsSpectating = (
+  principal: Principal | null,
+  contest: ContestAccessView,
+  hasEndedLiveRow: boolean,
+) =>
+  hasEndedLiveRow ||
+  isEditor(principal, contest) ||
+  isTester(principal, contest);
 const seesEveryContest = (principal: Principal | null) =>
   has(principal, 'judge.see_private_contest') ||
   has(principal, 'judge.edit_all_contest');
@@ -276,6 +285,7 @@ export const ContestAccess = {
   accessView,
   isEditor,
   isTester,
+  keepsSpectating,
   canEdit,
   editableFilter,
   editorOfFilter,

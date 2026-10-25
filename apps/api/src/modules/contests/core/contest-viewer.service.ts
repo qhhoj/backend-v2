@@ -44,6 +44,33 @@ function listViewerOf(
 }
 
 /** The viewer's participations in one contest, and the facts `ContestAccess` needs from them. */
+/** The viewer's current participation when it is in `contest` and still counts: an ended one, or a spectator row its user may no longer hold (`ContestAccess.keepsSpectating`), does not, before any read clears the pointer (`CurrentContestService.current`). */
+function currentIn(
+  principal: Principal,
+  contest: ContestDocument,
+  rows: {
+    current: ParticipationDocument | null;
+    live: ParticipationDocument | null;
+  },
+  now: Date,
+): ParticipationDocument | null {
+  const { current, live } = rows;
+  if (
+    current === null ||
+    uuidStr(current.contest) !== contest._id ||
+    hasParticipationEnded(contest, current, now)
+  )
+    return null;
+  const keeps =
+    current.virtual !== SPECTATE ||
+    ContestAccess.keepsSpectating(
+      principal,
+      ContestAccess.accessView(contest),
+      live !== null && hasParticipationEnded(contest, live, now),
+    );
+  return keeps ? current : null;
+}
+
 @Injectable()
 export class ContestViewerService {
   constructor(
@@ -120,13 +147,7 @@ export class ContestViewerService {
       this.participations.findCurrentOf(principal.userId),
       this.participations.findOne(contest._id, principal.userId, LIVE),
     ]);
-    // An ended participation no longer counts, before any read clears the pointer (`CurrentContestService.current`).
-    const currentHere =
-      current !== null &&
-      uuidStr(current.contest) === contest._id &&
-      !hasParticipationEnded(contest, current, now)
-        ? current
-        : null;
+    const currentHere = currentIn(principal, contest, { current, live }, now);
     return {
       inContest:
         currentHere !== null &&

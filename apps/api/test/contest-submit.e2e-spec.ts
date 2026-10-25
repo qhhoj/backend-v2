@@ -121,7 +121,11 @@ describe('submitting inside a contest', () => {
       isPublic: false,
     });
     const running = await createContest(api, {
+      timeLimit: 60,
       problems: [contestProblem(problem._id, 0)],
+    });
+    await joinParticipation(api, running._id, users.dave._id, {
+      realStart: hoursFromNow(-1),
     });
     await enter('dave', running._id, { virtual: SPECTATE });
     await submit('dave', 'cp_spectated')

@@ -17,6 +17,7 @@ import {
   rescheduleFinalJudge,
   reschedulePublish,
   scoringKeyOf,
+  SPECTATE,
 } from '@libs/contests';
 import type {
   ContestFinalJudgeJob,
@@ -30,6 +31,7 @@ import type { Contest } from '@libs/database';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ContestsRepository } from '../core/contests.repository';
 import type { ContestDocument } from '../core/contests.repository';
+import { ParticipationsRepository } from '../core/participations.repository';
 import { ContestsService } from '../core/contests.service';
 import type { ContestDetailResponse } from '../core/dto/contest-detail.response';
 import type { QueuedResponse } from '../core/dto/queued.response';
@@ -61,6 +63,40 @@ const publishTarget = (contest: Contest): PublishTarget => ({
   endTime: contest.endTime,
   publishAfterEnd: contest.publishAfterEnd,
 });
+
+const uuidStrs = (values: readonly string[]) => values.map(uuidStr);
+
+/** A clone's stored fields: `copied` settings, hidden and unrated, without the source's counters, jobs, staff and per-user lists (the cloner becomes the only author in `insert`). */
+function clonedFields(copied: Contest): Partial<Contest> {
+  return {
+    ...copied,
+    isVisible: false,
+    isRated: false,
+    userCount: 0,
+    virtualCount: 0,
+    lockedAfter: null,
+    publishAfterEnd: false,
+    publishAfterEndBy: null,
+    autoPublishOutcome: null,
+    dataPreparedAt: null,
+    managedBy: null,
+    balloonStaff: [],
+    exportPreparedAt: null,
+    organizations: uuidStrs(copied.organizations),
+    privateContestants: uuidStrs(copied.privateContestants),
+    viewContestScoreboard: uuidStrs(copied.viewContestScoreboard),
+    authors: [],
+    curators: [],
+    testers: [],
+    bannedUsers: [],
+    bannedJudges: [],
+    rateExclude: [],
+    problems: copied.problems.map((entry) => ({
+      ...entry,
+      problem: uuidStr(entry.problem),
+    })),
+  };
+}
 
 /** Matches the contest only while its organization fields are still `contest`'s; an empty list also matches a legacy row without the field. */
 function unchangedOrganizations(contest: Contest): FilterQuery<Contest> {
@@ -112,6 +148,7 @@ export class ContestEditingService {
     private readonly contestsService: ContestsService,
     private readonly editFields: ContestEditFieldsService,
     private readonly problems: ProblemsRepository,
+    private readonly participationRows: ParticipationsRepository,
     @InjectQueue(CONTEST_RESCORE_QUEUE)
     private readonly rescores: Queue<ContestRescoreJob>,
     @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)
@@ -136,7 +173,7 @@ export class ContestEditingService {
     return this.contestsService.detail(principal, contest.key);
   }
 
-  /** Legacy `ContestClone`: settings and problems are copied, the cloner is the only author, and per-contest collections stay with the source. A `startTime` moves the copy's whole window there. The copy starts hidden and unrated, a gated setting the cloner may not set is reset (`withUngrantedGatesReset`), and its window passes the create rules (`assertWindow`). */
+  /** Legacy `ContestClone`: settings and problems are copied, the cloner is the only author, and per-contest collections stay with the source. A `startTime` moves the copy's whole window there. The copy starts hidden and unrated, a gated setting the cloner may not set is reset (`withUngrantedGatesReset`), its window passes the create rules (`assertWindow`), and each problem must be one the cloner may add to the copy's scope (`assertProblemsAdmitted`). */
   async clone(
     principal: Principal,
     key: string,
@@ -157,43 +194,19 @@ export class ContestEditingService {
       ...(startTime && shiftedWindow(settings, new Date(startTime))),
     }) as Contest;
     assertWindow(principal, copied);
-    const ids = (values: readonly string[]) => values.map(uuidStr);
-    await this.editFields.assertOrganizationRights(
+    const scope = {
+      organizations: copied.organizations.map(uuidStr),
+      isOrganizationPrivate: copied.isOrganizationPrivate,
+    };
+    await this.editFields.assertOrganizationRights(principal, scope, null);
+    await this.editFields.assertProblemsAdmitted(
       principal,
-      {
-        organizations: ids(copied.organizations),
-        isOrganizationPrivate: copied.isOrganizationPrivate,
-      },
-      null,
+      copied.problems.map((entry) => uuidStr(entry.problem)),
+      { current: null, scope },
     );
     const contest = await this.insert(principal, {
-      ...copied,
+      ...clonedFields(copied),
       key: newKey,
-      isVisible: false,
-      isRated: false,
-      userCount: 0,
-      virtualCount: 0,
-      lockedAfter: null,
-      publishAfterEnd: false,
-      publishAfterEndBy: null,
-      autoPublishOutcome: null,
-      dataPreparedAt: null,
-      managedBy: null,
-      balloonStaff: [],
-      exportPreparedAt: null,
-      organizations: ids(copied.organizations),
-      privateContestants: ids(copied.privateContestants),
-      viewContestScoreboard: ids(copied.viewContestScoreboard),
-      authors: [],
-      curators: [],
-      testers: [],
-      bannedUsers: [],
-      bannedJudges: [],
-      rateExclude: [],
-      problems: copied.problems.map((entry) => ({
-        ...entry,
-        problem: uuidStr(entry.problem),
-      })),
     });
     return this.contestsService.detail(principal, contest.key);
   }
@@ -280,6 +293,7 @@ export class ContestEditingService {
         return saved;
       },
     );
+    await this.clearDroppedSpectators(contest, updated);
     // Cached boards embed the contest's problems, labels and timeout, not only standings.
     await purgeRankingCache(this.redis, contest._id);
     await this.rescheduleEndJobs({ previous: contest, next: updated });
@@ -291,6 +305,32 @@ export class ContestEditingService {
       !sameJson(fields.lockedAfter, contest.lockedAfter)
     )
       await this.contests.propagateLock(contest._id, fields.lockedAfter);
+  }
+
+  /** A user no longer an author, curator or tester leaves the spectator row that role gave them (the pointer is compare-and-set, so a contestant row it points at stays). */
+  private async clearDroppedSpectators(
+    previous: Contest,
+    next: Contest,
+  ): Promise<void> {
+    const staffOf = (contest: Contest) =>
+      new Set(
+        [...contest.authors, ...contest.curators, ...contest.testers].map(
+          uuidStr,
+        ),
+      );
+    const remaining = staffOf(next);
+    const dropped = [...staffOf(previous)].filter(
+      (userId) => !remaining.has(userId),
+    );
+    for (const userId of dropped) {
+      const spectating = await this.participationRows.findOne(
+        previous._id,
+        userId,
+        SPECTATE,
+      );
+      if (spectating)
+        await this.participationRows.clearCurrent(userId, spectating._id);
+    }
   }
 
   /** The problems were resolved live before the write, but a delete can land between that check and the write (the delete's own re-check covers the other order): check again and put every saved field back, so the edit is refused as if the delete had come first. A save landing between the write and the revert is overwritten (last write wins, as between two editors). */
