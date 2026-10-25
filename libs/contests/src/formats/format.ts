@@ -18,6 +18,8 @@ export interface ScoringRow {
   status: SubmissionStatus;
   /** ioi16 only: per batch (`'0'` = cases outside batches) the smallest case points; null otherwise. */
   batchPoints: Record<string, number> | null;
+  /** The run graded the pretests only (`submissions.isPretested`, as the judge reported); ioi16 scales such rows by `pretestPoints`. */
+  isPretested: boolean;
 }
 
 export interface ScoringProblem {
@@ -26,6 +28,8 @@ export interface ScoringProblem {
   points: number;
   /** ioi16 only: the problem data's points a full run awards (`dataPoints`, legacy `points_scaling_factor` divisor); 0 without data cases; null otherwise. */
   dataPoints: number | null;
+  /** ioi16 only: the points a pretest-only run awards (`pretestDataPoints`); absent or 0 when no pretest carries points. */
+  pretestPoints?: number;
 }
 
 export interface ScoringContext {

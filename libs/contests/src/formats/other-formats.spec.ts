@@ -1,7 +1,13 @@
 import { isSolvedCell } from '../first-solves';
 import { finalSubmissionFormat } from './final-submission';
 import { FormatConfigError } from './format';
-import { batchMinima, dataPoints, ioi16Format } from './ioi16';
+import type { ScoringRow } from './format';
+import {
+  batchMinima,
+  dataPoints,
+  ioi16Format,
+  pretestDataPoints,
+} from './ioi16';
 import { parseFormatConfig, scoreParticipation } from './registry';
 import { at, context, row } from './scoring-fixtures';
 import { ultimateFormat } from './ultimate';
@@ -55,7 +61,7 @@ describe('ioi16 (legacy IOIContestFormat, "IOI")', () => {
       R: { points: 0, time: 0 },
     });
   });
-  it('scores zero for no batches, a problem outside the context or without data points, and ignores row order and cumtime', () => {
+  it('scores zero for no batches or a problem outside the context, and ignores row order and cumtime', () => {
     const rows = [
       row('P', 20, 0, { batchPoints: { '1': 4, '2': 3 }, submissionId: 'b' }),
       row('P', 10, 0, { batchPoints: { '1': 6 }, submissionId: 'a' }),
@@ -174,6 +180,37 @@ describe('ioi16 cells from the judged cases and the problem data', () => {
     expect(
       cellOf(pretestBatch, [{ points: 10, batch: 1 }, ...plainCases([90])]),
     ).toBe(100);
+  });
+
+  it('scales a pretest-only run by the pretest points and a full run by the full-run points, never above the problem points', () => {
+    const data: DataCase[] = [
+      { type: 'C', points: 60, isPretest: true },
+      { type: 'C', points: 40 },
+    ];
+    const problems = [
+      {
+        problemId: 'P',
+        points: 100,
+        dataPoints: dataPoints(data),
+        pretestPoints: pretestDataPoints(data),
+      },
+    ];
+    const cellOfRows = (...rows: ScoringRow[]) =>
+      ioi16Format.score(rows, { cumtime: false }, context({ problems }))
+        .formatData.P.points;
+    const pretestOnly = (points: number) =>
+      row('P', 5, points, {
+        isPretested: true,
+        batchPoints: batchMinima(plainCases([points])),
+      });
+    const fullRun = (testPoints: number) =>
+      row('P', 9, testPoints, {
+        batchPoints: batchMinima(plainCases([0, testPoints])),
+      });
+    expect(cellOfRows(pretestOnly(60))).toBe(100);
+    expect(cellOfRows(pretestOnly(0), fullRun(40))).toBe(100);
+    expect(cellOfRows(pretestOnly(60), fullRun(40))).toBe(100);
+    expect(cellOfRows(pretestOnly(0), fullRun(0))).toBe(0);
   });
 
   it('scores an externally judged problem (no data cases) by its best submission, as other formats do', () => {
