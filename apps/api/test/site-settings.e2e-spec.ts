@@ -10,7 +10,7 @@ import {
 } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
-import { errorCode, setupApiTest } from './setup';
+import { errorCode, issueCodes, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 import type { Test } from 'supertest';
 import type { Permission } from '@libs/auth';
@@ -64,10 +64,28 @@ afterAll(() => api.teardown());
       );
 
     beforeAll(async () => {
+      const root = await createUserWith(api, 'root', { isSuperuser: true });
+      admin = await loginAs(api, root._id);
+    });
+
+    it('lets only a superuser change the mail, admin role and sign-in settings', async () => {
       const ops = await createUserWith(api, 'ops', {
         permissions: ['judge.change_settings'],
       });
-      admin = await loginAs(api, ops._id);
+      const session = await loginAs(api, ops._id);
+      for (const key of ['mail.smtpUrl', 'organization.adminRoleId'])
+        await patch(key, '', session)
+          .expect(403)
+          .expect(issueCodes(['superuser_only']));
+      await patch('auth.sessionMaxDays', 7).expect(200);
+      await restore(
+        'auth.sessionMaxDays',
+        await newestRevisionId('auth.sessionMaxDays'),
+        session,
+      )
+        .expect(403)
+        .expect(issueCodes(['superuser_only']));
+      await patch('pdf.maxBytes', 1_000_000, session).expect(200);
     });
 
     it('merges social login fields and never returns or stores a secret in clear', async () => {

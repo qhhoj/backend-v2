@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Principal } from '@libs/auth';
 import { AppError, invalidField, Paginated } from '@libs/common';
 import {
   definitionOf,
@@ -13,6 +14,19 @@ import type { SettingKey } from '@libs/settings';
 import { SettingResponse } from './dto/setting.response';
 import { SettingRevisionResponse } from './dto/setting-revision.response';
 
+/** Decision 416: `judge.change_settings` is operator-grade, but these keys hold mail credentials, sign-in and the role every organization admin gets, so only a superuser may change them. */
+const isSuperuserOnly = (key: SettingKey): boolean =>
+  key === 'mail.smtpUrl' ||
+  key === 'organization.adminRoleId' ||
+  key.startsWith('auth.');
+
+const superuserOnly = () => {
+  const message = 'Only a superuser may change this setting';
+  return new AppError('forbidden', 403, message, undefined, undefined, {
+    issues: [{ field: 'key', code: 'superuser_only', message }],
+  });
+};
+
 @Injectable()
 export class SettingsAdminService {
   constructor(private readonly settings: SettingsService) {}
@@ -25,11 +39,11 @@ export class SettingsAdminService {
   async update(
     key: string,
     value: unknown,
-    actorId: string,
+    actor: Principal,
   ): Promise<SettingResponse> {
-    const known = this.known(key);
+    const known = this.writable(key, actor);
     try {
-      await this.settings.set(known, value, actorId);
+      await this.settings.set(known, value, actor.userId);
     } catch (error) {
       if (error instanceof SettingError)
         throw invalidField('value', error.message);
@@ -42,9 +56,9 @@ export class SettingsAdminService {
   async restore(
     key: string,
     revisionId: string,
-    actorId: string,
+    actor: Principal,
   ): Promise<SettingResponse> {
-    const known = this.known(key);
+    const known = this.writable(key, actor);
     const revision = await this.settings.revisionOf(known, revisionId);
     if (!revision) throw new AppError('not_found', 404, 'No such revision');
     const value = restorableValue(definitionOf(known)!, revision.before);
@@ -54,7 +68,7 @@ export class SettingsAdminService {
         409,
         'Secret values are not stored in revisions',
       );
-    return this.update(known, value, actorId);
+    return this.update(known, value, actor);
   }
 
   async revisions(key: string, page: number, pageSize: number) {
@@ -80,6 +94,12 @@ export class SettingsAdminService {
     if (!definitionOf(key))
       throw new AppError('not_found', 404, 'No such setting');
     return key as SettingKey;
+  }
+
+  private writable(key: string, actor: Principal): SettingKey {
+    const known = this.known(key);
+    if (isSuperuserOnly(known) && !actor.isSuperuser) throw superuserOnly();
+    return known;
   }
 
   private view(key: SettingKey, row: Parameters<typeof SettingResponse.of>[3]) {

@@ -376,7 +376,7 @@ afterAll(() => api.teardown());
 
       it("meters the month's charges and lists the five problems that used the most", async () => {
         const world = await seedOrganizationWorld(api, {
-          quotaJudgingMs: 40_000,
+          quotaJudgingMs: 50_000,
         });
         const organization = world.organization._id;
         const problems: Array<{ _id: string; code: string; name: string }> = [];
@@ -403,6 +403,14 @@ afterAll(() => api.teardown());
           await charge(organization, ms, { problem: problems[index]._id });
         // a problem that no longer exists counts but takes no row of the table
         await charge(organization, 9000);
+        // nor does one the admin cannot see, however much it used
+        const hidden = await createProblem(api, catalog, {
+          code: `judged${(counter += 1)}`,
+          isPublic: false,
+          organizations: [organization],
+          authors: [world.member.user._id],
+        });
+        await charge(organization, 7000, { problem: hidden._id });
         // another month and another organization are not this meter's
         await charge(organization, 50_000, { month: '2000-01' });
         await charge((await createOrganization(api))._id, 50_000);
@@ -414,12 +422,12 @@ afterAll(() => api.teardown());
           ).expect(200),
         );
         expect(body.judging).toEqual({
-          used: 30_000,
-          limit: 40_000,
+          used: 37_000,
+          limit: 50_000,
           isNearLimit: false,
           isOver: false,
         });
-        expect(body.quota.judgingMs).toBe(40_000);
+        expect(body.quota.judgingMs).toBe(50_000);
         const entry = (index: number, ms: number, count = 1) => ({
           code: problems[index].code,
           name: problems[index].name,
@@ -704,6 +712,28 @@ afterAll(() => api.teardown());
       expect(
         await api.users.countDocuments({ organizations: organization._id }),
       ).toBe(2);
+    });
+
+    it('refuses a new admin from outside a full organization, but promotes a member', async () => {
+      const { user: owner, session } = await person();
+      const { user: member } = await person();
+      const { user: outsider } = await person();
+      const organization = await createOrganization(
+        api,
+        { slots: 2, adminIds: [owner._id] },
+        [member._id],
+      );
+      const url = organizationUrl(organization.slug);
+      await patch(url, session, { adminIds: [owner._id, outsider._id] })
+        .expect(409)
+        .expect(issueCode('organization_full'));
+      expect(await membershipsOf(outsider._id)).toEqual([]);
+      expect(
+        (await api.organizations.findById(organization._id).lean())!.adminIds,
+      ).toHaveLength(1);
+      await patch(url, session, { adminIds: [owner._id, member._id] }).expect(
+        200,
+      );
     });
 
     it('leaves and kicks members, never admins; only administrators kick', async () => {

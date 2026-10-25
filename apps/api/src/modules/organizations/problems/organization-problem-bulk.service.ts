@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { invalidField, RateLimitService } from '@libs/common';
 import { uuidStr } from '@libs/database';
+import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { OrganizationsService } from '../core/organizations.service';
 import { ProblemTagsRepository } from '../problem-tags/problem-tags.repository';
@@ -25,7 +26,7 @@ export class OrganizationProblemBulkService {
     private readonly rateLimit: RateLimitService,
   ) {}
 
-  /** One result per requested code. Only live problems that list this organization change; the rest are `skipped`, never an error, so a stale selection still applies the rest. */
+  /** One result per requested code. Only live problems that list this organization and that the viewer may see change; the rest are `skipped`, never an error, so a stale selection still applies the rest. */
   async run(
     principal: Principal,
     slug: string,
@@ -39,7 +40,12 @@ export class OrganizationProblemBulkService {
       BULK_WINDOW_SECONDS,
     );
     const owned = await this.problems.findPage(
-      { code: { $in: dto.codes }, organizations: organization._id },
+      {
+        $and: [
+          ProblemAccess.visibleFilter(principal, null),
+          { code: { $in: dto.codes }, organizations: organization._id },
+        ],
+      },
       { code: 1 },
       1,
       MAX_BULK_CODES,

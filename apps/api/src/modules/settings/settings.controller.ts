@@ -47,7 +47,7 @@ export class SettingsController {
    * Change a site setting
    *
    * @remarks
-   * Requires `judge.change_settings`. Sets the value of one setting and records a revision with the acting user. Object-valued settings are merged into the stored value. `null` is refused. Errors: 400 `validation_failed` on `value` when it does not fit the setting, 404 `not_found` for an unknown key.
+   * Requires `judge.change_settings`; `mail.smtpUrl`, `organization.adminRoleId` and every `auth.*` key also need a superuser. Sets the value of one setting and records a revision with the acting user. Object-valued settings are merged into the stored value. `null` is refused. Errors: 400 `validation_failed` on `value` when it does not fit the setting, 403 `superuser_only` on `key` for a superuser-only key, 404 `not_found` for an unknown key.
    */
   @Patch(':key')
   update(
@@ -55,14 +55,14 @@ export class SettingsController {
     @Param() { key }: SettingKeyParamDto,
     @Body(new RefuseNullFieldsPipe()) { value }: UpdateSettingDto,
   ): Promise<SettingResponse> {
-    return this.settings.update(key, value, auth.principal.userId);
+    return this.settings.update(key, value, auth.principal);
   }
 
   /**
    * Restore a setting to an earlier revision
    *
    * @remarks
-   * Requires `judge.change_settings`. Writes the value the setting had before the given revision, as a new revision. Secret values are not stored in revisions, so they are never restored. Errors: 404 `not_found` for an unknown setting or revision, 409 `secret_unrestorable` when the revision has nothing restorable because the value is secret.
+   * Requires `judge.change_settings`; the superuser-only keys of `PATCH` also need a superuser. Writes the value the setting had before the given revision, as a new revision. Secret values are not stored in revisions, so they are never restored. Errors: 403 `superuser_only` on `key` for a superuser-only key, 404 `not_found` for an unknown setting or revision, 409 `secret_unrestorable` when the revision has nothing restorable because the value is secret.
    */
   @HttpCode(200)
   @Post(':key/revisions/:revisionId/restore')
@@ -70,7 +70,7 @@ export class SettingsController {
     @CurrentAuth() auth: AuthContext,
     @Param() { key, revisionId }: SettingRevisionParamDto,
   ): Promise<SettingResponse> {
-    return this.settings.restore(key, revisionId, auth.principal.userId);
+    return this.settings.restore(key, revisionId, auth.principal);
   }
 
   /**

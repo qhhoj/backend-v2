@@ -130,6 +130,26 @@ export class OrganizationMembersRepository {
     return slots !== null && (await this.countMembers(organizationId)) >= slots;
   }
 
+  /** True when `slots` is set and admitting `userIds` would pass it; those already members take no new slot, so promoting them always fits. */
+  async lacksSlotsFor(
+    userIds: readonly string[],
+    organizationId: string,
+    slots: number | null,
+  ): Promise<boolean> {
+    if (slots === null) return false;
+    const [members, alreadyIn] = await Promise.all([
+      this.countMembers(organizationId),
+      this.users
+        .countDocuments({
+          _id: { $in: userIds },
+          organizations: organizationId,
+        })
+        .exec(),
+    ]);
+    const newcomers = userIds.length - alreadyIn;
+    return newcomers > 0 && members + newcomers > slots;
+  }
+
   async isMember(userId: string, organizationId: string): Promise<boolean> {
     return (
       (await this.users

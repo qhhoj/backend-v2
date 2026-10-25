@@ -3,6 +3,7 @@ import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import {
   AppError,
+  conflictIssue,
   invalidField,
   isDuplicateKey,
   REDIS,
@@ -14,6 +15,7 @@ import type { Organization } from '@libs/database';
 import { SettingsService } from '@libs/settings';
 import type Redis from 'ioredis';
 import { renderField } from '../../problems/editing/problem-markup';
+import { withMemberSlotsLock } from '../core/member-slots-lock';
 import { OrganizationAccess } from '../core/organization-access';
 import { OrganizationMembersRepository } from '../core/organization-members.repository';
 import { OrganizationPointsService } from '../core/organization-points.service';
@@ -140,9 +142,11 @@ export class OrganizationEditingService {
     }
     const write = () =>
       withSlugTaken(() => this.organizations.update(organization._id, changes));
-    if (added.length) await this.withAdminCap(principal, added, write);
+    if (added.length)
+      await this.withAdminCap(principal, added, () =>
+        this.writeWithinSlots(organization._id, changes, added, write),
+      );
     else await write();
-    await this.admitAdmins(added, organization._id);
     // Only the sent fields can differ, so a concurrent edit to another field is never attributed to this one.
     await this.history.recordChange(principal, organization._id, {
       action: 'edit',
@@ -201,6 +205,35 @@ export class OrganizationEditingService {
         ORGANIZATION_ADMIN_LIMIT
       )
         throw adminId === principal.userId ? ownAdminCap() : otherAdminCap();
+  }
+
+  /** New admins become members, so the ones from outside take slots: checked, written and admitted under the organization's member lock, like a join (`withMemberSlotsLock`). `slots` is re-read, or taken from this same edit. */
+  private writeWithinSlots(
+    organizationId: string,
+    changes: Partial<Organization>,
+    newAdminIds: readonly string[],
+    write: () => Promise<void>,
+  ): Promise<void> {
+    return withMemberSlotsLock(this.redis, organizationId, async () => {
+      const slots = await this.slotsAfter(organizationId, changes);
+      if (await this.members.lacksSlotsFor(newAdminIds, organizationId, slots))
+        throw conflictIssue(
+          'organization',
+          'organization_full',
+          'The organization is full',
+        );
+      await write();
+      await this.admitAdmins(newAdminIds, organizationId);
+    });
+  }
+
+  private async slotsAfter(
+    organizationId: string,
+    changes: Partial<Organization>,
+  ): Promise<number | null> {
+    if (changes.slots !== undefined) return changes.slots;
+    const [current] = await this.organizations.findByIds([organizationId]);
+    return current?.slots ?? null;
   }
 
   private async admitAdmins(
