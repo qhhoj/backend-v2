@@ -19429,7 +19429,7 @@
     },
     "/api/internal/admin/settings/{key}": {
       "patch": {
-        "description": "Requires `judge.change_settings`. Sets the value of one setting and records a revision with the acting user. Object-valued settings are merged into the stored value. `null` is refused. Errors: 400 `validation_failed` on `value` when it does not fit the setting, 404 `not_found` for an unknown key.",
+        "description": "Requires `judge.change_settings`; `mail.smtpUrl`, `organization.adminRoleId` and every `auth.*` key also need a superuser. Sets the value of one setting and records a revision with the acting user. Object-valued settings are merged into the stored value. `null` is refused. Errors: 400 `validation_failed` on `value` when it does not fit the setting, 403 `superuser_only` on `key` for a superuser-only key, 404 `not_found` for an unknown key.",
         "operationId": "SettingsController_update",
         "parameters": [
           {
@@ -19593,7 +19593,7 @@
     },
     "/api/internal/admin/settings/{key}/revisions/{revisionId}/restore": {
       "post": {
-        "description": "Requires `judge.change_settings`. Writes the value the setting had before the given revision, as a new revision. Secret values are not stored in revisions, so they are never restored. Errors: 404 `not_found` for an unknown setting or revision, 409 `secret_unrestorable` when the revision has nothing restorable because the value is secret.",
+        "description": "Requires `judge.change_settings`; the superuser-only keys of `PATCH` also need a superuser. Writes the value the setting had before the given revision, as a new revision. Secret values are not stored in revisions, so they are never restored. Errors: 403 `superuser_only` on `key` for a superuser-only key, 404 `not_found` for an unknown setting or revision, 409 `secret_unrestorable` when the revision has nothing restorable because the value is secret.",
         "operationId": "SettingsController_restore",
         "parameters": [
           {
@@ -30952,7 +30952,7 @@
         ]
       },
       "patch": {
-        "description": "Organization administrators only. Changes the fields sent (null is refused\nfor `slots`); `about` is re-rendered, `adminIds` is the whole new admin\nlist and must not be empty, and new admins are subject to the three-\norganization cap. Staff fields `isUnlisted`, `slots` and `shortName` need\n`judge.edit_all_organization`. A slug that is taken is 400\n`validation_failed`; the admin cap is issue code `admin_cap`. Changed\nfields are recorded in the history.",
+        "description": "Organization administrators only. Changes the fields sent (null is refused\nfor `slots`); `about` is re-rendered, `adminIds` is the whole new admin\nlist and must not be empty, and new admins are subject to the three-\norganization cap. Staff fields `isUnlisted`, `slots` and `shortName` need\n`judge.edit_all_organization`. A slug that is taken is 400\n`validation_failed`; the admin cap is issue code `admin_cap`. New admins\nbecome members, so 409 `organization_full` when those not yet members do\nnot fit in `slots`. Changed fields are recorded in the history.",
         "operationId": "OrganizationEditingController_update",
         "parameters": [
           {
