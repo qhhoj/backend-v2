@@ -2,6 +2,7 @@ export * from './groups/groups.module';
 export * from './groups/groups.querier';
 export * from './crypto';
 export * from './password/password-hasher';
+export * from './password/unusable-password';
 export * from './password/password-policy';
 export * from './password/password-issues';
 export * from './password/pwned-password.service';

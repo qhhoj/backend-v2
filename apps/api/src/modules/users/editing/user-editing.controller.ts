@@ -2,6 +2,7 @@ import { ApiTags } from '@nestjs/swagger';
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -61,7 +62,7 @@ export class UserEditingController {
    * Edit a user's profile
    *
    * @remarks
-   * Requires `judge.change_profile` and a browser session; changing `email` or `isActive` also needs `auth.change_user` (403 `forbidden`, issue `email_not_editable` or `activation_not_editable`), and an `email` change also your own `currentPassword` (400 `validation_failed` issue `password_required`, 400 `invalid_credentials`) and spends the credential budget shared with password sets (10 per admin per hour). An e-mail change keeps the user's sessions and reset links already sent: to recover a hijacked account, set a password. Not on yourself. Absent fields stay unchanged, `null` is refused; every check runs before the first write (a write that loses a race keeps the earlier ones, all audited). `organizations` replaces the whole ordered list (staff bypass the open-organization cap); deactivating signs the user out everywhere and revokes the API token. Every change is recorded as a `user` revision `staff_edit`.
+   * Requires `judge.change_profile` and a browser session; changing `email` or `isActive` also needs `auth.change_user` (403 `forbidden`, issue `email_not_editable` or `activation_not_editable`), and an `email` change also your own `currentPassword` (400 `validation_failed` issue `password_required`, 400 `invalid_credentials`) and spends the credential budget shared with password sets (10 per admin per hour). An e-mail change removes the user's social sign-in links (they were granted for the old address) but keeps their sessions and reset links already sent: to recover a hijacked account, set a password. Not on yourself. Absent fields stay unchanged, `null` is refused; every check runs before the first write (a write that loses a race keeps the earlier ones, all audited). `organizations` replaces the whole ordered list (staff bypass the open-organization cap); deactivating signs the user out everywhere and revokes the API token. Every change is recorded as a `user` revision `staff_edit`.
    * Errors: 400 `validation_failed` with issues `email_invalid`, `password_required`, `email_taken`, `organization_unknown`, `organization_admin_member` (the user administers a dropped organization); 403 `forbidden` for yourself or a superuser unless you are one; 404 `not_found`; 409 `conflict` with issue `user_banned` (a banned account keeps its rank and unlisting and is reactivated by unbanning), or when the memberships changed meanwhile or the e-mail is being registered.
    */
   @Patch('profile')
@@ -108,6 +109,23 @@ export class UserEditingController {
     @Param() { username }: UsernameParamDto,
   ): Promise<void> {
     return this.credentials.sendResetLink(auth, username);
+  }
+
+  /**
+   * Remove a user's social sign-in links
+   *
+   * @remarks
+   * Requires `auth.change_user` and a browser session. No Google, GitHub or Facebook identity signs in to the account any more (a provider can link again only through a verified e-mail matching the account's current one). Sessions already open stay: set a password to end them. Recorded as a `user` revision `staff_remove_social_links`.
+   * Errors: 403 `forbidden` for yourself or a superuser unless you are one, 404 `not_found`. Returns 204.
+   */
+  @Delete('social-links')
+  @HttpCode(204)
+  @RequirePermission('auth.change_user')
+  removeSocialLinks(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { username }: UsernameParamDto,
+  ): Promise<void> {
+    return this.credentials.removeSocialLinks(auth, username);
   }
 
   /**

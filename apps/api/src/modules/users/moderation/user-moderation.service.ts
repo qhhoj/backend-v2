@@ -13,7 +13,7 @@ export class UserModerationService {
     private readonly revisions: RevisionsRepository,
   ) {}
 
-  /** Legacy `Profile.ban_user`, plus every session revoked (the guard also rejects inactive users on the next request); the active flag is remembered for `unban`. Audit-logged as a `user` revision. */
+  /** Legacy `Profile.ban_user`, plus every session and the API token revoked (the guard also rejects inactive users on the next request), so an unban brings neither back; the active flag is remembered for `unban`. Audit-logged as a `user` revision. */
   async ban(
     principal: Principal,
     username: string,
@@ -31,6 +31,7 @@ export class UserModerationService {
         isUnlisted: true,
         isActive: false,
         isActiveBeforeBan: user.isActive,
+        apiTokenHash: null,
       }))
     )
       throw new AppError('conflict', 409, 'That user is already banned');

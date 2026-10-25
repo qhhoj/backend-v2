@@ -10,6 +10,7 @@ import {
 } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type Redis from 'ioredis';
+import { linkedProviders } from '../../auth/social/oauth-provider';
 import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { EMAIL_TAKEN, normaliseEmail } from '../core/dto/email';
@@ -37,6 +38,14 @@ const needsChangeUser = (field: string, code: string) =>
       issues: [{ field, code, message: `You may not change ${field}.` }],
     },
   );
+
+/** The audit entry of an e-mail change, with the social links it removed. */
+const emailChanges = (user: UserDocument, email: string): Changes => ({
+  email: { before: user.email, after: email },
+  ...(user.socialAuth.length
+    ? { socialAuth: { before: linkedProviders(user.socialAuth), after: [] } }
+    : {}),
+});
 
 /** Staff edits of another user's profile (legacy Django `ProfileAdmin` plus the `auth.User` e-mail and active flag). Every write leaves a `user` revision. */
 @Injectable()
@@ -98,7 +107,7 @@ export class UserProfileEditingService {
       }
       if (email !== undefined) {
         await this.withEmailLock(email, () => this.writeEmail(user, email));
-        changes.email = { before: user.email, after: email };
+        Object.assign(changes, emailChanges(user, email));
       }
     } finally {
       await this.audit(principal, user, changes);
@@ -218,10 +227,10 @@ export class UserProfileEditingService {
       throw new ValidationFailedError('E-mail rejected', [EMAIL_TAKEN]);
   }
 
-  /** Staff-set addresses count as verified: v2 has no unverified-e-mail state. */
+  /** Staff-set addresses count as verified: v2 has no unverified-e-mail state. The social links were granted for the old address, so they go with it. */
   private async writeEmail(user: UserDocument, email: string): Promise<void> {
     await this.assertEmailFree(user, email);
-    await this.users.update(user._id, { email });
+    await this.users.update(user._id, { email, socialAuth: [] });
   }
 
   private async respond(user: UserDocument): Promise<UserEditResponse> {

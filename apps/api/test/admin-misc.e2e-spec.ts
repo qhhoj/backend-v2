@@ -68,6 +68,11 @@ afterAll(() => api.teardown());
         displayRank: 'user',
       });
       const targetSession = await loginAs(api, target._id);
+      const { token, hash } = generateApiToken(
+        target._id,
+        TEST_ENV.TOKEN_SECRET,
+      );
+      await api.users.updateOne({ _id: target._id }, { apiTokenHash: hash });
       await authed(
         api.http().get('/api/internal/profile'),
         targetSession,
@@ -84,6 +89,7 @@ afterAll(() => api.teardown());
         displayRank: 'banned',
         isUnlisted: true,
         isActive: false,
+        apiTokenHash: null,
       });
       await authed(api.http().post('/api/internal/users/target/ban'), moderator)
         .send({ reason: 'again' })
@@ -105,6 +111,11 @@ afterAll(() => api.teardown());
         isActive: true,
       });
       expect((await login()).status).toBe(200);
+      await api
+        .http()
+        .get('/api/internal/auth/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(401);
       await authed(
         api.http().post('/api/internal/users/target/unban'),
         moderator,
@@ -178,15 +189,11 @@ afterAll(() => api.teardown());
         .expect(403);
     });
 
-    it('resets two-factor for staff only, never a superuser, signs the user out and leaves an audit row', async () => {
-      const staff = await loginAs(
-        api,
-        (
-          await createUserWith(api, 'recovery', {
-            permissions: ['judge.ban_user'],
-          })
-        )._id,
-      );
+    it('resets two-factor for staff only, from a browser session, never a superuser, signs the user out and leaves an audit row', async () => {
+      const recovery = await createUserWith(api, 'recovery', {
+        permissions: ['judge.ban_user'],
+      });
+      const staff = await loginAs(api, recovery._id);
       const locked = await createUserWith(api, 'locked', {
         isTotpEnabled: true,
         totpKey: 'secret',
@@ -212,6 +219,16 @@ afterAll(() => api.teardown());
         'locked',
         await loginAs(api, (await createUserWith(api, 'plain2'))._id),
       ).expect(403);
+      const staffToken = generateApiToken(recovery._id, TEST_ENV.TOKEN_SECRET);
+      await api.users.updateOne(
+        { _id: recovery._id },
+        { apiTokenHash: staffToken.hash },
+      );
+      await api
+        .http()
+        .post('/api/internal/users/locked/reset-two-factor')
+        .set('Authorization', `Bearer ${staffToken.token}`)
+        .expect(403);
       await reset('locked').expect(204);
       expect(await api.users.findById(locked._id).lean()).toMatchObject({
         isTotpEnabled: false,

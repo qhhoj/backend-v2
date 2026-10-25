@@ -13106,6 +13106,21 @@
         ],
         "type": "object"
       },
+      "SocialLinksResponse": {
+        "properties": {
+          "providers": {
+            "description": "Slugs of the providers linked to the account (a legacy provider v2 does not support keeps its stored name).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "type": "object"
+      },
       "SocialProvidersResponse": {
         "properties": {
           "providers": {
@@ -17179,6 +17194,13 @@
             },
             "type": "array"
           },
+          "socialProviders": {
+            "description": "Slugs of the social sign-in providers linked to the account (removed through `DELETE social-links`).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "username": {
             "type": "string"
           }
@@ -17198,6 +17220,7 @@
           "notes",
           "inContest",
           "hasTwoFactor",
+          "socialProviders",
           "isActive",
           "isStaff",
           "isSuperuser",
@@ -21382,7 +21405,7 @@
         ]
       },
       "patch": {
-        "description": "Requires `judge.change_profile` and a browser session; changing `email` or `isActive` also needs `auth.change_user` (403 `forbidden`, issue `email_not_editable` or `activation_not_editable`), and an `email` change also your own `currentPassword` (400 `validation_failed` issue `password_required`, 400 `invalid_credentials`) and spends the credential budget shared with password sets (10 per admin per hour). An e-mail change keeps the user's sessions and reset links already sent: to recover a hijacked account, set a password. Not on yourself. Absent fields stay unchanged, `null` is refused; every check runs before the first write (a write that loses a race keeps the earlier ones, all audited). `organizations` replaces the whole ordered list (staff bypass the open-organization cap); deactivating signs the user out everywhere and revokes the API token. Every change is recorded as a `user` revision `staff_edit`.\nErrors: 400 `validation_failed` with issues `email_invalid`, `password_required`, `email_taken`, `organization_unknown`, `organization_admin_member` (the user administers a dropped organization); 403 `forbidden` for yourself or a superuser unless you are one; 404 `not_found`; 409 `conflict` with issue `user_banned` (a banned account keeps its rank and unlisting and is reactivated by unbanning), or when the memberships changed meanwhile or the e-mail is being registered.",
+        "description": "Requires `judge.change_profile` and a browser session; changing `email` or `isActive` also needs `auth.change_user` (403 `forbidden`, issue `email_not_editable` or `activation_not_editable`), and an `email` change also your own `currentPassword` (400 `validation_failed` issue `password_required`, 400 `invalid_credentials`) and spends the credential budget shared with password sets (10 per admin per hour). An e-mail change removes the user's social sign-in links (they were granted for the old address) but keeps their sessions and reset links already sent: to recover a hijacked account, set a password. Not on yourself. Absent fields stay unchanged, `null` is refused; every check runs before the first write (a write that loses a race keeps the earlier ones, all audited). `organizations` replaces the whole ordered list (staff bypass the open-organization cap); deactivating signs the user out everywhere and revokes the API token. Every change is recorded as a `user` revision `staff_edit`.\nErrors: 400 `validation_failed` with issues `email_invalid`, `password_required`, `email_taken`, `organization_unknown`, `organization_admin_member` (the user administers a dropped organization); 403 `forbidden` for yourself or a superuser unless you are one; 404 `not_found`; 409 `conflict` with issue `user_banned` (a banned account keeps its rank and unlisting and is reactivated by unbanning), or when the memberships changed meanwhile or the e-mail is being registered.",
         "operationId": "UserEditingController_update",
         "parameters": [
           {
@@ -21515,6 +21538,51 @@
           }
         },
         "summary": "Rename a user",
+        "tags": [
+          "Admin: users"
+        ]
+      }
+    },
+    "/api/internal/admin/users/{username}/social-links": {
+      "delete": {
+        "description": "Requires `auth.change_user` and a browser session. No Google, GitHub or Facebook identity signs in to the account any more (a provider can link again only through a verified e-mail matching the account's current one). Sessions already open stay: set a password to end them. Recorded as a `user` revision `staff_remove_social_links`.\nErrors: 403 `forbidden` for yourself or a superuser unless you are one, 404 `not_found`. Returns 204.",
+        "operationId": "UserEditingController_removeSocialLinks",
+        "parameters": [
+          {
+            "description": "Username of the account; an unknown name gives 404.",
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Remove a user's social sign-in links",
         "tags": [
           "Admin: users"
         ]
@@ -22784,6 +22852,111 @@
         ]
       }
     },
+    "/api/internal/auth/social/links": {
+      "get": {
+        "description": "Browser session only, not while impersonating. Returns the slugs of the providers that sign in to this account.",
+        "operationId": "SocialLinksController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SocialLinksResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List your social sign-in links",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/internal/auth/social/links/{provider}": {
+      "delete": {
+        "description": "Browser session only, not while impersonating. Requires the current password in the body (400 `invalid_credentials`, then 429 `rate_limited`, sharing the budget of other password confirmations). The provider no longer signs in to this account; sessions already open stay until you sign out everywhere.\nErrors: 409 `conflict` with issue `password_unusable` when the account has no password yet (set one with the reset form first, so the account keeps a way to sign in), 404 `not_found` when no such link exists. Returns 204.",
+        "operationId": "SocialLinksController_unlink",
+        "parameters": [
+          {
+            "description": "Provider slug from `GET /auth/social/links`.",
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurrentPasswordDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Remove a social sign-in link",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
     "/api/internal/auth/social/providers": {
       "get": {
         "description": "Public. Returns the slugs of the OAuth providers that are configured, for the login page buttons.",
@@ -22836,7 +23009,7 @@
     },
     "/api/internal/auth/social/{provider}/callback": {
       "get": {
-        "description": "Public. The provider redirects the browser here. Always answers with a 302 to the site: to `/` (or `/login/2fa` when a second factor is pending) after signing in, to `/register/social?token=...` when a new account must be completed with `POST /auth/social/complete`, or to `/login?error=<code>` with `oauth_state`, `oauth_failed`, `email_unverified`, `banned`, `account_not_activated` or `account_disabled`.\nA verified email that matches exactly one active account links the provider to it. The state is single use.",
+        "description": "Public. The provider redirects the browser here. Always answers with a 302 to the site: to `/` (or `/login/2fa` when a second factor is pending) after signing in, to `/register/social?token=...` when a new account must be completed with `POST /auth/social/complete`, or to `/login?error=<code>` with `oauth_state`, `oauth_failed`, `email_unverified`, `banned`, `account_not_activated` or `account_disabled`.\nA verified email that matches exactly one active account links the provider to it and ends that account's other sessions and API token; when it was never signed in to, its password also stops working (set one with the reset form). The state is single use.",
         "operationId": "SocialController_callback",
         "parameters": [
           {
@@ -41126,7 +41299,7 @@
     },
     "/api/internal/users/{username}/ban": {
       "post": {
-        "description": "Requires `judge.ban_user`. Deactivates the account, hides it from the leaderboards, sets its rank to `banned`, records the reason and signs the user out everywhere. Errors: 400 `validation_failed` for the reason reserved to automatic contest-cheating bans, 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`, 409 `conflict` when already banned. Returns 204.",
+        "description": "Requires `judge.ban_user`. Deactivates the account, hides it from the leaderboards, sets its rank to `banned`, records the reason, signs the user out everywhere and revokes their API token. Errors: 400 `validation_failed` for the reason reserved to automatic contest-cheating bans, 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`, 409 `conflict` when already banned. Returns 204.",
         "operationId": "UserModerationController_ban",
         "parameters": [
           {
@@ -41571,7 +41744,7 @@
     },
     "/api/internal/users/{username}/reset-two-factor": {
       "post": {
-        "description": "Requires `judge.ban_user`. Removes the user's authenticator app and all security keys so a locked-out user can sign in again, signs them out everywhere and records a `user` revision for audit. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`. Returns 204.",
+        "description": "Requires `judge.ban_user` and a browser session (API tokens get 403), not while impersonating, like the other staff credential routes. Removes the user's authenticator app and all security keys so a locked-out user can sign in again, signs them out everywhere and records a `user` revision for audit. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`. Returns 204.",
         "operationId": "UserModerationController_resetTwoFactor",
         "parameters": [
           {

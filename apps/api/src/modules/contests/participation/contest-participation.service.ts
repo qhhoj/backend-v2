@@ -2,8 +2,13 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
-import { constantTimeEqual, sha256, UsersRepository } from '@libs/auth';
-import type { Principal } from '@libs/auth';
+import {
+  constantTimeEqual,
+  SessionService,
+  sha256,
+  UsersRepository,
+} from '@libs/auth';
+import type { Principal, UserDocument } from '@libs/auth';
 import {
   AppError,
   Paginated,
@@ -110,6 +115,7 @@ export class ContestParticipationService {
     private readonly rescores: Queue<ContestRescoreJob>,
     @Inject(REDIS) private readonly redis: Redis,
     private readonly settings: SettingsService,
+    private readonly sessions: SessionService,
   ) {}
 
   async register(
@@ -411,7 +417,7 @@ export class ContestParticipationService {
     void notifyContestRescore(this.rescores, contest._id, this.logger);
   }
 
-  /** Legacy `check_ban`, off unless the `contest.banAfterDisqualifications` setting is above 0: at the threshold the account is banned (and unlisted, and signed out: `isActive` is what the session guard checks); below it, only this ban is lifted, and the account is active again only if it was before the ban (as a manual unban). */
+  /** Legacy `check_ban`, off unless the `contest.banAfterDisqualifications` setting is above 0: at the threshold the account is banned, unlisted, signed out everywhere and its API token revoked, like a staff ban, so the lift brings neither back; below it, only this ban is lifted, and the account is active again only if it was before the ban (as a manual unban). */
   private async checkCheatingBan(userId: string): Promise<void> {
     const limit = this.settings.get('contest.banAfterDisqualifications');
     if (!limit) return;
@@ -421,13 +427,7 @@ export class ContestParticipationService {
     ]);
     if (!user) return;
     if (count >= limit && user.banReason === null)
-      await this.users.updateIfBanReason(userId, null, {
-        banReason: CONTEST_CHEATING_BAN_REASON,
-        displayRank: 'banned',
-        isUnlisted: true,
-        isActive: false,
-        isActiveBeforeBan: user.isActive,
-      });
+      await this.banForCheating(user);
     else if (count < limit && user.banReason === CONTEST_CHEATING_BAN_REASON)
       await this.users.updateIfBanReason(userId, CONTEST_CHEATING_BAN_REASON, {
         banReason: null,
@@ -436,6 +436,21 @@ export class ContestParticipationService {
         isActive: user.isActiveBeforeBan ?? true,
         isActiveBeforeBan: null,
       });
+  }
+
+  /** Signs the user out only when this ban won the compare-and-set on the ban reason. */
+  private async banForCheating(user: UserDocument): Promise<void> {
+    if (
+      await this.users.updateIfBanReason(user._id, null, {
+        banReason: CONTEST_CHEATING_BAN_REASON,
+        displayRank: 'banned',
+        isUnlisted: true,
+        isActive: false,
+        isActiveBeforeBan: user.isActive,
+        apiTokenHash: null,
+      })
+    )
+      await this.sessions.destroyAllForUser(user._id);
   }
 
   async leave(principal: Principal, key: string): Promise<void> {

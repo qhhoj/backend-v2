@@ -115,6 +115,18 @@ export class UsersRepository {
     return matchedCount === 1;
   }
 
+  /** False when the user has no link for this provider. */
+  async unlinkSocial(userId: string, provider: string): Promise<boolean> {
+    // Match on the link itself: timestamps make modifiedCount 1 even when nothing was pulled.
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: userId, 'socialAuth.provider': provider },
+        { $pull: { socialAuth: { provider } } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
   async findActiveByEmail(email: string): Promise<UserDocument[]> {
     if (!email) return [];
     return this.users.find({ email, isActive: true }).collation(CI).exec();

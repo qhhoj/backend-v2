@@ -14,6 +14,7 @@ import {
   ValidationFailedError,
 } from '@libs/common';
 import { AuthService } from '../../auth/core/auth.service';
+import { linkedProviders } from '../../auth/social/oauth-provider';
 import { PasswordResetService } from '../../auth/password-reset/password-reset.service';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import {
@@ -21,6 +22,13 @@ import {
   ADMIN_CREDENTIAL_WINDOW_SECONDS,
 } from '../core/rate-limits';
 import { editableTarget } from './editable-target';
+import type { Changes } from './user-field-changes';
+
+interface AuditEntry {
+  action: string;
+  comment: string;
+  changes?: Changes;
+}
 
 /** Staff credential actions on another user (legacy Django `auth.User` admin). Audit rows never hold a password or a hash. */
 @Injectable()
@@ -63,12 +71,10 @@ export class UserCredentialsService {
       );
     await this.users.update(user._id, { apiTokenHash: null });
     await this.sessions.destroyAllForUser(user._id);
-    await this.audit(
-      auth,
-      user,
-      'staff_set_password',
-      'Password set by staff; sessions and API token revoked',
-    );
+    await this.audit(auth, user, {
+      action: 'staff_set_password',
+      comment: 'Password set by staff; sessions and API token revoked',
+    });
   }
 
   /** Mails the user a reset link (the public reset flow's per-e-mail budget applies); the account must be active and have an address. */
@@ -89,12 +95,25 @@ export class UserCredentialsService {
         'The user has no e-mail address',
       );
     await this.passwordReset.sendTo(user);
-    await this.audit(
-      auth,
-      user,
-      'staff_send_reset_link',
-      `Password reset link sent to ${user.email}`,
-    );
+    await this.audit(auth, user, {
+      action: 'staff_send_reset_link',
+      comment: `Password reset link sent to ${user.email}`,
+    });
+  }
+
+  /** Recovery when a provider identity no longer belongs to the user: no provider signs in to the account any more. Sessions already open stay; setting a password ends them. */
+  async removeSocialLinks(auth: AuthContext, username: string): Promise<void> {
+    const user = await editableTarget(this.users, auth.principal, username, {
+      notSelf: true,
+    });
+    await this.users.update(user._id, { socialAuth: [] });
+    await this.audit(auth, user, {
+      action: 'staff_remove_social_links',
+      comment: 'Social sign-in links removed by staff',
+      changes: {
+        socialAuth: { before: linkedProviders(user.socialAuth), after: [] },
+      },
+    });
   }
 
   /** The signup policy plus the breach check, reported on `newPassword`. */
@@ -128,15 +147,14 @@ export class UserCredentialsService {
   private audit(
     auth: AuthContext,
     user: UserDocument,
-    action: string,
-    comment: string,
+    { action, comment, changes = {} }: AuditEntry,
   ): Promise<void> {
     return this.revisions.append({
       entity: 'user',
       entityId: user._id,
       action,
       userId: auth.principal.userId,
-      changes: {},
+      changes,
       comment,
     });
   }
