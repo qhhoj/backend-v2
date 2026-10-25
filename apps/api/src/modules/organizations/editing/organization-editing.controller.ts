@@ -73,8 +73,9 @@ export class OrganizationEditingController {
    * list and must not be empty, and new admins are subject to the three-
    * organization cap. Staff fields `isUnlisted`, `slots` and `shortName` need
    * `judge.edit_all_organization`. A slug that is taken is 400
-   * `validation_failed`; the admin cap is issue code `admin_cap`. Changed
-   * fields are recorded in the history.
+   * `validation_failed`; the admin cap is issue code `admin_cap`. New admins
+   * become members, so 409 `organization_full` when those not yet members do
+   * not fit in `slots`. Changed fields are recorded in the history.
    */
   @Patch(':slug')
   update(

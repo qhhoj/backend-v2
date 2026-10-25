@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type Redis from 'ioredis';
-import type { Model } from 'mongoose';
+import type { FilterQuery, Model } from 'mongoose';
 import { AppError, REDIS } from '@libs/common';
 import {
   Organization,
@@ -176,12 +176,17 @@ export class QuotaLedger {
     return sum?.ms ?? 0;
   }
 
-  /** The `limit` problems that used the most judging time of the organization in `month`, heaviest first; a problem that no longer exists is left out before the limit, so it takes no row. */
+  /** The `limit` problems that used the most judging time of the organization in `month`, heaviest first; a problem that no longer exists, or that `visible` (a `ProblemAccess.visibleFilter`) does not match, is left out before the limit, so it takes no row. */
   topProblems(
     organizationId: string,
     month: string,
     limit: number,
+    visible: FilterQuery<Problem>,
   ): Promise<ProblemJudgingTime[]> {
+    // `$match` does not cast ids, so the filter is cast first.
+    const match = this.problems
+      .find()
+      .cast(this.problems, visible) as FilterQuery<Problem>;
     return this.judgingCharges.aggregate<ProblemJudgingTime>([
       { $match: { organization: toUuid(organizationId), month } },
       { $group: { _id: '$problem', ms: { $sum: '$ms' }, runs: { $sum: 1 } } },
@@ -190,7 +195,7 @@ export class QuotaLedger {
           from: this.problems.collection.name,
           localField: '_id',
           foreignField: '_id',
-          pipeline: [{ $project: { code: 1, name: 1 } }],
+          pipeline: [{ $match: match }, { $project: { code: 1, name: 1 } }],
           as: 'problem',
         },
       },

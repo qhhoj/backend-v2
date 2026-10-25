@@ -183,6 +183,29 @@ afterAll(() => api.teardown());
       ).toBe(1);
     });
 
+    it('treats a problem of the organization the admin cannot see as missing', async () => {
+      const world = await seedOrganizationWorld(api);
+      const hidden = await orgProblem([world.organization._id], {
+        isPublic: false,
+        authors: [world.member.user._id],
+      });
+      const route = (suffix: string) =>
+        listUrl(world.organization.slug, `/${hidden.code}${suffix}`);
+      const session = world.admin.session;
+      await authed(api.http().put(route('/tags')), session)
+        .send({ tagIds: [] })
+        .expect(404);
+      await authed(api.http().post(route('/archive')), session).expect(404);
+      const bulk = await authed(
+        api.http().post(listUrl(world.organization.slug, '/bulk')),
+        session,
+      )
+        .send({ codes: [hidden.code], action: 'archive' })
+        .expect(201);
+      expect(dataOf<{ done: number }>(bulk).done).toBe(0);
+      expect(await links.countDocuments({ problem: hidden._id })).toBe(0);
+    });
+
     it('sets the tags of a problem and refuses tags of another organization', async () => {
       const world = await seedOrganizationWorld(api);
       const stranger = await seedOrganizationWorld(api);

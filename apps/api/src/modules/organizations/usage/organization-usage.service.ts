@@ -6,6 +6,7 @@ import { QuotaLedger } from '@libs/problems';
 import { uuidStr } from '@libs/database';
 import type { OrganizationCreditEntry } from '@libs/database';
 import type { OrganizationDocument } from '../core/organizations.repository';
+import { ProblemAccess } from '../../problems/core/problem-access';
 import { OrganizationsService } from '../core/organizations.service';
 import { QuotaService } from '../quota/quota.service';
 import { usernamesById } from '../requests/request-usernames';
@@ -56,12 +57,15 @@ export class OrganizationUsageService {
     private readonly users: UsersRepository,
   ) {}
 
-  /** Organization administrators and `edit_all_organization` holders. */
+  /** Organization administrators and `edit_all_organization` holders; the top problems are the ones the viewer may see. */
   async usage(
     principal: Principal,
     slug: string,
   ): Promise<OrganizationUsageResponse> {
-    return this.respond(await this.organizations.administered(principal, slug));
+    return this.respond(
+      principal,
+      await this.organizations.administered(principal, slug),
+    );
   }
 
   async updateQuota(
@@ -82,7 +86,7 @@ export class OrganizationUsageService {
         after: { ...before, ...changes },
       }),
     );
-    return this.respond(await this.organizations.bySlug(slug));
+    return this.respond(principal, await this.organizations.bySlug(slug));
   }
 
   async overview(
@@ -114,6 +118,7 @@ export class OrganizationUsageService {
   }
 
   private async respond(
+    principal: Principal,
     organization: OrganizationDocument,
   ): Promise<OrganizationUsageResponse> {
     const now = new Date();
@@ -124,6 +129,7 @@ export class OrganizationUsageService {
         organization._id,
         this.ledger.monthKeyOf(now),
         TOP_PROBLEMS,
+        ProblemAccess.visibleFilter(principal, null),
       ),
     ]);
     const caps = quotaOf(organization);

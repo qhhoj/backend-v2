@@ -133,7 +133,11 @@ export class OrganizationProblemsService {
       principal,
       target.slug,
     );
-    const problem = await this.ownedProblem(organization._id, target.code);
+    const problem = await this.ownedProblem(
+      principal,
+      organization._id,
+      target.code,
+    );
     const wanted = unique(tagIds);
     const found = await this.tags.findByIds(organization._id, wanted);
     if (found.length !== wanted.length)
@@ -160,19 +164,25 @@ export class OrganizationProblemsService {
       principal,
       target.slug,
     );
-    const problem = await this.ownedProblem(organization._id, target.code);
+    const problem = await this.ownedProblem(
+      principal,
+      organization._id,
+      target.code,
+    );
     await this.links.setArchived(organization._id, problem._id, archived);
   }
 
-  /** A link exists only for organizations the problem lists; a missing, deleted or foreign problem is a 404. */
+  /** A link exists only for organizations the problem lists; a missing, deleted or foreign problem, or one the viewer may not see (as in `list`), is the same 404. */
   private async ownedProblem(
+    principal: Principal,
     organizationId: string,
     code: string,
   ): Promise<ProblemDocument> {
     const problem = await this.problems.findByCode(code);
     if (
       !problem ||
-      !problem.organizations.map(uuidStr).includes(organizationId)
+      !problem.organizations.map(uuidStr).includes(organizationId) ||
+      !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem), null)
     )
       throw new AppError(
         'not_found',
