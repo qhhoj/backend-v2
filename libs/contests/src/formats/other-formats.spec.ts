@@ -2,12 +2,7 @@ import { isSolvedCell } from '../first-solves';
 import { finalSubmissionFormat } from './final-submission';
 import { FormatConfigError } from './format';
 import type { ScoringRow } from './format';
-import {
-  batchMinima,
-  dataPoints,
-  ioi16Format,
-  pretestDataPoints,
-} from './ioi16';
+import { batchMinima, dataPoints, ioi16Format, allDataPoints } from './ioi16';
 import { parseFormatConfig, scoreParticipation } from './registry';
 import { at, context, row } from './scoring-fixtures';
 import { ultimateFormat } from './ultimate';
@@ -182,7 +177,7 @@ describe('ioi16 cells from the judged cases and the problem data', () => {
     ).toBe(100);
   });
 
-  it('scales a pretest-only run by the pretest points and a full run by the full-run points, never above the problem points', () => {
+  it('scales a pretest-only run over all data points (legacy) and a full run over the full-run points, never above the problem points', () => {
     const data: DataCase[] = [
       { type: 'C', points: 60, isPretest: true },
       { type: 'C', points: 40 },
@@ -192,25 +187,23 @@ describe('ioi16 cells from the judged cases and the problem data', () => {
         problemId: 'P',
         points: 100,
         dataPoints: dataPoints(data),
-        pretestPoints: pretestDataPoints(data),
+        allDataPoints: allDataPoints(data),
       },
     ];
     const cellOfRows = (...rows: ScoringRow[]) =>
       ioi16Format.score(rows, { cumtime: false }, context({ problems }))
-        .formatData.P.points;
-    const pretestOnly = (points: number) =>
-      row('P', 5, points, {
-        isPretested: true,
-        batchPoints: batchMinima(plainCases([points])),
-      });
-    const fullRun = (testPoints: number) =>
-      row('P', 9, testPoints, {
-        batchPoints: batchMinima(plainCases([0, testPoints])),
-      });
-    expect(cellOfRows(pretestOnly(60))).toBe(100);
-    expect(cellOfRows(pretestOnly(0), fullRun(40))).toBe(100);
-    expect(cellOfRows(pretestOnly(60), fullRun(40))).toBe(100);
-    expect(cellOfRows(pretestOnly(0), fullRun(0))).toBe(0);
+        .formatData.P.points as number;
+    const pretestOnlyAc = row('P', 5, 60, {
+      isPretested: true,
+      batchPoints: batchMinima(plainCases([60])),
+    });
+    const fullAc = row('P', 9, 100, {
+      batchPoints: batchMinima(plainCases([0, 40])),
+    });
+    const pretestCell = cellOfRows(pretestOnlyAc);
+    expect(pretestCell).toBe(60);
+    expect(isSolvedCell({ points: pretestCell }, 100)).toBe(false);
+    expect(cellOfRows(pretestOnlyAc, fullAc)).toBe(100);
   });
 
   it('scores an externally judged problem (no data cases) by its best submission, as other formats do', () => {

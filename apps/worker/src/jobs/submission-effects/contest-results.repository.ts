@@ -4,7 +4,7 @@ import type { Model } from 'mongoose';
 import {
   batchMinima,
   dataPoints,
-  pretestDataPoints,
+  allDataPoints,
   SCORING_CONTEST_FIELDS,
 } from '@libs/contests';
 import type {
@@ -195,7 +195,7 @@ export class ContestResultsRepository {
           uuidStr(row._id),
           {
             dataPoints: dataPoints(cases),
-            pretestPoints: pretestDataPoints(cases),
+            allDataPoints: allDataPoints(cases),
           },
         ];
       }),

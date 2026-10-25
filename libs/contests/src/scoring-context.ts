@@ -3,10 +3,10 @@ import { frozenTime, participationStart } from './contest-time';
 import type { ContestTimes, ParticipationTimes } from './contest-time';
 import type { ScoringContext } from './formats/format';
 
-/** ioi16's divisors of one problem: what a full run and a pretest-only run award. */
+/** ioi16's divisors of one problem: of a full run (`dataPoints`) and of a pretest-only run (`allDataPoints`). */
 export interface RunDivisors {
   dataPoints: number;
-  pretestPoints: number;
+  allDataPoints: number;
 }
 
 export interface ScoringContestFields extends ContestTimes {

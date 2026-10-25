@@ -44,41 +44,37 @@ interface DataCase {
   isPretest?: boolean;
 }
 
-/** The points one kind of run awards in total. A pretest-only run grades the pretests as written. A full run grades the pretests first with a plain pretest case worth 0 (judge-v2 `Pass::FullRunPretest`, decision 185), then the tests: every batch start (`S`) and every plain test case outside batches. */
-function awardedPoints(
+/** Legacy `points_scaling_factor` walk (`judge/models/contest.py`): every batch start (`S`) and every plain case outside batches adds its points; a full run's divisor leaves out the plain pretest cases. */
+function batchAndPlainPoints(
   cases: readonly DataCase[],
-  isPretestRun: boolean,
+  withPlainPretests: boolean,
 ): number {
-  const counts = (testCase: DataCase): boolean =>
-    (testCase.type === 'S' && !isPretestRun) ||
-    Boolean(testCase.isPretest) === isPretestRun;
   let total = 0;
   let inBatch = false;
   for (const testCase of cases) {
-    if (testCase.type === 'E') {
-      inBatch = false;
-      continue;
-    }
-    if (testCase.type === 'S') inBatch = true;
-    else if (inBatch) continue;
-    if (counts(testCase)) total += testCase.points ?? 0;
+    if (testCase.type === 'E') inBatch = false;
+    else if (testCase.type === 'S') {
+      inBatch = true;
+      total += testCase.points ?? 0;
+    } else if (!inBatch && (withPlainPretests || !testCase.isPretest))
+      total += testCase.points ?? 0;
   }
   return total;
 }
 
-/** Legacy `points_scaling_factor` divisor for a full run: batch starts and plain cases outside batches, less the plain pretest cases a full run grades at 0. */
+/** The divisor of a full run: it grades the pretests first with a plain pretest case worth 0 (judge-v2 `Pass::FullRunPretest`, decision 185), so only batches and plain test cases count. */
 export const dataPoints = (cases: readonly DataCase[]): number =>
-  awardedPoints(cases, false);
+  batchAndPlainPoints(cases, false);
 
-/** The divisor for a pretest-only run (`runPretestsOnly` and the problem's `isPretested`): the pretest batches and plain pretest cases. */
-export const pretestDataPoints = (cases: readonly DataCase[]): number =>
-  awardedPoints(cases, true);
+/** Legacy `points_scaling_factor` divisor, plain pretests included: the divisor of a pretest-only run (`runPretestsOnly` and the problem's `isPretested`), as legacy ioi16 scaled every run. */
+export const allDataPoints = (cases: readonly DataCase[]): number =>
+  batchAndPlainPoints(cases, true);
 
 /** A row's batch points count only once its run graded every case (D); an AB, IE or in-flight run may have stopped inside a batch. */
 const gradedBatchPoints = (scored: ScoringRow): Record<string, number> =>
   scored.status === 'D' ? (scored.batchPoints ?? {}) : {};
 
-/** Per batch the best across the rows of one kind of run (pretest-only or full): their batch keys overlap but their points have different divisors. */
+/** Per batch the best across the rows of one kind of run (pretest-only or full): their batch keys overlap but their divisors differ. */
 function bestBatches(
   problemRows: readonly ScoringRow[],
   isPretestRun: boolean,
@@ -108,14 +104,14 @@ function scaledPoints(
   return partialPoints(points, problemPoints);
 }
 
-/** One problem's cell: the better of its full runs (over `dataPoints`) and its pretest-only runs (over `pretestPoints`), each the per-batch best, as `ioi` takes the best submission. A problem with no case points at all (externally judged) takes its best submission's points, as the other formats do. */
+/** One problem's cell: the better of its full runs (over `dataPoints`) and its pretest-only runs (over `allDataPoints`, so a pretest-only pass shows the pretests' share, as legacy), each the per-batch best. A problem with no case points at all (externally judged) takes its best submission's points, as the other formats do. */
 function problemPoints(
   problemRows: readonly ScoringRow[],
   problem: ScoringProblem | undefined,
 ): number {
   if (!problem) return 0;
   const fullRun = problem.dataPoints ?? 0;
-  const pretestRun = problem.pretestPoints ?? 0;
+  const pretestRun = problem.allDataPoints ?? 0;
   if (!fullRun && !pretestRun) return bestOf(problemRows).points;
   return Math.max(
     scaledPoints(bestBatches(problemRows, false), fullRun, problem.points),
@@ -123,7 +119,7 @@ function problemPoints(
   );
 }
 
-/** Legacy `IOIContestFormat` (key `ioi16`): per batch the best across the participation's submissions, scaled by the contest points over what the run awards (full and pretest-only runs apart); no times. A problem without data points scores its best submission (legacy divided by zero). */
+/** Legacy `IOIContestFormat` (key `ioi16`): per batch the best across the participation's submissions, scaled by the contest points over the run's divisor (full and pretest-only runs apart); no times. A problem without data points scores its best submission (legacy divided by zero). */
 export const ioi16Format: ContestFormat<Ioi16Config> = {
   parseConfig: (raw) => parseKnownConfig<Ioi16Config>(raw, { cumtime: false }),
   score(rows, _config, context) {
