@@ -114,31 +114,18 @@ describe('submitting inside a contest', () => {
     expect(await api.contestSubmissions.findById(normal).lean()).toBeNull();
   });
 
-  it('submits a spectator as practice: no contest priority, pretests, cap or contest row', async () => {
+  it('refuses a spectator (editor, tester or a contestant whose window ended) while the contest runs', async () => {
     const problem = await createProblem(api, catalog, {
       code: 'cp_spectated',
       isPublic: false,
     });
-    const contest = await createContest(api, {
-      runPretestsOnly: true,
-      problems: [
-        contestProblem(problem._id, 0, {
-          isPretested: true,
-          maxSubmissions: 1,
-        }),
-      ],
+    const running = await createContest(api, {
+      problems: [contestProblem(problem._id, 0)],
     });
-    await enter('dave', contest._id, { virtual: SPECTATE });
-    // Twice: a contest submission would hit `maxSubmissions: 1` the second time.
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const id = idOf(await submit('dave', 'cp_spectated').expect(201));
-      expect(await api.submissions.findById(id).lean()).toMatchObject({
-        priority: 1,
-        contest: null,
-        isPretested: false,
-      });
-      expect(await api.contestSubmissions.findById(id).lean()).toBeNull();
-    }
+    await enter('dave', running._id, { virtual: SPECTATE });
+    await submit('dave', 'cp_spectated')
+      .expect(403)
+      .expect(errorCode('spectator_cannot_submit'));
   });
 
   it('caps submissions per problem, not counting internal errors, for every user', async () => {

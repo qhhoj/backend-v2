@@ -207,7 +207,12 @@ export class UserPagesRepository {
               count: { $sum: 1 },
             },
           },
-          publicProblem(this.problems.collection.name, {}, '_id.problem'),
+          // Only presence is read: project one small field, never the whole problem.
+          publicProblem(
+            this.problems.collection.name,
+            { isPublic: 1 },
+            '_id.problem',
+          ),
           { $match: { problem: { $ne: [] } } },
           { $group: { _id: '$_id.day', count: { $sum: '$count' } } },
         ])

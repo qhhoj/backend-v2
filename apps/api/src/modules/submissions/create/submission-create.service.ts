@@ -304,7 +304,7 @@ export class SubmissionCreateService {
     }
   }
 
-  /** Legacy `form_valid` in a contest: only when the current contest lists the problem. A spectator (editor, tester, or a contestant whose window ended) submits as practice: a contest submission there would get contest priority, pretests and a fresh cap with no place on the board. */
+  /** Legacy `form_valid` in a contest: only when the current contest lists the problem. A spectator (editor, tester, or a contestant whose window ended) cannot submit to it until the contest ends (403 `spectator_cannot_submit`), then submits as practice: a spectator's contest submission got contest priority, pretests and a fresh cap with no place on the board. */
   private contestPlan(
     current: CurrentParticipation | null,
     problemId: string,
@@ -313,9 +313,17 @@ export class SubmissionCreateService {
     const entry = current?.contest.problems.find(
       (candidate) => uuidStr(candidate.problem) === problemId,
     );
-    if (!current || !entry || current.participation.virtual === SPECTATE)
-      return null;
+    if (!current || !entry) return null;
     const { contest, participation } = current;
+    if (participation.virtual === SPECTATE) {
+      if (contestPhase(contest, now) !== 'ended')
+        throw new AppError(
+          'spectator_cannot_submit',
+          403,
+          'Spectators cannot submit during the contest',
+        );
+      return null;
+    }
     const isPretest = contest.runPretestsOnly && entry.isPretested;
     const isFinalFormat = contest.formatName === 'final_submission';
     const finalOnly = isFinalFormat && contestPhase(contest, now) !== 'ended';
