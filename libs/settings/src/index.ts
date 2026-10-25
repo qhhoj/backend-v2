@@ -1,6 +1,7 @@
 export * from './setting-types';
 export * from './registry';
 export * from './sealing';
+export * from './superuser-only';
 export * from './settings-key';
 export * from './settings.module';
 export * from './settings.querier';

@@ -1592,6 +1592,59 @@ afterAll(() => api.teardown());
       });
     });
 
+    it('leaves out notes and superuser-only setting rows for a viewer without the matching permission', async () => {
+      const [note, secret] = [newId(), newId()];
+      const settings = api.app.get<Model<SettingRevision>>(
+        getModelToken(SettingRevision.name),
+      );
+      await api.revisions.create({
+        _id: note,
+        entity: 'user',
+        entityId: editorId,
+        action: 'staff_send_reset_link',
+        userId: editorId,
+        changes: {},
+        comment: 'Password reset link sent to editor@example.com',
+      });
+      await settings.create({
+        _id: secret,
+        key: 'auth.sessionMaxDays',
+        before: 8,
+        after: 9,
+        changedFields: ['value'],
+        actor: editorId,
+      });
+      try {
+        const { body } = await feed({ limit: 50 });
+        const seen = new Map(body.items.map((item) => [item.id, item]));
+        expect(seen.get(note)?.comment).toBe('');
+        expect(seen.has(secret)).toBe(false);
+        const root = await loginAs(
+          api,
+          (
+            await createUserWith(api, 'rootviewer', {
+              isSuperuser: true,
+              permissions: ['judge.change_settings'],
+            })
+          )._id,
+        );
+        const full = dataOf<AuditFeedResponse>(
+          await authed(api.http().get(AUDIT).query({ limit: 50 }), root).expect(
+            200,
+          ),
+        );
+        expect(full.items.find((item) => item.id === note)?.comment).toContain(
+          'editor@example.com',
+        );
+        expect(full.items.some((item) => item.id === secret)).toBe(true);
+      } finally {
+        await Promise.all([
+          api.revisions.deleteOne({ _id: note }),
+          settings.deleteOne({ _id: secret }),
+        ]);
+      }
+    });
+
     it('filters by actor across both collections, and an unknown actor gives an empty feed', async () => {
       const { body } = await feed({ actor: 'EDITOR' });
       expect(body.items.map((item) => item.id)).toEqual([ids[3], ids[0]]);

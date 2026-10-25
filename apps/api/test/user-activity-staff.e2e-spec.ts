@@ -1,6 +1,7 @@
 import type { User, UserActivity } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
 import { Logger } from '@nestjs/common';
+import { generateApiToken } from '@libs/auth';
 import type {
   ActivityLogResponse,
   ActivitySummaryResponse,
@@ -8,7 +9,7 @@ import type {
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
-import { errorCode, setupApiTest } from './setup';
+import { errorCode, setupApiTest, TEST_ENV } from './setup';
 import type { ApiTest } from './setup';
 
 const BASE = '/api/internal/admin/user-activity';
@@ -283,6 +284,25 @@ describe('user activity staff API', () => {
     expect(
       cells.filter((cell) => /=1\+1|\+cmd|SUM|-2\+3/.test(cell)),
     ).toHaveLength(agents.length);
+  });
+
+  it('keeps deletion to browser sessions, never for oneself or a superuser unless a superuser, and records it', async () => {
+    await createUserWith(api, 'rooty', { isSuperuser: true });
+    const token = generateApiToken(ids.staff, TEST_ENV.TOKEN_SECRET);
+    await api.users.updateOne({ _id: ids.staff }, { apiTokenHash: token.hash });
+    const bearer = { Authorization: `Bearer ${token.token}` };
+    await api.http().delete(`${BASE}/users/alice`).set(bearer).expect(403);
+    await api.http().delete(`${BASE}/anonymous`).set(bearer).expect(403);
+    await authed(api.http().delete(`${BASE}/users/rooty`), staff).expect(403);
+    await authed(api.http().delete(`${BASE}/users/staff`), staff).expect(403);
+    const auditRows = () =>
+      api.revisions.countDocuments({
+        entity: 'user',
+        action: 'delete_activity',
+      });
+    const rowsBefore = await auditRows();
+    await authed(api.http().delete(`${BASE}/users/alice`), staff).expect(204);
+    expect(await auditRows()).toBe(rowsBefore + 1);
   });
 
   it('audits deletions with who, whom and how many', async () => {

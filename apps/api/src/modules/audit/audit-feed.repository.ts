@@ -24,6 +24,8 @@ export interface AuditFilter {
   to?: Date;
   /** Only records older than this id. */
   before?: string;
+  /** Setting keys whose records are left out. */
+  hiddenSettingKeys?: readonly string[];
 }
 
 /** Ids are UUIDv7 in both collections, so `_id` order is time order and the hex strings compare the same way. */
@@ -105,6 +107,9 @@ export class AuditFeedRepository {
     const query: FilterQuery<SettingRevision> = {
       ...idRange(filter),
       ...(filter.actorId && { actor: filter.actorId }),
+      ...(filter.hiddenSettingKeys?.length && {
+        key: { $nin: [...filter.hiddenSettingKeys] },
+      }),
     };
     const rows = await newestRows(this.settingRevisions, query, limit);
     return rows.map((row) => ({
