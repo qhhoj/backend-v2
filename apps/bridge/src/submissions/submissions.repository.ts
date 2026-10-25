@@ -26,6 +26,7 @@ import type { SubmissionGradedJob } from '@libs/judging';
 import type { AssignmentRef } from '@libs/judge-proto';
 import type { QueuedSubmission } from '../dispatch/slots';
 import type { AssignRequest } from './assign-request';
+import type { RunBudget } from '../dispatch/run-deadlines';
 import { submissionFilePath } from './submission-file-path';
 
 /** Judge disconnects forgiven while a submission is in flight; the next one is an internal error. */
@@ -50,6 +51,11 @@ interface JudgedProblem {
 }
 /** The IE message of a claimed row whose problem, source or uploaded file is gone. */
 const MISSING_DATA_MESSAGE = 'Submission data is missing';
+/** What a reconnecting judge's held run resumes from: the stored seq and its deadline budget, null when the row cannot give one (the problem is gone, or its Started was stored before the case count was kept). */
+export interface ResumableRun {
+  seq: number;
+  budget: RunBudget | null;
+}
 /** A P/G row, the judge it names and the generation it runs. */
 export interface InFlightRun {
   id: string;
@@ -104,6 +110,15 @@ interface RunInputs extends JudgingInputs {
   sourceSize: number;
 }
 
+/** The problem's per-language override for a language, if any: its limits win over the problem's. */
+const languageLimitOf = (
+  problem: Pick<Problem, 'languageLimits'>,
+  language: string,
+) =>
+  problem.languageLimits.find(
+    (entry) => uuidStr(entry.languageId) === uuidStr(language),
+  );
+
 /** `PROBLEM_LIMITS.memoryLimit.min` is 0; isolate needs a positive `--cg-mem`. */
 const MIN_MEMORY_LIMIT_KIB = 1024;
 
@@ -114,10 +129,7 @@ function assignRequest(
   inputs: RunInputs,
 ): AssignRequest {
   const { problem, contestMeta } = inputs;
-  const languageId = uuidStr(submission.language);
-  const limit = problem.languageLimits.find(
-    (entry) => uuidStr(entry.languageId) === languageId,
-  );
+  const limit = languageLimitOf(problem, submission.language);
   return {
     ref: { submissionId: queued.id, generation: submission.judgeGeneration },
     problemCode: queued.problemCode,
@@ -595,15 +607,28 @@ export class SubmissionsRepository {
     return row && gradedJobOf(row);
   }
 
-  /** The seq stored for a run a reconnecting judge still holds; null when the row moved on (another judge or generation, or no longer P/G). */
-  async resumableSeq(
+  /** A run a reconnecting judge still holds; null when the row moved on (another judge or generation, or no longer P/G). */
+  async resumableRun(
     ref: AssignmentRef,
     judgeName: string,
-  ): Promise<number | null> {
+  ): Promise<ResumableRun | null> {
     const row = await this.submissions
-      .findOne({ ...runOf(ref, judgeName), status: IN_FLIGHT }, { judgeSeq: 1 })
+      .findOne(
+        { ...runOf(ref, judgeName), status: IN_FLIGHT },
+        { judgeSeq: 1, judgeCaseCount: 1, status: 1, problem: 1, language: 1 },
+      )
       .lean();
-    return row ? row.judgeSeq : null;
+    if (!row) return null;
+    const problem = await this.problems
+      .findById(row.problem, { timeLimit: 1, languageLimits: 1 })
+      .lean();
+    // a P row's count is an earlier generation's: its Started is still to come
+    const caseCount = row.status === 'G' ? (row.judgeCaseCount ?? null) : null;
+    if (!problem || (row.status === 'G' && caseCount === null))
+      return { seq: row.judgeSeq, budget: null };
+    const timeLimitSeconds =
+      languageLimitOf(problem, row.language)?.timeLimit ?? problem.timeLimit;
+    return { seq: row.judgeSeq, budget: { timeLimitSeconds, caseCount } };
   }
 
   /** P/G runs of judges; the external adapter's (`@external`) are its own to recover. */

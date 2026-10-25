@@ -8,6 +8,7 @@ import {
   requeueUpdate,
 } from '@libs/judging';
 import type { Problem } from '@libs/database';
+import { RunWritesRepository } from '../src/submissions/run-writes.repository';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import { seedCatalog, seedProblem, seedSubmission } from './fixtures';
 import type { BridgeCatalog } from './fixtures';
@@ -350,21 +351,35 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
     expect(await repository.requeueRun(second, JUDGE)).toBeNull();
   });
 
-  it('tells a reconnecting judge the seq stored for a run it still holds, and nothing for a run that moved on', async () => {
+  it('tells a reconnecting judge the seq and deadline budget stored for a run it still holds, and nothing for a run that moved on', async () => {
     const { id, ref } = await claimedRun();
+    expect(await repository.resumableRun(ref, JUDGE)).toEqual({
+      seq: 0,
+      budget: { timeLimitSeconds: 2, caseCount: null },
+    });
+    const writes = bridge.module.get(RunWritesRepository);
+    await writes.started({ ref, judgeName: JUDGE, seq: 1 }, false, 150);
+    expect(await repository.resumableRun(ref, JUDGE)).toEqual({
+      seq: 1,
+      budget: { timeLimitSeconds: 2, caseCount: 150 },
+    });
+    // a run started before the case count was kept: no budget from the row
     await bridge.submissions.updateOne(
       { _id: id },
-      { $set: { status: 'G', judgeSeq: 3 } },
+      { $set: { judgeCaseCount: null } },
     );
-    expect(await repository.resumableSeq(ref, JUDGE)).toBe(3);
-    expect(await repository.resumableSeq(ref, 'judge-02')).toBeNull();
+    expect(await repository.resumableRun(ref, JUDGE)).toEqual({
+      seq: 1,
+      budget: null,
+    });
+    expect(await repository.resumableRun(ref, 'judge-02')).toBeNull();
     expect(
-      await repository.resumableSeq({ ...ref, generation: 2 }, JUDGE),
+      await repository.resumableRun({ ...ref, generation: 2 }, JUDGE),
     ).toBeNull();
     await bridge.submissions.updateOne({ _id: id }, { $set: { status: 'D' } });
-    expect(await repository.resumableSeq(ref, JUDGE)).toBeNull();
+    expect(await repository.resumableRun(ref, JUDGE)).toBeNull();
     expect(
-      await repository.resumableSeq(
+      await repository.resumableRun(
         { submissionId: newId(), generation: 1 },
         JUDGE,
       ),

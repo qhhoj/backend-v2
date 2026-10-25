@@ -8,6 +8,7 @@ import type { AssignRequest } from '../submissions/assign-request';
 import type { RunsService } from '../submissions/runs.service';
 import type { SubmissionsRepository } from '../submissions/submissions.repository';
 import { DispatcherService } from './dispatcher.service';
+import type { RunBudget } from './run-deadlines';
 import type { DispatchTarget, QueuedSubmission } from './slots';
 
 /** A session without a stream: records what the dispatcher tells it. */
@@ -86,7 +87,9 @@ describe('DispatcherService', () => {
   let generations: Map<string, number>;
   let rows: Map<string, QueuedSubmission>;
   let stored: Map<string, number | null>;
-  /** `resumableSeq` of these submissions waits on their promise: a handshake held open mid-resume. */
+  /** The deadline budget a resumed run's row gives (none when unset). */
+  let budgets: Map<string, RunBudget>;
+  /** `resumableRun` of these submissions waits on their promise: a handshake held open mid-resume. */
   let resumeGates: Map<string, Promise<void>>;
   /** When set, every claim waits on it: a dispatch held open between its read and its claim. */
   let claimGate: Promise<void> | null;
@@ -124,9 +127,11 @@ describe('DispatcherService', () => {
       requeueFails
         ? Promise.reject(new Error('Mongo down'))
         : Promise.resolve(true),
-    resumableSeq: async (ref: AssignmentRef) => {
+    resumableRun: async (ref: AssignmentRef) => {
       await resumeGates.get(ref.submissionId);
-      return stored.get(`${ref.submissionId}.${ref.generation}`) ?? null;
+      const seq = stored.get(`${ref.submissionId}.${ref.generation}`);
+      if (seq === undefined || seq === null) return null;
+      return { seq, budget: budgets.get(ref.submissionId) ?? null };
     },
     graceExpired: (
       ref: AssignmentRef,
@@ -161,6 +166,7 @@ describe('DispatcherService', () => {
     generations = new Map();
     rows = new Map();
     stored = new Map();
+    budgets = new Map();
     resumeGates = new Map();
     claimGate = null;
     tracked = new Set();
@@ -509,6 +515,29 @@ describe('DispatcherService', () => {
       await flush();
       expect(judge.aborted).toEqual([ref]);
       expect(expired).toEqual([{ ref, abortRequested: false }]);
+    });
+
+    it('gives a run resumed after a bridge restart the deadline of its stored budget: 150 cases at the 10 s limit', async () => {
+      dispatcher.stop();
+      dispatcher = new DispatcherService(
+        submissions,
+        runs,
+        NO_GENERATIONS,
+        DEFAULT_BRIDGE_TIMINGS,
+      );
+      const ref = { submissionId: newId(), generation: 1 };
+      stored.set(`${ref.submissionId}.1`, 3);
+      budgets.set(ref.submissionId, { timeLimitSeconds: 10, caseCount: 150 });
+      const judge = new Target('j1');
+      await dispatcher.resume(judge, [{ ref, lastSeqSent: 3 }]);
+      await dispatcher.register(judge);
+      // 10 min + 150 × (3 × 10 + 1 + 5) s: 100 min, as from the run's Started
+      jest.advanceTimersByTime(600_000 + 150 * 36_000 - 1);
+      await flush();
+      expect(judge.aborted).toEqual([]);
+      jest.advanceTimersByTime(1);
+      await flush();
+      expect(judge.aborted).toEqual([ref]);
     });
 
     it('ignores a Started of a run its judge no longer holds', async () => {

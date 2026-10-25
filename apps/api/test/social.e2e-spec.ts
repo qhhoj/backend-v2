@@ -338,6 +338,7 @@ describe('social login', () => {
     await createUser(api.users, {
       ...linkOf('github-secure', 'g-1'),
       isTotpEnabled: true,
+      totpKey: 'stored-key',
     });
     github.identities.set('code-1', {
       uid: 'g-1',

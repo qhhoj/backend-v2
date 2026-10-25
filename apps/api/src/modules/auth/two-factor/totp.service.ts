@@ -12,6 +12,7 @@ import type { AuthContext, UserDocument } from '@libs/auth';
 import { AppError, decrypt, ENV, encrypt, encryptionKey } from '@libs/common';
 import type { Env } from '@libs/common';
 import { AuthService } from '../core/auth.service';
+import { isTotpEnrolled } from './second-factor-methods';
 import { SecondFactorService } from './second-factor.service';
 import { ScratchCodesRemainingResponse } from './dto/totp.response';
 
@@ -21,7 +22,7 @@ const invalidCode = () =>
 const assertTotpEnabled: (
   user: UserDocument,
 ) => asserts user is UserDocument & { totpKey: string } = (user) => {
-  if (!user.isTotpEnabled || !user.totpKey)
+  if (!isTotpEnrolled(user))
     throw new AppError('totp_not_enabled', 400, 'TOTP is not enabled');
 };
 
@@ -56,7 +57,7 @@ export class TotpService {
     currentPassword: string,
   ): Promise<{ secret: string; otpauthUrl: string }> {
     await this.authService.confirmPassword(auth, currentPassword);
-    if (auth.user.isTotpEnabled) throw alreadyEnabled();
+    if (isTotpEnrolled(auth.user)) throw alreadyEnabled();
     const secret = generateTotpSecret();
     await this.sessions.update(auth.sessionId!, {
       pendingTotpSecret: encrypt(secret, this.key),
@@ -68,7 +69,7 @@ export class TotpService {
     auth: AuthContext,
     code: string,
   ): Promise<{ scratchCodes: string[] }> {
-    if (auth.user.isTotpEnabled) throw alreadyEnabled();
+    if (isTotpEnrolled(auth.user)) throw alreadyEnabled();
     const sessionId = auth.sessionId!;
     // Atomic read+clear: concurrent confirms cannot both use one pending secret.
     const pending = await this.sessions.consume(sessionId, 'pendingTotpSecret');

@@ -4,11 +4,15 @@ import type { BridgeTimings } from '../bridge-timings';
 /** setTimeout fires at once for a longer delay (Node clamps it to 1 ms). */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
-interface RunDeadline {
-  timer: NodeJS.Timeout | null;
+/** What a run's deadline is computed from. */
+export interface RunBudget {
   timeLimitSeconds: number;
   /** From the run's Started; null before it. */
   caseCount: number | null;
+}
+
+interface RunDeadline extends RunBudget {
+  timer: NodeJS.Timeout | null;
 }
 
 /** Per-run deadline timers by `windingKey`, with the budget each is computed from (time limit, then Started's case count). A run in grace keeps its budget with the timer paused, so a resume restarts the same allowance. */
@@ -24,8 +28,13 @@ export class RunDeadlines {
 
   /** At Assign: `runDeadlineMs` from the time limit. */
   arm(key: string, timeLimitSeconds: number, onExpiry: () => void): void {
+    this.restore(key, { timeLimitSeconds, caseCount: null }, onExpiry);
+  }
+
+  /** At a resume after a bridge restart: the budget read back from the row, from now, the same formula as a run that never left. */
+  restore(key: string, budget: RunBudget, onExpiry: () => void): void {
     this.clear(key);
-    const run = { timer: null, timeLimitSeconds, caseCount: null };
+    const run = { timer: null, ...budget };
     this.runs.set(key, run);
     this.start(run, onExpiry);
   }
