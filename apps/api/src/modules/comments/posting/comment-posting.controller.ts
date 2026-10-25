@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
@@ -17,6 +18,7 @@ import {
   CommentPageParamsDto,
 } from '../core/dto/comment-params.dto';
 import type { CommentResponse } from '../core/dto/comment.response';
+import { PageListQueryDto } from '../../site/admin/dto/site-admin-params.dto';
 import { CommentPostingService } from './comment-posting.service';
 import { CommentBodyDto, NewCommentDto } from './dto/comment-body.dto';
 import type { CommentPreviewResponse } from './dto/comment-preview.response';
@@ -108,16 +110,19 @@ export class CommentPostingController {
    * List the edit history of a comment
    *
    * @remarks
-   * Public. Returns every edit of a comment with the time, the editor, and the
-   * text before and after. Hidden and deleted comments are only available to
-   * holders of `judge.change_comment`.
+   * Public. Returns the edits of a comment, newest first, 100 per `page`
+   * (a full page may have a next one), with the time, the editor, and the
+   * text before and after. A deleted comment also lists its deletion, as the
+   * last text changed to empty. Hidden and deleted comments are only
+   * available to holders of `judge.change_comment`.
    */
   @Public()
   @Get(':id/revisions')
   revisions(
     @CurrentAuth() auth: AuthContext | undefined,
     @Param() { id }: CommentIdParamDto,
+    @Query() { page }: PageListQueryDto,
   ): Promise<CommentRevisionResponse[]> {
-    return this.posting.revisionsOf(optionalPrincipal(auth), id);
+    return this.posting.revisionsOf(optionalPrincipal(auth), id, page);
   }
 }

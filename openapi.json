@@ -24185,7 +24185,7 @@
     },
     "/api/internal/comments/{id}/revisions": {
       "get": {
-        "description": "Public. Returns every edit of a comment with the time, the editor, and the\ntext before and after. Hidden and deleted comments are only available to\nholders of `judge.change_comment`.",
+        "description": "Public. Returns the edits of a comment, newest first, 100 per `page`\n(a full page may have a next one), with the time, the editor, and the\ntext before and after. A deleted comment also lists its deletion, as the\nlast text changed to empty. Hidden and deleted comments are only\navailable to holders of `judge.change_comment`.",
         "operationId": "CommentPostingController_revisions",
         "parameters": [
           {
@@ -24195,6 +24195,18 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "description": "Page number, starting at 1.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],

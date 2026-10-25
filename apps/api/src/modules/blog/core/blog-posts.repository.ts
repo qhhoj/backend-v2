@@ -96,6 +96,20 @@ export class BlogPostsRepository {
     await this.posts.updateOne({ _id: id }, { $set: changes }).exec();
   }
 
+  /** `update`, but only while no moderator has hidden the post; false when one has (so a stale read cannot make a moderator-hidden post public). */
+  async updateUnlessModeratorHidden(
+    id: string,
+    changes: Partial<BlogPost>,
+  ): Promise<boolean> {
+    const { matchedCount } = await this.posts
+      .updateOne(
+        { _id: id, isHiddenByModerator: { $ne: true } },
+        { $set: changes },
+      )
+      .exec();
+    return matchedCount > 0;
+  }
+
   /** The post and its discussion (votes, comments with their votes and reports, the lock, the numbering counter) in one transaction; legacy left the comments orphaned. Returns the comment authors, whose contribution points change. */
   async deleteWithDiscussion(id: string): Promise<string[]> {
     const page = { 'page.type': 'blog', 'page.id': id };

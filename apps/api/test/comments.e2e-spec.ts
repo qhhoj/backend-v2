@@ -317,11 +317,59 @@ describe('comment preview, post blocks, hidden listings, delete, reports, locate
           moderator,
         ).expect(200),
       );
-      expect(history.map((row) => row.after)).toEqual(['edited text']);
+      expect(history.map((row) => row.after)).toEqual(['', 'edited text']);
       const deleteRow = await api.revisions
         .findOne({ entityId: comment._id, action: 'delete' })
         .lean();
       expect(deleteRow?.changes.body.before).toBe('edited text');
+    });
+  });
+
+  describe('moderation history', () => {
+    const history = async (id: string, session: TestSession, page = 1) =>
+      dataOf<CommentRevisionResponse[]>(
+        await authed(
+          api.http().get(commentUrl(id, `/revisions?page=${page}`)),
+          session,
+        ).expect(200),
+      );
+
+    it('keeps the text of an unedited deleted comment for moderators', async () => {
+      const { user: author, session } = await person();
+      const { session: moderator } = await person(MODERATOR);
+      const page = await createPost(api);
+      const comment = await blogComment(page._id, author._id, {
+        body: 'original text',
+      });
+      await remove(comment._id, session).expect(200);
+      expect(
+        (await history(comment._id, moderator)).map((row) => [
+          row.before,
+          row.after,
+        ]),
+      ).toEqual([['original text', '']]);
+    });
+
+    it('pages the history past 100 rows so the original text stays reachable', async () => {
+      const { user: author } = await person();
+      const { session: moderator } = await person(MODERATOR);
+      const page = await createPost(api);
+      const comment = await blogComment(page._id, author._id);
+      await api.revisions.insertMany(
+        Array.from({ length: 101 }, (_unused, index) => ({
+          entity: 'comment',
+          entityId: comment._id,
+          action: 'edit',
+          userId: author._id,
+          changes: { body: { before: `v${index}`, after: `v${index + 1}` } },
+          comment: 'Edited from site',
+          createdAt: new Date(Date.UTC(2026, 0, 1, 0, index)),
+        })),
+      );
+      expect(await history(comment._id, moderator)).toHaveLength(100);
+      expect(
+        (await history(comment._id, moderator, 2)).map((row) => row.before),
+      ).toEqual(['v0']);
     });
   });
 
