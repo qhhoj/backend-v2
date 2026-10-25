@@ -241,6 +241,15 @@ const codeTaken = (job: PolygonImportJob) =>
     'problem_code_taken',
   );
 
+/** An update finds its problem by id (a rename may have given its code to another problem); jobs queued before `problemId` existed, and creates, go by code. */
+function targetFilter(
+  job: PolygonImportJob,
+): { _id: string } | { code: string } {
+  return job.mode === 'update' && job.problemId
+    ? { _id: job.problemId }
+    : { code: job.code };
+}
+
 @Injectable()
 export class PolygonImportRepository {
   constructor(
@@ -268,7 +277,7 @@ export class PolygonImportRepository {
   /** Cheap pre-check so a wrong mode fails before any file is written; `apply` checks again inside the transaction. Deliberately S: `findOne({ code })` sees deleted and tombstoned problems, so their codes stay taken. */
   async resolveTarget(job: PolygonImportJob): Promise<ImportTarget> {
     const existing = await this.problems
-      .findOne({ code: job.code })
+      .findOne(targetFilter(job))
       .select('+data')
       .exec();
     this.checkTarget(job, existing);
@@ -445,7 +454,7 @@ export class PolygonImportRepository {
     session: ClientSession,
   ): Promise<AppliedImport> {
     const existing = await this.problems
-      .findOne({ code: job.code })
+      .findOne(targetFilter(job))
       .select('+data')
       .session(session)
       .exec();
@@ -717,12 +726,18 @@ export class PolygonImportRepository {
   private checkTarget(
     job: PolygonImportJob,
     existing: {
+      code: string;
       isFullMarkup: boolean;
       isManuallyManaged: boolean;
       mirrorOf: string | null;
       deletedAt?: Date | null;
     } | null,
   ): void {
+    if (existing && existing.code !== job.code && job.mode === 'update')
+      throw new PolygonImportError(
+        'The problem was renamed since the import was queued',
+        'problem_changed',
+      );
     if (existing?.deletedAt)
       throw notImportable(`problem with code ${job.code} is deleted`);
     if (job.mode === 'create' && existing) throw codeTaken(job);

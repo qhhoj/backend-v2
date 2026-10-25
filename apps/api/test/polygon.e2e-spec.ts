@@ -802,7 +802,7 @@ describe('Polygon routes', () => {
     });
   });
 
-  it('lists the sync history per problem for its editors, and overall only with judge.edit_all_problem', async () => {
+  it('lists the sync history per problem for its editors, and overall only with judge.edit_all_problem and judge.edit_own_problem', async () => {
     const mine = await createProblem(api, catalog, {
       code: 'history_mine',
       authors: [importerId],
@@ -870,8 +870,19 @@ describe('Polygon routes', () => {
         })
       )._id,
     );
+    await get(`${POLYGON}/syncs`, auditor)
+      .expect(403)
+      .expect(errorCode('forbidden'));
+    const staff = await loginAs(
+      api,
+      (
+        await createUserWith(api, 'staffer', {
+          permissions: ['judge.edit_all_problem', 'judge.edit_own_problem'],
+        })
+      )._id,
+    );
     const all = dataOf<Array<{ code: string }>>(
-      await get(`${POLYGON}/syncs`, auditor).expect(200),
+      await get(`${POLYGON}/syncs`, staff).expect(200),
     );
     expect(all.map(({ code }) => code)).toEqual(
       expect.arrayContaining(['history_mine', 'history_other']),
@@ -961,6 +972,26 @@ describe('Polygon routes', () => {
         ),
       ).toMatchObject({ id: jobId, state: 'waiting', step: 'queued' });
       await get(`/api/internal/problems/imports/${jobId}`, plain).expect(404);
+      // After a rename, another problem that takes the code does not inherit the job.
+      const squatterId = (
+        await createUserWith(api, `squatter_${counter}`, {
+          permissions: ['judge.edit_own_problem'],
+        })
+      )._id;
+      await api.problems.updateOne(
+        { code },
+        { $set: { code: `${code}_moved` } },
+      );
+      await createProblem(api, catalog, { code, curators: [squatterId] });
+      await get(
+        `/api/internal/problems/imports/${jobId}`,
+        await loginAs(api, squatterId),
+      ).expect(404);
+      await api.problems.deleteOne({ code });
+      await api.problems.updateOne(
+        { code: `${code}_moved` },
+        { $set: { code } },
+      );
 
       const worker = new Worker<PolygonImportJob>(
         POLYGON_QUEUE,

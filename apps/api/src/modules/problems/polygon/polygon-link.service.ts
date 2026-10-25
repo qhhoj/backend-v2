@@ -55,13 +55,15 @@ export class PolygonLinkService {
     auth: AuthContext,
     code: string,
   ): Promise<PolygonLinkStateResponse> {
-    const { polygonLink } = linkedProblem(await this.problemOf(auth, code));
+    const { _id, polygonLink } = linkedProblem(
+      await this.problemOf(auth, code),
+    );
     const [latestPackage, runningJobId] = await Promise.all([
       this.polygon
         .packages(polygonLink.problemId)
         .then(latestPackageOf)
         .catch(() => null),
-      this.imports.unfinishedJobIdOf(code),
+      this.imports.unfinishedJobIdOf(_id),
     ]);
     return { link: linkView(polygonLink), latestPackage, runningJobId };
   }

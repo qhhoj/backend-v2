@@ -36,13 +36,13 @@ export async function removeFinished(
   if (job && FINISHED.has(await job.getState())) await job.remove();
 }
 
-/** The newest queued or running job that imports into `code`; null when none. */
+/** The newest queued or running job that imports into the problem; null when none. */
 export async function unfinishedJobOf(
   queue: ImportQueue,
-  code: string,
+  problemId: string,
 ): Promise<ImportJob | null> {
   const jobs = (await queue.getJobs(UNFINISHED)).filter(
-    (job): job is ImportJob => job?.data.code === code,
+    (job): job is ImportJob => job?.data.problemId === problemId,
   );
   return (
     jobs.sort((left, right) => right.timestamp - left.timestamp)[0] ?? null

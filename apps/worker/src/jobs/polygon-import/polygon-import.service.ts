@@ -611,7 +611,7 @@ export class PolygonImportService {
     }
   }
 
-  /** Rescore, then (when the data files are in place) the cached PDFs are dropped and the checker and interactor are compiled on a judge. */
+  /** Rescore, drop the cached PDFs (always: the commit changed the statements), then (when the data files are in place) compile the checker and interactor on a judge. */
   private async afterDataWrite(
     job: PolygonImportJob,
     { applied, attention }: WrittenImport,
@@ -620,11 +620,14 @@ export class PolygonImportService {
     // Points, partial and the cases may all have changed; a create has no submissions yet. Never throws: the import stands.
     if (job.mode === 'update')
       await notifyRescore(this.rescoreQueue, applied.problemId, this.logger);
-    if (attention) return attention;
-    return this.attentionOnFailure(job.code, async () => {
-      await this.runSteps(job.code, [
+    // The statements were written by the commit itself, so the cached PDFs go even when the data files need attention.
+    const pdfAttention = await this.attentionOnFailure(job.code, () =>
+      this.runSteps(job.code, [
         ['dropping the cached PDFs', () => this.dropPdfs(job.code)],
-      ]);
+      ]),
+    );
+    if (attention || pdfAttention) return attention ?? pdfAttention;
+    return this.attentionOnFailure(job.code, async () => {
       await this.sourceChecks.checkAfterImport(
         applied.problemId,
         read.imported,

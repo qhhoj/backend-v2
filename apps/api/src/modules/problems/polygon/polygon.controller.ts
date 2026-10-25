@@ -93,7 +93,7 @@ export class PolygonController {
    * List the Polygon sync history of every problem
    *
    * @remarks
-   * Needs `judge.edit_all_problem` (the runs name every problem). Every finished Polygon import and sync job, newest
+   * Needs `judge.edit_own_problem` and `judge.edit_all_problem` (the runs name every problem). Every finished Polygon import and sync job, newest
    * first: problem code, Polygon problem, revision, package and its build time,
    * first import or sync, manual or automatic, who started it, the result and,
    * for a failure, the step it stopped at and the error shown to the requester.

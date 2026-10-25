@@ -9,6 +9,7 @@ export const POLYGON_SYNC_PERMISSION: Permission = 'judge.sync_polygon_problem';
 
 /** The problem fields a sync job is built from. */
 export interface LinkedProblem {
+  _id: string;
   code: string;
   isFullMarkup: boolean;
   dataVersion: number;
@@ -44,6 +45,7 @@ export function syncJobOf(
     requesterId: requester.userId,
     code: problem.code,
     mode: 'update',
+    problemId: problem._id,
     isFullMarkup: problem.isFullMarkup,
     ...jobOptionsOf({ from: 'link', stored: link.options }),
     expectedDataVersion: problem.dataVersion ?? 0,
