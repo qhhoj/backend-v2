@@ -12,6 +12,7 @@ import {
   syncJobOf,
 } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
+import { RunningContestsRepository } from '../polygon-import/running-contests.repository';
 import { PolygonAutoSyncRepository } from './polygon-autosync.repository';
 import type { AutoSyncProblem } from './polygon-autosync.repository';
 
@@ -30,18 +31,19 @@ export class PolygonAutoSyncService {
 
   constructor(
     private readonly repository: PolygonAutoSyncRepository,
+    private readonly runningContests: RunningContestsRepository,
     private readonly polygon: PolygonClient,
     @InjectQueue(POLYGON_QUEUE)
     private readonly imports: Queue<PolygonImportJob>,
   ) {}
 
-  /** One pass over the auto-sync problems; a problem in a running contest is deferred to a later pass. */
+  /** One pass over the auto-sync problems; a problem in a running contest is deferred to a later pass (a queued sync waits again when it runs). */
   async run(now = new Date()): Promise<AutoSyncSummary> {
     const summary: AutoSyncSummary = { checked: 0, queued: 0, deferred: 0 };
     if (!this.polygon.isConnected()) return summary;
     for (const problem of await this.repository.autoSyncProblems()) {
       summary.checked++;
-      if (await this.repository.inRunningContest(problem._id, now))
+      if (await this.runningContests.runningUntil(problem.code, now))
         summary.deferred++;
       else if (await this.queueIfNewer(problem)) summary.queued++;
     }

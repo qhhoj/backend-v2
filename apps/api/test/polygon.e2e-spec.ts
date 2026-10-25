@@ -12,6 +12,7 @@ import {
   POLYGON_ERROR_PREFIX,
   POLYGON_FETCH,
   POLYGON_QUEUE,
+  syncJobId,
 } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { buildZip, FakePolygon } from '@libs/problems/testing';
@@ -982,6 +983,29 @@ describe('Polygon routes', () => {
       });
       await post(`${links()}/sync`).expect(202);
       expect(await (await queue.getJob(jobId))?.getState()).toBe('waiting');
+    });
+
+    it('replaces an automatic sync the worker holds back for a contest with the manual one, which runs now', async () => {
+      polygon.reply('problem.packages', { result: [pkg(11, 4, 'READY')] });
+      const problem = (await api.problems.findOne({ code }))!;
+      const jobId = syncJobId(uuidStr(problem._id), 11);
+      await queue.add(
+        'sync',
+        {
+          code,
+          requesterId: importerId,
+          mode: 'update',
+          polygon: { packageId: 11, purpose: 'sync', trigger: 'auto' },
+        } as PolygonImportJob,
+        { jobId, delay: 3_600_000 },
+      );
+      const { jobId: started } = dataOf<{ jobId: string }>(
+        await post(`${links()}/sync`).expect(202),
+      );
+      expect(started).toBe(jobId);
+      const job = (await queue.getJob(jobId))!;
+      expect(await job.getState()).toBe('waiting');
+      expect(job.data.polygon?.trigger).toBe('manual');
     });
 
     it('refuses a sync while the newest package is still building or failed, with Polygon comment on a linked problem', async () => {

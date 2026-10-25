@@ -64,7 +64,7 @@ import { helperHeadersOf } from './polygon-headers';
 import type { HelperHeader } from './polygon-headers';
 import { ImportQuota } from './import-quota.service';
 import { ImportSourceChecks } from './import-source-checks';
-import { PolygonImportError } from './polygon-import.error';
+import { PolygonImportError, SyncDeferredError } from './polygon-import.error';
 import { PolygonImportRepository } from './polygon-import.repository';
 import type {
   AppliedImport,
@@ -87,6 +87,7 @@ import {
 } from './polygon-statements';
 import { planTests } from './polygon-tests';
 import type { PlannedTest, TestPlan } from './polygon-tests';
+import { RunningContestsRepository } from './running-contests.repository';
 import {
   generatedTestsPathOf,
   StandardPackageTests,
@@ -130,6 +131,8 @@ interface ImportContext {
   /** Syncs only: the settings the setter may have edited since the last import. */
   local: LocalSettings | null;
   tracker: ImportTracker;
+  /** When the job was queued: bounds how long an automatic sync waits for a contest. */
+  queuedAt: Date;
 }
 
 /** What `commitWithData` needs beside the job: the read package, its staged files, and where the import goes. */
@@ -138,6 +141,7 @@ interface CommitInput {
   staged: StagedFile[];
   target: ImportTarget;
   tracker: ImportTracker;
+  queuedAt: Date;
 }
 
 /** The committed import and, when a data step failed after the commit, why it needs attention. */
@@ -145,6 +149,9 @@ interface WrittenImport {
   applied: AppliedImport;
   attention: PolygonImportResult['attention'];
 }
+
+/** How long an automatic sync may wait for running contests (from when it was queued) before it fails with `problem_in_running_contest`. */
+export const MAX_SYNC_DEFERRAL_MS = 7 * 86_400_000;
 
 /** How long an import waits for an API data write that holds the problem's data lock; a test may shorten it. */
 export const IMPORT_DATA_LOCK = { waitSeconds: 60 };
@@ -176,15 +183,21 @@ const needsAttention = (
 const isStandard = (job: PolygonImportJob): boolean =>
   job.polygon?.packageType === 'standard';
 
-/** Headers go beside the package's checker and interactor, whose init.yml `files` list them (a judge with `interactive.checker` reads a checker's list); a problem with neither, an hcmp one, gets none. */
+/** Headers go beside the package's checker and interactor, whose init.yml `files` list them (a judge with `interactive.checker` reads a checker's list); a problem with neither, an hcmp one, gets none. A sync never takes a header named like one of the problem's other data files: a kept local checker keeps its bytes. */
 const helperHeaders = (
-  root: XmlElement,
-  pkg: PolygonPackage,
+  { root, pkg }: { root: XmlElement; pkg: PolygonPackage },
   assets: PolygonAssets,
+  local: LocalSettings | null,
 ): HelperHeader[] =>
   assets.checkerSource || assets.interactorSource
-    ? helperHeadersOf(root, pkg)
+    ? helperHeadersOf(root, pkg, nonHeaderFilesOf(local))
     : [];
+
+/** The local data files a package header must not replace: every file the problem names except its headers. */
+const nonHeaderFilesOf = (local: LocalSettings | null): Set<string> =>
+  new Set(
+    local ? dataFileNamesOf({ ...local.state.data, helperHeaders: [] }) : [],
+  );
 
 /** Grader arguments from the tests (file io) and from the assets (interactor points); null when neither has any. */
 const joinArgs = (
@@ -317,6 +330,7 @@ export class PolygonImportService {
     private readonly standardTests: StandardPackageTests,
     private readonly quota: ImportQuota,
     private readonly sourceChecks: ImportSourceChecks,
+    private readonly runningContests: RunningContestsRepository,
     @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
     @InjectQueue(PROBLEM_RESCORE_QUEUE)
     private readonly rescoreQueue: Queue<ProblemRescoreJob>,
@@ -334,6 +348,7 @@ export class PolygonImportService {
     try {
       await this.pandoc.assertAvailable();
       const target = await this.repository.resolveTarget(job);
+      await this.assertNoRunningContest(job, run.queuedAt);
       await this.repository.assertFullMarkupWriter(job);
       if (job.polygon) {
         await this.download(run.id, job.polygon, tracker);
@@ -344,11 +359,31 @@ export class PolygonImportService {
         target,
         local,
         tracker,
+        queuedAt: run.queuedAt,
       });
     } finally {
       await rm(packagePath, { force: true });
       await rm(generatedTestsPathOf(packagePath), { force: true });
     }
+  }
+
+  /** An automatic sync never changes a problem under a running contest; checked before the download and again under the data lock, right before the write. It waits for the contest's end, `MAX_SYNC_DEFERRAL_MS` after it was queued at most, then fails. A sync someone started keeps its own rule. */
+  private async assertNoRunningContest(
+    job: PolygonImportJob,
+    queuedAt: Date,
+  ): Promise<void> {
+    if (job.polygon?.trigger !== 'auto') return;
+    const now = new Date();
+    const until = await this.runningContests.runningUntil(job.code, now);
+    if (!until) return;
+    const deadline = new Date(queuedAt.getTime() + MAX_SYNC_DEFERRAL_MS);
+    if (now >= deadline)
+      throw new PolygonImportError(
+        'a contest using the problem was still running a week after the automatic sync was queued; sync it by hand',
+        'problem_in_running_contest',
+        { until: until.toISOString() },
+      );
+    throw new SyncDeferredError(until < deadline ? until : deadline);
   }
 
   /** A Polygon failure (refused credentials, package not built for Linux, too large) is shown to the requester. */
@@ -380,7 +415,7 @@ export class PolygonImportService {
   private async importPackage(
     packagePath: string,
     job: PolygonImportJob,
-    { target, local, tracker }: ImportContext,
+    { target, local, tracker, queuedAt }: ImportContext,
   ): Promise<PolygonImportResult> {
     const pkg = await PolygonPackage.open(packagePath);
     const savedImages: string[] = [];
@@ -404,7 +439,7 @@ export class PolygonImportService {
       tracker.enter('saving');
       const written = await this.commitWithData(
         job,
-        { read, staged, target, tracker },
+        { read, staged, target, tracker, queuedAt },
         () => (committed = true),
       );
       const attention = await this.afterDataWrite(job, written, read);
@@ -437,7 +472,7 @@ export class PolygonImportService {
       { job, options },
       savedImages,
     );
-    const headers = helperHeaders(root, pkg, assets);
+    const headers = helperHeaders({ root, pkg }, assets, local);
     const sources = await readSources(pkg, assets, headers);
     const settings = settingsOf(job, { assets, plan, sources }, local);
     const compiled = this.compile(settings.values.data, plan.tests);
@@ -550,10 +585,11 @@ export class PolygonImportService {
    */
   private async commitWithData(
     job: PolygonImportJob,
-    { read, staged, target, tracker }: CommitInput,
+    { read, staged, target, tracker, queuedAt }: CommitInput,
     onCommitted: () => void,
   ): Promise<WrittenImport> {
     const write = async (): Promise<WrittenImport> => {
+      await this.assertNoRunningContest(job, queuedAt);
       const applied = await this.repository.apply(job, read.imported, target);
       onCommitted();
       tracker.enter('finishing');

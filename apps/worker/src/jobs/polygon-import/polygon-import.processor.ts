@@ -1,6 +1,6 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
-import { UnrecoverableError } from 'bullmq';
+import { DelayedError, UnrecoverableError } from 'bullmq';
 import type { Job } from 'bullmq';
 import { AUTO_RETRIED_IMPORT_ERRORS, POLYGON_QUEUE } from '@libs/problems';
 import type {
@@ -14,6 +14,7 @@ import { importFailureOf } from './import-failure';
 import type { ImportFailure } from './import-failure';
 import { ImportQuota } from './import-quota.service';
 import { ImportTracker } from './import-tracker';
+import { SyncDeferredError } from './polygon-import.error';
 import { PolygonImportRepository } from './polygon-import.repository';
 import { PolygonImportService } from './polygon-import.service';
 import { PolygonSyncRunsRepository } from './polygon-sync-runs.repository';
@@ -32,8 +33,11 @@ export class PolygonImportProcessor extends WorkerHost {
     super();
   }
 
-  /** Every Polygon job is recorded in the sync history; a failure also stores its step and code on the job and, for a sync, on the problem's link, and gives back the credits of a create. A created organization problem is announced like one made on the site. */
-  async process(job: Job<PolygonImportJob>): Promise<PolygonImportResult> {
+  /** Every Polygon job is recorded in the sync history; a failure also stores its step and code on the job and, for a sync, on the problem's link, and gives back the credits of a create. A created organization problem is announced like one made on the site. A deferred automatic sync waits for the contest's end, recording nothing. */
+  async process(
+    job: Job<PolygonImportJob>,
+    token?: string,
+  ): Promise<PolygonImportResult> {
     const tracker = new ImportTracker((progress) => this.report(job, progress));
     try {
       if (!job.id) throw new Error('A queued job always has an id');
@@ -45,6 +49,10 @@ export class PolygonImportProcessor extends WorkerHost {
       await this.recordSuccess(job, result);
       return result;
     } catch (error) {
+      if (error instanceof SyncDeferredError) {
+        await job.moveToDelayed(error.until.getTime(), token);
+        throw new DelayedError(error.message);
+      }
       throw await this.failed(job, tracker.step, error);
     }
   }

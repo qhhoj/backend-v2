@@ -43,15 +43,17 @@ export function headerPathsOf(
 const isDataFileName = (name: string): boolean =>
   SAFE_SEGMENT.test(name) && !name.includes('..') && !RESERVED_NAMES.has(name);
 
-/** The package's headers under their base names (the first of a repeated name wins), as the flat data directory holds them; a name it cannot hold is left out. */
+/** The package's headers under their base names (the first of a repeated name wins), as the flat data directory holds them; a name it cannot hold, or one of `taken` (the problem's own checker, interactor and other non-header files), is left out. */
 export function helperHeadersOf(
   root: XmlElement,
   pkg: Pick<PolygonPackage, 'has'>,
+  taken: ReadonlySet<string> = new Set(),
 ): HelperHeader[] {
   const byName = new Map<string, string>();
   for (const path of headerPathsOf(root, pkg)) {
     const name = posix.basename(path);
-    if (isDataFileName(name) && !byName.has(name)) byName.set(name, path);
+    if (isDataFileName(name) && !taken.has(name) && !byName.has(name))
+      byName.set(name, path);
   }
   return [...byName].map(([name, path]) => ({ path, name }));
 }

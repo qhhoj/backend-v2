@@ -1,12 +1,16 @@
+import { rm } from 'node:fs/promises';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import type { Principal } from '@libs/auth';
-import { AppError, REDIS } from '@libs/common';
+import { AppError, ENV, REDIS } from '@libs/common';
+import type { Env } from '@libs/common';
 import {
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_PUBLISH_QUEUE,
+  contestDataPath,
+  contestExportPath,
   finalJudgeJobId,
   publishJobId,
   purgeRankingCache,
@@ -34,6 +38,7 @@ export class ContestRemovalService {
     @InjectQueue(CONTEST_PUBLISH_QUEUE)
     private readonly publishes: Queue<ContestPublishJob>,
     @Inject(REDIS) private readonly redis: Redis,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   /** Editors only, with the key typed again (`confirm`); a visible, rated or still-judging contest is refused with 409 `contest_not_deletable`. */
@@ -75,7 +80,7 @@ export class ContestRemovalService {
       throw notDeletable('Wait until its submissions are judged');
   }
 
-  /** The scheduled end jobs and the cached board; a failure is logged, the contest is already gone. */
+  /** The scheduled end jobs, the cached board and the export and data zips (they hold every contestant's source); a failure is logged, the contest is already gone. */
   private async clearLeftovers(contest: ContestDocument): Promise<void> {
     const log = (what: string) => (error: Error) =>
       this.logger.error(`${what} of ${contest.key}: ${error.message}`);
@@ -88,5 +93,12 @@ export class ContestRemovalService {
     await purgeRankingCache(this.redis, contest._id).catch(
       log('Ranking cache not purged'),
     );
+    const root = this.env.contestDataRoot;
+    if (root)
+      for (const path of [
+        contestExportPath(root, contest._id),
+        contestDataPath(root, contest._id),
+      ])
+        await rm(path, { force: true }).catch(log('Contest zip not removed'));
   }
 }

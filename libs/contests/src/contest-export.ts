@@ -4,6 +4,12 @@ import { oneJobPerContest } from './queues';
 
 export const CONTEST_EXPORT_QUEUE = 'contest-export';
 export const CONTEST_EXPORT_JOB = 'export';
+/** The hourly sweep of `CONTEST_DATA_ROOT` (export and data zips) runs on the export queue. */
+export const CONTEST_ZIP_SWEEP_JOB = 'sweep';
+export const CONTEST_ZIP_SWEEP_SCHEDULER = 'contest-zip-sweep-hourly';
+export const CONTEST_ZIP_SWEEP_MS = 3_600_000;
+/** A contest's export and data zips are removed a week after they were built (they hold every contestant's source); an editor prepares a new one. */
+export const CONTEST_ZIP_TTL_MS = 7 * 86_400_000;
 /** Zip every live contest submission with its source, plus a `submissions.csv`. */
 export interface ContestExportJob {
   contestId: string;

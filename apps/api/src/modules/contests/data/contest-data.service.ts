@@ -6,7 +6,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
-import { AppError, ENV } from '@libs/common';
+import { AppError, ENV, RateLimitService } from '@libs/common';
 import type { Env } from '@libs/common';
 import {
   canPrepareData,
@@ -21,6 +21,7 @@ import {
 import type { ContestDataJob } from '@libs/contests';
 import { ContestsRepository } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
+import { claimZipBuild } from '../core/zip-build-budget';
 import type {
   ContestDataStatusResponse,
   PrepareDataDto,
@@ -33,6 +34,7 @@ export class ContestDataService {
     @Inject(ENV) private readonly env: Env,
     private readonly contestsService: ContestsService,
     private readonly contests: ContestsRepository,
+    private readonly rateLimits: RateLimitService,
     @InjectQueue(CONTEST_DATA_QUEUE)
     private readonly queue: Queue<ContestDataJob>,
   ) {}
@@ -81,6 +83,7 @@ export class ContestDataService {
         429,
         'The data can be prepared once a day',
       );
+    await claimZipBuild(this.rateLimits, 'data', contest._id);
     await this.contests.setDataPreparedAt(contest._id, now);
     await this.queue.add(
       CONTEST_DATA_JOB,

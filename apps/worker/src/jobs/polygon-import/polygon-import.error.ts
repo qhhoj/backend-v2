@@ -11,3 +11,11 @@ export class PolygonImportError extends Error {
     this.name = 'PolygonImportError';
   }
 }
+
+/** An automatic sync reached a problem a contest is running with: the job waits until `until` (the contest's end) and runs again, recording nothing. */
+export class SyncDeferredError extends Error {
+  constructor(readonly until: Date) {
+    super(`a contest using the problem runs until ${until.toISOString()}`);
+    this.name = 'SyncDeferredError';
+  }
+}

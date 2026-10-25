@@ -1,3 +1,5 @@
+import { existsSync, writeFileSync } from 'node:fs';
+import { contestDataPath, contestExportPath } from '@libs/contests';
 import type { User } from '@libs/database';
 import {
   contestProblem,
@@ -154,7 +156,13 @@ describe('deleting a contest', () => {
       description: '',
       descriptionHtml: '',
     });
+    const zips = [
+      contestExportPath(api.contestDataRoot, contest._id),
+      contestDataPath(api.contestDataRoot, contest._id),
+    ];
+    for (const zip of zips) writeFileSync(zip, 'zip bytes');
     await remove(contest.key, contest.key).expect(204);
+    expect(zips.filter((zip) => existsSync(zip))).toEqual([]);
     expect(await api.contests.exists({ _id: contest._id })).toBeNull();
     expect(
       await api.participations.countDocuments({ contest: contest._id }),

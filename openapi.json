@@ -8673,6 +8673,7 @@
           "polygon_unavailable",
           "problem_changed",
           "problem_code_taken",
+          "problem_in_running_contest",
           "problem_not_found",
           "problem_not_importable",
           "problem_unlinked",
