@@ -118,6 +118,25 @@ describe('totp endpoints', () => {
       .expect(errorCode('invalid_code'));
   });
 
+  it('treats TOTP flagged on without a stored key as not enrolled: no second step at login, and it can be enrolled', async () => {
+    await api.users.updateOne(
+      { username: 'alice' },
+      { isTotpEnabled: true, totpKey: null },
+    );
+    const session = await login();
+    expect(session.twoFactorRequired).toBe(false);
+    const { secret } = dataOf(
+      await post(`${TOTP}/enroll`, session, ENROLL).expect(201),
+    );
+    await post(`${TOTP}/confirm`, session, {
+      code: currentCode(secret),
+    }).expect(201);
+    const user = await stored();
+    expect(
+      decrypt(user!.totpKey!, encryptionKey(TEST_ENV.ENCRYPTION_KEY)),
+    ).toBe(secret);
+  });
+
   it('enables TOTP once when two confirms race', async () => {
     const session = await login();
     const { secret } = dataOf(
@@ -295,7 +314,10 @@ describe('totp endpoints', () => {
   });
 
   it('keeps every management endpoint behind the second factor and the pwned-password gate', async () => {
-    await api.users.updateOne({ username: 'alice' }, { isTotpEnabled: true });
+    await api.users.updateOne(
+      { username: 'alice' },
+      { isTotpEnabled: true, totpKey: 'stored-key' },
+    );
     const partial = await login();
     for (const path of ['enroll', 'confirm', 'disable', 'scratch-codes'])
       await post(`${TOTP}/${path}`, partial, { code: '123456' })

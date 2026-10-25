@@ -95,10 +95,16 @@ export class RunWritesRepository {
     return this.write(key, IN_FLIGHT, { error: log });
   }
 
-  started(key: RunKey, isPretested: boolean): Promise<WriteOutcome> {
+  /** `caseCount` is kept for the deadline of a run resumed after a bridge restart; null from the external adapter. */
+  started(
+    key: RunKey,
+    isPretested: boolean,
+    caseCount: number | null = null,
+  ): Promise<WriteOutcome> {
     return this.write(key, ['P'], {
       status: 'G',
       isPretested,
+      judgeCaseCount: caseCount,
       currentTestcase: 1,
       batch: false,
       judgedDate: new Date(),

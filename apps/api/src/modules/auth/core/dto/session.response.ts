@@ -4,6 +4,7 @@ import { AppearanceResponse } from '../../../users/profile/dto/profile.response'
 import { Principal, SessionData, UserDocument } from '@libs/auth';
 
 import {
+  isTotpEnrolled,
   SECOND_FACTOR_METHODS,
   secondFactorMethods,
 } from '../../two-factor/second-factor-methods';
@@ -78,7 +79,7 @@ export class UserResponse {
       isSuperuser: user.isSuperuser,
       permissions: [...principal.permissions].sort(),
       adminCapabilities,
-      isTotpEnabled: user.isTotpEnabled,
+      isTotpEnabled: isTotpEnrolled(user),
       isWebauthnEnabled: user.isWebauthnEnabled,
       siteTheme: user.siteTheme,
       appearance: user.appearance ?? null,

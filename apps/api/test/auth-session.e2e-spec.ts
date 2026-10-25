@@ -51,6 +51,7 @@ describe('auth session endpoints', () => {
       username: 'tina',
       email: 'tina@example.com',
       isTotpEnabled: true,
+      totpKey: 'stored-key',
     });
   });
   afterAll(() => api.teardown());
@@ -124,6 +125,7 @@ describe('auth session endpoints', () => {
       username: 'totpflag',
       email: 'totpflag@example.com',
       isTotpEnabled: true,
+      totpKey: 'stored-key',
       isWebauthnEnabled: true,
     });
     const mixed = await api

@@ -145,7 +145,10 @@ describe('impersonation', () => {
   });
 
   it('restores the admin with a passed second factor', async () => {
-    await api.users.updateOne({ _id: adminId }, { isTotpEnabled: true });
+    await api.users.updateOne(
+      { _id: adminId },
+      { isTotpEnabled: true, totpKey: 'stored-key' },
+    );
     const { id, session } = await api.sessions.create({
       userId: aliceId,
       twoFaPassed: true,

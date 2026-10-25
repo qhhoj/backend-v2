@@ -15,6 +15,7 @@ import { GRACE_CLOCK, TIMER_GRACE_CLOCK } from './grace-clock';
 import type { GraceClock } from './grace-clock';
 import type { GraceEntry } from './grace';
 import { RunDeadlines } from './run-deadlines';
+import type { RunBudget } from './run-deadlines';
 import {
   freeSlots,
   insertQueued,
@@ -42,8 +43,8 @@ const GRACE_OUTCOME_TEXT: Record<GraceOutcome, string> = {
   stale: 'nothing to do (the row moved on)',
 };
 
-/** A resumed run's time limit is not known to the bridge; its deadline assumes this one (seconds). */
-const RESUMED_RUN_TIME_LIMIT_SECONDS = 20;
+/** A run resumed after a bridge restart whose row gives no budget (problem gone, or Started stored before its case count was kept) assumes this time limit and no case count. */
+const UNKNOWN_RUN_BUDGET: RunBudget = { timeLimitSeconds: 20, caseCount: null };
 
 const isSameEntry = (left: QueuedSubmission, right: QueuedSubmission) =>
   left.priority === right.priority &&
@@ -196,15 +197,27 @@ export class DispatcherService {
     await this.offerWork(judge);
   }
 
-  /** The session could not store the run's Final (Mongo kept failing). The judge already finished the run, so its slot is free at once (never `winding`: no Final follows). The row goes back to the queue, free twice since the last rejudge, then spending a RETRY each, IE once those are spent (`RunsService.requeueUnstored`); if that write fails too, the resync's stranded-run reset requeues it, as no session holds it any more. */
+  /** The session could not store the run's Final (Mongo kept failing). The judge already finished the run, so its slot is free at once (never `winding`: no Final follows). A run the user aborted ends AB (held in grace again while that write fails); any other goes back to the queue (`requeueUnstored`). */
   async finalNotStored(
     judge: DispatchTarget,
     ref: AssignmentRef,
   ): Promise<void> {
     if (judge.inFlight.get(ref.submissionId) !== ref.generation) return;
+    const abortRequested = this.abortsRequested.has(windingKey(ref));
     judge.inFlight.delete(ref.submissionId);
     this.abortsRequested.delete(windingKey(ref));
     this.clearDeadline(ref);
+    if (abortRequested)
+      await this.graceExpired({ ref, judgeName: judge.name, abortRequested });
+    else await this.requeueUnstored(judge, ref);
+    await this.offerWork(judge);
+  }
+
+  /** Back to the queue, free twice since the last rejudge, then spending a RETRY each, IE once those are spent (`RunsService.requeueUnstored`); if that write fails too, the resync's stranded-run reset requeues it, as no session holds it any more. */
+  private async requeueUnstored(
+    judge: DispatchTarget,
+    ref: AssignmentRef,
+  ): Promise<void> {
     try {
       if (await this.runs.requeueUnstored(ref, judge.name))
         await this.dispatchRequeued(ref.submissionId);
@@ -213,7 +226,6 @@ export class DispatcherService {
         `Requeuing submission ${runOf(ref)} after its lost Final failed, the resync requeues it: ${(error as Error).message}`,
       );
     }
-    await this.offerWork(judge);
   }
 
   /** Whether the api aborted this held run: its judge's Final RETRY then ends it AB instead of requeuing it. */
@@ -497,7 +509,7 @@ export class DispatcherService {
     ref: AssignmentRef,
     plan: ResumePlan,
   ): Promise<void> {
-    const stored = await this.runs.resumableSeq(ref, judge.name);
+    const stored = await this.runs.resumableRun(ref, judge.name);
     // taken only now: while Mongo is read the entry stays in grace, where an abort or a failed read leaves it
     if (judge.isClosed) return;
     const waiting = this.grace.take(ref, judge.name);
@@ -514,22 +526,27 @@ export class DispatcherService {
       return;
     }
     judge.inFlight.set(ref.submissionId, ref.generation);
-    this.resumeDeadline(judge, ref);
+    this.resumeDeadline(judge, ref, stored.budget);
     plan.resume.push({
       ref,
       action: Resume_Action.ACTION_CONTINUE,
-      fromSeq: stored + 1,
+      fromSeq: stored.seq + 1,
     });
     if (!waiting?.abortRequested) return;
     this.abortsRequested.add(windingKey(ref));
     plan.abort.push(ref);
   }
 
-  /** A resumed run gets its kept budget again from now; after a bridge restart the time limit is unknown and assumed. */
-  private resumeDeadline(judge: DispatchTarget, ref: AssignmentRef): void {
+  /** A resumed run gets its kept budget again from now; after a bridge restart, the one its row gives (time limit, stored Started's case count). */
+  private resumeDeadline(
+    judge: DispatchTarget,
+    ref: AssignmentRef,
+    stored: RunBudget | null,
+  ): void {
     const onExpiry = () => this.onDeadline(judge, ref);
-    if (!this.deadlines.resume(windingKey(ref), onExpiry))
-      this.armDeadline(judge, ref, RESUMED_RUN_TIME_LIMIT_SECONDS);
+    if (this.deadlines.resume(windingKey(ref), onExpiry)) return;
+    const budget = stored ?? UNKNOWN_RUN_BUDGET;
+    this.deadlines.restore(windingKey(ref), budget, onExpiry);
   }
 
   /** A newer session of the same judge takes over (the registered one, or one still in its handshake): the old one's runs wait in grace for it to resume them. */

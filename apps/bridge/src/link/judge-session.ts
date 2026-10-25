@@ -433,7 +433,7 @@ export class JudgeSession implements DispatchTarget {
   private async onStarted(started: GradingStarted): Promise<void> {
     const { pretested, caseCount } = started;
     const handled = await this.handleRun(started, (key) =>
-      this.services.runs.started(key, pretested),
+      this.services.runs.started(key, pretested, caseCount),
     );
     if (handled?.outcome === 'applied')
       this.services.dispatch.runStarted(this, handled.ref, caseCount);

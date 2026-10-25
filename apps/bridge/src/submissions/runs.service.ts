@@ -23,6 +23,7 @@ import { ProblemDataWrites } from './problem-data-writes';
 import { RunWritesRepository } from './run-writes.repository';
 import type { Refusal, RetryOutcome } from './run-writes.repository';
 import { SubmissionsRepository } from './submissions.repository';
+import type { ResumableRun } from './submissions.repository';
 import type { RunKey, WriteOutcome } from './write-outcome';
 
 export const LOST_JUDGE_MESSAGE =
@@ -139,8 +140,11 @@ export class RunsService {
     return written.requeued;
   }
 
-  resumableSeq(ref: AssignmentRef, judgeName: string): Promise<number | null> {
-    return this.submissions.resumableSeq(ref, judgeName);
+  resumableRun(
+    ref: AssignmentRef,
+    judgeName: string,
+  ): Promise<ResumableRun | null> {
+    return this.submissions.resumableRun(ref, judgeName);
   }
 
   accepted(key: RunKey): Promise<WriteOutcome> {
@@ -151,8 +155,12 @@ export class RunsService {
     return this.writes.compiled(key, log);
   }
 
-  async started(key: RunKey, isPretested: boolean): Promise<WriteOutcome> {
-    const outcome = await this.writes.started(key, isPretested);
+  async started(
+    key: RunKey,
+    isPretested: boolean,
+    caseCount: number | null = null,
+  ): Promise<WriteOutcome> {
+    const outcome = await this.writes.started(key, isPretested, caseCount);
     if (outcome === 'applied')
       this.publishTracked(key.ref.submissionId, 'grading-begin', 'G');
     return outcome;

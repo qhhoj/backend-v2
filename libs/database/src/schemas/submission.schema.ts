@@ -164,6 +164,8 @@ export class Submission {
   @Prop({ default: 0 }) judgeGeneration!: number;
   /** Seq of the last judge message stored for the current generation; the next one must be `judgeSeq + 1`. Reset to 0 by the claim. */
   @Prop({ default: 0 }) judgeSeq!: number;
+  /** The case count the judge's Started named for the current generation (G only; a P row's value is an earlier generation's); the bridge re-arms a resumed run's deadline from it after a restart. */
+  @Prop({ type: Number, default: null }) judgeCaseCount!: number | null;
   /** The problem data version the judge graded with (`Final.dataVersionUsed`, 0 = unstamped data); null until a judge finished it. */
   @Prop({ type: Number, default: null }) judgedDataVersion!: number | null;
   /** `Final{RETRY}` answers with no transient reason since the last rejudge (the judge failed it); the third is IE. Transient ones are `deferral`, refusals `refusedBy`. */

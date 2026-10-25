@@ -243,14 +243,20 @@ export class UsersRepository {
     return matchedCount === 1;
   }
 
-  /** CAS: false when TOTP is already enabled (a racing confirm won). */
+  /** CAS: false when TOTP is already enabled with a key (a racing confirm won); a flag left without a key is enrolled over. Never sets the flag without a key. */
   async enableTotp(
     userId: string,
-    fields: Pick<User, 'totpKey' | 'scratchCodes' | 'lastTotpTimecode'>,
+    fields: Pick<User, 'scratchCodes' | 'lastTotpTimecode'> & {
+      totpKey: string;
+    },
   ): Promise<boolean> {
+    if (!fields.totpKey) throw new Error('enableTotp needs a TOTP key');
     const { matchedCount } = await this.users
       .updateOne(
-        { _id: userId, isTotpEnabled: { $ne: true } },
+        {
+          _id: userId,
+          $or: [{ isTotpEnabled: { $ne: true } }, { totpKey: null }],
+        },
         { $set: { ...fields, isTotpEnabled: true } },
       )
       .exec();
