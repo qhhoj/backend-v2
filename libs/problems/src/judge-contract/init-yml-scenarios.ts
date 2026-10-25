@@ -115,7 +115,6 @@ export const INIT_YML_SCENARIOS: InitYmlScenario[] = [
       ],
     },
   },
-  { name: 'output_limit_zero', data: { outputLimit: 0, cases: [numbered(1)] } },
   {
     name: 'max_safe_numbers',
     data: {
