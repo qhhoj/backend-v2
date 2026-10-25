@@ -1,5 +1,5 @@
 export const FAILURE_LIMIT = 10;
-/** Login failures per account and network (IPv4 /24, IPv6 /48) and window: one site or tunnel is handed a whole network, so its addresses share one budget per account. */
+/** Login failures per account and network (IPv6 /48, IPv4 address) and window: one site or tunnel is handed a whole IPv6 /48, so its addresses share one budget per account; an IPv4 /24 may be a carrier's shared pool, so it does not. */
 export const FAILURE_NETWORK_LIMIT = 30;
 export const FAILURE_WINDOW_SECONDS = 15 * 60;
 /** Login failures per address and window, across every username: a ceiling against spraying, high enough that a 60-student room behind one NAT, each with a few typos, never reaches it. */

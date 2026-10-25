@@ -75,7 +75,7 @@ export class AuthService {
       { key: `login:ip:${address}`, limit: FAILURE_IP_LIMIT },
       { key: `login:${account}:ip:${address}`, limit: FAILURE_LIMIT },
       {
-        key: `login:${account}:net:${limiterNetwork(ip)}`,
+        key: `login:${account}:net:${limiterNetwork(ip, { ipv4: 'address' })}`,
         limit: FAILURE_NETWORK_LIMIT,
       },
     ];
