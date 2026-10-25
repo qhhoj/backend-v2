@@ -106,8 +106,8 @@ export class TicketTimelineEntryResponse {
 }
 
 export class TicketDetailResponse extends TicketListItemResponse {
-  /** Every reader sees it; `can.editNotes` says who may change it. */
-  notes!: string;
+  /** Staff-only internal notes: set for those who may edit them (`can.editNotes`: staff and assignees), null for every other reader. */
+  notes!: string | null;
   /** The ticket's messages, oldest first. */
   messages!: TicketMessageResponse[];
   /** Messages and state changes by time (equal instants: message first). */

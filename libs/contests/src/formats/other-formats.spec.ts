@@ -1,7 +1,8 @@
 import { isSolvedCell } from '../first-solves';
 import { finalSubmissionFormat } from './final-submission';
 import { FormatConfigError } from './format';
-import { batchMinima, dataPoints, ioi16Format } from './ioi16';
+import type { ScoringRow } from './format';
+import { batchMinima, dataPoints, ioi16Format, allDataPoints } from './ioi16';
 import { parseFormatConfig, scoreParticipation } from './registry';
 import { at, context, row } from './scoring-fixtures';
 import { ultimateFormat } from './ultimate';
@@ -55,7 +56,7 @@ describe('ioi16 (legacy IOIContestFormat, "IOI")', () => {
       R: { points: 0, time: 0 },
     });
   });
-  it('scores zero for no batches, a problem outside the context or without data points, and ignores row order and cumtime', () => {
+  it('scores zero for no batches or a problem outside the context, and ignores row order and cumtime', () => {
     const rows = [
       row('P', 20, 0, { batchPoints: { '1': 4, '2': 3 }, submissionId: 'b' }),
       row('P', 10, 0, { batchPoints: { '1': 6 }, submissionId: 'a' }),
@@ -87,7 +88,11 @@ describe('ioi16 (legacy IOIContestFormat, "IOI")', () => {
 });
 
 describe('ioi16 cells from the judged cases and the problem data', () => {
-  type DataCase = { type: 'C' | 'S' | 'E'; points: number | null };
+  type DataCase = {
+    type: 'C' | 'S' | 'E';
+    points: number | null;
+    isPretest?: boolean;
+  };
   type JudgedCase = { points: number; batch: number | null };
   const plainCases = (points: number[]): JudgedCase[] =>
     points.map((earned) => ({ points: earned, batch: null }));
@@ -150,6 +155,69 @@ describe('ioi16 cells from the judged cases and the problem data', () => {
     ]);
     expect(cell).toBe(100);
     expect(isSolvedCell({ points: cell }, 100)).toBe(true);
+  });
+
+  it('leaves out a plain pretest, which a full run scores 0, and keeps a pretest batch: a full AC is full points', () => {
+    const plainPretest: DataCase[] = [
+      { type: 'C', points: 10, isPretest: true },
+      { type: 'C', points: 20 },
+      { type: 'C', points: 70 },
+    ];
+    const plainCell = cellOf(plainPretest, plainCases([0, 20, 70]));
+    expect(plainCell).toBe(100);
+    expect(isSolvedCell({ points: plainCell }, 100)).toBe(true);
+    const pretestBatch: DataCase[] = [
+      { type: 'S', points: 10, isPretest: true },
+      { type: 'C', points: null, isPretest: true },
+      { type: 'E', points: null },
+      { type: 'C', points: 90 },
+    ];
+    expect(
+      cellOf(pretestBatch, [{ points: 10, batch: 1 }, ...plainCases([90])]),
+    ).toBe(100);
+  });
+
+  it('scales a pretest-only run over all data points (legacy) and a full run over the full-run points, never above the problem points', () => {
+    const data: DataCase[] = [
+      { type: 'C', points: 60, isPretest: true },
+      { type: 'C', points: 40 },
+    ];
+    const problems = [
+      {
+        problemId: 'P',
+        points: 100,
+        dataPoints: dataPoints(data),
+        allDataPoints: allDataPoints(data),
+      },
+    ];
+    const cellOfRows = (...rows: ScoringRow[]) =>
+      ioi16Format.score(rows, { cumtime: false }, context({ problems }))
+        .formatData.P.points as number;
+    const pretestOnlyAc = row('P', 5, 60, {
+      isPretested: true,
+      batchPoints: batchMinima(plainCases([60])),
+    });
+    const fullAc = row('P', 9, 100, {
+      batchPoints: batchMinima(plainCases([0, 40])),
+    });
+    const pretestCell = cellOfRows(pretestOnlyAc);
+    expect(pretestCell).toBe(60);
+    expect(isSolvedCell({ points: pretestCell }, 100)).toBe(false);
+    expect(cellOfRows(pretestOnlyAc, fullAc)).toBe(100);
+  });
+
+  it('scores an externally judged problem (no data cases) by its best submission, as other formats do', () => {
+    const problems = [{ problemId: 'X', points: 100, dataPoints: 0 }];
+    const external = batchMinima([{ points: 100, batch: null }]);
+    const score = ioi16Format.score(
+      [
+        row('X', 5, 40, { batchPoints: external }),
+        row('X', 9, 100, { batchPoints: external }),
+      ],
+      { cumtime: false },
+      context({ problems }),
+    );
+    expect(score.formatData.X).toEqual({ points: 100, time: 0 });
   });
 
   it('never rounds a partial cell up to full points, even with no decimals shown', () => {

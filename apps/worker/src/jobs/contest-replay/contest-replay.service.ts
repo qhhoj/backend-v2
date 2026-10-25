@@ -10,7 +10,12 @@ import {
   replayReadyAt,
   scoringContextOf,
 } from '@libs/contests';
-import type { GhostReplay, GhostSetup, ReplayEvent } from '@libs/contests';
+import type {
+  GhostReplay,
+  GhostSetup,
+  ReplayEvent,
+  RunDivisors,
+} from '@libs/contests';
 import { newId, uuidStr } from '@libs/database';
 import { ContestResultsRepository } from '../submission-effects/contest-results.repository';
 import type { ScoringContest } from '../submission-effects/contest-results.repository';
@@ -33,7 +38,7 @@ export interface BuildOptions {
 interface BuildPlan {
   contest: ScoringContest;
   withBatches: boolean;
-  dataPointsOf: ReadonlyMap<string, number>;
+  divisorsOf: ReadonlyMap<string, RunDivisors>;
   /** Contest order; the position is the event `problemIndex`. */
   problemIndexes: ReadonlyMap<string, number>;
 }
@@ -188,8 +193,8 @@ export class ContestReplayService {
     return {
       contest,
       withBatches,
-      dataPointsOf: withBatches
-        ? await this.results.dataPointsOf(ordered)
+      divisorsOf: withBatches
+        ? await this.results.divisorsOf(ordered)
         : new Map(),
       problemIndexes: new Map(
         ordered.map((problemId, position) => [problemId, position]),
@@ -239,7 +244,7 @@ export class ContestReplayService {
     return replayEvents(
       rows,
       { name: plan.contest.formatName, config: plan.contest.formatConfig },
-      scoringContextOf(plan.contest, participation, plan.dataPointsOf),
+      scoringContextOf(plan.contest, participation, plan.divisorsOf),
       { participantIndex, problemIndexes: plan.problemIndexes },
     );
   }

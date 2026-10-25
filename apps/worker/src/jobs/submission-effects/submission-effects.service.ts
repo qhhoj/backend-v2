@@ -21,7 +21,11 @@ import {
   scoreParticipation,
   scoringContextOf,
 } from '@libs/contests';
-import type { ContestRatingJob, ContestReplayJob } from '@libs/contests';
+import type {
+  ContestRatingJob,
+  ContestReplayJob,
+  RunDivisors,
+} from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { acceptanceRate, userPoints } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
@@ -140,16 +144,16 @@ export class SubmissionEffectsService {
           uuidStr(entry.problem),
         );
         const withBatches = contest.formatName === 'ioi16';
-        const [rows, dataPointsOf] = await Promise.all([
+        const [rows, divisorsOf] = await Promise.all([
           this.contestResults.scoringRows(participationId, withBatches),
           withBatches
-            ? this.contestResults.dataPointsOf(problemIds)
-            : Promise.resolve(new Map<string, number>()),
+            ? this.contestResults.divisorsOf(problemIds)
+            : Promise.resolve(new Map<string, RunDivisors>()),
         ]);
         const score = scoreParticipation(
           rows.filter((row) => problemIds.includes(row.problemId)),
           { name: contest.formatName, config: contest.formatConfig },
-          scoringContextOf(contest, participation, dataPointsOf),
+          scoringContextOf(contest, participation, divisorsOf),
         );
         await this.contestResults.setResults(
           participationId,

@@ -51,6 +51,7 @@ function rowsOfCell(
     result: attemptPoints > 0 ? 'AC' : 'WA',
     status: 'D',
     batchPoints: setup.format.name === 'ioi16' ? { '0': attemptPoints } : null,
+    isPretested: false,
   });
   const wrong = Array.from(
     { length: cell.rejectedBefore ?? 0 },

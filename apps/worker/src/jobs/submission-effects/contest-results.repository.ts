@@ -4,10 +4,12 @@ import type { Model } from 'mongoose';
 import {
   batchMinima,
   dataPoints,
+  allDataPoints,
   SCORING_CONTEST_FIELDS,
 } from '@libs/contests';
 import type {
   ParticipationScore,
+  RunDivisors,
   ScoringContestField,
   ScoringRow,
 } from '@libs/contests';
@@ -40,6 +42,7 @@ interface JoinedRow {
     date: Date;
     result: SubmissionResult | null;
     status: SubmissionStatus;
+    isPretested?: boolean;
     cases?: Array<{ points: number; batch: number | null }>;
   };
 }
@@ -153,6 +156,7 @@ export class ContestResultsRepository {
                 date: 1,
                 result: 1,
                 status: 1,
+                isPretested: 1,
                 ...(withBatches && { 'cases.points': 1, 'cases.batch': 1 }),
               },
             },
@@ -170,25 +174,31 @@ export class ContestResultsRepository {
       result: row.submission.result,
       status: row.submission.status,
       batchPoints: withBatches ? batchMinima(row.submission.cases ?? []) : null,
+      isPretested: row.submission.isPretested ?? false,
     }));
   }
 
-  /** ioi16's divisor per problem, from the problem data's cases (`select: false`). */
-  async dataPointsOf(problemIds: string[]): Promise<Map<string, number>> {
+  /** ioi16's divisors per problem, from the problem data's cases (`select: false`). */
+  async divisorsOf(problemIds: string[]): Promise<Map<string, RunDivisors>> {
     const rows = await this.problems
       .find({ _id: { $in: problemIds }, deletedAt: null })
       .select('+data')
       .lean();
     return new Map(
-      rows.map((row) => [
-        uuidStr(row._id),
-        dataPoints(
-          (row.data?.cases ?? []) as Array<{
-            type: CaseType;
-            points: number | null;
-          }>,
-        ),
-      ]),
+      rows.map((row) => {
+        const cases = (row.data?.cases ?? []) as Array<{
+          type: CaseType;
+          points: number | null;
+          isPretest?: boolean;
+        }>;
+        return [
+          uuidStr(row._id),
+          {
+            dataPoints: dataPoints(cases),
+            allDataPoints: allDataPoints(cases),
+          },
+        ];
+      }),
     );
   }
 

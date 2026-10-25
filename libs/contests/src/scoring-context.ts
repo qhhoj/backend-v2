@@ -3,17 +3,23 @@ import { frozenTime, participationStart } from './contest-time';
 import type { ContestTimes, ParticipationTimes } from './contest-time';
 import type { ScoringContext } from './formats/format';
 
+/** ioi16's divisors of one problem: of a full run (`dataPoints`) and of a pretest-only run (`allDataPoints`). */
+export interface RunDivisors {
+  dataPoints: number;
+  allDataPoints: number;
+}
+
 export interface ScoringContestFields extends ContestTimes {
   pointsPrecision: number;
   /** `problem` may be a BSON UUID on a lean read; `uuidStr` normalises it. */
   problems: ReadonlyArray<{ problem: string; points: number }>;
 }
 
-/** What every format needs to score one participation. The recompute and the replay build both come here, so they cannot drift. `dataPointsOf` is ioi16's divisor per problem id. */
+/** What every format needs to score one participation. The recompute and the replay build both come here, so they cannot drift. `divisorsOf` holds ioi16's divisors per problem id. */
 export function scoringContextOf(
   contest: ScoringContestFields,
   participation: ParticipationTimes,
-  dataPointsOf: ReadonlyMap<string, number>,
+  divisorsOf: ReadonlyMap<string, RunDivisors>,
 ): ScoringContext {
   return {
     start: participationStart(contest, participation),
@@ -23,7 +29,7 @@ export function scoringContextOf(
     problems: contest.problems.map((entry) => ({
       problemId: uuidStr(entry.problem),
       points: entry.points,
-      dataPoints: dataPointsOf.get(uuidStr(entry.problem)) ?? null,
+      ...(divisorsOf.get(uuidStr(entry.problem)) ?? { dataPoints: null }),
     })),
   };
 }

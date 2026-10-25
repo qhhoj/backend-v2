@@ -498,7 +498,7 @@ afterAll(() => api.teardown());
       await make('onDeleted', { creator: people.creator.id, problem: newId() });
     });
 
-    it('returns people, the link and rendered messages; notes to every reader, edit rights only to assignees and staff', async () => {
+    it('returns people, the link and rendered messages; notes and edit rights only to assignees and staff', async () => {
       const asCreator = dataOf<TicketDetailResponse>(
         await as('creator', ticketUrl(tickets.onPublic)).expect(200),
       );
@@ -515,7 +515,7 @@ afterAll(() => api.teardown());
         isOpen: true,
         isContributive: false,
         messageCount: 1,
-        notes: 'secret staff note',
+        notes: null,
         can: { editNotes: false, markGood: false, assign: false },
       });
       expect(asCreator.messages).toHaveLength(1);
@@ -527,11 +527,12 @@ afterAll(() => api.teardown());
         const detail = dataOf<TicketDetailResponse>(
           await as(who, ticketUrl(tickets.onPublic)).expect(200),
         );
-        expect([who, detail.notes]).toEqual([who, 'secret staff note']);
-        expect([who, detail.can.editNotes]).toEqual([
+        const isTicketStaff = ['staff', 'assignee'].includes(who);
+        expect([who, detail.notes]).toEqual([
           who,
-          ['staff', 'assignee'].includes(who),
+          isTicketStaff ? 'secret staff note' : null,
         ]);
+        expect([who, detail.can.editNotes]).toEqual([who, isTicketStaff]);
       }
       const refused = await as('outsider', ticketUrl(tickets.onPublic)).expect(
         403,

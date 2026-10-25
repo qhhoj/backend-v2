@@ -19,6 +19,7 @@ export const row = (
   result: points > 0 ? 'AC' : 'WA',
   status: 'D',
   batchPoints: null,
+  isPretested: false,
   ...extra,
 });
 
