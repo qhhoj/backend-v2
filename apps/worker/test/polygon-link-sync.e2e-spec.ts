@@ -997,6 +997,38 @@ describe('Polygon link, sync and auto-sync', () => {
     expect(polygon.calls).toEqual([]);
   });
 
+  it('records a refused sync of a renamed, unlinked problem on that problem, never on a new problem relinked to the same Polygon problem', async () => {
+    const original = await linked('renamed_src', 10);
+    await worker.problems.updateOne(
+      { _id: original._id },
+      { $set: { code: 'renamed_moved', polygonLink: null } },
+    );
+    const relinked = await linked('renamed_src', 10);
+    try {
+      polygon.reset();
+      const { error, jobId } = await runJob({
+        ...syncJob(
+          'renamed_src',
+          { packageId: 11, revision: 4 },
+          original.dataVersion,
+        ),
+        problemId: String(original._id),
+      });
+      expect(error).toContain('was renamed since the import was queued');
+      expect(polygon.calls).toEqual([]);
+      const run = await runs.findOne({ jobId }).lean();
+      expect(String(run?.problem)).toBe(String(original._id));
+      const link = (await worker.problems.findById(relinked._id).lean())!
+        .polygonLink;
+      expect(link).toMatchObject({ lastSyncResult: 'ok' });
+      expect(link?.lastSyncPackageId).not.toBe(11);
+    } finally {
+      await worker.problems.deleteMany({
+        code: { $in: ['renamed_src', 'renamed_moved'] },
+      });
+    }
+  });
+
   it.each([
     ['is deactivated', { isActive: false }, null],
     [

@@ -361,7 +361,7 @@ export class PolygonImportRepository {
     const problem = await this.problems
       .findOne(
         {
-          code: job.code,
+          ...targetFilter(job),
           deletedAt: null,
           'polygonLink.problemId': job.polygon.problemId,
           'polygonLink.packageId': job.polygon.packageId,
@@ -708,7 +708,10 @@ export class PolygonImportRepository {
     if (job.polygon?.purpose !== 'sync') return;
     await this.problems
       .updateOne(
-        { code: job.code, 'polygonLink.problemId': job.polygon.problemId },
+        {
+          ...targetFilter(job),
+          'polygonLink.problemId': job.polygon.problemId,
+        },
         {
           $set: {
             'polygonLink.lastSyncAt': new Date(),
