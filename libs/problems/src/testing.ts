@@ -37,6 +37,8 @@ export interface ZipTestEntry {
   encrypted?: boolean;
   /** Writes this compression method number in both headers (unsupported methods). */
   methodNumber?: number;
+  /** Lies about the extra field length in the local header (no bytes are written for it). */
+  localExtraLength?: number;
   /** Extra field bytes for the central directory header. */
   centralExtra?: Buffer;
   /** Lies about where the local header starts. */
@@ -80,6 +82,7 @@ interface ResolvedEntry {
   declaredSize: number;
   checksum: number;
   centralExtra: Buffer;
+  localExtraLength: number;
 }
 /** Where the central directory sits, for the end records. */
 interface ZipLayout {
@@ -104,6 +107,7 @@ function resolveEntry(entry: ZipTestEntry): ResolvedEntry {
     declaredSize: entry.declaredSize ?? content.length,
     checksum: entry.checksum ?? crc32(content),
     centralExtra: entry.centralExtra ?? Buffer.alloc(0),
+    localExtraLength: entry.localExtraLength ?? 0,
   };
 }
 
@@ -117,6 +121,7 @@ function localHeader(resolved: ResolvedEntry): Buffer {
   header.writeUInt32LE(resolved.data.length, 18);
   header.writeUInt32LE(resolved.declaredSize, 22);
   header.writeUInt16LE(resolved.name.length, 26);
+  header.writeUInt16LE(resolved.localExtraLength, 28);
   resolved.name.copy(header, 30);
   return header;
 }

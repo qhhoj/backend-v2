@@ -7,7 +7,7 @@ import { dataFileNamesOf } from '@libs/database';
 import type { DataFileKind, ProblemData } from '@libs/database';
 import {
   extensionOf,
-  listZipEntries,
+  checkUploadedZip,
   ProblemDataFilesService,
   safeFileName,
   SOURCE_MAX_BYTES,
@@ -255,7 +255,7 @@ export class ProblemDataUploadService {
 
   private async assertZip(path: string): Promise<void> {
     try {
-      await listZipEntries(path);
+      await checkUploadedZip(path);
     } catch (error) {
       throw error instanceof ZipError
         ? rejectFile(error.message, error.code)

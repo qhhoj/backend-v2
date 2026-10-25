@@ -3,6 +3,7 @@ import type { FileHandle } from 'node:fs/promises';
 import { crc32 } from 'node:zlib';
 import { pipeline, Readable as ReadableStream, Transform } from 'node:stream';
 import type { Readable } from 'node:stream';
+import { finished } from 'node:stream/promises';
 import yauzl from 'yauzl';
 import type { Entry, ZipFile } from 'yauzl';
 import { hasDotSegment } from './file-names';
@@ -103,7 +104,7 @@ function violation(
   const badName = nameViolation(entry);
   if (badName) return badName;
   if (isSymlink(entry)) return `Symbolic links are not allowed: ${name}`;
-  if (isDirectory(entry)) return undefined;
+  // Folders too: the judge's Rust `zip` crate parses every record and its local header when it opens the archive.
   if (!entry.canDecodeFileData())
     return `${name} is encrypted or uses an unsupported compression method.`;
   if (
@@ -122,14 +123,24 @@ function violation(
   return undefined;
 }
 
-/** Files and folders seen so far; the judge cannot extract a file and a folder of the same name. */
+/** Files and folders seen so far; the judge cannot extract a file and a folder of the same name, and its Rust `zip` crate keeps one of two records with the same name, so it would count fewer records than the end record names. */
 class ArchivePaths {
   private readonly files = new Set<string>();
   private readonly folders = new Set<string>();
+  private readonly folderRecords = new Set<string>();
 
-  /** Records the entry; false when its path clashes with one seen before. */
-  add(entry: Entry): boolean {
+  /** Records the entry; why its path clashes with one seen before, else undefined. */
+  clash(entry: Entry): string | undefined {
     const path = entry.fileName.replace(/\/$/, '');
+    if (isDirectory(entry) && this.folderRecords.has(path))
+      return `Duplicate folder in the archive: ${shown(entry.fileName)}`;
+    if (isDirectory(entry)) this.folderRecords.add(path);
+    return this.add(entry, path)
+      ? undefined
+      : `A file and a folder share a name: ${shown(entry.fileName)}`;
+  }
+
+  private add(entry: Entry, path: string): boolean {
     const parents = path.split('/').slice(0, -1);
     const prefixes = parents.map((_segment, index) =>
       parents.slice(0, index + 1).join('/'),
@@ -220,10 +231,18 @@ async function assertCentralDirectoryIsConsistent(
     );
 }
 
-/** Walks the central directory once (lazy entries, so memory is one entry at a time) and applies every bound. Every record counts, directories included. */
-function collectEntries(zip: ZipFile): Promise<Map<string, Entry>> {
+/** The records, folders included, whose local headers must fit before the central directory. */
+interface Collected {
+  entries: Map<string, Entry>;
+  spans: Entry[];
+  centralDirectoryStart: number;
+}
+
+/** Walks the central directory once (lazy entries) and applies every bound. Every record counts, directories included. */
+function collectEntries(zip: ZipFile): Promise<Collected> {
   return new Promise((resolve, reject) => {
     const entries = new Map<string, Entry>();
+    const spans: Entry[] = [];
     const paths = new ArchivePaths();
     const { fileSize, readEntryCursor } = zip as unknown as ZipFileInternals;
     const bounds = { fileSize, centralDirectoryStart: readEntryCursor };
@@ -239,16 +258,20 @@ function collectEntries(zip: ZipFile): Promise<Map<string, Entry>> {
         'zip_invalid',
       ),
     );
-    zip.on('end', () => resolve(entries));
+    zip.on('end', () =>
+      resolve({
+        entries,
+        spans,
+        centralDirectoryStart: bounds.centralDirectoryStart,
+      }),
+    );
     zip.on('entry', (entry: Entry) => {
       records += 1;
       const broken = violation(entry, records, bounds);
       if (broken) return fail(broken, 'zip_entry_rejected');
-      if (!paths.add(entry))
-        return fail(
-          `A file and a folder share a name: ${shown(entry.fileName)}`,
-          'zip_duplicate_entry',
-        );
+      const clash = paths.clash(entry);
+      if (clash) return fail(clash, 'zip_duplicate_entry');
+      spans.push(entry);
       if (isDirectory(entry)) return zip.readEntry();
       if (entries.has(entry.fileName))
         return fail(
@@ -266,6 +289,37 @@ function collectEntries(zip: ZipFile): Promise<Map<string, Entry>> {
     });
     zip.readEntry();
   });
+}
+
+const LOCAL_HEADER_SIGNATURE = 0x04034b50;
+const LOCAL_NAME_LENGTH_AT = 26;
+const LOCAL_EXTRA_LENGTH_AT = 28;
+
+/** The crate reads every record's local header at open and refuses data that starts after the central directory; yauzl reads a local header only when an entry is read. Each record's local header and data must end before the central directory. */
+async function assertLocalHeadersFit(
+  { spans, centralDirectoryStart }: Collected,
+  readAt: ReadAt,
+): Promise<void> {
+  for (const entry of spans) {
+    const header = await readAt(
+      entry.relativeOffsetOfLocalHeader,
+      LOCAL_HEADER_BYTES,
+    );
+    const dataEnd =
+      entry.relativeOffsetOfLocalHeader +
+      LOCAL_HEADER_BYTES +
+      header.readUInt16LE(LOCAL_NAME_LENGTH_AT) +
+      header.readUInt16LE(LOCAL_EXTRA_LENGTH_AT) +
+      entry.compressedSize;
+    if (
+      header.readUInt32LE(0) !== LOCAL_HEADER_SIGNATURE ||
+      dataEnd > centralDirectoryStart
+    )
+      throw new ZipError(
+        `${shown(entry.fileName)} points outside the archive.`,
+        'zip_entry_rejected',
+      );
+  }
 }
 
 const openZipFile = (
@@ -440,9 +494,10 @@ export class ZipArchive {
     closed: Promise<void>,
   ): Promise<ZipArchive> {
     try {
-      const entries = await collectEntries(zip);
+      const collected = await collectEntries(zip);
       await assertCentralDirectoryIsConsistent(zip, readAt);
-      return new ZipArchive(zip, entries, closed);
+      await assertLocalHeadersFit(collected, readAt);
+      return new ZipArchive(zip, collected.entries, closed);
     } catch (error) {
       zip.close();
       throw error;
@@ -469,6 +524,12 @@ export class ZipArchive {
         `${shown(name)} is too large to read`,
         'zip_entry_too_large',
       );
+    return this.checkedStream(entry);
+  }
+
+  /** The entry's bytes through `exactly`, with no size bound. */
+  private async checkedStream(entry: Entry): Promise<Readable> {
+    const name = entry.fileName;
     const source = await new Promise<Readable>((resolve, reject) =>
       this.zip.openReadStream(entry, (error, stream) =>
         error || !stream
@@ -489,6 +550,14 @@ export class ZipArchive {
     for await (const chunk of await this.stream(name))
       chunks.push(chunk as Buffer);
     return Buffer.concat(chunks);
+  }
+
+  /** Reads every file entry through to its end, so a size or CRC-32 that does not match fails here (with the stream's `ZipError`), as it would when the judge extracts the archive. */
+  async verifyAll(): Promise<void> {
+    for (const entry of this.entries.values()) {
+      const stream = await this.checkedStream(entry);
+      await finished(stream.resume());
+    }
   }
 
   /** Resolves once the file is closed, so a caller that awaits it holds no descriptor afterwards. Open streams keep it open until they end or are destroyed. */
@@ -512,6 +581,17 @@ export class ZipArchive {
 export async function listZipEntries(path: string): Promise<string[]> {
   const zip = await ZipArchive.open(path);
   try {
+    return zip.names().filter((name) => !hasDotSegment(name));
+  } finally {
+    await zip.close();
+  }
+}
+
+/** What an upload accepts: every entry listed and read (sizes and CRC-32 checked, as the judge's extraction does), and the files a case may name. */
+export async function checkUploadedZip(path: string): Promise<string[]> {
+  const zip = await ZipArchive.open(path);
+  try {
+    await zip.verifyAll();
     return zip.names().filter((name) => !hasDotSegment(name));
   } finally {
     await zip.close();

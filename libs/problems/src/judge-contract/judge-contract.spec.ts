@@ -24,7 +24,7 @@ import { compileInitYaml } from '../init-yaml';
 import { judgeRefusal } from '../judge-refusals';
 import { buildZip } from '../testing';
 import type { ZipTestEntry } from '../testing';
-import { listZipEntries, ZIP_LIMITS, ZipArchive } from '../zip-archive';
+import { checkUploadedZip, ZIP_LIMITS, ZipArchive } from '../zip-archive';
 import { expectedPlan } from './expected-plan';
 import type { CheckerJson } from './expected-plan';
 import { INIT_YML_SCENARIOS } from './init-yml-scenarios';
@@ -315,6 +315,32 @@ const ZIP_SCENARIOS: ZipScenario[] = [
     name: 'symlink_directory',
     zip: zipOf([...caseFiles(), { name: 'link/', symlink: true }]),
   },
+  {
+    name: 'folder_with_aes_method',
+    zip: zipOf([...caseFiles(), { name: 'z/', methodNumber: 99 }]),
+  },
+  {
+    name: 'duplicate_folder_records',
+    zip: zipOf([{ name: 'z/' }, ...caseFiles(), { name: 'z/' }]),
+  },
+  {
+    name: 'local_extra_past_central_directory',
+    zip: zipOf([...caseFiles(), { name: 'z.txt', localExtraLength: 60000 }]),
+  },
+  {
+    name: 'deflate_longer_than_declared',
+    zip: zipOf([
+      { name: '1.in', content: '1\n' },
+      { name: '1.out', content: '1\n2\n', method: 'deflate', declaredSize: 2 },
+    ]),
+  },
+  {
+    name: 'bad_crc_unlisted',
+    zip: zipOf([
+      ...caseFiles(),
+      { name: '.notes', content: 'n\n', checksum: 0x12345678 },
+    ]),
+  },
 ];
 
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
@@ -380,10 +406,10 @@ function writeInitYml(out: string, scenario: InitYmlScenario): void {
   writeFileSync(join(out, `${scenario.name}.expect.json`), json(expectation));
 }
 
-/** What the upload accepts (`listZipEntries`), and each name a case may use with its bytes. */
+/** What the upload accepts (`checkUploadedZip`), and each name a case may use with its bytes. */
 async function verdictOf(path: string): Promise<Record<string, unknown>> {
   try {
-    const names = await listZipEntries(path);
+    const names = await checkUploadedZip(path);
     const zip = await ZipArchive.open(path);
     const files: Record<string, string> = {};
     for (const name of names)
