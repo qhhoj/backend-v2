@@ -53,6 +53,7 @@ function canEdit(
 
 /** The viewer's current contest (`CurrentContestService.scopeOf`): before it starts every problem is hidden; once started its problems are visible whatever their publicity (legacy `is_accessible_by` step 1). */
 export interface ContestScope {
+  contestId: string;
   started: boolean;
   problemIds: readonly string[];
 }

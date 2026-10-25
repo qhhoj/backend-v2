@@ -39,6 +39,12 @@ import type {
   SubmissionActions,
 } from './submission-access';
 import { SubmissionContestsService } from './submission-contests.service';
+import {
+  contestRowsFilter,
+  isContestRow,
+  listRowsOf,
+  problemRowsOf,
+} from './contest-rows';
 import { sourceFilename } from './source-file';
 import { TEST_SUMMARY_CAP, testSummaryOf } from './test-summary';
 import type { TestSummary } from './test-summary';
@@ -421,7 +427,7 @@ export class SubmissionsService {
     return { submission, problem };
   }
 
-  /** A live problem must be visible to the viewer (source visibility A never exposes a private problem); a deleted or tombstoned one keeps its history for the submission's owner and for staff who see every submission. */
+  /** A live problem must be visible to the viewer (source visibility A never exposes a private problem), and one seen only through the current contest shows only that contest's rows and the viewer's own (`problemRowsOf`); a deleted or tombstoned one keeps its history for the submission's owner and for staff who see every submission. */
   private mayRead(
     principal: Principal | null,
     submission: SubmissionDocument,
@@ -434,11 +440,13 @@ export class SubmissionsService {
         (uuidStr(submission.user) === principal.userId ||
           hasPermission(principal, 'judge.view_all_submission'))
       );
-    return ProblemAccess.canSee(
+    const rows = problemRowsOf(
       principal,
       ProblemAccess.accessView(problem),
       scope,
     );
+    if (typeof rows === 'string') return rows === 'all';
+    return isContestRow(submission, rows.onlyContest, principal);
   }
 
   /** `visible`, then the contest gate (`assertResultOpen`); `source` is legacy `can_see_detail` for signed-in viewers and `sign_in` for visitors. The result page's rule. */
@@ -629,7 +637,7 @@ export class SubmissionsService {
     return clauses.length ? { $and: clauses } : {};
   }
 
-  /** The named problem (null when unknown or, outside a contest, invisible), else outside a contest the viewer's visible problems. */
+  /** The named problem (null when unknown or, outside a contest, invisible; only the current contest's rows and the viewer's own when seen only through that contest), else outside a contest the viewer's visible problems. */
   private async problemClauses(
     principal: Principal | null,
     problemCode: string | undefined,
@@ -644,29 +652,57 @@ export class SubmissionsService {
       ? await this.problems.findByCode(problemCode)
       : null;
     if (!problem) return null;
-    if (
-      contestId === undefined &&
-      !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem), scope)
-    )
-      return null;
-    return [{ problem: problem._id }];
+    if (contestId !== undefined) return [{ problem: problem._id }];
+    const rows = problemRowsOf(
+      principal,
+      ProblemAccess.accessView(problem),
+      scope,
+    );
+    if (rows === 'none') return null;
+    return rows === 'all'
+      ? [{ problem: problem._id }]
+      : [
+          { problem: problem._id },
+          contestRowsFilter(rows.onlyContest, principal),
+        ];
   }
 
-  /** The viewer's visible live problems, plus the history of deleted problems they may read (their own submissions, or every one for `judge.view_all_submission`). A viewer who sees every live problem still must not see deleted ones that are not theirs. */
+  /** The viewer's visible live problems (those seen only through the current contest with only that contest's rows and the viewer's own, `listRowsOf`), plus the history of deleted problems they may read (their own submissions, or every one for `judge.view_all_submission`). A viewer who sees every live problem still must not see deleted ones that are not theirs. */
   private async visibleProblemClauses(
     principal: Principal | null,
     scope: ContestScope | null,
   ): Promise<FilterQuery<Submission>[]> {
     const deleted = await this.problems.deletedIds();
-    const visible = ProblemAccess.visibleFilter(principal, scope);
-    const live: FilterQuery<Submission> | null = Object.keys(visible).length
-      ? { problem: { $in: await this.problems.visibleIds(visible) } }
+    const { everyRow, contestOnly } = listRowsOf(principal, scope);
+    const visible: FilterQuery<Submission> | null = Object.keys(everyRow).length
+      ? { problem: { $in: await this.problems.visibleIds(everyRow) } }
       : deleted.length
         ? { problem: { $nin: deleted } }
         : null;
-    if (!live) return [];
+    if (!visible) return [];
+    const live = contestOnly
+      ? {
+          $or: [
+            visible,
+            this.contestOnlyClause(principal, contestOnly, deleted),
+          ],
+        }
+      : visible;
     const history = this.deletedHistoryClause(principal, deleted);
     return [history ? { $or: [live, history] } : live];
+  }
+
+  /** The current contest's live problems, with only `contestRowsFilter` rows. */
+  private contestOnlyClause(
+    principal: Principal | null,
+    scope: ContestScope,
+    deleted: readonly string[],
+  ): FilterQuery<Submission> {
+    const deletedIds = new Set(deleted);
+    return {
+      problem: { $in: scope.problemIds.filter((id) => !deletedIds.has(id)) },
+      ...contestRowsFilter(scope, principal),
+    };
   }
 
   private deletedHistoryClause(

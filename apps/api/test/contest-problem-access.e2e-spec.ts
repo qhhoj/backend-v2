@@ -1,4 +1,4 @@
-import type { SubmissionCase } from '@libs/database';
+import type { Contest, SubmissionCase } from '@libs/database';
 import type { ProblemListItemResponse } from '../src/modules/problems/core/dto/problem-list.response';
 import {
   contestProblem,
@@ -302,5 +302,84 @@ describe('contest-only problem access', () => {
       { endTime: hoursFromNow(-0.5) },
     );
     expect(await firstCase(inContest._id)).toMatchObject({ output: '42' });
+  });
+
+  describe('submissions on a problem visible only through the current contest', () => {
+    const listedIds = async (path: string) =>
+      dataOf<Array<{ id: string }>>(
+        await authed(api.http().get(path), session).expect(200),
+      ).map((row) => row.id);
+    const read = (path: string) => authed(api.http().get(path), session);
+    /** A private problem in a contest, with an outside submission by its author. */
+    const scoped = async (
+      code: string,
+      contestTimes: Partial<Contest> = {},
+    ) => {
+      const author = await createUserWith(api, `${code}_author`);
+      const shared = await createProblem(api, catalog, {
+        code,
+        isPublic: false,
+        authors: [author._id],
+        submissionSourceVisibility: 'A',
+      });
+      const contest = await createContest(api, {
+        problems: [contestProblem(shared._id, 0)],
+        ...contestTimes,
+      });
+      const outside = await seedSubmission(api, {
+        user: author._id,
+        problem: shared._id,
+        language: catalog.languages.cpp,
+      });
+      return { shared, contest, outsideId: outside._id };
+    };
+
+    it("serves only the contest's submissions and the viewer's own", async () => {
+      const { shared, contest, outsideId } = await scoped('scoped_live');
+      const ownPractice = await seedSubmission(api, {
+        user: userId,
+        problem: shared._id,
+        language: catalog.languages.cpp,
+      });
+      await enter(contest._id);
+      const ownContest = await seedSubmission(api, {
+        user: userId,
+        problem: shared._id,
+        language: catalog.languages.cpp,
+        contest: contest._id,
+      });
+      expect(
+        (
+          await listedIds('/api/internal/submissions?problem=scoped_live')
+        ).sort(),
+      ).toEqual([ownPractice._id, ownContest._id].sort());
+      expect(
+        await listedIds('/api/internal/submissions?pageSize=100'),
+      ).not.toContain(outsideId);
+      expect(
+        await listedIds('/api/internal/problems/scoped_live/best-submissions'),
+      ).not.toContain(outsideId);
+      await read(`/api/internal/submissions/${outsideId}`).expect(404);
+      await read(`/api/internal/submissions/${outsideId}/source`).expect(404);
+    });
+
+    it("serves an ended contest's submissions to a virtual participant, and nothing outside it", async () => {
+      const { shared, contest, outsideId } = await scoped('scoped_virtual', {
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-2),
+      });
+      const rival = await createUserWith(api, 'scoped_rival');
+      const inContest = await seedSubmission(api, {
+        user: rival._id,
+        problem: shared._id,
+        language: catalog.languages.cpp,
+        contest: contest._id,
+      });
+      await enter(contest._id, { virtual: 1 });
+      expect(
+        await listedIds('/api/internal/submissions?problem=scoped_virtual'),
+      ).toEqual([inContest._id]);
+      await read(`/api/internal/submissions/${outsideId}`).expect(404);
+    });
   });
 });

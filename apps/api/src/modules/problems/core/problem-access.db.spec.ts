@@ -139,8 +139,16 @@ describe('ProblemAccess.visibleFilter', () => {
       .findOne({ code: privateCodes[0] })
       .lean())!;
     const scopes: ContestScope[] = [
-      { started: true, problemIds: [uuidStr(contestProblem._id)] },
-      { started: false, problemIds: [uuidStr(contestProblem._id)] },
+      {
+        contestId: 'c-current',
+        started: true,
+        problemIds: [uuidStr(contestProblem._id)],
+      },
+      {
+        contestId: 'c-current',
+        started: false,
+        problemIds: [uuidStr(contestProblem._id)],
+      },
     ];
     for (const scope of scopes)
       for (const principal of Object.values(PRINCIPALS)) {
