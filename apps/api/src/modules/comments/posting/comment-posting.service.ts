@@ -51,6 +51,9 @@ const refusalOf = ({ reason }: PostBlock): AppError => {
   );
 };
 
+/** Rows of the revision history per page. */
+const HISTORY_PAGE_SIZE = 100;
+
 const text = (value: unknown): string =>
   typeof value === 'string' ? value : '';
 
@@ -244,10 +247,11 @@ export class CommentPostingService {
     return response;
   }
 
-  /** Legacy `CommentRevisionAjax`: page access, hidden comments for `change_comment` only, and deleted ones too (their history holds the deleted text). Only `edit` rows: hides and deletes are audit, not history. */
+  /** Legacy `CommentRevisionAjax`: page access, hidden comments for `change_comment` only, and deleted ones too (their history holds the deleted text). `edit` rows plus the `delete` row (shown as an edit to empty text, so a deleted comment's last text stays readable to moderators); hides are audit, not history. Newest first, `HISTORY_PAGE_SIZE` a page. */
   async revisionsOf(
     principal: Principal | null,
     id: string,
+    page = 1,
   ): Promise<CommentRevisionResponse[]> {
     this.reads.assertOpen(principal);
     const { comment } = await this.reads.visibleComment(principal, id, {
@@ -255,8 +259,11 @@ export class CommentPostingService {
     });
     if (comment.deletedAt && !moderatesComments(principal))
       throw new AppError('not_found', 404, 'No such comment');
-    const rows = (await this.revisions.list('comment', id)).filter(
-      (row) => row.action === 'edit',
+    const rows = await this.revisions.pageOfActions(
+      'comment',
+      id,
+      ['edit', 'delete'],
+      { page, pageSize: HISTORY_PAGE_SIZE },
     );
     const editors = new Map(
       (

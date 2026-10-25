@@ -198,7 +198,7 @@ export class BlogEditingService {
       changes.authors = unique(authorIds);
     }
     const before = revisionView(post.toJSON());
-    await this.posts.update(id, changes);
+    await this.writeChanges(principal, id, dto, changes);
     const after = revisionView({ ...post.toJSON(), ...changes });
     const diff = fieldDiff(before, after);
     if (Object.keys(diff).length)
@@ -215,6 +215,22 @@ export class BlogEditingService {
         unique([...view.authors, ...(changes.authors ?? [])]),
       );
     return this.reads.detail(principal, id);
+  }
+
+  /** An author making the post visible writes only while no moderator has hidden it since the read, else 403 like the check in `moderatorHideMark`. */
+  private async writeChanges(
+    principal: Principal,
+    id: string,
+    dto: Pick<UpdatePostDto, 'visible'>,
+    changes: Partial<BlogPost>,
+  ): Promise<void> {
+    const isAuthorPublishing =
+      dto.visible === true && !hasPermission(principal, 'judge.edit_all_post');
+    if (!isAuthorPublishing) return this.posts.update(id, changes);
+    if (!(await this.posts.updateUnlessModeratorHidden(id, changes)))
+      throw forbidden(
+        'A moderator hid this post; only edit_all_post makes it visible again',
+      );
   }
 
   /** Legacy `BlogPostDelete`: edit rights plus `delete_blogpost`. */

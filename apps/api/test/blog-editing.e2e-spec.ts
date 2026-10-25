@@ -8,6 +8,7 @@ import {
 } from '@libs/community';
 import type { ContributionPointsJob, DiscordWebhookJob } from '@libs/community';
 import { newId, uuidStr } from '@libs/database';
+import { BlogVisibilityService } from '../src/modules/blog/core/blog-visibility.service';
 import { BlogEditingService } from '../src/modules/blog/editing/blog-editing.service';
 import type { PostDetailResponse } from '../src/modules/blog/core/dto/post.response';
 import {
@@ -464,6 +465,32 @@ describe('blog editing', () => {
     await api.http().get(postUrl(post._id)).expect(200);
     await patch(post._id, session, { visible: false }).expect(200);
     await patch(post._id, session, { visible: true }).expect(200);
+  });
+
+  it('refuses an author publish that raced a moderator hide', async () => {
+    const { user, session } = await person();
+    const post = await createPost(api, {
+      authors: [user._id],
+      visible: false,
+    });
+    const visibility = api.app.get(BlogVisibilityService);
+    const read = visibility.visiblePost.bind(visibility);
+    jest
+      .spyOn(visibility, 'visiblePost')
+      .mockImplementationOnce(async (...args) => {
+        const stale = await read(...args);
+        await api.blogPosts.updateOne(
+          { _id: post._id },
+          { isHiddenByModerator: true },
+        );
+        return stale;
+      });
+    await patch(post._id, session, { visible: true })
+      .expect(403)
+      .expect(errorCode('forbidden'));
+    expect((await api.blogPosts.findById(post._id).lean())!.visible).toBe(
+      false,
+    );
   });
 
   it('deletes with delete_blogpost, taking comments, votes and the lock along and recomputing their authors', async () => {

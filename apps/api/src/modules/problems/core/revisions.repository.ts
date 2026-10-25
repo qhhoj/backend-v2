@@ -40,6 +40,22 @@ export class RevisionsRepository {
     return { items, total };
   }
 
+  /** One page of an entity's rows with one of `actions`, newest first, through `{entity, entityId, createdAt, _id}`. */
+  pageOfActions(
+    entity: string,
+    entityId: string,
+    actions: string[],
+    { page, pageSize }: { page: number; pageSize: number },
+  ): Promise<Revision[]> {
+    return this.revisions
+      .find({ entity, entityId, action: { $in: actions } })
+      .sort({ createdAt: -1, _id: -1 })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .lean<Revision[]>()
+      .exec();
+  }
+
   /** One page of the `delete` revisions of an entity kind, newest first, through the partial `{entity, createdAt, _id}` index. */
   async deletedPage(
     entity: string,
