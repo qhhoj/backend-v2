@@ -15285,7 +15285,8 @@
             "type": "array"
           },
           "notes": {
-            "description": "Every reader sees it; `can.editNotes` says who may change it.",
+            "description": "Staff-only internal notes: set for those who may edit them (`can.editNotes`: staff and assignees), null for every other reader.",
+            "nullable": true,
             "type": "string"
           },
           "timeline": {
@@ -40690,7 +40691,7 @@
     },
     "/api/internal/tickets/{id}": {
       "get": {
-        "description": "Returns the ticket with its messages, notes, assignees and timeline.\nReadable by its creator, its assignees, editors of the linked problem,\neditors of the contest it was filed from and staff. Fails with 404 `not_found` for an unknown id and 403 `forbidden`\nfor a ticket the caller may not read.",
+        "description": "Returns the ticket with its messages, assignees and timeline; the internal notes only to staff and assignees.\nReadable by its creator, its assignees, editors of the linked problem,\neditors of the contest it was filed from and staff. Fails with 404 `not_found` for an unknown id and 403 `forbidden`\nfor a ticket the caller may not read.",
         "operationId": "TicketsController_detail",
         "parameters": [
           {
