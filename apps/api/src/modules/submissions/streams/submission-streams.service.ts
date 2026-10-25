@@ -3,7 +3,7 @@ import type { OnModuleInit } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { optionalPrincipal } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { AppError, RateLimitService } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import { parseSubmissionEvent, SUBMISSION_EVENTS_CHANNEL } from '@libs/judging';
 import type { SubmissionEvent } from '@libs/judging';
@@ -17,6 +17,11 @@ import { STREAM_LIMITS } from '../../events/stream-limits';
 import type { StreamLimits } from '../../events/stream-limits';
 import { ProblemEvents } from '../../problems/core/problem.events';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
+import {
+  VISITOR_DETAIL_LIMIT,
+  VISITOR_DETAIL_WINDOW_SECONDS,
+  visitorDetailKey,
+} from '../core/rate-limits';
 import { SubmissionsRepository } from '../core/submissions.repository';
 import type { SubmissionState } from '../core/submissions.repository';
 import { SubmissionsService } from '../core/submissions.service';
@@ -94,6 +99,7 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
     private readonly submissionRows: SubmissionsRepository,
     private readonly problems: ProblemsRepository,
     private readonly problemEvents: ProblemEvents,
+    private readonly rateLimit: RateLimitService,
   ) {
     hub.register(this);
   }
@@ -114,11 +120,14 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
     reply: FastifyReply,
   ): Promise<void> {
     const principal = optionalPrincipal(auth);
-    // A session short of its 2FA or password gate still counts against its user's cap.
-    const release = this.hub.reserve(
-      request.ip,
-      auth?.principal.userId ?? null,
-    );
+    // A session short of its 2FA or password gate is a visitor: no user cap, and the detail page's visitor limit.
+    if (!principal)
+      await this.rateLimit.reserve(
+        [visitorDetailKey(request.ip)],
+        VISITOR_DETAIL_LIMIT,
+        VISITOR_DETAIL_WINDOW_SECONDS,
+      );
+    const release = this.hub.reserve(request.ip, principal?.userId ?? null);
     let entry: SubmissionStream;
     try {
       const { submission, caseEvents } = await this.submissions.streamAccess(

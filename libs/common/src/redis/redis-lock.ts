@@ -6,6 +6,9 @@ import { conflictIssue } from '../errors/conflict-issue';
 
 export const RELEASE_LOCK_SCRIPT =
   "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
+/** Extends the lock's expiry only while `token` still holds it. */
+export const RENEW_LOCK_SCRIPT =
+  "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0";
 const logger = new Logger('RedisLock');
 
 /** How often a waiting lock taker tries the lock again. */
@@ -17,6 +20,8 @@ export interface RedisLock {
   busyMessage: string;
   /** How long a held lock is waited for, retried every LOCK_RETRY_MS; 0 (the default) refuses it at once. */
   waitSeconds?: number;
+  /** Extends the expiry every third of `ttlSeconds` while `work` runs, so slow work (a queued password hash) never outlives its lock. A crashed process still frees the lock after `ttlSeconds`. */
+  renew?: boolean;
 }
 
 /** Runs `work` while holding `key` (expires after `ttlSeconds`); a lock still held after `waitSeconds` (default: at once) is a 409 `conflict` with `issues: [{ field: 'lock', code: 'busy', message }]`. The owner-checked release never throws: a failure is logged, the work's result stands. */
@@ -28,9 +33,11 @@ export async function withRedisLock<Result>(
   const token = randomBytes(16).toString('hex');
   if (!(await acquire(redis, lock, token)))
     throw conflictIssue('lock', 'busy', lock.busyMessage);
+  const renewal = lock.renew ? startRenewal(redis, lock, token) : null;
   try {
     return await work();
   } finally {
+    if (renewal) clearInterval(renewal);
     try {
       await redis.eval(RELEASE_LOCK_SCRIPT, 1, lock.key, token);
     } catch (error) {
@@ -54,4 +61,25 @@ async function acquire(
     if (Date.now() + LOCK_RETRY_MS > deadline) return false;
     await sleep(LOCK_RETRY_MS);
   }
+}
+
+function startRenewal(
+  redis: Redis,
+  { key, ttlSeconds }: RedisLock,
+  token: string,
+): NodeJS.Timeout {
+  const timer = setInterval(
+    () => {
+      redis
+        .eval(RENEW_LOCK_SCRIPT, 1, key, token, ttlSeconds)
+        .catch((error: unknown) =>
+          logger.error(
+            `Lock ${key} renewal failed: ${(error as Error).message}`,
+          ),
+        );
+    },
+    (ttlSeconds * 1000) / 3,
+  );
+  timer.unref();
+  return timer;
 }

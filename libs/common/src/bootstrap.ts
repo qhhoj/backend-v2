@@ -81,6 +81,13 @@ export async function configureApp(app: NestFastifyApplication): Promise<void> {
           error: {
             code: 'validation_failed',
             message: 'Request body is nested too deeply',
+            issues: [
+              {
+                field: '',
+                code: 'validation_failed',
+                message: 'Request body is nested too deeply',
+              },
+            ],
           },
         });
     });
