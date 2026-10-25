@@ -122,8 +122,13 @@ describe('ProblemAccess.canEdit', () => {
 });
 
 describe('ProblemAccess with a current contest (legacy is_accessible_by step 1)', () => {
-  const started: ContestScope = { started: true, problemIds: ['p-contest'] };
+  const started: ContestScope = {
+    contestId: 'c-current',
+    started: true,
+    problemIds: ['p-contest'],
+  };
   const notStarted: ContestScope = {
+    contestId: 'c-current',
     started: false,
     problemIds: ['p-contest'],
   };
