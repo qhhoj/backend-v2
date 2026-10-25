@@ -60,6 +60,7 @@ describe('submitting inside a contest', () => {
       ['carol', {}],
       ['dave', {}],
       ['erin', {}],
+      ['tess', {}],
       ['spammer', { permissions: ['judge.spam_submission'] }],
     ];
     for (const [name, extra] of roles) {
@@ -114,7 +115,7 @@ describe('submitting inside a contest', () => {
     expect(await api.contestSubmissions.findById(normal).lean()).toBeNull();
   });
 
-  it('refuses a spectator (editor, tester or a contestant whose window ended) while the contest runs', async () => {
+  it('refuses a spectator who is not contest staff (a contestant whose window ended) while the contest runs', async () => {
     const problem = await createProblem(api, catalog, {
       code: 'cp_spectated',
       isPublic: false,
@@ -126,6 +127,23 @@ describe('submitting inside a contest', () => {
     await submit('dave', 'cp_spectated')
       .expect(403)
       .expect(errorCode('spectator_cannot_submit'));
+  });
+
+  it('lets a tester spectating a running contest submit as a contest submission', async () => {
+    const problem = await createProblem(api, catalog, {
+      code: 'cp_tested',
+      isPublic: false,
+    });
+    const contest = await createContest(api, {
+      testers: [users.tess._id],
+      problems: [contestProblem(problem._id, 0)],
+    });
+    await enter('tess', contest._id, { virtual: SPECTATE });
+    const id = idOf(await submit('tess', 'cp_tested').expect(201));
+    expect(uuidStr((await api.submissions.findById(id).lean())!.contest!)).toBe(
+      contest._id,
+    );
+    expect(await api.contestSubmissions.findById(id).lean()).not.toBeNull();
   });
 
   it('caps submissions per problem, not counting internal errors, for every user', async () => {

@@ -24,8 +24,9 @@ export class SubmissionCreateController {
    * `judge_unavailable` if it is offline or lacks the language). When the
    * caller's current contest lists the problem, the submission counts as a
    * contest submission, subject to the contest's attempt cap (403
-   * `contest_submission_limit`); a spectator cannot submit to it until the
-   * contest ends (403 `spectator_cannot_submit`). Other errors: 403 `banned_from_problem`, 429
+   * `contest_submission_limit`); a spectator who is not contest staff (author,
+   * curator, tester or contest editor) cannot submit to it until the contest
+   * ends (403 `spectator_cannot_submit`). Other errors: 403 `banned_from_problem`, 429
    * `rate_limited` (20 per minute per user) and 429
    * `unfinished_submission_limit` (2 unfinished submissions, waived by
    * `judge.spam_submission`). Queues the submission for judging and returns its
