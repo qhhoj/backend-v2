@@ -71,7 +71,7 @@ export class ContestRemovalService {
     await this.clearLeftovers(contest);
   }
 
-  /** Hidden only (others may depend on a visible one), never rated (later ratings were computed from it), with nothing left to judge, and without participations unless the caller edits every contest (hiding is ungated, so hidden alone does not protect the results). */
+  /** Hidden only (others may depend on a visible one), never rated (later ratings were computed from it), with nothing left to judge, and without participations unless the caller edits every contest (a contest's results are deleted by staff only). */
   private async assertDeletable(
     principal: Principal,
     contest: ContestDocument,
