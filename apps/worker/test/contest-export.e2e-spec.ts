@@ -1,6 +1,18 @@
-import { readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  readdirSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
-import { contestExportPath } from '@libs/contests';
+import {
+  contestDataPath,
+  contestDataTempPath,
+  contestExportPath,
+  contestExportTempPath,
+} from '@libs/contests';
+import { newId } from '@libs/database';
 import type {
   Contest,
   ContestParticipation,
@@ -9,6 +21,7 @@ import type {
 } from '@libs/database';
 import { ContestExportRepository } from '../src/jobs/contest-export/contest-export.repository';
 import { ContestExportService } from '../src/jobs/contest-export/contest-export.service';
+import { ContestZipSweepService } from '../src/jobs/contest-export/contest-zip-sweep.service';
 import {
   CONTEST_EXPORT_LIMITS,
   ContestExportError,
@@ -270,5 +283,30 @@ describe('contest export', () => {
         contestId: '0192f1c2-7a3b-7c4d-8e5f-0123456789ab',
       }),
     ).toBe(0);
+  });
+
+  it('sweeps export and data zips after a week and crashed temp files after a day, and nothing else', async () => {
+    const root = worker.contestDataRoot;
+    const hours = (count: number) => new Date(Date.now() - count * 3_600_000);
+    const fileAged = (path: string, age: Date) => {
+      writeFileSync(path, 'bytes');
+      utimesSync(path, age, age);
+      return path;
+    };
+    const [weekOld, dayOld] = [hours(7 * 24 + 1), hours(25)];
+    const removed = [
+      fileAged(contestExportPath(root, newId()), weekOld),
+      fileAged(contestDataPath(root, newId()), weekOld),
+      fileAged(contestExportTempPath(root, newId(), 'run'), dayOld),
+    ];
+    const kept = [
+      fileAged(contestExportPath(root, newId()), hours(6 * 24)),
+      fileAged(contestDataTempPath(root, newId(), 'run'), hours(23)),
+      fileAged(join(root, 'notes.zip'), weekOld),
+      fileAged(join(root, 'readme.txt'), weekOld),
+    ];
+    expect(await worker.module.get(ContestZipSweepService).sweep()).toBe(3);
+    expect(removed.filter((path) => existsSync(path))).toEqual([]);
+    expect(kept.filter((path) => !existsSync(path))).toEqual([]);
   });
 });

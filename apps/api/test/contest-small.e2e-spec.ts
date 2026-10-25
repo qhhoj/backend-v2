@@ -700,7 +700,7 @@ describe('contest submissions export', () => {
     rmSync(zipFile(), { force: true });
   });
 
-  it('queues an export for editors of an ended contest, once a day while a zip exists', async () => {
+  it('queues an export for editors of an ended contest, once a day while a zip exists and three builds a day at most', async () => {
     await request('editor', running.key).expect(409);
     await request('editor', ended.key).expect(202);
     expect((await queue.getJob(contestExportJobId(ended._id)))!.data).toEqual({
@@ -716,6 +716,13 @@ describe('contest submissions export', () => {
     expect(issueCodes(limited)).toEqual(['export_rate_limited']);
     rmSync(zipFile());
     await request('editor', ended.key).expect(202);
+    // A failed build leaves no zip either: the daily cap still holds.
+    await queue.obliterate({ force: true });
+    await request('editor', ended.key).expect(202);
+    await queue.obliterate({ force: true });
+    expect(issueCodes(await request('editor', ended.key).expect(429))).toEqual([
+      'export_rate_limited',
+    ]);
   });
 
   it('refuses everyone but editors, each refusal carrying an issue code', async () => {

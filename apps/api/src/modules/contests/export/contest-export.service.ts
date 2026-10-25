@@ -6,7 +6,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
-import { ENV } from '@libs/common';
+import { AppError, ENV, RateLimitService } from '@libs/common';
 import type { Env } from '@libs/common';
 import {
   canPrepareData,
@@ -25,6 +25,7 @@ import type { ContestDocument } from '../core/contests.repository';
 import type { QueuedResponse } from '../core/dto/queued.response';
 import type { ContestExportStatusResponse } from './dto/contest-export.dto';
 import { refusalsOf } from '../core/coded-refusal';
+import { claimZipBuild } from '../core/zip-build-budget';
 
 const exportRefusal = refusalsOf('export');
 
@@ -43,6 +44,7 @@ export class ContestExportService {
     @Inject(ENV) private readonly env: Env,
     private readonly viewers: ContestViewerService,
     private readonly contests: ContestsRepository,
+    private readonly rateLimits: RateLimitService,
     @InjectQueue(CONTEST_EXPORT_QUEUE)
     private readonly queue: Queue<ContestExportJob>,
   ) {}
@@ -95,6 +97,7 @@ export class ContestExportService {
         'export_rate_limited',
         'The export can be prepared once a day',
       );
+    await this.claimBuild(contest._id);
     await this.contests.setExportPreparedAt(contest._id, now);
     await this.queue.add(
       CONTEST_EXPORT_JOB,
@@ -124,6 +127,21 @@ export class ContestExportService {
       );
     }
     return { stream, filename: `${contest.key}-export.zip` };
+  }
+
+  /** The daily build cap, refused with the export's own issue code. */
+  private async claimBuild(contestId: string): Promise<void> {
+    try {
+      await claimZipBuild(this.rateLimits, 'export', contestId);
+    } catch (error) {
+      if (!(error instanceof AppError) || error.status !== 429) throw error;
+      throw exportRefusal(
+        429,
+        'rate_limited',
+        'export_rate_limited',
+        'The export can be prepared a few times a day at most',
+      );
+    }
   }
 
   private async isPreparing(contestId: string): Promise<boolean> {

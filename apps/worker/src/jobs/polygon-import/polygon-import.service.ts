@@ -64,7 +64,7 @@ import { helperHeadersOf } from './polygon-headers';
 import type { HelperHeader } from './polygon-headers';
 import { ImportQuota } from './import-quota.service';
 import { ImportSourceChecks } from './import-source-checks';
-import { PolygonImportError } from './polygon-import.error';
+import { PolygonImportError, SyncDeferredError } from './polygon-import.error';
 import { PolygonImportRepository } from './polygon-import.repository';
 import type {
   AppliedImport,
@@ -87,6 +87,7 @@ import {
 } from './polygon-statements';
 import { planTests } from './polygon-tests';
 import type { PlannedTest, TestPlan } from './polygon-tests';
+import { RunningContestsRepository } from './running-contests.repository';
 import {
   generatedTestsPathOf,
   StandardPackageTests,
@@ -176,15 +177,21 @@ const needsAttention = (
 const isStandard = (job: PolygonImportJob): boolean =>
   job.polygon?.packageType === 'standard';
 
-/** Headers go beside the package's checker and interactor, whose init.yml `files` list them (a judge with `interactive.checker` reads a checker's list); a problem with neither, an hcmp one, gets none. */
+/** Headers go beside the package's checker and interactor, whose init.yml `files` list them (a judge with `interactive.checker` reads a checker's list); a problem with neither, an hcmp one, gets none. A sync never takes a header named like one of the problem's other data files: a kept local checker keeps its bytes. */
 const helperHeaders = (
-  root: XmlElement,
-  pkg: PolygonPackage,
+  { root, pkg }: { root: XmlElement; pkg: PolygonPackage },
   assets: PolygonAssets,
+  local: LocalSettings | null,
 ): HelperHeader[] =>
   assets.checkerSource || assets.interactorSource
-    ? helperHeadersOf(root, pkg)
+    ? helperHeadersOf(root, pkg, nonHeaderFilesOf(local))
     : [];
+
+/** The local data files a package header must not replace: every file the problem names except its headers. */
+const nonHeaderFilesOf = (local: LocalSettings | null): Set<string> =>
+  new Set(
+    local ? dataFileNamesOf({ ...local.state.data, helperHeaders: [] }) : [],
+  );
 
 /** Grader arguments from the tests (file io) and from the assets (interactor points); null when neither has any. */
 const joinArgs = (
@@ -317,6 +324,7 @@ export class PolygonImportService {
     private readonly standardTests: StandardPackageTests,
     private readonly quota: ImportQuota,
     private readonly sourceChecks: ImportSourceChecks,
+    private readonly runningContests: RunningContestsRepository,
     @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
     @InjectQueue(PROBLEM_RESCORE_QUEUE)
     private readonly rescoreQueue: Queue<ProblemRescoreJob>,
@@ -334,6 +342,7 @@ export class PolygonImportService {
     try {
       await this.pandoc.assertAvailable();
       const target = await this.repository.resolveTarget(job);
+      await this.assertNoRunningContest(job);
       await this.repository.assertFullMarkupWriter(job);
       if (job.polygon) {
         await this.download(run.id, job.polygon, tracker);
@@ -349,6 +358,13 @@ export class PolygonImportService {
       await rm(packagePath, { force: true });
       await rm(generatedTestsPathOf(packagePath), { force: true });
     }
+  }
+
+  /** An automatic sync never changes a problem under a running contest; checked before the download and again under the data lock, right before the write. A sync someone started keeps its own rule. */
+  private async assertNoRunningContest(job: PolygonImportJob): Promise<void> {
+    if (job.polygon?.trigger !== 'auto') return;
+    const until = await this.runningContests.runningUntil(job.code, new Date());
+    if (until) throw new SyncDeferredError(until);
   }
 
   /** A Polygon failure (refused credentials, package not built for Linux, too large) is shown to the requester. */
@@ -437,7 +453,7 @@ export class PolygonImportService {
       { job, options },
       savedImages,
     );
-    const headers = helperHeaders(root, pkg, assets);
+    const headers = helperHeaders({ root, pkg }, assets, local);
     const sources = await readSources(pkg, assets, headers);
     const settings = settingsOf(job, { assets, plan, sources }, local);
     const compiled = this.compile(settings.values.data, plan.tests);
@@ -554,6 +570,7 @@ export class PolygonImportService {
     onCommitted: () => void,
   ): Promise<WrittenImport> {
     const write = async (): Promise<WrittenImport> => {
+      await this.assertNoRunningContest(job);
       const applied = await this.repository.apply(job, read.imported, target);
       onCommitted();
       tracker.enter('finishing');

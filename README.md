@@ -110,7 +110,7 @@ One folder per job. Schedule: a repeating job registers its own scheduler when t
 | `contest-publish`                | every 1 min              | publish a contest's problems and editorials at its end                  |
 | `contest-rating`                 | on request               | Elo-MMR rating run                                                      |
 | `contest-data`                   | on request               | contest data zip                                                        |
-| `contest-export`                 | on request               | contest export zip (submissions CSV and sources)                        |
+| `contest-export`                 | on request, hourly sweep | contest export zip (submissions CSV and sources); expiry of both zips   |
 | `contest-replay`                 | on request               | build the replay chunks of an ended contest                             |
 | `similarity`                     | on request               | code-similarity run (Dolos) per problem or contest                      |
 | `organization-points`            | on change                | organization PP and member counts                                       |

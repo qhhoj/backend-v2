@@ -1,6 +1,6 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { getModelToken } from '@nestjs/mongoose';
-import { UnrecoverableError } from 'bullmq';
+import { DelayedError, UnrecoverableError } from 'bullmq';
 import type { Job, Queue } from 'bullmq';
 import { readFile, writeFile } from 'node:fs/promises';
 import { parse } from 'yaml';
@@ -88,14 +88,19 @@ describe('Polygon link, sync and auto-sync', () => {
   let requesterId: string, groupId: string, otherGroupId: string;
   let typeId: string, otherLanguageId: string;
 
-  /** A job as BullMQ hands it to the processor, recording the progress it reports; `timestamp` is when it was queued. */
+  /** A job as BullMQ hands it to the processor, recording the progress it reports and when it was delayed to; `timestamp` is when it was queued. */
   const runJob = async (
     data: PolygonImportJob,
     attempts = { attemptsMade: 0, opts: { attempts: 1 } },
     timestamp = Date.now(),
   ) => {
     const progress: ImportProgress[] = [];
+    const delayedTo: number[] = [];
     const job = {
+      moveToDelayed: (until: number) => {
+        delayedTo.push(until);
+        return Promise.resolve();
+      },
       id: newId(),
       timestamp,
       data,
@@ -115,10 +120,12 @@ describe('Polygon link, sync and auto-sync', () => {
         result: null,
         error: error.message,
         final: error instanceof UnrecoverableError,
+        delayed: error instanceof DelayedError,
       }),
     );
     return {
       ...outcome,
+      delayedTo,
       jobId: job.id!,
       failedStep: job.data.failedStep,
       steps: progress.map(({ step }) => step),
@@ -1070,6 +1077,43 @@ describe('Polygon link, sync and auto-sync', () => {
         expect(
           await imports.getJob(syncJobId(problem._id, 30)),
         ).toBeUndefined();
+    });
+
+    it('holds a sync queued before a contest started until the contest ends, recording nothing, then applies it', async () => {
+      const problem = await linked('auto_race');
+      const contest = await seedContest(worker, {
+        startTime: new Date(Date.now() + 5 * 60_000),
+        problems: [{ problem: problem._id, points: 100, order: 0 }],
+      } as never);
+      polygon.reply('problem.packages', {
+        result: [ready(10, 3), ready(20, 6)],
+      });
+      await autoSync.run();
+      const queued = (await imports.getJob(syncJobId(problem._id, 20)))!;
+      await worker.contests.updateOne(
+        { _id: contest._id },
+        { $set: { startTime: new Date(Date.now() - 60_000) } },
+      );
+      polygon.reply('problem.package', {
+        zip: buildPolygonPackage(fixtureNamed('Sum v2', 3000)),
+      });
+      const held = await runJob(queued.data);
+      expect(held).toMatchObject({ delayed: true, final: false });
+      expect(held.delayedTo).toEqual([contest.endTime.getTime()]);
+      const during = (await worker.problems.findOne({ code: 'auto_race' }))!;
+      expect(during).toMatchObject({ name: 'Sum', timeLimit: 1 });
+      expect(during.polygonLink).toMatchObject({ packageId: 10 });
+      expect(during.polygonLink?.lastSyncResult).not.toBe('failed');
+      expect(await runs.countDocuments({ jobId: held.jobId })).toBe(0);
+
+      await worker.contests.updateOne(
+        { _id: contest._id },
+        { $set: { endTime: new Date(Date.now() - 1000) } },
+      );
+      expect((await runJob(queued.data)).error).toBeNull();
+      expect(
+        await worker.problems.findOne({ code: 'auto_race' }),
+      ).toMatchObject({ name: 'Sum v2', timeLimit: 3 });
     });
 
     it('does nothing while Polygon is not connected', async () => {

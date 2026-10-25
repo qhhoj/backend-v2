@@ -58,4 +58,14 @@ describe('helperHeadersOf', () => {
       { path: 'files/ok.h', name: 'ok.h' },
     ]);
   });
+
+  it("leaves out a header named like one of the problem's own data files, so a kept local checker keeps its bytes", () => {
+    const { root, pkg } = read([
+      { path: 'files/my_checker.cpp', type: 'h.g++' },
+      { path: 'files/testlib.h', type: 'h.g++' },
+    ]);
+    expect(helperHeadersOf(root, pkg, new Set(['my_checker.cpp']))).toEqual([
+      { path: 'files/testlib.h', name: 'testlib.h' },
+    ]);
+  });
 });

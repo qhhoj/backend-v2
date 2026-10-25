@@ -16,6 +16,7 @@ import { PolygonImportProcessor } from './polygon-import.processor';
 import { PolygonImportRepository } from './polygon-import.repository';
 import { PolygonImportService } from './polygon-import.service';
 import { PolygonSyncRunsRepository } from './polygon-sync-runs.repository';
+import { RunningContestsRepository } from './running-contests.repository';
 import { StandardPackageTests } from './standard-package-tests';
 import { TestGenerationRepository } from './test-generation.repository';
 import { TestGenerationService } from './test-generation.service';
@@ -40,6 +41,7 @@ import { TestGenerationService } from './test-generation.service';
     PolygonImportService,
     PolygonImportRepository,
     PolygonSyncRunsRepository,
+    RunningContestsRepository,
     PandocService,
     StandardPackageTests,
     TestGenerationService,

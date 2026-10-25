@@ -11,3 +11,6 @@ export const RANKING_TOKEN_WINDOW_SECONDS = 10 * 60;
 /** Announcement pushes per contest (resends included): each reaches every open stream of the contest. */
 export const ANNOUNCEMENT_PUSH_LIMIT = 20;
 export const ANNOUNCEMENT_PUSH_WINDOW_SECONDS = 60 * 60;
+/** Export or data builds per contest per day, failed ones included (new; legacy had only "once a day while a zip is ready"): a failed build leaves no zip, so the zip rule alone let editors rerun 512 MiB builds back to back. Never given back. */
+export const CONTEST_ZIP_BUILD_LIMIT = 3;
+export const CONTEST_ZIP_BUILD_WINDOW_SECONDS = 86_400;
