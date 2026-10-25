@@ -69,23 +69,26 @@ export class ContestParticipationController {
    * @remarks
    * Registers the signed-in user for a contest that requires registration,
    * before registration closes. Send `accessCode` when the contest has one
-   * (editors skip it) and `acceptRules` true when the contest has rules.
+   * (editors skip it), `acceptRules` true and the `acceptRulesRevision` shown
+   * to the user when the contest has rules.
    * Refusals are 409 `editor_cannot_register`, `registration_not_required`,
    * `registration_closed`, `contest_ended` or `already_registered`; 403
-   * `banned_from_contest`, `access_code_required` or `wrong_access_code`; and
-   * 400 `rules_not_accepted`. Wrong access codes are rate limited per user and
+   * `banned_from_contest`, `access_code_required` or `wrong_access_code`; 400
+   * `rules_not_accepted`; and 409 `rules_changed` when the rules were saved
+   * after the user read them. Wrong access codes are rate limited per user and
    * per IP.
    */
   @Post(':key/register')
   register(
     @CurrentAuth() auth: AuthContext,
     @Param() { key }: ContestKeyParamDto,
-    @Body() { accessCode, acceptRules }: JoinBodyDto,
+    @Body() { accessCode, acceptRules, acceptRulesRevision }: JoinBodyDto,
     @Req() request: FastifyRequest,
   ): Promise<ParticipationSummaryResponse> {
     return this.participation.register(auth.principal, key, {
       accessCode,
       acceptRules: acceptRules === true,
+      acceptRulesRevision,
       ip: limiterAddress(request.ip),
     });
   }
@@ -106,12 +109,13 @@ export class ContestParticipationController {
   join(
     @CurrentAuth() auth: AuthContext,
     @Param() { key }: ContestKeyParamDto,
-    @Body() { accessCode, acceptRules }: JoinBodyDto,
+    @Body() { accessCode, acceptRules, acceptRulesRevision }: JoinBodyDto,
     @Req() request: FastifyRequest,
   ): Promise<ParticipationSummaryResponse> {
     return this.participation.join(auth.principal, key, {
       accessCode,
       acceptRules: acceptRules === true,
+      acceptRulesRevision,
       ip: limiterAddress(request.ip),
     });
   }

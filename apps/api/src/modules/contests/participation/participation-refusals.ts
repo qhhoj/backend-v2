@@ -36,3 +36,20 @@ export const rulesNotAccepted = (): AppError => {
     { issues: [{ field: 'acceptRules', code: 'rules_not_accepted', message }] },
   );
 };
+
+/** 409 with an `issues[]` entry on `acceptRulesRevision`: the rules were saved after the contestant opened them. */
+export const rulesChanged = (): AppError => {
+  const message = 'The contest rules changed; read them again.';
+  return new AppError(
+    'rules_changed',
+    409,
+    message,
+    { acceptRulesRevision: [message] },
+    undefined,
+    {
+      issues: [
+        { field: 'acceptRulesRevision', code: 'rules_changed', message },
+      ],
+    },
+  );
+};

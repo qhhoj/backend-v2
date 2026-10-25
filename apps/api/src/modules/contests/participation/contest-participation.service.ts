@@ -44,7 +44,11 @@ import type {
   BulkDisqualifyDto,
   ParticipationListQueryDto,
 } from './dto/participation.dto';
-import { refusal, rulesNotAccepted } from './participation-refusals';
+import {
+  refusal,
+  rulesChanged,
+  rulesNotAccepted,
+} from './participation-refusals';
 import {
   CurrentParticipationResponse,
   ParticipationResponse,
@@ -97,7 +101,16 @@ export interface JoinCredentials {
   accessCode: string | undefined;
   /** Whether the request ticked the rules box. */
   acceptRules: boolean;
+  /** The rules revision the contestant read; absent from older clients. */
+  acceptRulesRevision: number | undefined;
   ip: string;
+}
+
+/** The viewer, contest and request of one join. */
+interface JoinContext {
+  principal: Principal;
+  contest: ContestDocument;
+  credentials: JoinCredentials;
 }
 
 /** Legacy `ContestRegister`, `ContestJoin`, `ContestLeave` and `ContestParticipationList`. */
@@ -138,11 +151,7 @@ export class ContestParticipationService {
       credentials.accessCode,
       credentials.ip,
     );
-    const acceptance = this.acceptanceFor(
-      contest,
-      credentials.acceptRules,
-      now,
-    );
+    const acceptance = this.acceptanceFor(contest, credentials, now);
     const participation = await this.participationRows.register(
       contest._id,
       principal.userId,
@@ -227,7 +236,7 @@ export class ContestParticipationService {
       contest._id,
       principal.userId,
       now,
-      this.acceptanceFor(contest, credentials.acceptRules, now),
+      this.acceptanceFor(contest, credentials, now),
     );
   }
 
@@ -247,7 +256,8 @@ export class ContestParticipationService {
       principal.userId,
       virtual,
     );
-    if (existing) return this.reenter(principal, contest, existing, now);
+    if (existing)
+      return this.reenter({ principal, contest, credentials }, existing, now);
     const isRegistrationOver =
       requiresRegistration(contest) && !isRegistrationOpen(contest, now);
     if (isRegistrationOver && !isSpectatorOnly) throw refusal('not_registered');
@@ -259,36 +269,46 @@ export class ContestParticipationService {
     );
     const acceptance = isSpectatorOnly
       ? null
-      : this.acceptanceFor(contest, credentials.acceptRules, now);
+      : this.acceptanceFor(contest, credentials, now);
     return this.participationRows.findOrCreate(
       { contestId: contest._id, userId: principal.userId, virtual },
       { now, acceptance },
     );
   }
 
-  /** The acceptance to store with a new row: none when the contest has no rules; `rules_not_accepted` when it has and the request did not tick the box. */
+  /** The acceptance to store with a new row: none when the contest has no rules; `rules_not_accepted` when it has and the request did not tick the box; `rules_changed` when the revision the request read is no longer the current one. A request without a revision (older client) is accepted as before and logged. */
   private acceptanceFor(
     contest: ContestDocument,
-    acceptRules: boolean,
+    { acceptRules, acceptRulesRevision }: JoinCredentials,
     now: Date,
   ): RulesAcceptance | null {
     if (contest.rules === '') return null;
     if (!acceptRules) throw rulesNotAccepted();
+    if (acceptRulesRevision === undefined)
+      this.logger.warn(`Rules accepted without a revision: ${contest.key}`);
+    else if (acceptRulesRevision !== contest.rulesRevision)
+      throw rulesChanged();
     return {
       rulesAcceptedAt: now,
       rulesAcceptedRevision: contest.rulesRevision,
     };
   }
 
-  /** The first join after registering starts the clock; a participation whose time ran out continues as a spectator. */
+  /** The first join after registering starts the clock, and asks for the rules again when they changed since the registration; a participation whose time ran out continues as a spectator. */
   private async reenter(
-    principal: Principal,
-    contest: ContestDocument,
+    { principal, contest, credentials }: JoinContext,
     existing: ParticipationDocument,
     now: Date,
   ): Promise<ParticipationDocument> {
+    const isStale =
+      contest.rules !== '' &&
+      (existing.rulesAcceptedRevision ?? -1) < contest.rulesRevision;
     const started = existing.isRegistered
-      ? await this.participationRows.start(existing, now)
+      ? await this.participationRows.start(
+          existing,
+          now,
+          isStale ? this.acceptanceFor(contest, credentials, now) : null,
+        )
       : existing;
     return hasParticipationEnded(contest, started, now)
       ? this.participationRows.findOrCreate(

@@ -189,7 +189,7 @@ afterAll(() => api.teardown());
       expect((await rowsOf(without._id, 'bob'))[0].rulesAcceptedAt).toBeNull();
     });
 
-    it('exempts spectating and re-entering, even after the rules were edited', async () => {
+    it('exempts spectating and re-entering a started run, even after the rules were edited', async () => {
       const contest = await createContest(api, {
         ...rules,
         testers: [ids.tester],
@@ -203,6 +203,7 @@ afterAll(() => api.teardown());
       await post('dave', contest.key, 'register', { acceptRules: true }).expect(
         201,
       );
+      await post('dave', contest.key, 'join').expect(201);
       await api.contests.updateOne(
         { _id: contest._id },
         { rules: 'New', rulesRevision: 2 },
@@ -238,6 +239,38 @@ afterAll(() => api.teardown());
         [1, 1],
         [2, 2],
       ]);
+    });
+
+    it('refuses acceptance of a revision that is no longer current and asks again after an edit', async () => {
+      const contest = await createContest(api, {
+        ...rules,
+        registrationStart: hoursFromNow(-2),
+        registrationEnd: hoursFromNow(1),
+      });
+      await api.contests.updateOne({ _id: contest._id }, { rulesRevision: 2 });
+      await post('alice', contest.key, 'register', {
+        acceptRules: true,
+        acceptRulesRevision: 1,
+      })
+        .expect(409)
+        .expect(errorCode('rules_changed'));
+      expect(await rowsOf(contest._id, 'alice')).toHaveLength(0);
+      await post('alice', contest.key, 'register', {
+        acceptRules: true,
+        acceptRulesRevision: 2,
+      }).expect(201);
+      await api.contests.updateOne({ _id: contest._id }, { rulesRevision: 3 });
+      await post('alice', contest.key, 'join')
+        .expect(400)
+        .expect(errorCode('rules_not_accepted'));
+      await post('alice', contest.key, 'join', {
+        acceptRules: true,
+        acceptRulesRevision: 3,
+      }).expect(201);
+      expect((await rowsOf(contest._id, 'alice'))[0]).toMatchObject({
+        rulesAcceptedRevision: 3,
+        isRegistered: false,
+      });
     });
   });
 }

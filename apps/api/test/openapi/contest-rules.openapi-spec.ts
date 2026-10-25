@@ -55,6 +55,7 @@ describe('contest rules, acceptance and auto-publish schemas', () => {
     expect(properties('JoinBodyDto')).toMatchObject({
       accessCode: { type: 'string' },
       acceptRules: { type: 'boolean' },
+      acceptRulesRevision: { type: 'number' },
     });
     for (const name of [
       'ParticipationSummaryResponse',
