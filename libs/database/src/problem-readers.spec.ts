@@ -92,6 +92,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'a failed sync of a problem deleted meanwhile still belongs to its history',
   ],
+  'apps/worker/src/jobs/polygon-import/running-contests.repository.ts': [
+    'S',
+    'an automatic sync waits for the running contests of the problem its code names, whatever its state; the import itself refuses a deleted one',
+  ],
   'apps/worker/src/jobs/polygon-autosync/polygon-autosync.repository.ts': [
     'F',
     'only live problems are synced automatically',
