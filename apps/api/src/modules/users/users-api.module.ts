@@ -7,6 +7,7 @@ import { AuthApiModule } from '../auth/auth-api.module';
 import { BlogApiModule } from '../blog/blog-api.module';
 import { CommentsApiModule } from '../comments/comments-api.module';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
+import { FeedModule } from '../contests/feed/feed.module';
 import { OrganizationsApiModule } from '../organizations/organizations-api.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
@@ -47,6 +48,7 @@ import { UserSuggestionsService } from './suggestions/user-suggestions.service';
     BlogApiModule,
     CommentsApiModule,
     ContestAccessModule,
+    FeedModule,
     OrganizationsApiModule,
     ProblemsApiModule,
     SubmissionsApiModule,

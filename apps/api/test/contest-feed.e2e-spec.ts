@@ -52,11 +52,15 @@ describe('contest event feed', () => {
   const users: Record<string, { _id: string }> = {};
   const problems: Array<{ _id: string }> = [];
   const url = (contest: Contest) => contestUrl(contest.key, '/feed');
-  const mint = async (contest: Contest, body: object = {}) =>
+  const mint = async (
+    contest: Contest,
+    body: object = {},
+    session = sessions.editor,
+  ) =>
     dataOf<MintedFeedKeyResponse>(
       await authed(
         api.http().post(contestUrl(contest.key, '/feed-key')).send(body),
-        sessions.editor,
+        session,
       ).expect(201),
     ).key;
   const fetchFeed = async (
@@ -257,6 +261,32 @@ describe('contest event feed', () => {
       .set('X-Forwarded-For', '198.51.100.99')
       .expect(429);
     expect(locked.status).toBe(429);
+  });
+
+  it('refuses a key whose owner was banned, also after the unban', async () => {
+    const owner = await createUserWith(api, 'feed-owner', {
+      permissions: ['judge.edit_own_contest'],
+    });
+    const moderator = await createUserWith(api, 'feed-moderator', {
+      permissions: ['judge.ban_user'],
+    });
+    const { contest } = await seed({ authors: [owner._id] });
+    const key = await mint(contest, {}, await loginAs(api, owner._id));
+    const moderation = await loginAs(api, moderator._id);
+    const moderate = (action: string) =>
+      authed(
+        api.http().post(`/api/internal/users/feed-owner/${action}`),
+        moderation,
+      )
+        .send({ reason: 'test ban' })
+        .expect(204);
+    await moderate('ban');
+    await moderate('unban');
+    await api
+      .http()
+      .get(url(contest))
+      .set('Authorization', basic(key))
+      .expect(401);
   });
 
   it('cuts the feed at the freeze until the key is released, the contest unfreezes, or the key is live', async () => {

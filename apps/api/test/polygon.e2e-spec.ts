@@ -162,11 +162,8 @@ describe('Polygon routes', () => {
     importer = await loginAs(api, importerId);
     admin = await loginAs(
       api,
-      (
-        await createUserWith(api, 'admin', {
-          permissions: ['judge.change_settings'],
-        })
-      )._id,
+      // The Polygon settings are superuser-only (decision 416).
+      (await createUserWith(api, 'admin', { isSuperuser: true }))._id,
     );
     plain = await loginAs(api, (await createUserWith(api, 'plain'))._id);
     await api.setSetting('polygon.apiKey', API_KEY);

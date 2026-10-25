@@ -10,9 +10,10 @@ import {
 } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
-import { errorCode, issueCodes, setupApiTest } from './setup';
+import { errorCode, issueCodes, setupApiTest, TEST_ENV } from './setup';
 import type { ApiTest } from './setup';
 import type { Test } from 'supertest';
+import { generateApiToken } from '@libs/auth';
 import type { Permission } from '@libs/auth';
 import type { FlatpageAdminResponse } from '../src/modules/site/admin/dto/flatpage-admin.response';
 import type { FlatpageDeletedResponse } from '../src/modules/site/admin/dto/flatpage-revision.response';
@@ -63,20 +64,50 @@ afterAll(() => api.teardown());
         await authed(api.http().get(SETTINGS), admin).expect(200),
       );
 
+    let rootId: string;
     beforeAll(async () => {
       const root = await createUserWith(api, 'root', { isSuperuser: true });
+      rootId = root._id;
       admin = await loginAs(api, root._id);
     });
 
-    it('lets only a superuser change the mail, admin role and sign-in settings', async () => {
+    it('lets only a superuser read or change the credential, sign-in, admin role and off-site settings', async () => {
       const ops = await createUserWith(api, 'ops', {
         permissions: ['judge.change_settings'],
       });
       const session = await loginAs(api, ops._id);
-      for (const key of ['mail.smtpUrl', 'organization.adminRoleId'])
+      const offSite = [
+        'externalJudge.baseUrl',
+        'externalJudge.apiToken',
+        'polygon.apiKey',
+        'polygon.apiSecret',
+        'polygon.accountName',
+      ];
+      for (const key of [
+        'mail.smtpUrl',
+        'organization.adminRoleId',
+        ...offSite,
+      ])
         await patch(key, '', session)
           .expect(403)
           .expect(issueCodes(['superuser_only']));
+      await patch('discord.webhooks', {}, session)
+        .expect(403)
+        .expect(issueCodes(['superuser_only']));
+      const shown = dataOf<SettingView[]>(
+        await authed(api.http().get(SETTINGS), session).expect(200),
+      ).map((setting) => setting.key);
+      expect(shown).toContain('pdf.maxBytes');
+      for (const key of [...offSite, 'discord.webhooks', 'auth.google'])
+        expect(shown).not.toContain(key);
+      await authed(
+        api.http().get(`${SETTINGS}/externalJudge.baseUrl/revisions`),
+        session,
+      ).expect(403);
+      await authed(
+        api.http().get('/api/internal/admin/discord-webhooks'),
+        session,
+      ).expect(403);
       await patch('auth.sessionMaxDays', 7).expect(200);
       await restore(
         'auth.sessionMaxDays',
@@ -86,6 +117,22 @@ afterAll(() => api.teardown());
         .expect(403)
         .expect(issueCodes(['superuser_only']));
       await patch('pdf.maxBytes', 1_000_000, session).expect(200);
+    });
+
+    it("refuses an API token, a superuser's too, on every settings write", async () => {
+      const { token, hash } = generateApiToken(rootId, TEST_ENV.TOKEN_SECRET);
+      await api.users.updateOne({ _id: rootId }, { apiTokenHash: hash });
+      const bearer = (request: Test) =>
+        request.set('Authorization', `Bearer ${token}`);
+      await bearer(api.http().get(SETTINGS)).expect(200);
+      await bearer(api.http().patch(`${SETTINGS}/pdf.maxBytes`))
+        .send({ value: 1_000_000 })
+        .expect(403);
+      await bearer(
+        api.http().put('/api/internal/admin/discord-webhooks/default'),
+      )
+        .send({ url: 'https://discord.test/api/webhooks/tok-bearer' })
+        .expect(403);
     });
 
     it('merges social login fields and never returns or stores a secret in clear', async () => {
