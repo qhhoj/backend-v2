@@ -33286,7 +33286,7 @@
     },
     "/api/internal/polygon/syncs": {
       "get": {
-        "description": "Needs `judge.edit_all_problem` (the runs name every problem). Every finished Polygon import and sync job, newest\nfirst: problem code, Polygon problem, revision, package and its build time,\nfirst import or sync, manual or automatic, who started it, the result and,\nfor a failure, the step it stopped at and the error shown to the requester.\nPaged, default 20 per page (max 100). Errors: 403 `forbidden`.",
+        "description": "Needs `judge.edit_own_problem` and `judge.edit_all_problem` (the runs name every problem). Every finished Polygon import and sync job, newest\nfirst: problem code, Polygon problem, revision, package and its build time,\nfirst import or sync, manual or automatic, who started it, the result and,\nfor a failure, the step it stopped at and the error shown to the requester.\nPaged, default 20 per page (max 100). Errors: 403 `forbidden`.",
         "operationId": "PolygonController_syncs",
         "parameters": [
           {
