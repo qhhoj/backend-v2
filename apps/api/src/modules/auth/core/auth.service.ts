@@ -23,6 +23,7 @@ import { secondFactorMethods } from '../two-factor/second-factor-methods';
 import { BannedError } from './banned.error';
 import type { Env } from '@libs/common';
 import {
+  FAILURE_IP_LIMIT,
   FAILURE_LIMIT,
   FAILURE_WINDOW_SECONDS,
   SUCCESS_ACCOUNT_LIMIT,
@@ -60,17 +61,21 @@ export class AuthService {
     previousSessionId: string | null,
   ) {
     const user = await this.users.findByUsername(username);
-    // The account budget is per address too: failures from elsewhere never lock the owner out; the address budget brakes spraying.
+    // The tight budget is per (account, address): typos lock only that username from that address, and failures from
+    // elsewhere never lock the owner out; the address ceiling brakes spraying across many usernames.
     const account = user
       ? `user:${user._id}`
       : `name:${username.normalize('NFKC').toLowerCase()}`;
-    const failureKeys = [`login:ip:${ip}`, `login:${account}:ip:${ip}`];
+    const failureBudgets = [
+      { key: `login:ip:${ip}`, limit: FAILURE_IP_LIMIT },
+      { key: `login:${account}:ip:${ip}`, limit: FAILURE_LIMIT },
+    ];
     const successBudgets = [
       loginSuccessIpBudget(ip),
       ...(user ? [passwordSuccessBudget(user._id)] : []),
     ];
     const passwordValid = await this.verifyMetered(
-      { failureKeys, successBudgets },
+      { failureBudgets, successBudgets },
       () => verifyPassword(password, user?.password ?? DUMMY_PASSWORD_HASH),
     );
     if (!user || !passwordValid)
@@ -89,17 +94,16 @@ export class AuthService {
   }
 
   /**
-   * Both budgets are taken before the hash, so concurrent attempts cannot race past either: failures (`reserve`) are
-   * given back on a correct password, correct passwords (`claim`) on a wrong one; a check that fails to run (hash queue
-   * full) gives both back.
+   * Both budgets are claimed before the hash, so concurrent attempts cannot race past either, and a refused attempt
+   * costs nothing: failures are given back on a correct password, correct passwords on a wrong one; a check that fails
+   * to run (hash queue full) gives both back.
    */
   private async verifyMetered(
-    budgets: { failureKeys: string[]; successBudgets: Budget[] },
+    budgets: { failureBudgets: Budget[]; successBudgets: Budget[] },
     verify: () => Promise<boolean>,
   ): Promise<boolean> {
-    const releaseFailure = await this.rateLimit.reserve(
-      budgets.failureKeys,
-      FAILURE_LIMIT,
+    const releaseFailure = await this.rateLimit.claim(
+      budgets.failureBudgets,
       FAILURE_WINDOW_SECONDS,
     );
     let releaseSuccess: () => Promise<void>;
@@ -202,10 +206,12 @@ export class AuthService {
   /** Re-entry of the current password; shares the `password-confirm` failure budget across every caller, and the correct-password budget with login. */
   async confirmPassword(auth: AuthContext, password: string): Promise<void> {
     const { userId } = auth.principal;
-    // Reserved before verifying, like login, so a stolen session cannot brute-force the current password.
+    // Claimed before verifying, like login, so a stolen session cannot brute-force the current password.
     const passwordValid = await this.verifyMetered(
       {
-        failureKeys: [`password-confirm:user:${userId}`],
+        failureBudgets: [
+          { key: `password-confirm:user:${userId}`, limit: FAILURE_LIMIT },
+        ],
         successBudgets: [passwordSuccessBudget(userId)],
       },
       () => verifyPassword(password, auth.user.password),
