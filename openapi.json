@@ -25064,7 +25064,7 @@
     },
     "/api/internal/contests/{key}": {
       "delete": {
-        "description": "Contest editors only, with the key typed again in `confirm` (400\n`confirmation_mismatch` otherwise). Only a hidden contest without ratings\nor pending final submissions can be deleted (409 `contest_not_deletable`).\nIts participations, announcements, ranking link, ghosts, balloons, feed\nkeys, replay and official ranking are deleted; its submissions are kept\noutside any contest. Returns 204.",
+        "description": "Contest editors only, with the key typed again in `confirm` (400\n`confirmation_mismatch` otherwise). Only a hidden contest without ratings\nor pending final submissions can be deleted, and one with live or virtual\nparticipations only with `judge.edit_all_contest` (409\n`contest_not_deletable`).\nIts participations, announcements, ranking link, ghosts, balloons, feed\nkeys, replay and official ranking are deleted; its submissions are kept\noutside any contest. Returns 204.",
         "operationId": "ContestEditingController_remove",
         "parameters": [
           {
