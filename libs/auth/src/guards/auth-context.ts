@@ -8,6 +8,8 @@ export interface AuthContext {
   sessionId: string | null;
   session: SessionData | null;
   viaToken: boolean;
+  /** The client IP (`request.ip`, which honours `TRUST_PROXY`); password checks queue under it. */
+  ip: string;
 }
 
 declare module 'fastify' {

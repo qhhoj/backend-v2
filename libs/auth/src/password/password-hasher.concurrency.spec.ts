@@ -60,10 +60,21 @@ describe('password hashing concurrency', () => {
     await expect(Promise.all(running)).resolves.toHaveLength(2);
   });
 
-  it('serves requesters in turn and refuses one requester its checks beyond its share before hashing', async () => {
+  const finishAll = async () => {
+    while (mockHeld!.length) {
+      mockHeld!.shift()!();
+      await settle();
+    }
+  };
+
+  it('serves requesters in turn and refuses one requester its checks and new hashes beyond its share before hashing', async () => {
     mockHeld = [];
-    const flood = Array.from({ length: 300 }, () =>
-      verifyPassword('flood', '!unusable', '203.0.113.66').then(
+    const requester = '203.0.113.66';
+    const flood = Array.from({ length: 300 }, (_unused, index) =>
+      (index % 2
+        ? hashPassword('flood', { requester })
+        : verifyPassword('flood', '!unusable', requester)
+      ).then(
         () => 'checked',
         () => 'refused',
       ),
@@ -74,14 +85,35 @@ describe('password hashing concurrency', () => {
     for (const finish of mockHeld.splice(0, 2)) finish();
     await settle();
     expect(mockStarted).toContain('bystander');
-    while (mockHeld.length) {
-      mockHeld.shift()!();
-      await settle();
-    }
+    await finishAll();
     await expect(bystander).resolves.toBe(false);
     const outcomes = await Promise.all(flood);
     expect(outcomes.filter((outcome) => outcome === 'checked')).toHaveLength(
       MAX_HASHES_PER_REQUESTER,
     );
+  });
+
+  it('serves networks in turn, however many addresses one network spreads its checks over', async () => {
+    mockHeld = [];
+    const flood = Array.from({ length: 200 }, (_unused, index) => [
+      `2001:db8:1:${index.toString(16)}::1`,
+      `198.51.100.${index}`,
+    ])
+      .flat()
+      .map((address) =>
+        verifyPassword('flood', '!unusable', address).catch(() => false),
+      );
+    await settle();
+    const bystander = verifyPassword('bystander', '!unusable', '192.0.2.200');
+    await settle();
+    // Three networks wait: the IPv6 /48, the IPv4 /24 and the bystander's; the third freed slot is the bystander's.
+    for (let turn = 0; turn < 3; turn++) {
+      mockHeld.shift()!();
+      await settle();
+    }
+    expect(mockStarted).toContain('bystander');
+    await finishAll();
+    await expect(bystander).resolves.toBe(false);
+    await Promise.all(flood);
   });
 });

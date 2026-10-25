@@ -1,15 +1,14 @@
 import { pbkdf2, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { AppError } from '@libs/common';
+import { AppError, limiterAddress, limiterNetwork } from '@libs/common';
 import { concurrencyLimit } from './concurrency-limit';
-import type { Lane } from './concurrency-limit';
 
 /** PBKDF2 runs on libuv's pool (4 threads by default), shared with file, DNS and zlib work, on a host with 2 cores outside judging: password checks never take more than half of it. */
 const MAX_CONCURRENT_HASHES = 2;
 /** A check still waiting for a slot after this long is refused, well inside nginx's 60 s proxy timeout. */
 export const MAX_HASH_WAIT_MS = 20_000;
-/** Checks one requester (a client address) may have running or waiting; more are refused at once, before any hashing. Matches nginx's `limit_conn qhhoj_login 8`. */
-export const MAX_HASHES_PER_REQUESTER = 8;
+/** Checks one requester (a client address) may have running or waiting; more are refused at once, before any hashing. Sized so a 60-student room behind one NAT signs in at once; matches nginx's `limit_conn qhhoj_login 64`. */
+export const MAX_HASHES_PER_REQUESTER = 64;
 const busy = () =>
   new AppError(
     'rate_limited',
@@ -27,10 +26,17 @@ const withHashSlot = concurrencyLimit(
   busy,
 );
 const derive = promisify(pbkdf2);
+/** `requester` is the client IP: its lane is `limiterAddress`, inside the group of its `limiterNetwork`. */
 const pbkdf2Async = (
-  lane: Lane | undefined,
+  requester: string | undefined,
   ...args: Parameters<typeof derive>
-) => withHashSlot(() => derive(...args), lane);
+) =>
+  withHashSlot(
+    () => derive(...args),
+    requester === undefined
+      ? undefined
+      : { lane: limiterAddress(requester), group: limiterNetwork(requester) },
+  );
 const ALGORITHMS = new Map([
   ['pbkdf2_sha256', { digest: 'sha256', keyLength: 32 }],
   ['pbkdf2_sha1', { digest: 'sha1', keyLength: 20 }],
@@ -52,8 +58,9 @@ const DUMMY_SALT = 'dummysaltdummysaltdumm';
 export const DUMMY_PASSWORD_HASH = `pbkdf2_sha256$${PASSWORD_ITERATIONS}$${DUMMY_SALT}$${'A'.repeat(43)}=`;
 
 /**
- * `requester` (a client address) queues the check in that requester's lane: slots go to the lanes in turn, and a
- * requester holding `MAX_HASHES_PER_REQUESTER` checks is refused (429) at once. Without it the check has a lane of its own.
+ * `requester` (the client IP) queues the check in that client's lane: slots go to the networks in turn and, inside one,
+ * to its clients in turn; a client holding `MAX_HASHES_PER_REQUESTER` checks is refused (429) at once. Without it the
+ * check has a lane of its own.
  */
 export async function verifyPassword(
   password: string,
@@ -101,16 +108,20 @@ export async function verifyPassword(
   );
 }
 
+/** `requester` queues the hash like `verifyPassword`'s. */
 export async function hashPassword(
   password: string,
-  iterations = passwordIterations(),
+  {
+    requester,
+    iterations = passwordIterations(),
+  }: { requester?: string; iterations?: number } = {},
 ): Promise<string> {
   const salt = randomBytes(32)
     .toString('base64')
     .replace(/[^A-Za-z0-9]/g, '')
     .slice(0, 22);
   const hash = await pbkdf2Async(
-    undefined,
+    requester,
     password,
     salt,
     iterations,

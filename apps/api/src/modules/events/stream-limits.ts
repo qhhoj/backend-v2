@@ -2,7 +2,7 @@
 export interface StreamLimits {
   /** Open streams per signed-in user: one `user` stream per tab plus a submission, ticket or contest stream on some pages. */
   perUser: number;
-  /** Open streams (all channels) per client IP (`request.ip`, which honours `TRUST_PROXY`). */
+  /** Open streams (all channels) per client address (`limiterAddress` of `request.ip`, which honours `TRUST_PROXY`: an IPv6 client counts per /64). */
   perIp: number;
   /** Open streams per client IP listed in `SSE_IP_ALLOWLIST`, instead of `perIp`: a school lab sits behind one NAT address, so its machines share one IP. Only listed addresses get it (a blanket raise would let one machine hold hundreds of streams); per-user and total caps still apply. */
   perAllowlistedIp: number;

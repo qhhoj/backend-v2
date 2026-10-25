@@ -1,9 +1,4 @@
-import {
-  hashPassword,
-  MAX_HASHES_PER_REQUESTER,
-  PASSWORD_ITERATIONS,
-  UsersRepository,
-} from '@libs/auth';
+import { hashPassword, PASSWORD_ITERATIONS, UsersRepository } from '@libs/auth';
 
 import { AppError, REDIS } from '@libs/common';
 
@@ -410,21 +405,9 @@ describe('auth session endpoints', () => {
         ).rejects.toMatchObject({ code: 'invalid_credentials' });
       return (await auth.login(username, password, classroom, null)).user;
     };
-    // As many students at once as one address may have password checks in flight (nginx allows as many connections).
-    const desks = Array.from(
-      { length: MAX_HASHES_PER_REQUESTER },
-      async (_unused, desk) => {
-        const users: unknown[] = [];
-        for (
-          let seat = desk;
-          seat < students.length;
-          seat += MAX_HASHES_PER_REQUESTER
-        )
-          users.push(await typeThenSignIn(students[seat].username));
-        return users;
-      },
+    const signedIn = await Promise.all(
+      students.map(({ username }) => typeThenSignIn(username)),
     );
-    const signedIn = (await Promise.all(desks)).flat();
     expect(signedIn).toHaveLength(60);
 
     const typist = await createUser(api.users, {

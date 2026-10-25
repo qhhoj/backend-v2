@@ -66,7 +66,7 @@ export class RegistrationService {
 
   register(body: RegisterDto, ip: string): Promise<void> {
     return this.withRegistrationSlot(body.email, ip, () =>
-      this.registerLocked(body),
+      this.registerLocked(body, ip),
     );
   }
 
@@ -157,16 +157,19 @@ export class RegistrationService {
       : null;
   }
 
-  private async registerLocked(body: RegisterDto): Promise<void> {
+  private async registerLocked(body: RegisterDto, ip: string): Promise<void> {
     await this.assertRegistrable(body);
     const { username, email, password } = body;
-    const user = await this.createUser({
-      username,
-      email,
-      password,
-      isActive: false,
-      ...(await this.profileFields(body)),
-    });
+    const user = await this.createUser(
+      {
+        username,
+        email,
+        password,
+        isActive: false,
+        ...(await this.profileFields(body)),
+      },
+      ip,
+    );
     let key: string;
     try {
       key = await this.activation.createKey(user._id);
@@ -282,15 +285,18 @@ export class RegistrationService {
       );
   }
 
-  /** Hashes the password and inserts the user; a username that lost a race maps to the same error as the up-front check. */
-  async createUser({
-    password,
-    ...fields
-  }: Partial<User> &
-    Pick<User, 'username' | 'email'> & {
-      password: string;
-    }): Promise<UserDocument> {
-    const hashed = await hashPassword(password);
+  /** Hashes the password (queued under the client `ip`) and inserts the user; a username that lost a race maps to the same error as the up-front check. */
+  async createUser(
+    {
+      password,
+      ...fields
+    }: Partial<User> &
+      Pick<User, 'username' | 'email'> & {
+        password: string;
+      },
+    ip: string,
+  ): Promise<UserDocument> {
+    const hashed = await hashPassword(password, { requester: ip });
     try {
       return await this.insertWithinSlots({ ...fields, password: hashed });
     } catch (error) {

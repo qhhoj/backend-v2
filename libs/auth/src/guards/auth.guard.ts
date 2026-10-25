@@ -299,6 +299,7 @@ export class AuthGuard implements CanActivate {
       sessionId: null,
       session: null,
       viaToken: true,
+      ip: request.ip,
     };
   }
 
@@ -323,6 +324,7 @@ export class AuthGuard implements CanActivate {
       sessionId,
       session,
       viaToken: false,
+      ip: request.ip,
     };
   }
 }

@@ -169,16 +169,19 @@ export class SocialService {
         // Single use: the token is only spent once the signup is known to succeed, and only one request can win it.
         if (!(await this.redis.getdel(`oauth-pending:${token}`)))
           throw invalidToken();
-        return this.registration.createUser({
-          username,
-          email: pending.email,
-          password,
-          ...(await this.registration.profileFields(credentials)),
-          isActive: true,
-          socialAuth: [
-            { provider: pending.provider, uid: pending.uid, extraData: {} },
-          ],
-        });
+        return this.registration.createUser(
+          {
+            username,
+            email: pending.email,
+            password,
+            ...(await this.registration.profileFields(credentials)),
+            isActive: true,
+            socialAuth: [
+              { provider: pending.provider, uid: pending.uid, extraData: {} },
+            ],
+          },
+          ip,
+        );
       },
     );
     await this.registration.announceMembership(created);
