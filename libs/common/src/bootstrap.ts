@@ -1,6 +1,7 @@
 import fastifyCookie from '@fastify/cookie';
 import fastifyMultipart from '@fastify/multipart';
 import { randomUUID } from 'node:crypto';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Reflector } from '@nestjs/core';
 import {
   FastifyAdapter,
@@ -40,6 +41,23 @@ export const fastifyAdapter = ({
     trustProxy,
   });
 
+const PRIVATE_NO_STORE = 'private, no-store';
+
+function addVaryCookie(reply: FastifyReply) {
+  const vary = String(reply.getHeader('vary') ?? '');
+  if (!/\bcookie\b/i.test(vary))
+    reply.header('vary', vary ? `${vary}, Cookie` : 'Cookie');
+}
+
+/** Every `/api` answer says how a shared cache may treat it: no `Cache-Control` becomes `private, no-store` (a CDN caches by file extension otherwise), and a `private, max-age` answer varies by `Cookie`, so a browser never replays one user's answer to the next sign-in. */
+function setApiCacheHeaders(request: FastifyRequest, reply: FastifyReply) {
+  if (!request.url.startsWith('/api/')) return;
+  const cacheControl = reply.getHeader('cache-control');
+  if (cacheControl === undefined)
+    reply.header('cache-control', PRIVATE_NO_STORE);
+  else if (/\bmax-age=[1-9]/.test(String(cacheControl))) addVaryCookie(reply);
+}
+
 export async function configureApp(app: NestFastifyApplication): Promise<void> {
   await app.register(fastifyCookie);
   await app.register(fastifyMultipart, {
@@ -65,6 +83,12 @@ export async function configureApp(app: NestFastifyApplication): Promise<void> {
             message: 'Request body is nested too deeply',
           },
         });
+    });
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onSend', async (request, reply) => {
+      setApiCacheHeaders(request, reply);
     });
   app.enableShutdownHooks();
   app.useGlobalPipes(validationPipe);

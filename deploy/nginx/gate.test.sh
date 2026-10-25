@@ -6,6 +6,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 engine="$(command -v docker || command -v podman)" || { echo "FAIL: needs docker or podman" >&2; exit 1; }
 conf="$(mktemp -d)"; trap 'rm -rf "$conf"' EXIT
 cp "$here/cloudflare-origin.conf" "$conf/a-gate.conf"
+cp "$here/api-cache.conf" "$conf/20-api-cache.conf"
 # 8443 stands in for 443: any port but 80
 echo 'server { listen 80; listen 8443; access_log off; location / { if ($qhhoj_refuse_origin) { return 403; } return 200; } }' > "$conf/b-site.conf"
 chmod -R a+rX "$conf"

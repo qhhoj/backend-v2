@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # deploy/nginx/redirects.test.sh: the legacy redirects (/problem/<code>/pdf, /url/<code>) in qhhoj.conf, in a real nginx
-# (container): a code redirects, a path with control bytes in the code never adds a response header.
+# (container): a code redirects, a path with control bytes in the code never adds a response header, and an /api path
+# without a Cache-Control of its own (here: nginx's own 502, any .zip name) gets "private, no-store" while "/" keeps "no-cache".
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 engine="$(command -v docker || command -v podman)" || { echo "FAIL: needs docker or podman" >&2; exit 1; }
@@ -9,6 +10,7 @@ mkdir -p "$work/conf.d" "$work/snippets" "$work/tls" "$work/www/current"
 openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=oj.example.org -keyout "$work/tls/k.pem" -out "$work/tls/c.pem" -days 1 2>/dev/null
 cp "$here/cloudflare-origin.conf" "$work/conf.d/a-gate.conf"
 cp "$here/login-limit.conf" "$work/conf.d/10-login-limit.conf"
+cp "$here/api-cache.conf" "$work/conf.d/20-api-cache.conf"
 sed -e 's#/etc/letsencrypt/live/oj.example.org/fullchain.pem#/tls/c.pem#; s#/etc/letsencrypt/live/oj.example.org/privkey.pem#/tls/k.pem#' \
   "$here/qhhoj.conf" > "$work/conf.d/qhhoj.conf"
 cp "$here/security-headers.conf" "$work/snippets/qhhoj-security-headers.conf"
@@ -24,12 +26,19 @@ results="$("$engine" run --rm -v "$work/conf.d:/etc/nginx/conf.d:ro" -v "$work/s
     printf "GET %s HTTP/1.1\r\nHost: oj.example.org\r\nConnection: close\r\n\r\n" "$path" \
       | openssl s_client -quiet -connect 127.0.0.1:443 -servername oj.example.org 2>/dev/null \
       | sed -n "1,/^\r$/p" | tr -d "\r" | grep -ciE "^X-Injected:" | sed "s#^#$path injected-headers #"
-  done' 2>"$work/engine.err" | grep injected-headers)" || { echo "FAIL: no redirect results; container stderr:" >&2; cat "$work/engine.err" >&2; exit 1; }
+  done
+  for path in "/api/internal/problems/p/data/files/tests.zip" "/"; do
+    printf "GET %s HTTP/1.1\r\nHost: oj.example.org\r\nConnection: close\r\n\r\n" "$path" \
+      | openssl s_client -quiet -connect 127.0.0.1:443 -servername oj.example.org 2>/dev/null \
+      | sed -n "1,/^\r$/p" | tr -d "\r" | grep -iE "^cache-control:" | sed "s#^#$path #"
+  done' 2>"$work/engine.err" | grep -E 'injected-headers|Cache-Control')" || { echo "FAIL: no redirect results; container stderr:" >&2; cat "$work/engine.err" >&2; exit 1; }
 expected='/url/my-link injected-headers 0
 /problem/aplusb/pdf injected-headers 0
 /problem/aplusb/pdf/vi injected-headers 0
 /url/a%0d%0aX-Injected:%20yes injected-headers 0
 /problem/x%0d%0aX-Injected:%20yes/pdf injected-headers 0
-/problem/x%0d%0aX-Injected:%20yes/pdf/en injected-headers 0'
+/problem/x%0d%0aX-Injected:%20yes/pdf/en injected-headers 0
+/api/internal/problems/p/data/files/tests.zip Cache-Control: private, no-store
+/ Cache-Control: no-cache'
 [ "$results" = "$expected" ] || { printf 'FAIL: redirects\n%s\nexpected\n%s\n' "$results" "$expected" >&2; exit 1; }
 echo "nginx redirects ok"

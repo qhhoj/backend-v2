@@ -20,7 +20,7 @@ for f in usr/local/sbin/qhhoj-deploy usr/local/sbin/qhhoj-deploy-serve usr/local
   usr/local/sbin/qhhoj-backup-lib.sh usr/local/sbin/qhhoj-pull-serve \
   etc/systemd/system/qhhoj-backup.service etc/systemd/system/qhhoj-backup.timer etc/containers/systemd/qhhoj-api.container \
   etc/containers/systemd/qhhoj-worker.container etc/containers/systemd/qhhoj-bridge.container \
-  etc/systemd/system/qhhoj.target etc/sudoers.d/qhhoj-deploy etc/nginx/snippets/qhhoj-gate.conf etc/nginx/conf.d/qhhoj-cloudflare-origin.conf etc/nginx/conf.d/10-qhhoj-login-limit.conf var/www/qhhoj-maintenance/maintenance.html; do
+  etc/systemd/system/qhhoj.target etc/sudoers.d/qhhoj-deploy etc/nginx/snippets/qhhoj-gate.conf etc/nginx/conf.d/qhhoj-cloudflare-origin.conf etc/nginx/conf.d/10-qhhoj-login-limit.conf etc/nginx/conf.d/20-qhhoj-api-cache.conf var/www/qhhoj-maintenance/maintenance.html; do
   [ -f "$root/$f" ] || fail "missing $f"
 done
 [ "$(stat -c %a "$root/etc/sudoers.d/qhhoj-deploy")" = 440 ] || fail "sudoers mode"
