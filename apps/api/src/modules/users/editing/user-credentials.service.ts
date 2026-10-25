@@ -53,7 +53,7 @@ export class UserCredentialsService {
       !(await this.users.updatePasswordIfUnchanged(
         user._id,
         user.password,
-        await hashPassword(newPassword),
+        await hashPassword(newPassword, { requester: auth.ip }),
       ))
     )
       throw new AppError(

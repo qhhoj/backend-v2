@@ -359,7 +359,7 @@ describe('auth session endpoints', () => {
     await api.http().post(LOGIN).send({ username: 'rita' }).expect(400);
   });
 
-  it('counts failures per account and address, so another address still signs in', async () => {
+  it('counts failures per account and address (an IPv6 /64 is one address), so another address still signs in', async () => {
     await createUser(api.users, {
       username: 'victor',
       email: 'victor@example.com',
@@ -367,15 +367,20 @@ describe('auth session endpoints', () => {
     const auth = api.app.get(AuthService);
     for (let attempt = 0; attempt < 10; attempt++)
       await expect(
-        auth.login('victor', 'wrong password', '203.0.113.1', null),
+        auth.login(
+          'victor',
+          'wrong password',
+          `2001:db8:1:2::${attempt}`,
+          null,
+        ),
       ).rejects.toMatchObject({ code: 'invalid_credentials' });
     await expect(
-      auth.login('victor', 'correct horse battery', '203.0.113.1', null),
+      auth.login('victor', 'correct horse battery', '2001:db8:1:2::ff', null),
     ).rejects.toMatchObject({ code: 'rate_limited' });
     const session = await auth.login(
       'victor',
       'correct horse battery',
-      '203.0.113.2',
+      '2001:db8:1:3::1',
       null,
     );
     expect(session.user.username).toBe('victor');

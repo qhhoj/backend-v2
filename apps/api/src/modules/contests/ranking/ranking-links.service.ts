@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
-import { AppError, RateLimitService } from '@libs/common';
+import { AppError, limiterAddress, RateLimitService } from '@libs/common';
 import { isFrozen } from '@libs/contests';
 import { RANKING_LINK_TOKEN_PATTERN, uuidStr } from '@libs/database';
 import { ContestAccess } from '../core/contest-access';
@@ -90,7 +90,7 @@ export class RankingLinksService {
     now = new Date(),
   ): Promise<PublicRankingResponse> {
     const release = await this.rateLimit.reserve(
-      [`ranking-link:ip:${ip}`],
+      [`ranking-link:ip:${limiterAddress(ip)}`],
       RANKING_TOKEN_MISS_LIMIT,
       RANKING_TOKEN_WINDOW_SECONDS,
     );

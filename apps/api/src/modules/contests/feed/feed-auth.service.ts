@@ -5,7 +5,7 @@ import {
   sha256,
   UsersRepository,
 } from '@libs/auth';
-import { AppError, RateLimitService } from '@libs/common';
+import { AppError, limiterAddress, RateLimitService } from '@libs/common';
 import { ContestAccess } from '../core/contest-access';
 import { ContestsRepository } from '../core/contests.repository';
 import type { ContestDocument } from '../core/contests.repository';
@@ -69,7 +69,7 @@ export class FeedAuthService {
     now = new Date(),
   ): Promise<FeedContext> {
     const release = await this.rateLimit.reserve(
-      [`feed-fail:${request.ip}`],
+      [`feed-fail:${limiterAddress(request.ip)}`],
       FEED_FAIL_LIMIT,
       FEED_FAIL_WINDOW_SECONDS,
     );

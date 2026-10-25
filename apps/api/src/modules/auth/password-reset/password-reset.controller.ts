@@ -37,7 +37,10 @@ export class PasswordResetController {
    */
   @Post('confirm')
   @HttpCode(204)
-  confirm(@Body() body: PasswordResetConfirmDto): Promise<void> {
-    return this.passwordReset.confirm(body.token, body.newPassword);
+  confirm(
+    @Body() body: PasswordResetConfirmDto,
+    @Req() request: FastifyRequest,
+  ): Promise<void> {
+    return this.passwordReset.confirm(body.token, body.newPassword, request.ip);
   }
 }

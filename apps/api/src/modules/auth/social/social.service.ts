@@ -5,6 +5,7 @@ import {
   AppError,
   ENV,
   isDuplicateKey,
+  limiterAddress,
   MAIL_ADDRESS_PATTERN,
   RateLimitService,
   REDIS,
@@ -75,7 +76,7 @@ export class SocialService {
     const provider = this.provider(slug);
     // Never released; over the limit this throws the same 429 `rate_limited` as the other auth endpoints.
     await this.rateLimit.reserve(
-      [`oauth-start:ip:${ip}`],
+      [`oauth-start:ip:${limiterAddress(ip)}`],
       OAUTH_START_LIMIT,
       OAUTH_START_WINDOW_SECONDS,
     );
@@ -168,16 +169,19 @@ export class SocialService {
         // Single use: the token is only spent once the signup is known to succeed, and only one request can win it.
         if (!(await this.redis.getdel(`oauth-pending:${token}`)))
           throw invalidToken();
-        return this.registration.createUser({
-          username,
-          email: pending.email,
-          password,
-          ...(await this.registration.profileFields(credentials)),
-          isActive: true,
-          socialAuth: [
-            { provider: pending.provider, uid: pending.uid, extraData: {} },
-          ],
-        });
+        return this.registration.createUser(
+          {
+            username,
+            email: pending.email,
+            password,
+            ...(await this.registration.profileFields(credentials)),
+            isActive: true,
+            socialAuth: [
+              { provider: pending.provider, uid: pending.uid, extraData: {} },
+            ],
+          },
+          ip,
+        );
       },
     );
     await this.registration.announceMembership(created);

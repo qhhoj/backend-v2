@@ -24,7 +24,9 @@ describe('AuthService budget refunds', () => {
     );
     const context = {
       principal: { userId: 'user-1' },
-      user: { password: await hashPassword('the right one', 1000) },
+      user: {
+        password: await hashPassword('the right one', { iterations: 1000 }),
+      },
     } as unknown as Parameters<AuthService['confirmPassword']>[0];
     await expect(auth.confirmPassword(context, 'wrong')).rejects.toThrow(
       'redis down',

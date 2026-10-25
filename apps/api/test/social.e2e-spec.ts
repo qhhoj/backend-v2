@@ -447,19 +447,27 @@ describe('social login', () => {
     await api.users.syncIndexes();
     // Bypasses the up-front findBySocial check to hit the unique index directly.
     const registration = api.app.get(RegistrationService);
-    await registration.createUser({
-      username: 'first',
-      email: 'x@example.com',
-      password: PASSWORD,
-      socialAuth: [{ provider: 'github-secure', uid: 'g-2', extraData: {} }],
-    });
-    await expect(
-      registration.createUser({
-        username: 'second',
-        email: 'y@example.com',
+    await registration.createUser(
+      {
+        username: 'first',
+        email: 'x@example.com',
         password: PASSWORD,
         socialAuth: [{ provider: 'github-secure', uid: 'g-2', extraData: {} }],
-      }),
+      },
+      '203.0.113.1',
+    );
+    await expect(
+      registration.createUser(
+        {
+          username: 'second',
+          email: 'y@example.com',
+          password: PASSWORD,
+          socialAuth: [
+            { provider: 'github-secure', uid: 'g-2', extraData: {} },
+          ],
+        },
+        '203.0.113.1',
+      ),
     ).rejects.toMatchObject({ code: 'conflict', status: 409 });
     await complete({ token, username: 'third', password: PASSWORD })
       .expect(400)

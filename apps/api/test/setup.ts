@@ -313,7 +313,7 @@ export const createUser = async (
     email: 'alice@example.com',
     isActive: true,
     ...fields,
-    password: await hashPassword(password, 1000),
+    password: await hashPassword(password, { iterations: 1000 }),
   });
 
 export const sessionCookie = (id: string) => `qhhoj_session=${id}`;

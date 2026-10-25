@@ -14,6 +14,7 @@ import {
   AppError,
   assertMailAvailable,
   ENV,
+  limiterAddress,
   MAILER,
   RateLimitService,
   ValidationFailedError,
@@ -51,7 +52,7 @@ export class PasswordResetService {
     assertMailAvailable(this.mailer);
     // Never released: every request spends budget.
     await this.rateLimit.reserve(
-      [`password-reset:ip:${ip}`],
+      [`password-reset:ip:${limiterAddress(ip)}`],
       PASSWORD_RESET_IP_LIMIT,
       PASSWORD_RESET_WINDOW_SECONDS,
     );
@@ -92,7 +93,7 @@ export class PasswordResetService {
     });
   }
 
-  async confirm(token: string, newPassword: string): Promise<void> {
+  async confirm(token: string, newPassword: string, ip: string): Promise<void> {
     const parsed = readPasswordResetToken(token);
     const user = parsed && (await this.users.findById(parsed.userId));
     if (
@@ -113,7 +114,7 @@ export class PasswordResetService {
     const changed = await this.users.updatePasswordIfUnchanged(
       user._id,
       user.password,
-      await hashPassword(newPassword),
+      await hashPassword(newPassword, { requester: ip }),
     );
     if (!changed) throw invalidToken();
     // Reset is the recovery path: a leaked API token must not survive it.

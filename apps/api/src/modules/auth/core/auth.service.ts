@@ -16,6 +16,7 @@ import type { AuthContext, SessionData, UserDocument } from '@libs/auth';
 import {
   AppError,
   ENV,
+  limiterAddress,
   RateLimitService,
   ValidationFailedError,
 } from '@libs/common';
@@ -35,8 +36,8 @@ const passwordSuccessBudget = (userId: string) => ({
   key: `password-success:user:${userId}`,
   limit: SUCCESS_ACCOUNT_LIMIT,
 });
-const loginSuccessIpBudget = (ip: string) => ({
-  key: `login-success:ip:${ip}`,
+const loginSuccessIpBudget = (address: string) => ({
+  key: `login-success:ip:${address}`,
   limit: SUCCESS_IP_LIMIT,
 });
 type Budget = { key: string; limit: number };
@@ -61,22 +62,24 @@ export class AuthService {
     previousSessionId: string | null,
   ) {
     const user = await this.users.findByUsername(username);
+    const address = limiterAddress(ip);
     // The tight budget is per (account, address): typos lock only that username from that address, and failures from
     // elsewhere never lock the owner out; the address ceiling brakes spraying across many usernames.
     const account = user
       ? `user:${user._id}`
       : `name:${username.normalize('NFKC').toLowerCase()}`;
     const failureBudgets = [
-      { key: `login:ip:${ip}`, limit: FAILURE_IP_LIMIT },
-      { key: `login:${account}:ip:${ip}`, limit: FAILURE_LIMIT },
+      { key: `login:ip:${address}`, limit: FAILURE_IP_LIMIT },
+      { key: `login:${account}:ip:${address}`, limit: FAILURE_LIMIT },
     ];
     const successBudgets = [
-      loginSuccessIpBudget(ip),
+      loginSuccessIpBudget(address),
       ...(user ? [passwordSuccessBudget(user._id)] : []),
     ];
     const passwordValid = await this.verifyMetered(
       { failureBudgets, successBudgets },
-      () => verifyPassword(password, user?.password ?? DUMMY_PASSWORD_HASH),
+      // Queued under the client: another network's login waits for at most one check per hash slot.
+      () => verifyPassword(password, user?.password ?? DUMMY_PASSWORD_HASH, ip),
     );
     if (!user || !passwordValid)
       throw new AppError(
@@ -86,7 +89,7 @@ export class AuthService {
       );
     this.assertLoginAllowed(user);
     const passwordPwned = await this.pwned.isPwned(password);
-    await this.upgradeWeakHash(user, password);
+    await this.upgradeWeakHash(user, password, ip);
     return this.startSession(user, {
       isPasswordPwned: passwordPwned,
       previousSessionId,
@@ -135,13 +138,14 @@ export class AuthService {
   private async upgradeWeakHash(
     user: UserDocument,
     password: string,
+    ip: string,
   ): Promise<void> {
     if (!needsRehash(user.password)) return;
     try {
       await this.users.updatePasswordIfUnchanged(
         user._id,
         user.password,
-        await hashPassword(password),
+        await hashPassword(password, { requester: ip }),
       );
     } catch (error) {
       this.logger.warn(
@@ -214,7 +218,7 @@ export class AuthService {
         ],
         successBudgets: [passwordSuccessBudget(userId)],
       },
-      () => verifyPassword(password, auth.user.password),
+      () => verifyPassword(password, auth.user.password, auth.ip),
     );
     if (!passwordValid)
       throw new AppError(
@@ -259,7 +263,7 @@ export class AuthService {
     const changed = await this.users.updatePasswordIfUnchanged(
       userId,
       auth.user.password,
-      await hashPassword(newPassword),
+      await hashPassword(newPassword, { requester: auth.ip }),
     );
     if (!changed)
       throw new AppError(

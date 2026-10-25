@@ -6,7 +6,13 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { AppError, ENV, RateLimitService, type Env } from '@libs/common';
+import {
+  AppError,
+  type Env,
+  ENV,
+  limiterAddress,
+  RateLimitService,
+} from '@libs/common';
 import { uuidStr, type IntegrationScope } from '@libs/database';
 import {
   BEFORE_TWO_FACTOR_ROUTE,
@@ -131,7 +137,7 @@ export class AuthGuard implements CanActivate {
     token: string,
     address: string,
   ): Promise<IntegrationClientDocument> {
-    const failures = `service-key-failures:ip:${address}`;
+    const failures = `service-key-failures:ip:${limiterAddress(address)}`;
     if ((await this.rateLimit.count(failures)) >= SERVICE_KEY_FAILURE_LIMIT)
       throw new AppError(
         'rate_limited',
@@ -293,6 +299,7 @@ export class AuthGuard implements CanActivate {
       sessionId: null,
       session: null,
       viaToken: true,
+      ip: request.ip,
     };
   }
 
@@ -317,6 +324,7 @@ export class AuthGuard implements CanActivate {
       sessionId,
       session,
       viaToken: false,
+      ip: request.ip,
     };
   }
 }

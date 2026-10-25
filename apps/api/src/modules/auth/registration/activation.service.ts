@@ -6,6 +6,7 @@ import type { UserDocument } from '@libs/auth';
 import {
   assertMailAvailable,
   ENV,
+  limiterAddress,
   MAILER,
   RateLimitService,
 } from '@libs/common';
@@ -58,7 +59,7 @@ export class ActivationService {
     assertMailAvailable(this.mailer);
     // Never released: every request spends budget.
     await this.rateLimit.reserve(
-      [`activation-resend:ip:${ip}`],
+      [`activation-resend:ip:${limiterAddress(ip)}`],
       ACTIVATION_RESEND_IP_LIMIT,
       ACTIVATION_RESEND_WINDOW_SECONDS,
     );

@@ -17,6 +17,7 @@ export * from './querier/base-catalog.querier';
 export * from './querier/base-mongo-stream.querier';
 export * from './redis/redis.module';
 export * from './queue/queue.module';
+export * from './rate-limit/limiter-address';
 export * from './rate-limit/rate-limit.service';
 export * from './redis/redis-exec';
 export * from './mail/mailer';

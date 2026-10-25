@@ -12,6 +12,7 @@ import type { UserDocument } from '@libs/auth';
 import {
   AppError,
   isDuplicateKey,
+  limiterAddress,
   MAILER,
   RateLimitService,
   REDIS,
@@ -65,7 +66,7 @@ export class RegistrationService {
 
   register(body: RegisterDto, ip: string): Promise<void> {
     return this.withRegistrationSlot(body.email, ip, () =>
-      this.registerLocked(body),
+      this.registerLocked(body, ip),
     );
   }
 
@@ -77,7 +78,7 @@ export class RegistrationService {
   ): Promise<Result> {
     // Never released: every attempt, successful or not, spends budget.
     await this.rateLimit.reserve(
-      [`register:ip:${ip}`],
+      [`register:ip:${limiterAddress(ip)}`],
       REGISTRATION_IP_LIMIT,
       REGISTRATION_WINDOW_SECONDS,
     );
@@ -156,16 +157,19 @@ export class RegistrationService {
       : null;
   }
 
-  private async registerLocked(body: RegisterDto): Promise<void> {
+  private async registerLocked(body: RegisterDto, ip: string): Promise<void> {
     await this.assertRegistrable(body);
     const { username, email, password } = body;
-    const user = await this.createUser({
-      username,
-      email,
-      password,
-      isActive: false,
-      ...(await this.profileFields(body)),
-    });
+    const user = await this.createUser(
+      {
+        username,
+        email,
+        password,
+        isActive: false,
+        ...(await this.profileFields(body)),
+      },
+      ip,
+    );
     let key: string;
     try {
       key = await this.activation.createKey(user._id);
@@ -222,7 +226,7 @@ export class RegistrationService {
   /** Whether `username` could be registered now; spends the caller's per-IP budget. */
   async usernameAvailable(username: string, ip: string): Promise<boolean> {
     await this.rateLimit.reserve(
-      [`username-check:ip:${ip}`],
+      [`username-check:ip:${limiterAddress(ip)}`],
       USERNAME_CHECK_IP_LIMIT,
       USERNAME_CHECK_WINDOW_SECONDS,
     );
@@ -281,15 +285,18 @@ export class RegistrationService {
       );
   }
 
-  /** Hashes the password and inserts the user; a username that lost a race maps to the same error as the up-front check. */
-  async createUser({
-    password,
-    ...fields
-  }: Partial<User> &
-    Pick<User, 'username' | 'email'> & {
-      password: string;
-    }): Promise<UserDocument> {
-    const hashed = await hashPassword(password);
+  /** Hashes the password (queued under the client `ip`) and inserts the user; a username that lost a race maps to the same error as the up-front check. */
+  async createUser(
+    {
+      password,
+      ...fields
+    }: Partial<User> &
+      Pick<User, 'username' | 'email'> & {
+        password: string;
+      },
+    ip: string,
+  ): Promise<UserDocument> {
+    const hashed = await hashPassword(password, { requester: ip });
     try {
       return await this.insertWithinSlots({ ...fields, password: hashed });
     } catch (error) {

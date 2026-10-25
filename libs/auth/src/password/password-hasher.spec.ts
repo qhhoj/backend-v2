@@ -40,14 +40,14 @@ describe('password hasher', () => {
       expect(await verifyPassword('anything', encoded)).toBe(false);
   });
   it('hashes in Django format and round-trips', async () => {
-    const encoded = await hashPassword('s3cret-pass', 1000);
+    const encoded = await hashPassword('s3cret-pass', { iterations: 1000 });
     expect(encoded).toMatch(
       /^pbkdf2_sha256\$1000\$[A-Za-z0-9]{22}\$[A-Za-z0-9+/]{43}=$/,
     );
     expect(await verifyPassword('s3cret-pass', encoded)).toBe(true);
   });
   it('never accepts a digest shorter than the algorithm key length', async () => {
-    const full = await hashPassword('secret-pass', 1);
+    const full = await hashPassword('secret-pass', { iterations: 1 });
     const [algorithm, iterations, salt, digest] = full.split('$');
     const truncated = [
       algorithm,
