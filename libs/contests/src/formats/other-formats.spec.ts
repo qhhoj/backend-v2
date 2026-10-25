@@ -87,7 +87,11 @@ describe('ioi16 (legacy IOIContestFormat, "IOI")', () => {
 });
 
 describe('ioi16 cells from the judged cases and the problem data', () => {
-  type DataCase = { type: 'C' | 'S' | 'E'; points: number | null };
+  type DataCase = {
+    type: 'C' | 'S' | 'E';
+    points: number | null;
+    isPretest?: boolean;
+  };
   type JudgedCase = { points: number; batch: number | null };
   const plainCases = (points: number[]): JudgedCase[] =>
     points.map((earned) => ({ points: earned, batch: null }));
@@ -150,6 +154,40 @@ describe('ioi16 cells from the judged cases and the problem data', () => {
     ]);
     expect(cell).toBe(100);
     expect(isSolvedCell({ points: cell }, 100)).toBe(true);
+  });
+
+  it('leaves out a plain pretest, which a full run scores 0, and keeps a pretest batch: a full AC is full points', () => {
+    const plainPretest: DataCase[] = [
+      { type: 'C', points: 10, isPretest: true },
+      { type: 'C', points: 20 },
+      { type: 'C', points: 70 },
+    ];
+    const plainCell = cellOf(plainPretest, plainCases([0, 20, 70]));
+    expect(plainCell).toBe(100);
+    expect(isSolvedCell({ points: plainCell }, 100)).toBe(true);
+    const pretestBatch: DataCase[] = [
+      { type: 'S', points: 10, isPretest: true },
+      { type: 'C', points: null, isPretest: true },
+      { type: 'E', points: null },
+      { type: 'C', points: 90 },
+    ];
+    expect(
+      cellOf(pretestBatch, [{ points: 10, batch: 1 }, ...plainCases([90])]),
+    ).toBe(100);
+  });
+
+  it('scores an externally judged problem (no data cases) by its best submission, as other formats do', () => {
+    const problems = [{ problemId: 'X', points: 100, dataPoints: 0 }];
+    const external = batchMinima([{ points: 100, batch: null }]);
+    const score = ioi16Format.score(
+      [
+        row('X', 5, 40, { batchPoints: external }),
+        row('X', 9, 100, { batchPoints: external }),
+      ],
+      { cumtime: false },
+      context({ problems }),
+    );
+    expect(score.formatData.X).toEqual({ points: 100, time: 0 });
   });
 
   it('never rounds a partial cell up to full points, even with no decimals shown', () => {

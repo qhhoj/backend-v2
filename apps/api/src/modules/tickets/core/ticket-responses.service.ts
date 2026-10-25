@@ -60,7 +60,7 @@ export class TicketResponsesService {
     );
     return {
       ...this.item(ticket, people, subjects),
-      notes: ticket.notes,
+      notes: can.editNotes ? ticket.notes : null,
       can,
       messages,
       timeline: this.timeline(messages, ticket.events ?? [], people),

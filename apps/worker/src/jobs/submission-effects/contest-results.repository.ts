@@ -186,6 +186,7 @@ export class ContestResultsRepository {
           (row.data?.cases ?? []) as Array<{
             type: CaseType;
             points: number | null;
+            isPretest?: boolean;
           }>,
         ),
       ]),

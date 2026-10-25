@@ -24,7 +24,7 @@ export interface ScoringProblem {
   problemId: string;
   /** The contest problem's points. */
   points: number;
-  /** ioi16 only: the problem data's plain-case and batch points (legacy `points_scaling_factor` divisor); null otherwise. */
+  /** ioi16 only: the problem data's points a full run awards (`dataPoints`, legacy `points_scaling_factor` divisor); 0 without data cases; null otherwise. */
   dataPoints: number | null;
 }
 

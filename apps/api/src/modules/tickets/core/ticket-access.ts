@@ -28,7 +28,7 @@ const canSee = (principal: Principal, view: TicketAccessView): boolean =>
   (view.problem !== null && ProblemAccess.canEdit(principal, view.problem)) ||
   (view.contest !== null && ContestAccess.canEdit(principal, view.contest));
 
-/** Spec: notes are edited by assignees and staff only (every reader sees them). */
+/** Notes are internal: only assignees and staff read and edit them (legacy showed them to `change_ticket` and assignees). */
 const canEditNotes = (principal: Principal, view: TicketAccessView): boolean =>
   isStaff(principal) || isAssignee(principal, view);
 

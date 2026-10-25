@@ -83,7 +83,7 @@ export class TicketsController {
    * Get a ticket
    *
    * @remarks
-   * Returns the ticket with its messages, notes, assignees and timeline.
+   * Returns the ticket with its messages, assignees and timeline; the internal notes only to staff and assignees.
    * Readable by its creator, its assignees, editors of the linked problem,
    * editors of the contest it was filed from and staff. Fails with 404 `not_found` for an unknown id and 403 `forbidden`
    * for a ticket the caller may not read.
