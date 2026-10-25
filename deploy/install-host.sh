@@ -76,6 +76,7 @@ install_files() {
   [ -f "$ROOT/etc/nginx/snippets/qhhoj-gate.conf" ] || install -m 644 "$here/nginx/qhhoj-gate.conf" "$ROOT/etc/nginx/snippets/qhhoj-gate.conf"
   install -m 644 "$here/nginx/cloudflare-origin.conf" "$ROOT/etc/nginx/conf.d/qhhoj-cloudflare-origin.conf"
   install -m 644 "$here/nginx/login-limit.conf" "$ROOT/etc/nginx/conf.d/10-qhhoj-login-limit.conf"
+  install -m 644 "$here/nginx/api-cache.conf" "$ROOT/etc/nginx/conf.d/20-qhhoj-api-cache.conf"
   install -m 644 "$here/nginx/maintenance.html" "$ROOT/var/www/qhhoj-maintenance/maintenance.html"
 }
 

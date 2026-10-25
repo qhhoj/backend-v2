@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Post,
+  StreamableFile,
+} from '@nestjs/common';
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { IsInt, IsString } from 'class-validator';
 import request from 'supertest';
@@ -53,14 +60,49 @@ class TestController {
   }
 }
 
+@Controller('api/t')
+class ApiCacheController {
+  @Get('json') json() {
+    return { a: 1 };
+  }
+  @Get('files/tests.zip') download() {
+    return new StreamableFile(Buffer.from('zip'));
+  }
+  @Header('Cache-Control', 'private, max-age=15')
+  @Get('counted')
+  counted() {
+    return { n: 1 };
+  }
+}
+
 describe('http layer', () => {
   let app: NestFastifyApplication;
   const http = () => request(app.getHttpServer());
   beforeAll(async () => {
-    app = await createTestApp({ controllers: [TestController] });
+    app = await createTestApp({
+      controllers: [TestController, ApiCacheController],
+    });
   });
   afterAll(() => app.close());
 
+  it('keeps /api answers out of shared caches', async () => {
+    for (const path of ['/api/t/json', '/api/t/files/tests.zip'])
+      await http()
+        .get(path)
+        .expect(200)
+        .expect('cache-control', 'private, no-store');
+    await http()
+      .get('/t/obj')
+      .expect((res) => {
+        expect(res.headers['cache-control']).toBeUndefined();
+      });
+  });
+  it('varies a private max-age answer by cookie', () =>
+    http()
+      .get('/api/t/counted')
+      .expect(200)
+      .expect('cache-control', 'private, max-age=15')
+      .expect('vary', 'Cookie'));
   it('wraps results', () =>
     http()
       .get('/t/obj')
