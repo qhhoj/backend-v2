@@ -501,6 +501,7 @@ describe('password reset', () => {
     const user = await createUser(api.users, {
       username: 'resetme',
       email: 'resetme@example.com',
+      passwordSetBeforeVerification: true,
     });
     const { id: sessionId } = await api.sessions.create({
       userId: user._id,
@@ -515,6 +516,10 @@ describe('password reset', () => {
     expect(await api.sessions.get(sessionId)).toBeNull();
     await login('resetme', OLD_PASSWORD).expect(401);
     await login('resetme', NEW_PASSWORD).expect(200);
+    expect(
+      (await api.users.findById(user._id).lean())!
+        .passwordSetBeforeVerification,
+    ).toBe(false);
     await confirm(token, 'another long passphrase 1')
       .expect(400)
       .expect(errorCode('invalid_token'));

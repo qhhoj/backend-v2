@@ -1,4 +1,5 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { PasswordVerificationBackfillService } from '@libs/auth';
 import { REDIS } from '@libs/common';
 import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
 import type { Queue } from 'bullmq';
@@ -151,8 +152,11 @@ describe('social login', () => {
     expect((await api.users.findOne())!.lastLogin).not.toBeNull();
   });
 
-  it('links a verified email of exactly one active user and logs in, ending its other sessions and API token; a never-signed-in account also loses its password', async () => {
-    const created = await createUser(api.users, { apiTokenHash: 'earlier' });
+  it('links a verified email of exactly one active user and logs in, ending its other sessions and API token; a password chosen before the mailbox was proven also becomes unusable', async () => {
+    const created = await createUser(api.users, {
+      apiTokenHash: 'earlier',
+      passwordSetBeforeVerification: true,
+    });
     const earlier = await loginAs(api, created._id);
     const kept = await createUser(api.users, {
       username: 'bob',
@@ -198,6 +202,97 @@ describe('social login', () => {
       401,
     );
     await passwordLogin('bob').expect(200);
+  });
+
+  describe('a password chosen at signup, before the mailbox was proven', () => {
+    const SIGNUP_PASSWORD = 'plum violet harbour 7';
+    const CHANGED_PASSWORD = 'amber quiet meadow 9';
+    const passwordLogin = (password: string) =>
+      api
+        .http()
+        .post('/api/internal/auth/login')
+        .send({ username: 'squatter', password });
+    const register = async () => {
+      await api
+        .http()
+        .post('/api/internal/auth/register')
+        .send({
+          username: 'squatter',
+          email: 'owner@gmail.test',
+          password: SIGNUP_PASSWORD,
+        })
+        .expect(204);
+      const key = /\/activate\/([0-9a-f]{64})/.exec(
+        api.mailer.sent.at(-1)!.text,
+      )![1];
+      await api
+        .http()
+        .post('/api/internal/auth/activate')
+        .send({ token: key })
+        .expect(204);
+    };
+    /** Signs in with the password (optionally changing it), then the mailbox owner signs in with Google; returns the passwords known before the link. */
+    const signInThenAutoLink = async (changePassword: boolean) => {
+      const response = await passwordLogin(SIGNUP_PASSWORD).expect(200);
+      const session = {
+        cookie: `qhhoj_session=${cookieValue(response.headers, 'qhhoj_session')}`,
+        csrf: (response.body as { data: { csrfToken: string } }).data.csrfToken,
+      };
+      if (changePassword)
+        await authed(
+          api.http().post('/api/internal/auth/password/change'),
+          session,
+        )
+          .send({
+            currentPassword: SIGNUP_PASSWORD,
+            newPassword: CHANGED_PASSWORD,
+          })
+          .expect(204);
+      google.identities.set('code-owner', {
+        uid: 'go-owner',
+        email: 'owner@gmail.test',
+        emailVerified: true,
+      });
+      await callback((await start('google')).state, {
+        code: 'code-owner',
+        slug: 'google',
+      }).expect('location', `${SITE}/`);
+      return changePassword
+        ? [SIGNUP_PASSWORD, CHANGED_PASSWORD]
+        : [SIGNUP_PASSWORD];
+    };
+
+    it.each([
+      ['after a sign-in', false],
+      ['after a sign-in and a self-service password change', true],
+    ])(
+      'stops working on a social auto-link %s',
+      async (_case, changePassword) => {
+        await register();
+        for (const password of await signInThenAutoLink(changePassword))
+          await passwordLogin(password).expect(401);
+      },
+    );
+
+    it('stops working on an account from before the flag once the boot backfill ran', async () => {
+      await createUser(api.users, {
+        username: 'squatter',
+        email: 'owner@gmail.test',
+        password: SIGNUP_PASSWORD,
+      });
+      const migrated = await createUser(api.users, {
+        username: 'veteran',
+        email: 'veteran@example.com',
+        dateJoined: new Date('2020-01-01T00:00:00Z'),
+      });
+      await api.app.get(PasswordVerificationBackfillService).backfill();
+      expect(
+        (await api.users.findById(migrated._id).lean())!
+          .passwordSetBeforeVerification,
+      ).toBe(false);
+      for (const password of await signInThenAutoLink(false))
+        await passwordLogin(password).expect(401);
+    });
   });
 
   it('does not link by an unverified email', async () => {

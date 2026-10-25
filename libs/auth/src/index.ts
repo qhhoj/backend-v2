@@ -17,6 +17,7 @@ export * from './session/session.service';
 export * from './session/session-cookie';
 export * from './users/users.repository';
 export * from './users/active-superuser';
+export * from './users/password-verification-backfill.service';
 export * from './principal/permissions';
 export * from './principal/permission-catalog';
 export * from './principal/build-principal';

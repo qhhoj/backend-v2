@@ -912,7 +912,9 @@ afterAll(() => api.teardown());
     });
 
     it("requires the admin's own password, then revokes the user's sessions and API token and audits without the secret", async () => {
-      const target = await createUserWith(api, 'dave');
+      const target = await createUserWith(api, 'dave', {
+        passwordSetBeforeVerification: true,
+      });
       const targetSession = await loginAs(api, target._id);
       const { token, hash } = generateApiToken(
         target._id,
@@ -956,7 +958,9 @@ afterAll(() => api.teardown());
         .post('/api/internal/auth/login')
         .send({ username: 'dave', password: fresh })
         .expect(200);
-      const stored = (await api.users.findById(target._id).lean())!.password;
+      const after = (await api.users.findById(target._id).lean())!;
+      expect(after.passwordSetBeforeVerification).toBe(false);
+      const stored = after.password;
       const rows = await api.revisions
         .find({
           entity: 'user',

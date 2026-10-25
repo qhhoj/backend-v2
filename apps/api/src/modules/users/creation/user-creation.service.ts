@@ -199,6 +199,7 @@ export class UserCreationService {
           ? `!${randomBytes(20).toString('hex')}`
           : await hashPassword(row.password ?? generatedPassword!),
         isActive: true,
+        passwordSetBeforeVerification: true,
         organizations: organizationId ? [organizationId] : [],
       });
     } catch (error) {

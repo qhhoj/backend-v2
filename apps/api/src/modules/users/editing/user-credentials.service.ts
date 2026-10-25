@@ -69,7 +69,10 @@ export class UserCredentialsService {
         409,
         'Password was changed by another request',
       );
-    await this.users.update(user._id, { apiTokenHash: null });
+    await this.users.update(user._id, {
+      apiTokenHash: null,
+      passwordSetBeforeVerification: false,
+    });
     await this.sessions.destroyAllForUser(user._id);
     await this.audit(auth, user, {
       action: 'staff_set_password',
