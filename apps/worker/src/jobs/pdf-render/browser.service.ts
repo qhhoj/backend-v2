@@ -7,7 +7,7 @@ import type { Browser } from 'playwright';
 import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
 import { SettingsService } from '@libs/settings';
-import { isAllowedRequest } from './local-file-policy';
+import { isAllowedRequest, statementMediaPaths } from './local-file-policy';
 import { KATEX_DIST_DIR, PAGE_FOOTER } from './pdf-template';
 
 const withTimeout = <Value>(
@@ -22,7 +22,7 @@ const withTimeout = <Value>(
     work.then(resolve, reject).finally(() => clearTimeout(timer));
   });
 
-/** One lazily launched Chromium per worker process; each render is a fresh JavaScript-less context that may only load the page, KaTeX and `MEDIA_ROOT` files. */
+/** One lazily launched Chromium per worker process; each render is a fresh JavaScript-less context that may only load the page, KaTeX and the statement image folders of `MEDIA_ROOT`. */
 @Injectable()
 export class BrowserService implements OnModuleDestroy {
   private readonly logger = new Logger(BrowserService.name);
@@ -35,7 +35,10 @@ export class BrowserService implements OnModuleDestroy {
 
   async renderPdf(htmlPath: string, pdfPath: string): Promise<void> {
     const pageUrl = pathToFileURL(htmlPath).href;
-    const resourcePaths = [KATEX_DIST_DIR, this.env.mediaRoot];
+    const resourcePaths = [
+      KATEX_DIST_DIR,
+      ...statementMediaPaths(this.env.mediaRoot),
+    ];
     const context = await (
       await this.launch()
     ).newContext({
@@ -44,7 +47,7 @@ export class BrowserService implements OnModuleDestroy {
       acceptDownloads: false,
     });
     try {
-      // Statement content (images, iframes, stylesheets, redirects) may only load KaTeX and MEDIA_ROOT files: no SSRF, no other local file.
+      // Statement content (images, iframes, stylesheets, redirects) may only load KaTeX and the statement image folders of MEDIA_ROOT: no SSRF, no other local file.
       // The page file itself is allowed only as the top-level navigation, so an `<iframe src="?x">` cannot embed it again.
       // `data:` and `srcdoc` documents are not routed by Playwright; they are inert (no JavaScript, and their requests go through this route).
       await context.route('**/*', async (route) => {

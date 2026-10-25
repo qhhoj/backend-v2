@@ -72,6 +72,22 @@ describe('short links', () => {
       ).toBe(1);
     });
 
+    it('answers a create with the link only, leaving its visit stats to the list', async () => {
+      const path = fresh();
+      const { code } = dataOf<Link>(
+        await create(student, { path }).expect(201),
+      );
+      await visit(code).expect(302);
+      const other = await loginAs(
+        api,
+        (await createUserWith(api, 'slother'))._id,
+      );
+      const again = dataOf<Record<string, unknown>>(
+        await create(other, { path }).expect(201),
+      );
+      expect(again).toEqual({ code, path, isAuto: true, expiresAt: null });
+    });
+
     it.each([
       '//evil.example',
       '/\\evil.example',

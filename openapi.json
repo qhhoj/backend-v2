@@ -4415,7 +4415,7 @@
             "type": "string"
           },
           "description": {
-            "description": "Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set.",
+            "description": "Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set and its writer holds `judge.problem_full_markup`.",
             "maxLength": 200000,
             "type": "string"
           },
@@ -4425,7 +4425,7 @@
             "type": "string"
           },
           "isFullMarkup": {
-            "description": "Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`.",
+            "description": "Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`. Only text written by a holder of `judge.problem_full_markup` renders unsanitized; other text stays sanitized.",
             "type": "boolean"
           },
           "isManuallyManaged": {
@@ -4765,6 +4765,35 @@
         "required": [
           "judge",
           "authKey"
+        ],
+        "type": "object"
+      },
+      "CreatedShortLinkResponse": {
+        "properties": {
+          "code": {
+            "description": "The code in `/s/<code>`.",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "When the link stops working; null if it never expires.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "isAuto": {
+            "description": "Made for anyone by path (idempotent) rather than chosen by staff.",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "Site path the link redirects to.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "path",
+          "isAuto",
+          "expiresAt"
         ],
         "type": "object"
       },
@@ -12546,9 +12575,9 @@
           "code",
           "path",
           "isAuto",
+          "expiresAt",
           "hits",
           "lastHitAt",
-          "expiresAt",
           "createdAt"
         ],
         "type": "object"
@@ -16430,7 +16459,7 @@
             "type": "string"
           },
           "description": {
-            "description": "Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set.",
+            "description": "Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set and its writer holds `judge.problem_full_markup`.",
             "maxLength": 200000,
             "type": "string"
           },
@@ -16440,7 +16469,7 @@
             "type": "string"
           },
           "isFullMarkup": {
-            "description": "Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`.",
+            "description": "Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`. Only text written by a holder of `judge.problem_full_markup` renders unsanitized; other text stays sanitized.",
             "type": "boolean"
           },
           "isManuallyManaged": {
@@ -33575,7 +33604,7 @@
         ]
       },
       "patch": {
-        "description": "Changes the fields sent (null is refused). Allowed for the author,\norganization admins and `judge.edit_all_post` holders; muted users cannot\nedit. Authors can only be changed with `judge.edit_all_post`, and the flag\nand staff fields follow the permissions listed for creating. A revision\nrecords the difference. Hiding or showing a post alone with\n`judge.edit_all_post` skips the write limit and the contest lock.",
+        "description": "Changes the fields sent (null is refused). Allowed for the author,\norganization admins and `judge.edit_all_post` holders; muted users cannot\nedit. Authors can only be changed with `judge.edit_all_post`, and the flag\nand staff fields follow the permissions listed for creating. A revision\nrecords the difference. Hiding or showing a post alone with\n`judge.edit_all_post` skips the write limit and the contest lock. A post\nthat a `judge.edit_all_post` holder other than its authors hid becomes\nvisible again only through `judge.edit_all_post` (403 otherwise).",
         "operationId": "BlogEditingController_edit",
         "parameters": [
           {
@@ -37511,7 +37540,7 @@
     },
     "/api/internal/problems/{code}/translations/{lang}": {
       "put": {
-        "description": "Needs edit rights on the problem. Stores the name and markdown description\nfor `lang` (`en` or `vi`) and re-renders it. Problems in full-markup mode\nneed `judge.problem_full_markup` to change the text. Sending the stored text\nagain changes nothing. Answers 204 and invalidates the cached PDF\nstatements.",
+        "description": "Needs edit rights on the problem. Stores the name and markdown description\nfor `lang` (`en` or `vi`) and re-renders it. Problems in full-markup mode\nneed `judge.problem_full_markup` to change the text. The text renders\nunsanitized only on a full-markup problem and only when its writer holds\n`judge.problem_full_markup`. Sending the stored text again changes nothing,\nexcept that a writer holding `judge.problem_full_markup` takes it over.\nAnswers 204 and invalidates the cached PDF statements.",
         "operationId": "ProblemEditingController_putTranslation",
         "parameters": [
           {
@@ -38236,7 +38265,7 @@
         "x-enveloped": true
       },
       "post": {
-        "description": "Signed-in callers only. Shortens a site path to `/s/<code>`; only problems, contests (and their announcements, submissions, stats and ranking tabs), blog posts, users and organizations are allowed, otherwise 400 `validation_failed` on `path`. Without `code` and `expiresAt` the link is automatic and idempotent: the same path always returns the same link, and users get 20 new links per day (429 `rate_limited`).\nChoosing a `code` or an `expiresAt` needs `judge.manage_short_link` (403 `forbidden` otherwise), and staff have no daily quota. A taken code gives 409 `conflict`; a reserved code or a past expiry gives 400.",
+        "description": "Signed-in callers only. Shortens a site path to `/s/<code>`; only problems, contests (and their announcements, submissions, stats and ranking tabs), blog posts, users and organizations are allowed, otherwise 400 `validation_failed` on `path`. Without `code` and `expiresAt` the link is automatic and idempotent: the same path always returns the same link, and users get 20 new links per day (429 `rate_limited`).\nChoosing a `code` or an `expiresAt` needs `judge.manage_short_link` (403 `forbidden` otherwise), and staff have no daily quota. A taken code gives 409 `conflict`; a reserved code or a past expiry gives 400. The answer carries the link without its visit stats; the list has them.",
         "operationId": "ShortLinksController_create",
         "parameters": [],
         "requestBody": {
@@ -38256,7 +38285,7 @@
                 "schema": {
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/ShortLinkResponse"
+                      "$ref": "#/components/schemas/CreatedShortLinkResponse"
                     }
                   },
                   "required": [

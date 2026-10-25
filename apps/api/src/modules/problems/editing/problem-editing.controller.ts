@@ -115,9 +115,11 @@ export class ProblemEditingController {
    * @remarks
    * Needs edit rights on the problem. Stores the name and markdown description
    * for `lang` (`en` or `vi`) and re-renders it. Problems in full-markup mode
-   * need `judge.problem_full_markup` to change the text. Sending the stored text
-   * again changes nothing. Answers 204 and invalidates the cached PDF
-   * statements.
+   * need `judge.problem_full_markup` to change the text. The text renders
+   * unsanitized only on a full-markup problem and only when its writer holds
+   * `judge.problem_full_markup`. Sending the stored text again changes nothing,
+   * except that a writer holding `judge.problem_full_markup` takes it over.
+   * Answers 204 and invalidates the cached PDF statements.
    */
   @Put(':code/translations/:lang')
   @HttpCode(204)

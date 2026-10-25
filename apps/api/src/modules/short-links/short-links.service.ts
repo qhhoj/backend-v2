@@ -13,7 +13,10 @@ import type {
   CreateShortLinkDto,
   ShortLinkListQueryDto,
 } from './dto/short-link.dto';
-import { ShortLinkResponse } from './dto/short-link.response';
+import {
+  CreatedShortLinkResponse,
+  ShortLinkResponse,
+} from './dto/short-link.response';
 import {
   CREATE_LIMIT,
   CREATE_WINDOW_SECONDS,
@@ -49,7 +52,7 @@ export class ShortLinksService {
   async create(
     principal: Principal,
     dto: CreateShortLinkDto,
-  ): Promise<ShortLinkResponse> {
+  ): Promise<CreatedShortLinkResponse> {
     const path = shortTargetOf(dto.path);
     if (path === null)
       throw invalidField(
@@ -73,7 +76,7 @@ export class ShortLinksService {
         ? { link: await this.insertChosen(principal, path, dto), isNew: true }
         : await this.automaticLink(principal, path);
       if (!isNew) await release();
-      return ShortLinkResponse.from(link);
+      return CreatedShortLinkResponse.from(link);
     } catch (error) {
       // No link was made (taken code, no free code, database error): the slot goes back.
       await release();

@@ -1,5 +1,5 @@
 import { realpath } from 'node:fs/promises';
-import { sep } from 'node:path';
+import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const realpathOrNull = (path: string) => realpath(path).catch(() => null);
@@ -28,3 +28,8 @@ export async function isAllowedRequest(
   }
   return false;
 }
+
+/** The `MEDIA_ROOT` folders statements embed images from: site and Polygon uploads (`images`) and legacy uploads (`martor`). Never `submission_file` or the rest of the volume. */
+const STATEMENT_MEDIA_DIRS = ['images', 'martor'];
+export const statementMediaPaths = (mediaRoot: string): string[] =>
+  STATEMENT_MEDIA_DIRS.map((folder) => join(mediaRoot, folder));

@@ -18,7 +18,10 @@ import {
   ShortCodeParamDto,
   ShortLinkListQueryDto,
 } from './dto/short-link.dto';
-import { ShortLinkResponse } from './dto/short-link.response';
+import {
+  CreatedShortLinkResponse,
+  ShortLinkResponse,
+} from './dto/short-link.response';
 import { ShortLinksService } from './short-links.service';
 
 @ApiTags('Short links')
@@ -31,13 +34,13 @@ export class ShortLinksController {
    *
    * @remarks
    * Signed-in callers only. Shortens a site path to `/s/<code>`; only problems, contests (and their announcements, submissions, stats and ranking tabs), blog posts, users and organizations are allowed, otherwise 400 `validation_failed` on `path`. Without `code` and `expiresAt` the link is automatic and idempotent: the same path always returns the same link, and users get 20 new links per day (429 `rate_limited`).
-   * Choosing a `code` or an `expiresAt` needs `judge.manage_short_link` (403 `forbidden` otherwise), and staff have no daily quota. A taken code gives 409 `conflict`; a reserved code or a past expiry gives 400.
+   * Choosing a `code` or an `expiresAt` needs `judge.manage_short_link` (403 `forbidden` otherwise), and staff have no daily quota. A taken code gives 409 `conflict`; a reserved code or a past expiry gives 400. The answer carries the link without its visit stats; the list has them.
    */
   @Post()
   create(
     @CurrentAuth() auth: AuthContext,
     @Body() body: CreateShortLinkDto,
-  ): Promise<ShortLinkResponse> {
+  ): Promise<CreatedShortLinkResponse> {
     return this.links.create(auth.principal, body);
   }
 

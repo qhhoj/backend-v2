@@ -2,11 +2,16 @@ import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '@libs/auth';
 import { RateLimitService, sameJson, unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
-import type { StatementLanguage } from '@libs/database';
+import type { ProblemTranslation, StatementLanguage } from '@libs/database';
 import { PutEditorialDto } from './dto/editorial.dto';
 import { RenderPreviewDto } from './dto/render-preview.dto';
 import { PutTranslationDto } from './dto/translation.dto';
-import { renderField, styleOf } from './problem-markup';
+import {
+  isTrustedMarkupWriter,
+  markupTrustAfterSave,
+  renderField,
+  styleOf,
+} from './problem-markup';
 import { ProblemEditPolicyService } from './problem-edit-policy.service';
 import { ProblemEvents } from '../core/problem.events';
 import { ProblemsRepository } from '../core/problems.repository';
@@ -27,6 +32,7 @@ export class ProblemStatementEditingService {
     private readonly rateLimit: RateLimitService,
   ) {}
 
+  /** Saves the translation; its trust (see `markupTrustAfterSave`) picks the render style. Sending the stored text again writes nothing, unless a trusted writer vouches for untrusted text. */
   async putTranslation(
     auth: AuthContext,
     code: string,
@@ -38,25 +44,50 @@ export class ProblemStatementEditingService {
     const previous = problem.translations.find(
       (translation) => translation.language === lang,
     );
-    if (problem.isFullMarkup && dto.description !== previous?.description)
+    const isDescriptionChanged = dto.description !== previous?.description;
+    if (problem.isFullMarkup && isDescriptionChanged)
       this.policy.assertFullMarkupWriter(principal);
-    if (previous?.name === dto.name && previous.description === dto.description)
-      return;
+    const wasTrusted = previous?.isMarkupTrusted ?? false;
+    const isMarkupTrusted = markupTrustAfterSave({
+      isWriterTrusted: isTrustedMarkupWriter(principal),
+      isTextChanged: isDescriptionChanged,
+      wasTrusted,
+    });
+    const isTextChanged = isDescriptionChanged || previous?.name !== dto.name;
+    if (!isTextChanged && isMarkupTrusted === wasTrusted) return;
     await this.repository.upsertTranslation(problem._id, {
       language: lang,
       name: dto.name,
       description: dto.description,
+      isMarkupTrusted,
       descriptionHtml: renderField(
         dto.description,
-        styleOf(problem),
+        styleOf(problem, isMarkupTrusted),
         'description',
       ),
     });
-    await this.revisions.append({
+    if (isTextChanged)
+      await this.recordTranslationEdit(principal.userId, problem._id, lang, {
+        previous,
+        dto,
+      });
+    this.events.emit('statementChanged', problem._id);
+  }
+
+  private recordTranslationEdit(
+    userId: string,
+    problemId: string,
+    lang: StatementLanguage,
+    {
+      previous,
+      dto,
+    }: { previous: ProblemTranslation | undefined; dto: PutTranslationDto },
+  ) {
+    return this.revisions.append({
       entity: 'problem',
-      entityId: problem._id,
+      entityId: problemId,
       action: 'translation',
-      userId: principal.userId,
+      userId,
       changes: {
         [`translations.${lang}`]: {
           before: previous
@@ -67,7 +98,6 @@ export class ProblemStatementEditingService {
       },
       comment: `Translation ${lang} edited from site`,
     });
-    this.events.emit('statementChanged', problem._id);
   }
 
   /** The editorial always renders with the sanitizing `solution` style, so it needs no full-markup gate. */

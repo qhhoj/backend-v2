@@ -448,6 +448,24 @@ describe('blog editing', () => {
     expect((await api.blogPosts.findById(post._id).lean())!.sticky).toBe(true);
   });
 
+  it('keeps a moderator hide until edit_all_post publishes the post again', async () => {
+    const { user, session } = await person();
+    const { session: staff } = await person({
+      permissions: ['judge.edit_all_post'],
+    });
+    const post = await createPost(api, { authors: [user._id] });
+    await patch(post._id, staff, { visible: false }).expect(200);
+    await patch(post._id, session, { visible: true })
+      .expect(403)
+      .expect(errorCode('forbidden'));
+    await patch(post._id, session, { title: 'Still mine' }).expect(200);
+    await api.http().get(postUrl(post._id)).expect(404);
+    await patch(post._id, staff, { visible: true }).expect(200);
+    await api.http().get(postUrl(post._id)).expect(200);
+    await patch(post._id, session, { visible: false }).expect(200);
+    await patch(post._id, session, { visible: true }).expect(200);
+  });
+
   it('deletes with delete_blogpost, taking comments, votes and the lock along and recomputing their authors', async () => {
     const { user, session } = await person();
     const { user: deleter, session: deleterSession } = await person({

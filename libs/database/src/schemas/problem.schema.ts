@@ -54,6 +54,8 @@ export class ProblemTranslation {
   @Prop({ required: true, maxlength: 100 }) name!: string;
   @Prop({ default: '' }) description!: string;
   @Prop({ default: '' }) descriptionHtml!: string;
+  /** The description's writer held `judge.problem_full_markup`: only then does it render unsanitized on a full-markup problem. Absent (rows written before it) is false. */
+  @Prop({ default: false }) isMarkupTrusted?: boolean;
 }
 
 @Schema({ _id: false })
@@ -74,6 +76,8 @@ export class Problem {
   @Prop({ default: '' }) summary!: string;
   @Prop({ default: '' }) description!: string;
   @Prop({ default: '' }) descriptionHtml!: string;
+  /** The description's writer held `judge.problem_full_markup`: only then does it render unsanitized on a full-markup problem. Absent (rows written before it) is false. */
+  @Prop({ default: false }) isDescriptionMarkupTrusted?: boolean;
   @Prop({
     required: true,
     min: PROBLEM_LIMITS.timeLimit.min,
