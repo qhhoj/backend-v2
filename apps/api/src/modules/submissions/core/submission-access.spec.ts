@@ -73,7 +73,7 @@ describe('detailAccess', () => {
       expected: 'granted',
     },
     {
-      label: 'a reviewer of a suggested problem',
+      label: "a suggester on another's unpublished suggestion they cannot edit",
       principal: viewer({
         permissions: new Set(['judge.suggest_new_problem']),
       }),
@@ -82,15 +82,6 @@ describe('detailAccess', () => {
         suggester: 'someone',
         submissionSourceVisibility: 'O',
       }),
-      canEdit: false,
-      expected: 'granted',
-    },
-    {
-      label: 'a reviewer of a public problem that has a suggester',
-      principal: viewer({
-        permissions: new Set(['judge.suggest_new_problem']),
-      }),
-      view: problem({ suggester: 'someone', submissionSourceVisibility: 'O' }),
       canEdit: false,
       expected: 'denied',
     },

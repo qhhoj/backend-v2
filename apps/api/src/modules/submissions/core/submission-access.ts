@@ -50,7 +50,7 @@ const sourceVisibilityOf = (problem: SubmissionProblemView): string =>
     ? SITE_SOURCE_VISIBILITY
     : problem.submissionSourceVisibility;
 
-/** Legacy `Submission.can_see_detail`; contest editors see every submission of their contest. `if-solved`: granted once the viewer has an AC worth the problem's full points. */
+/** Legacy `Submission.can_see_detail`; contest editors see every submission of their contest, and a suggester only on problems they may edit (`canEdit`), not the whole suggestion pool. `if-solved`: granted once the viewer has solved the problem (`IS_SOLVED`: every case point earned). */
 export function detailAccess(
   principal: Principal,
   { ownerId, problem, canEdit, isContestEditor }: DetailAccessFacts,
@@ -59,12 +59,6 @@ export function detailAccess(
     canEdit ||
     isContestEditor ||
     hasPermission(principal, 'judge.view_all_submission')
-  )
-    return 'granted';
-  if (
-    !problem.isPublic &&
-    problem.suggester !== null &&
-    hasPermission(principal, 'judge.suggest_new_problem')
   )
     return 'granted';
   if (ownerId === principal.userId) return 'granted';
@@ -76,7 +70,7 @@ export function detailAccess(
     : 'denied';
 }
 
-/** The source rule on top of `detailAccess`: never for visitors, and an `if-solved` grant needs the viewer's full-points AC (`hasSolved`). */
+/** The source rule on top of `detailAccess`: never for visitors, and an `if-solved` grant needs the viewer to have solved the problem (`hasSolved`, by `IS_SOLVED`). */
 export function sourceAccessOf(
   principal: Principal | null,
   access: DetailAccess,
