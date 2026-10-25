@@ -166,6 +166,7 @@ export class RegistrationService {
         email,
         password,
         isActive: false,
+        passwordSetBeforeVerification: true,
         ...(await this.profileFields(body)),
       },
       ip,

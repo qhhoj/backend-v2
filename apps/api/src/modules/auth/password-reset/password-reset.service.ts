@@ -117,8 +117,11 @@ export class PasswordResetService {
       await hashPassword(newPassword, { requester: ip }),
     );
     if (!changed) throw invalidToken();
-    // Reset is the recovery path: a leaked API token must not survive it.
-    await this.users.update(user._id, { apiTokenHash: null });
+    // Reset is the recovery path: a leaked API token must not survive it; the mailbox chose this password.
+    await this.users.update(user._id, {
+      apiTokenHash: null,
+      passwordSetBeforeVerification: false,
+    });
     await this.sessions.destroyAllForUser(user._id);
   }
 }

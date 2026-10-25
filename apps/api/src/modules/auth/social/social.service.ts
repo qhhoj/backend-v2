@@ -181,6 +181,8 @@ export class SocialService {
             password,
             ...(await this.registration.profileFields(credentials)),
             isActive: true,
+            // The provider proved the mailbox before the password was chosen.
+            passwordSetBeforeVerification: false,
             socialAuth: [
               { provider: pending.provider, uid: pending.uid, extraData: {} },
             ],
@@ -247,9 +249,9 @@ export class SocialService {
     });
   }
 
-  /** An auto-linked account may have been registered by someone else with this address: its other sessions and API token always end; one never signed in to also loses its password until one is set with the reset form. */
+  /** An auto-linked account may have been registered by someone else with this address: its other sessions and API token always end; a password chosen before the mailbox was proven also becomes unusable until one is set with the reset form. */
   private async endEarlierCredentials(user: UserDocument): Promise<void> {
-    if (user.lastLogin === null)
+    if (user.passwordSetBeforeVerification === true)
       await this.users.update(user._id, { password: unusablePasswordHash() });
     await this.auth.logoutAll(user._id);
   }
