@@ -88,10 +88,6 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'the code-collision check must see deleted and tombstoned codes',
   ],
-  'apps/worker/src/jobs/polygon-import/polygon-sync-runs.repository.ts': [
-    'S',
-    'a failed sync of a problem deleted meanwhile still belongs to its history',
-  ],
   'apps/worker/src/jobs/polygon-import/running-contests.repository.ts': [
     'S',
     'an automatic sync waits for the running contests of the problem its code names, whatever its state; the import itself refuses a deleted one',
