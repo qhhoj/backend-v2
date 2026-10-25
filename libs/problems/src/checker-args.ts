@@ -18,7 +18,7 @@ const oneOf =
       ? null
       : `must be one of ${allowed.join(', ')}`;
 const precision: Rule = (value) =>
-  Number.isInteger(value) &&
+  Number.isSafeInteger(value) &&
   (value as number) >= 0 &&
   (value as number) <= MAX_PRECISION
     ? null
@@ -30,7 +30,7 @@ const distribution: Rule = (value) => {
     value.length > MAX_DISTRIBUTION_LINES
   )
     return `must be a list of 1 to ${MAX_DISTRIBUTION_LINES} weights`;
-  if (!value.every((weight) => Number.isInteger(weight) && weight >= 0))
+  if (!value.every((weight) => Number.isSafeInteger(weight) && weight >= 0))
     return 'must hold whole numbers of 0 or more';
   return value.some((weight) => weight > 0)
     ? null

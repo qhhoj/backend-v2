@@ -44,15 +44,15 @@ describe('compileInitYaml', () => {
       compile({ cases: [plain(1), plain(2, { isPretest: true })] }).yaml,
     ).toBe(
       [
-        'archive: tests.zip',
-        'checker: standard',
+        'archive: "tests.zip"',
+        'checker: "standard"',
         'pretest_test_cases:',
-        '  - in: 2.in',
-        '    out: 2.out',
+        '  - in: "2.in"',
+        '    out: "2.out"',
         '    points: 1',
         'test_cases:',
-        '  - in: 1.in',
-        '    out: 1.out',
+        '  - in: "1.in"',
+        '    out: "1.out"',
         '    points: 1',
         '',
       ].join('\n'),
@@ -543,7 +543,7 @@ describe('compileInitYaml', () => {
       ),
   );
 
-  it('quotes hostile strings so PyYAML (YAML 1.1) keeps them strings', () => {
+  it('quotes every string, so neither YAML 1.1 nor 1.2 retypes one', () => {
     const hostile = [
       'yes',
       'a\tb',
@@ -561,8 +561,8 @@ describe('compileInitYaml', () => {
         .yaml,
     ).toBe(
       [
-        'archive: tests.zip',
-        'checker: standard',
+        'archive: "tests.zip"',
+        'checker: "standard"',
         'test_cases:',
         '  - generator_args:',
         '      - "yes"',
@@ -574,9 +574,9 @@ describe('compileInitYaml', () => {
         '      - "2024-01-01"',
         '      - "a\\u0085b"',
         '      - "0b101"',
-        '      - 1 2',
-        '    in: 1.in',
-        '    out: 1.out',
+        '      - "1 2"',
+        '    in: "1.in"',
+        '    out: "1.out"',
         '    points: 1',
         '',
       ].join('\n'),

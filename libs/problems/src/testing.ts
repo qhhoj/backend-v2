@@ -18,6 +18,10 @@ export const PDF = Buffer.from('%PDF-1.4\n%âãÏÓ\n1 0 obj', 'latin1');
 
 export interface ZipTestEntry {
   name: string;
+  /** Name bytes written as-is; `name` is then only a label. */
+  rawName?: Buffer;
+  /** The UTF-8 names flag; default on, off for a `rawName` (a CP437 name). */
+  utf8?: boolean;
   content?: Buffer | string;
   /** Marks the entry as a unix symlink in the external attributes. */
   symlink?: boolean;
@@ -48,6 +52,10 @@ export interface ZipTestOptions {
   zip64?: boolean;
   /** With `zip64`: lies about the zip64 end record offset in the locator. */
   zip64RecordOffset?: bigint;
+  /** Lies about the entry count on this disk in the end record (the total stays right). */
+  diskEntryCount?: number;
+  /** With `zip64`: an end record holding this count and the real offset instead of 0xFFFF and 0xFFFFFFFF. */
+  zip32EntryCount?: number;
   /** With `zip64`: lies about the central directory offset in the zip64 end record. */
   zip64CentralOffset?: bigint;
 }
@@ -87,10 +95,12 @@ function resolveEntry(entry: ZipTestEntry): ResolvedEntry {
     : Buffer.from(entry.content ?? '', 'utf8');
   const isDeflated = entry.method === 'deflate';
   return {
-    name: Buffer.from(entry.name, 'utf8'),
+    name: entry.rawName ?? Buffer.from(entry.name, 'utf8'),
     data: entry.data ?? (isDeflated ? deflateRawSync(content) : content),
     method: entry.methodNumber ?? (isDeflated ? METHOD_DEFLATE : METHOD_STORE),
-    flags: UTF8_NAMES_FLAG | (entry.encrypted ? ENCRYPTED_FLAG : 0),
+    flags:
+      ((entry.utf8 ?? !entry.rawName) ? UTF8_NAMES_FLAG : 0) |
+      (entry.encrypted ? ENCRYPTED_FLAG : 0),
     declaredSize: entry.declaredSize ?? content.length,
     checksum: entry.checksum ?? crc32(content),
     centralExtra: entry.centralExtra ?? Buffer.alloc(0),
@@ -144,10 +154,15 @@ function centralHeader(
 function endRecord(layout: ZipLayout, options: ZipTestOptions): Buffer {
   const record = Buffer.alloc(22);
   record.writeUInt32LE(END_RECORD, 0);
-  record.writeUInt16LE(options.zip64 ? 0xffff : layout.count, 8);
-  record.writeUInt16LE(options.zip64 ? 0xffff : layout.count, 10);
+  const saturated = options.zip64 && options.zip32EntryCount === undefined;
+  const count = options.zip32EntryCount ?? layout.count;
+  record.writeUInt16LE(
+    saturated ? 0xffff : (options.diskEntryCount ?? count),
+    8,
+  );
+  record.writeUInt16LE(saturated ? 0xffff : count, 10);
   record.writeUInt32LE(layout.centralSize, 12);
-  record.writeUInt32LE(options.zip64 ? 0xffffffff : layout.centralOffset, 16);
+  record.writeUInt32LE(saturated ? 0xffffffff : layout.centralOffset, 16);
   return record;
 }
 

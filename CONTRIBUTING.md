@@ -295,7 +295,7 @@ user-activity/
 - Volume: `PROBLEM_DATA_ROOT/<code>/` flat (`init.yml`, archive, sources); Polygon packages stage in `PROBLEM_DATA_ROOT/.imports/`
 - Routes (`/api/internal/problems/:code/data`): `GET`/`PUT` (8 MiB body, 300 cases, 9999 with `judge.create_mass_testcases`), `GET init`, `POST archive` (.zip, 512 MiB), `POST files/:kind` (`generator|customChecker|customGrader|customHeader`, 1 MiB), `DELETE files/:kind` (those plus `archive`), `GET files/:name` (attachment, `nosniff`)
 - Source extensions: generator `cpp cc c pas java py`, customChecker `cpp pas java`, customGrader `cpp`, customHeader `h`
-- Zip bounds (`ZIP_LIMITS`): 25000 entries, 2 GiB total, 512 MiB per entry, ratio 1100; no symlinks, control characters or Unicode-path mismatch
+- Zip bounds (`ZIP_LIMITS`): 25000 entries, 2 GiB total, 512 MiB per entry, ratio 1100; no symlinks (folders too), control characters (raw CP437 bytes too), name parts over 255 bytes or names over 1024, a file and a folder of one name, end records that disagree, or extra fields judge-v2's Rust `zip` reader would refuse or read differently (`zip-extra-fields.ts`)
 - `isManuallyManaged` problem -> 404 on data routes except `GET files/:name`; mirror problem -> 403 on writes
 - Rename: pre-check, then the `codeRenamed` listener moves the directory (and drops cached PDFs)
 - A rename while an import of that problem is in flight fails that import (the worker's compare-and-set filters on `code`)
@@ -334,6 +334,7 @@ user-activity/
 - The contract is `libs/judge-proto/proto/qhhoj/judge/v1/judge.proto`, a copy of judge-v2 `proto/` at the tag named in `libs/judge-proto/proto.lock.json`. Never edit the copy or `libs/judge-proto/src/generated`: change judge-v2, tag it (`proto-v1.<minor>`), then `npm run judge-proto:sync -- ../judge-v2 <tag>` and commit `libs/judge-proto`.
 - `npm run judge-proto:check` (CI) checks the copy against the lock and regenerates the TypeScript; `npm run judge-proto:check -- ../judge-v2` also checks the lock against the judge-v2 tag.
 - `scripts/judge/check-deploy-copies.sh [../judge-v2]` checks that `deploy/judge/*` equals judge-v2 `packaging/`; run it when either side changes. `scripts/judge/emit-init-fixtures.ts <out-dir>` writes the `init.yml` shapes judge-v2 tests against (see `scripts/README.md`).
+- Backend-judge contract: `libs/problems/src/judge-contract/` writes init.yml files (the real `compileInitYaml`), crafted zips with the upload reader's verdicts, and `ZIP_LIMITS` into `fixtures/`; its spec fails when the committed fixtures differ. judge-v2 keeps a copy in `crates/problem/tests/fixtures/judge-contract` and checks that it reads each the same. After a change: `UPDATE_JUDGE_CONTRACT=1 npx jest libs/problems/src/judge-contract`, commit, then `cp -r libs/problems/src/judge-contract/fixtures/. ../judge-v2/crates/problem/tests/fixtures/judge-contract/` in a judge-v2 PR.
 - Import types and the service from `@libs/judge-proto`; oneof bodies are `{ $case, <name> }` unions, 64-bit fields are numbers. Golden fixtures (`proto/golden`) and conformance scenarios (`proto/conformance`) come with the copy.
 
 ## Local judge

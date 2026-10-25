@@ -6,6 +6,7 @@ import type { Readable } from 'node:stream';
 import yauzl from 'yauzl';
 import type { Entry, ZipFile } from 'yauzl';
 import { hasDotSegment } from './file-names';
+import { extraFieldProblem } from './zip-extra-fields';
 
 export const ZIP_LIMITS = {
   maxEntries: 25_000,
@@ -34,7 +35,9 @@ interface ArchiveBounds {
   fileSize: number;
   centralDirectoryStart: number;
 }
-const UNICODE_PATH_EXTRA = 0x7075;
+/** Linux NAME_MAX, the judge's limit when it extracts; a path stays well under PATH_MAX below its cache directory. */
+const MAX_SEGMENT_BYTES = 255;
+const MAX_NAME_BYTES = 1024;
 
 /** A problem in an uploaded archive; the message is shown to the uploader, the snake_case `code` is the stable key (documented in docs/decisions.md). */
 export class ZipError extends Error {
@@ -53,6 +56,9 @@ const isControlCharacter = (character: string) => {
 };
 const hasControlCharacter = (name: string) =>
   [...name].some(isControlCharacter);
+/** yauzl shows CP437 control bytes as symbols (☺, ⌂), the judge keeps them raw, so the decoded name cannot tell. */
+const hasControlByte = (raw: Buffer) =>
+  raw.some((byte) => byte < FIRST_PRINTABLE || byte === DELETE_CHARACTER);
 /** A name that is safe to echo in a message. */
 const shown = (name: string) =>
   [...name]
@@ -66,10 +72,24 @@ const hasBadSegment = (name: string) =>
   (name.endsWith('/') ? name.slice(0, -1) : name)
     .split('/')
     .some((segment) => segment === '' || segment === '.');
-/** yauzl names an entry from its Unicode Path extra, the judge's Rust `zip` crate from the raw name; refuse the entries on which they differ. */
-const hasForeignUnicodePath = (entry: Entry) =>
-  entry.extraFields.some((field) => field.id === UNICODE_PATH_EXTRA) &&
-  !entry.fileNameRaw.equals(Buffer.from(entry.fileName, 'utf8'));
+const isTooLong = (name: string) =>
+  Buffer.byteLength(name) > MAX_NAME_BYTES ||
+  name
+    .split('/')
+    .some((segment) => Buffer.byteLength(segment) > MAX_SEGMENT_BYTES);
+
+/** The first rule an entry's name breaks, or undefined: anything the judge would refuse or name differently. */
+function nameViolation(entry: Entry): string | undefined {
+  const name = shown(entry.fileName);
+  if (hasControlCharacter(entry.fileName) || hasControlByte(entry.fileNameRaw))
+    return 'File names must not contain control characters.';
+  if (entry.fileName === '' || hasBadSegment(entry.fileName))
+    return `Invalid file name: ${name}`;
+  if (isTooLong(entry.fileName))
+    return `${name} is too long: at most ${MAX_SEGMENT_BYTES} bytes per folder or file name and ${MAX_NAME_BYTES} in all.`;
+  const fields = extraFieldProblem(entry);
+  return fields && `${name} ${fields}.`;
+}
 
 /** The first rule an entry breaks, or undefined. yauzl itself rejects `..`, absolute paths and backslashes. */
 function violation(
@@ -80,14 +100,10 @@ function violation(
   const name = shown(entry.fileName);
   if (records > ZIP_LIMITS.maxEntries)
     return `The archive has too many files (limit ${ZIP_LIMITS.maxEntries}).`;
-  if (hasControlCharacter(entry.fileName))
-    return 'File names must not contain control characters.';
-  if (entry.fileName === '' || hasBadSegment(entry.fileName))
-    return `Invalid file name: ${name}`;
-  if (hasForeignUnicodePath(entry))
-    return `${name} has a Unicode path that differs from its name.`;
-  if (isDirectory(entry)) return undefined;
+  const badName = nameViolation(entry);
+  if (badName) return badName;
   if (isSymlink(entry)) return `Symbolic links are not allowed: ${name}`;
+  if (isDirectory(entry)) return undefined;
   if (!entry.canDecodeFileData())
     return `${name} is encrypted or uses an unsupported compression method.`;
   if (
@@ -106,6 +122,29 @@ function violation(
   return undefined;
 }
 
+/** Files and folders seen so far; the judge cannot extract a file and a folder of the same name. */
+class ArchivePaths {
+  private readonly files = new Set<string>();
+  private readonly folders = new Set<string>();
+
+  /** Records the entry; false when its path clashes with one seen before. */
+  add(entry: Entry): boolean {
+    const path = entry.fileName.replace(/\/$/, '');
+    const parents = path.split('/').slice(0, -1);
+    const prefixes = parents.map((_segment, index) =>
+      parents.slice(0, index + 1).join('/'),
+    );
+    if (prefixes.some((prefix) => this.files.has(prefix))) return false;
+    prefixes.forEach((prefix) => this.folders.add(prefix));
+    const [own, other] = isDirectory(entry)
+      ? [this.folders, this.files]
+      : [this.files, this.folders];
+    if (other.has(path)) return false;
+    own.add(path);
+    return true;
+  }
+}
+
 /** yauzl's internals that the typings leave out or get wrong. */
 interface ZipFileInternals {
   /** A byte offset, although @types/yauzl says boolean. */
@@ -117,32 +156,64 @@ interface ZipFileInternals {
 const ZIP64_LOCATOR_BYTES = 20;
 const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
 const ZIP64_RECORD_OFFSET_AT = 8;
+const ZIP64_RECORD_BYTES = 56;
+const ZIP64_COUNT_AT = 32;
+const ZIP64_CENTRAL_OFFSET_AT = 48;
 
 /** Reads `length` bytes at `position` of the archive. */
 type ReadAt = (position: number, length: number) => Promise<Buffer>;
 
-/** Where the central directory must end: at the zip64 end record when a zip64 locator precedes the end record, else at the end record itself. */
-async function expectedCentralEnd(
-  zip: ZipFile,
-  readAt: ReadAt,
-): Promise<number> {
+interface EndRecords {
+  endRecordStart: number;
+  /** The zip64 end record's offset, when a zip64 locator precedes the end record. */
+  zip64RecordStart?: number;
+}
+
+async function endRecordsOf(zip: ZipFile, readAt: ReadAt): Promise<EndRecords> {
   const { fileSize, comment } = zip as unknown as ZipFileInternals;
   const endRecordStart = fileSize - END_RECORD_BYTES - comment.length;
   const locatorStart = endRecordStart - ZIP64_LOCATOR_BYTES;
-  if (locatorStart < 0) return endRecordStart;
+  if (locatorStart < 0) return { endRecordStart };
   const locator = await readAt(locatorStart, ZIP64_LOCATOR_BYTES);
   return locator.readUInt32LE(0) === ZIP64_LOCATOR_SIGNATURE
-    ? Number(locator.readBigUInt64LE(ZIP64_RECORD_OFFSET_AT))
-    : endRecordStart;
+    ? {
+        endRecordStart,
+        zip64RecordStart: Number(
+          locator.readBigUInt64LE(ZIP64_RECORD_OFFSET_AT),
+        ),
+      }
+    : { endRecordStart };
 }
 
-/** The judge's Rust `zip` crate trusts the central directory offset, yauzl the entry count; a count that hides records would skip every check, so the records must end exactly where the end record (zip64 or not) starts. */
+/** yauzl counts the end record's total entries, the judge's Rust `zip` crate those on this disk: they must agree. yauzl reads the zip64 end record whenever its locator is there, the crate only when the end record's count or offset is 0xFFFF(FFFF): an end record that is not must agree with the zip64 one. */
+async function endRecordsAgree(
+  { endRecordStart, zip64RecordStart }: EndRecords,
+  readAt: ReadAt,
+): Promise<boolean> {
+  const end = await readAt(endRecordStart, END_RECORD_BYTES);
+  const [count, offset] = [end.readUInt16LE(10), end.readUInt32LE(16)];
+  if (end.readUInt16LE(8) !== count) return false;
+  if (zip64RecordStart === undefined) return true;
+  if (count === 0xffff || offset === 0xffffffff) return true;
+  const zip64 = await readAt(zip64RecordStart, ZIP64_RECORD_BYTES);
+  return (
+    zip64.readBigUInt64LE(ZIP64_COUNT_AT) === BigInt(count) &&
+    zip64.readBigUInt64LE(ZIP64_CENTRAL_OFFSET_AT) === BigInt(offset)
+  );
+}
+
+/** The judge's Rust `zip` crate trusts the central directory offset, yauzl the entry count; a count that hides records would skip every check, so the records must end exactly where the end record (zip64 or not) starts, and both end records must say the same. */
 async function assertCentralDirectoryIsConsistent(
   zip: ZipFile,
   readAt: ReadAt,
 ): Promise<void> {
   const { readEntryCursor } = zip as unknown as ZipFileInternals;
-  if (readEntryCursor !== (await expectedCentralEnd(zip, readAt)))
+  const records = await endRecordsOf(zip, readAt);
+  const centralEnd = records.zip64RecordStart ?? records.endRecordStart;
+  if (
+    readEntryCursor !== centralEnd ||
+    !(await endRecordsAgree(records, readAt))
+  )
     throw new ZipError(
       'Archive central directory is inconsistent.',
       'zip_inconsistent',
@@ -153,6 +224,7 @@ async function assertCentralDirectoryIsConsistent(
 function collectEntries(zip: ZipFile): Promise<Map<string, Entry>> {
   return new Promise((resolve, reject) => {
     const entries = new Map<string, Entry>();
+    const paths = new ArchivePaths();
     const { fileSize, readEntryCursor } = zip as unknown as ZipFileInternals;
     const bounds = { fileSize, centralDirectoryStart: readEntryCursor };
     let records = 0;
@@ -172,6 +244,11 @@ function collectEntries(zip: ZipFile): Promise<Map<string, Entry>> {
       records += 1;
       const broken = violation(entry, records, bounds);
       if (broken) return fail(broken, 'zip_entry_rejected');
+      if (!paths.add(entry))
+        return fail(
+          `A file and a folder share a name: ${shown(entry.fileName)}`,
+          'zip_duplicate_entry',
+        );
       if (isDirectory(entry)) return zip.readEntry();
       if (entries.has(entry.fileName))
         return fail(
