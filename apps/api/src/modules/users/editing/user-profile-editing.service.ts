@@ -22,6 +22,7 @@ import { UserCredentialsService } from './user-credentials.service';
 import { fieldChanges } from './user-field-changes';
 import type { Changes } from './user-field-changes';
 import { UserMembershipEditor } from './user-membership-editor';
+import { FeedKeysRepository } from '../../contests/feed/feed-keys.repository';
 
 /** Same lock as registration, so a signup and a staff edit cannot claim one address together. */
 
@@ -57,6 +58,7 @@ export class UserProfileEditingService {
     private readonly revisions: RevisionsRepository,
     private readonly credentials: UserCredentialsService,
     @Inject(REDIS) private readonly redis: Redis,
+    private readonly feedKeys: FeedKeysRepository,
   ) {}
 
   async get(principal: Principal, username: string): Promise<UserEditResponse> {
@@ -189,7 +191,7 @@ export class UserProfileEditingService {
     return isActive;
   }
 
-  /** Deactivation stamps `deactivatedAt` (never reclaimed as an abandoned signup) and ends every session and the API token at once (the guard also refuses inactive users). */
+  /** Deactivation stamps `deactivatedAt` (never reclaimed as an abandoned signup) and ends every session, the API token and the contest feed keys the user minted at once (the guard also refuses inactive users). */
   private async writeActivation(
     user: UserDocument,
     isActive: boolean,
@@ -204,6 +206,7 @@ export class UserProfileEditingService {
       apiTokenHash: null,
     });
     await this.sessions.destroyAllForUser(user._id);
+    await this.feedKeys.revokeMintedBy(user._id, new Date());
   }
 
   /** E-mails are not uniquely indexed (legacy duplicates): checked case-insensitively before any write, and again under the lock. */
