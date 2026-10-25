@@ -210,18 +210,8 @@ export class SocialService {
 
     // Several matches are ambiguous: never guess, let registration reject the taken email.
     const [match, ...others] = await this.users.findActiveByEmail(usableEmail);
-    if (
-      match &&
-      !others.length &&
-      (await this.users.linkSocial(match._id, {
-        provider: provider.legacyName,
-        uid,
-        extraData: {},
-      }))
-    ) {
-      await this.endEarlierCredentials(match);
+    if (match && !others.length && (await this.autoLink(match, provider, uid)))
       return this.login(match, previousSessionId);
-    }
 
     const token = randomToken();
     const pending: PendingLogin = {
@@ -239,6 +229,22 @@ export class SocialService {
       location: `${this.env.siteUrl}/register/social?token=${token}`,
       pendingToken: token,
     };
+  }
+
+  /** Ends the account's earlier credentials before the link is saved, so a failure in between leaves no link that would skip this on the next sign-in. False when the account already has a link for this provider. */
+  private async autoLink(
+    user: UserDocument,
+    provider: OAuthProvider,
+    uid: string,
+  ): Promise<boolean> {
+    if (user.socialAuth.some((link) => link.provider === provider.legacyName))
+      return false;
+    await this.endEarlierCredentials(user);
+    return this.users.linkSocial(user._id, {
+      provider: provider.legacyName,
+      uid,
+      extraData: {},
+    });
   }
 
   /** An auto-linked account may have been registered by someone else with this address: its other sessions and API token always end; one never signed in to also loses its password until one is set with the reset form. */
