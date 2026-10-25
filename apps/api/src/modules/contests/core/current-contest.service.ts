@@ -67,7 +67,11 @@ export class CurrentContestService {
       principal.userId,
       LIVE,
     );
-    return ContestAccess.keepsSpectating(principal, view, live !== null);
+    return ContestAccess.keepsSpectating(
+      principal,
+      view,
+      live !== null && hasParticipationEnded(contest, live, now),
+    );
   }
 
   /** What the user's current contest does to problem access (`ProblemAccess`); null outside a contest. */

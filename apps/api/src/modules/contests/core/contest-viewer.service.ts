@@ -66,7 +66,7 @@ function currentIn(
     ContestAccess.keepsSpectating(
       principal,
       ContestAccess.accessView(contest),
-      live !== null,
+      live !== null && hasParticipationEnded(contest, live, now),
     );
   return keeps ? current : null;
 }
