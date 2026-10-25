@@ -51,9 +51,9 @@ const JsonArgs = () =>
 /** `update()` runs no schema validators, so counts must be proven safe integers here. */
 const NullableCount = () =>
   applyDecorators(IsOptional(), IsInt(), Min(0), Max(Number.MAX_SAFE_INTEGER));
-/** judge-v2 refuses a larger `output_limit_length` at judge time. */
+/** judge-v2 refuses a larger `output_limit_length`, and 0 at judge time. */
 const OutputLimit = () =>
-  applyDecorators(IsOptional(), IsInt(), Min(0), Max(JUDGE_MAX_OUTPUT_LIMIT));
+  applyDecorators(IsOptional(), IsInt(), Min(1), Max(JUDGE_MAX_OUTPUT_LIMIT));
 const FileName = () =>
   applyDecorators(IsString(), MaxLength(100), Matches(NO_NUL));
 

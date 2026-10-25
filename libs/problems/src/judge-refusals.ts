@@ -45,9 +45,11 @@ function caseCheckerKeys(data: JudgedSettings): [number, string][] {
   return keys;
 }
 
+/** Null is the judge default; an explicit 0 or negative limit is refused, as is one above the ceiling. */
 const tooLarge = (outputLimit: number | null) =>
-  outputLimit !== null && outputLimit > JUDGE_MAX_OUTPUT_LIMIT;
-const OUTPUT_LIMIT_MESSAGE = `the judge accepts an output limit of at most ${JUDGE_MAX_OUTPUT_LIMIT} bytes (64 MiB).`;
+  outputLimit !== null &&
+  (outputLimit <= 0 || outputLimit > JUDGE_MAX_OUTPUT_LIMIT);
+const OUTPUT_LIMIT_MESSAGE = `the judge accepts an output limit of 1 to ${JUDGE_MAX_OUTPUT_LIMIT} bytes (64 MiB); leave it empty for the default.`;
 
 /** An output limit judge-v2 refuses when it plans the cases (`InitError::Invalid`): problem-wide, batch or case; an `E` row emits none. */
 function outputLimitRefusal(data: JudgedSettings): JudgeRefusal | null {
