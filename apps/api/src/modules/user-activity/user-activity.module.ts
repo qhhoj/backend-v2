@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
+import { RevisionsRepository } from '../problems/core/revisions.repository';
 import { ActiveUsersStore } from './capture/active-users.store';
 import { ActivityWriterRepository } from './capture/activity-writer.repository';
 import { UserActivityCaptureService } from './capture/user-activity-capture.service';
@@ -19,6 +20,7 @@ import { UserActivityStaffController } from './staff/user-activity-staff.control
     ActiveUsersStore,
     UserActivityCaptureService,
     ActivityLogsRepository,
+    RevisionsRepository,
     ActivityLogsService,
     ActivitySummaryRepository,
     ActivitySummaryService,

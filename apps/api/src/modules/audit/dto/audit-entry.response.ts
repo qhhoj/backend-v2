@@ -29,7 +29,7 @@ export class AuditEntryResponse {
   object!: AuditObjectResponse;
   /** Names of the changed fields. Values are never returned: some records hold sensitive before/after values. */
   changedFields!: string[];
-  /** The writer's free-text note, often empty. */
+  /** The writer's free-text note, often empty; empty too when you lack the permission of the record's kind. */
   comment!: string;
 }
 

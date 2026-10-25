@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
+import type { AuthContext } from '@libs/auth';
 import { AppError, Paginated, unique } from '@libs/common';
 import type { HasMorePageMetaResponse } from '@libs/common';
 import { ACTIVITY_PAGE_SIZE } from '@libs/community';
+import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { activityFilter } from './activity-filter';
 import type { ActivityScope } from './activity-filter';
 import { ActivityLogsRepository } from './activity-logs.repository';
@@ -17,6 +19,7 @@ export class ActivityLogsService {
   constructor(
     private readonly logs: ActivityLogsRepository,
     private readonly users: UsersRepository,
+    private readonly revisions: RevisionsRepository,
   ) {}
 
   /** `anonymous`, a username fragment (no match = no rows) or any user. */
@@ -60,21 +63,61 @@ export class ActivityLogsService {
     });
   }
 
-  /** Audit line: who deleted whose activity and how much. */
-  async deleteForUser(actor: string, username: string): Promise<void> {
-    const { rows, sessions } = await this.logs.deleteForUser(
-      await this.userId(username),
-    );
+  /** Refused for the caller's own account or a superuser's unless the caller is a superuser; leaves a `user` revision and a log line with the counts. */
+  async deleteForUser(auth: AuthContext, username: string): Promise<void> {
+    const target = await this.users.findByUsername(username, {
+      _id: 1,
+      isSuperuser: 1,
+    });
+    if (!target) throw new AppError('not_found', 404, 'No such user');
+    const { principal } = auth;
+    if (
+      !principal.isSuperuser &&
+      (target.isSuperuser || target._id === principal.userId)
+    )
+      throw new AppError(
+        'forbidden',
+        403,
+        "Only a superuser can delete their own or a superuser's activity",
+      );
+    const counts = await this.logs.deleteForUser(target._id);
+    await this.audit(auth, target._id, 'delete_activity', counts);
     this.logger.log(
-      `${actor} deleted the activity of ${username}: ${rows} rows, ${sessions} sessions`,
+      `${auth.user.username} deleted the activity of ${username}: ${counts.rows} rows, ${counts.sessions} sessions`,
     );
   }
 
-  async deleteAnonymous(actor: string): Promise<void> {
-    const { rows, sessions } = await this.logs.deleteAnonymous();
-    this.logger.log(
-      `${actor} deleted the anonymous activity: ${rows} rows, ${sessions} sessions`,
+  /** Recorded as a `user` revision on the caller's own account. */
+  async deleteAnonymous(auth: AuthContext): Promise<void> {
+    const counts = await this.logs.deleteAnonymous();
+    await this.audit(
+      auth,
+      auth.principal.userId,
+      'delete_anonymous_activity',
+      counts,
     );
+    this.logger.log(
+      `${auth.user.username} deleted the anonymous activity: ${counts.rows} rows, ${counts.sessions} sessions`,
+    );
+  }
+
+  private audit(
+    auth: AuthContext,
+    entityId: string,
+    action: string,
+    { rows, sessions }: { rows: number; sessions: number },
+  ): Promise<void> {
+    return this.revisions.append({
+      entity: 'user',
+      entityId,
+      action,
+      userId: auth.principal.userId,
+      changes: {
+        rows: { before: rows, after: 0 },
+        sessions: { before: sessions, after: 0 },
+      },
+      comment: 'Activity deleted from site',
+    });
   }
 
   async userId(username: string): Promise<string> {

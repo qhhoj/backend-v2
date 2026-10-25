@@ -10,7 +10,12 @@ import {
 import { ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { Readable } from 'node:stream';
-import { CurrentAuth, RequirePermission } from '@libs/auth';
+import {
+  CurrentAuth,
+  NoImpersonation,
+  RequirePermission,
+  SessionOnly,
+} from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiHasMoreResponse, RawResponse } from '@libs/common';
 import type { HasMorePageMetaResponse, Paginated } from '@libs/common';
@@ -114,27 +119,31 @@ export class UserActivityStaffController {
    * Delete a user's activity data
    *
    * @remarks
-   * Requires `judge.can_see_user_activity`. Deletes the user's activity log rows and their stored sessions; the deletion is written to the server log with the acting staff member. 404 `not_found` for an unknown user. Returns 204.
+   * Requires `judge.can_see_user_activity`. Needs a browser session (API tokens get 403) and not impersonating. Deletes the user's activity log rows and their stored sessions; the deletion is written to the server log and recorded as a `user` revision (`delete_activity`) with the counts. 403 `forbidden` when the target is yourself or a superuser and you are not a superuser; 404 `not_found` for an unknown user. Returns 204.
    */
+  @SessionOnly()
+  @NoImpersonation()
   @Delete('users/:username')
   @HttpCode(204)
   deleteUser(
     @Param() { username }: UsernameParamDto,
     @CurrentAuth() auth: AuthContext,
   ): Promise<void> {
-    return this.logs.deleteForUser(auth.user.username, username);
+    return this.logs.deleteForUser(auth, username);
   }
 
   /**
    * Delete anonymous activity data
    *
    * @remarks
-   * Requires `judge.can_see_user_activity`. Deletes all activity log rows and sessions of signed-out visitors; the deletion is written to the server log with the acting staff member. Returns 204.
+   * Requires `judge.can_see_user_activity`. Needs a browser session (API tokens get 403) and not impersonating. Deletes all activity log rows and sessions of signed-out visitors; the deletion is written to the server log and recorded as a `user` revision (`delete_anonymous_activity`) on your account. Returns 204.
    */
+  @SessionOnly()
+  @NoImpersonation()
   @Delete('anonymous')
   @HttpCode(204)
   deleteAnonymous(@CurrentAuth() auth: AuthContext): Promise<void> {
-    return this.logs.deleteAnonymous(auth.user.username);
+    return this.logs.deleteAnonymous(auth);
   }
 
   /**
