@@ -46,7 +46,7 @@ function eventAfter(
   const last = prefix.at(-1)!;
   const score = scoreParticipation(prefix, format, context);
   return [
-    Math.max(0, secondsSince(context.start, last.date)),
+    secondsSince(context.start, last.date),
     target.participantIndex,
     target.problemIndexes.get(last.problemId)!,
     score.formatData[last.problemId] ?? {},

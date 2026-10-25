@@ -19,7 +19,7 @@ export class SiteController {
    * Get the site shell data
    *
    * @remarks
-   * Public. Returns what the web app needs on every load: the public misc config key/values, and whether official contest mode is on with its end time. Cached privately for 60 seconds.
+   * Public. Returns what the web app needs on every load: the public misc config key/values, whether official contest mode is on with its end time, and the site time zone. Cached privately for 60 seconds.
    */
   @Header('Cache-Control', 'private, max-age=60')
   @Get()
@@ -28,6 +28,7 @@ export class SiteController {
       config: this.config.asRecord(),
       officialMode: isOfficialModeActive(this.settings),
       officialModeEndsAt: officialModeEndsAt(this.settings),
+      timeZone: this.settings.get('site.timeZone'),
     };
   }
 }

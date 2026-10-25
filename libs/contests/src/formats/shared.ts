@@ -7,8 +7,9 @@ import type {
   ScoringRow,
 } from './format';
 
+/** Never negative: a row before the start (an editor moved `realStart` past it) counts as time 0. */
 export const secondsSince = (start: Date, date: Date): number =>
-  (date.getTime() - start.getTime()) / 1000;
+  Math.max(0, (date.getTime() - start.getTime()) / 1000);
 
 /** Legacy `round(score, points_precision)`. */
 export const roundScore = (score: number, precision: number): number =>

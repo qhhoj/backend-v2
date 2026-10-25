@@ -344,6 +344,15 @@ describe('creating problems and contests for an organization', () => {
         'thpt-demo',
         withProblem('thptdemo_foreign_kt', foreign),
       ).expect(400);
+      // The problem stays only while the scope it was admitted for does.
+      const editScope = (body: object) =>
+        authed(
+          api.http().patch('/api/internal/contests/thptdemo_own_kt'),
+          sessions.teacher,
+        ).send(body);
+      const widened = [organizationId, otherOrganizationId];
+      await editScope({ organizations: widened }).expect(400);
+      await editScope({ organizations: widened, problems: [] }).expect(200);
     });
 
     it('still refuses the site-wide create without judge.add_contest', async () => {

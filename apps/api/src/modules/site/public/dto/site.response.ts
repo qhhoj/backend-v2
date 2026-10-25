@@ -8,4 +8,6 @@ export class SiteResponse {
   /** The ISO 8601 UTC instant the mode switches itself off, or `null` when the mode is off or has no end time. Same cache as `officialMode`. */
   @ApiProperty({ type: String, format: 'date-time', nullable: true })
   officialModeEndsAt!: string | null;
+  /** The site's time zone (setting `site.timeZone`, an IANA name such as `Asia/Ho_Chi_Minh`): the one zone the app reads and types site dates in (contest times in the admin, day boundaries). */
+  timeZone!: string;
 }

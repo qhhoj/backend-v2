@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated, unique } from '@libs/common';
+import { contestPhase } from '@libs/contests';
 import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Submission } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
@@ -269,7 +270,7 @@ export class SubmissionsService {
       ? NO_CASE_DETAIL
       : caseVisibility(principal, problem, {
           canEdit,
-          isInContest: scope !== null,
+          isInContest: await this.hidesOutputAsInContest(scope, viewed),
           readsSource,
         });
     const submission = await this.withCasesFor(viewed.submission, visibility);
@@ -303,6 +304,20 @@ export class SubmissionsService {
         contest,
       },
     );
+  }
+
+  /** `testcaseVisibility` C withholds output in contests: while the viewer is in one, and on a contest submission until its contest ends, so leaving the contest does not open it. Only C problems read the contest. */
+  private async hidesOutputAsInContest(
+    scope: ContestScope | null,
+    {
+      submission,
+      problem,
+    }: { submission: Submission; problem: ProblemDocument },
+  ): Promise<boolean> {
+    if (scope !== null) return true;
+    if (problem.testcaseVisibility !== 'C' || !submission.contest) return false;
+    const contest = await this.contests.findById(uuidStr(submission.contest));
+    return contest !== null && contestPhase(contest, new Date()) !== 'ended';
   }
 
   /** Cases (up to 10000 rows) are loaded only for a viewer who passed the access check and sees them. */

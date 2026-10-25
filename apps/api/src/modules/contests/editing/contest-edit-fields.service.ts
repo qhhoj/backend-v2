@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission, sha256, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, invalidField, unique } from '@libs/common';
+import { AppError, invalidField, sameJson, unique } from '@libs/common';
 import { FormatConfigError, parseFormatConfig } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest, ContestProblem, Problem } from '@libs/database';
@@ -241,11 +241,14 @@ export class ContestEditFieldsService {
   ): Promise<Partial<Contest>> {
     assertNoForbiddenNulls(dto);
     const fields = fieldsWithoutLookups(dto);
+    const scope = organizationChange(fields, current);
     if (dto.problems !== undefined)
       fields.problems = await this.contestProblems(principal, dto.problems, {
         current,
-        scope: organizationChange(fields, current).after,
+        scope: scope.after,
       });
+    if (current && !sameJson(scope.before, scope.after))
+      await this.assertKeptProblemsFitScope(principal, fields, current, scope);
     if (dto.description !== undefined)
       fields.descriptionHtml = renderField('description', dto.description);
     Object.assign(fields, rulesFields(dto, current));
@@ -353,6 +356,31 @@ export class ContestEditFieldsService {
     if (!scope.organizations.every((id) => view.organizations.includes(id)))
       return false;
     return this.rights.administersEach(principal, scope.organizations);
+  }
+
+  /** A scope edit re-checks the members-only problems the contest keeps against the new scope: they were admitted for the old one (`usableAsMembersOnly`). 400 on `organizations` otherwise. */
+  private async assertKeptProblemsFitScope(
+    principal: Principal,
+    fields: Partial<Contest>,
+    current: ContestDocument,
+    { after }: { after: OrganizationScope },
+  ): Promise<void> {
+    const stored = new Set(
+      current.problems.map((entry) => uuidStr(entry.problem)),
+    );
+    const kept = (fields.problems ?? current.problems)
+      .map((entry) => uuidStr(entry.problem))
+      .filter((id) => stored.has(id));
+    for (const problem of await this.problems.findByIds(kept)) {
+      const view = ProblemAccess.accessView(problem);
+      if (!view.isPublic || !view.isOrganizationPrivate) continue;
+      if (usableInContest(principal, problem)) continue;
+      if (!(await this.usableAsMembersOnly(principal, problem, after)))
+        throw invalidField(
+          'organizations',
+          `Problem ${problem.code} is public only to members of organizations this scope does not match; remove it first.`,
+        );
+    }
   }
 
   /** Each problem once and existing; a problem not yet in the contest must be one the editor may put in it (`usableInContest`, `usableAsMembersOnly`); `order` is the request's order. */

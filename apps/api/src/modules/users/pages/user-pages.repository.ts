@@ -43,11 +43,15 @@ const scoredOutside = (userId: string, hiddenContests: readonly string[]) => ({
   },
 });
 
-/** Public, non-organization-private, not-deleted problems: what legacy counts on user pages. */
-const publicProblem = (from: string, project: Record<string, 0 | 1>) => ({
+/** Public, non-organization-private, not-deleted problems: what legacy counts on user pages. `localField` holds the problem id. */
+const publicProblem = (
+  from: string,
+  project: Record<string, 0 | 1>,
+  localField = '_id',
+) => ({
   $lookup: {
     from,
-    localField: '_id',
+    localField,
     foreignField: '_id',
     pipeline: [
       {
@@ -169,7 +173,7 @@ export class UserPagesRepository {
       .exec();
   }
 
-  /** Submissions per day in `timezone` since `since`, through `{user, date}`, leaving out `hiddenContests`. */
+  /** Submissions per day in `timezone` since `since`, through `{user, date}`, leaving out `hiddenContests` and problems that are not public (as `solved`); grouped per day and problem first, so the problem lookup runs once per pair. */
   async activity(
     userId: string,
     since: Date,
@@ -191,11 +195,21 @@ export class UserPagesRepository {
           {
             $group: {
               _id: {
-                $dateToString: { format: '%Y-%m-%d', date: '$date', timezone },
+                day: {
+                  $dateToString: {
+                    format: '%Y-%m-%d',
+                    date: '$date',
+                    timezone,
+                  },
+                },
+                problem: '$problem',
               },
               count: { $sum: 1 },
             },
           },
+          publicProblem(this.problems.collection.name, {}, '_id.problem'),
+          { $match: { problem: { $ne: [] } } },
+          { $group: { _id: '$_id.day', count: { $sum: '$count' } } },
         ])
         .exec();
     } catch (error) {

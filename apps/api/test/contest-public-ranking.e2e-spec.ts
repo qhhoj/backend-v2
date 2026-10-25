@@ -42,7 +42,12 @@ describe('contest public ranking', () => {
   beforeAll(async () => {
     api = await setupApiTest();
     const roles: Array<[string, Partial<User>]> = [
-      ['editor', { permissions: ['judge.edit_own_contest'] }],
+      [
+        'editor',
+        {
+          permissions: ['judge.edit_own_contest', 'judge.contest_access_code'],
+        },
+      ],
       ['plain', {}],
       ['alice', {}],
       ['bob', {}],
@@ -228,6 +233,11 @@ describe('contest public ranking', () => {
     expect(
       (await api.contests.findById(contest._id).lean())!.rankingAccessCodeHash,
     ).toBeNull();
+    // Without a code there is nothing to guess: refused before the (spent) budget.
+    await api
+      .http()
+      .get(contestUrl(contest.key, '/ranking?code=wrong'))
+      .expect(403);
   });
 
   it('never serves editors a cached board', async () => {

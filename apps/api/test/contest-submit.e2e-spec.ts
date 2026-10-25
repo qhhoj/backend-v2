@@ -2,6 +2,7 @@ import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { recordSubmissionEvents } from '@libs/judging/testing';
+import { SPECTATE } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import {
@@ -111,6 +112,33 @@ describe('submitting inside a contest', () => {
       lockedAfter: null,
     });
     expect(await api.contestSubmissions.findById(normal).lean()).toBeNull();
+  });
+
+  it('submits a spectator as practice: no contest priority, pretests, cap or contest row', async () => {
+    const problem = await createProblem(api, catalog, {
+      code: 'cp_spectated',
+      isPublic: false,
+    });
+    const contest = await createContest(api, {
+      runPretestsOnly: true,
+      problems: [
+        contestProblem(problem._id, 0, {
+          isPretested: true,
+          maxSubmissions: 1,
+        }),
+      ],
+    });
+    await enter('dave', contest._id, { virtual: SPECTATE });
+    // Twice: a contest submission would hit `maxSubmissions: 1` the second time.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const id = idOf(await submit('dave', 'cp_spectated').expect(201));
+      expect(await api.submissions.findById(id).lean()).toMatchObject({
+        priority: 1,
+        contest: null,
+        isPretested: false,
+      });
+      expect(await api.contestSubmissions.findById(id).lean()).toBeNull();
+    }
   });
 
   it('caps submissions per problem, not counting internal errors, for every user', async () => {

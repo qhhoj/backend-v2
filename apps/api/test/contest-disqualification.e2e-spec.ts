@@ -168,6 +168,28 @@ describe('disqualification', () => {
     expect((await userOf(repeat._id)).banReason).toBe('Spam');
   });
 
+  it('lifts a cheating ban without activating an account that was inactive before it', async () => {
+    const inactive = await createUserWith(api, 'inactive_cheater', {
+      isActive: false,
+    });
+    const rows = await Promise.all(
+      [1, 2].map(async () => {
+        const contest = await createContest(api, { authors: [editorId] });
+        const row = await joinParticipation(api, contest._id, inactive._id);
+        return { key: contest.key, id: row._id };
+      }),
+    );
+    for (const row of rows) await disqualify(row.key, row.id, true).expect(201);
+    expect((await userOf(inactive._id)).banReason).toBe(
+      CONTEST_CHEATING_BAN_REASON,
+    );
+    await disqualify(rows[0].key, rows[0].id, false).expect(201);
+    expect(await userOf(inactive._id)).toMatchObject({
+      banReason: null,
+      isActive: false,
+    });
+  });
+
   it('leaves a manual ban alone when the lift finds it replaced between the read and the write', async () => {
     const repeat = await createUserWith(api, 'cas_cheater');
     const contests = await Promise.all(

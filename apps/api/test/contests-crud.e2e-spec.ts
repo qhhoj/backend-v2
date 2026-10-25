@@ -271,6 +271,12 @@ describe('contest CRUD', () => {
     it.each([
       ['rating', { isRated: true }, 'creator', 'rater'],
       ['privacy', { isPrivate: true }, 'creator', 'privateCreator'],
+      [
+        'ranking code',
+        { rankingAccessCode: 'board' },
+        'privateCreator',
+        'creator',
+      ],
     ])(
       'gates %s fields on their permission',
       async (_case, fields, without, withPermission) => {

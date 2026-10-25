@@ -16,11 +16,17 @@ const GATED_FIELDS: ReadonlyArray<[keyof Contest, Permission]> = [
   ['ratingCeiling', 'judge.contest_rating'],
   ['lockedAfter', 'judge.lock_contest'],
   ['accessCodeHash', 'judge.contest_access_code'],
+  ['rankingAccessCodeHash', 'judge.contest_access_code'],
   ['isPrivate', 'judge.create_private_contest'],
   ['privateContestants', 'judge.create_private_contest'],
   ['isOrganizationPrivate', 'judge.create_private_contest'],
   ['organizations', 'judge.create_private_contest'],
 ];
+/** The request field a stored code hash comes from, for the refusal text. */
+const CODE_FIELD_NAMES: Partial<Record<keyof Contest, string>> = {
+  accessCodeHash: 'accessCode',
+  rankingAccessCodeHash: 'rankingAccessCode',
+};
 /** Stored values of a new contest, to tell which gated fields a create request changes. */
 export const CREATE_BASELINE: Partial<Record<keyof Contest, unknown>> = {
   isRated: false,
@@ -30,6 +36,7 @@ export const CREATE_BASELINE: Partial<Record<keyof Contest, unknown>> = {
   ratingCeiling: null,
   lockedAfter: null,
   accessCodeHash: null,
+  rankingAccessCodeHash: null,
   isPrivate: false,
   privateContestants: [],
   isOrganizationPrivate: false,
@@ -107,7 +114,7 @@ export function assertGates(
       throw new AppError(
         'forbidden',
         403,
-        `Changing ${field === 'accessCodeHash' ? 'accessCode' : field} requires ${permission}`,
+        `Changing ${CODE_FIELD_NAMES[field] ?? field} requires ${permission}`,
       );
   assertVisibility(principal, fields, baseline, merged);
 }

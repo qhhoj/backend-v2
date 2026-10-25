@@ -15,7 +15,7 @@ import {
   validationPipe,
   withRedisLock,
 } from '@libs/common';
-import { contestPhase, LIVE } from '@libs/contests';
+import { contestPhase, LIVE, SPECTATE } from '@libs/contests';
 import { isLanguageActive, SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
 import type { Language } from '@libs/database';
 import {
@@ -304,7 +304,7 @@ export class SubmissionCreateService {
     }
   }
 
-  /** Legacy `form_valid` in a contest: only when the current contest lists the problem. */
+  /** Legacy `form_valid` in a contest: only when the current contest lists the problem. A spectator (editor, tester, or a contestant whose window ended) submits as practice: a contest submission there would get contest priority, pretests and a fresh cap with no place on the board. */
   private contestPlan(
     current: CurrentParticipation | null,
     problemId: string,
@@ -313,7 +313,8 @@ export class SubmissionCreateService {
     const entry = current?.contest.problems.find(
       (candidate) => uuidStr(candidate.problem) === problemId,
     );
-    if (!current || !entry) return null;
+    if (!current || !entry || current.participation.virtual === SPECTATE)
+      return null;
     const { contest, participation } = current;
     const isPretest = contest.runPretestsOnly && entry.isPretested;
     const isFinalFormat = contest.formatName === 'final_submission';

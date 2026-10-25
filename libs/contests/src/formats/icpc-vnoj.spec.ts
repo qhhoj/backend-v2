@@ -126,15 +126,15 @@ describe('icpc (legacy ICPCContestFormat)', () => {
       ).toMatchObject({ cumtime: 120, tiebreaker: 90, frozenTiebreaker: 90 });
     });
 
-    it('floors a negative non-whole minute downwards', () =>
-      // -9m59s floors to -10 (truncating gives -9): -10 + 30.
-      expect(
-        icpcFormat.score(
-          [{ ...row('A', 0, 100), date: at(-10, 1) }, row('B', 30, 100)],
-          { penalty: 20 },
-          context(),
-        ).cumtime,
-      ).toBe(20));
+    it('times a solve before the participation start (an editor moved it later) at 0, taking nothing off later solves', () => {
+      const score = icpcFormat.score(
+        [{ ...row('A', 0, 100), date: at(-10, 1) }, row('B', 30, 100)],
+        { penalty: 20 },
+        context(),
+      );
+      expect(score.cumtime).toBe(30);
+      expect(score.formatData.A).toMatchObject({ time: 0 });
+    });
 
     it('does not count rows without a result as tries', () => {
       const score = icpcFormat.score(

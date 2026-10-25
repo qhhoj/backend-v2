@@ -13027,12 +13027,17 @@
             "format": "date-time",
             "nullable": true,
             "type": "string"
+          },
+          "timeZone": {
+            "description": "The site's time zone (setting `site.timeZone`, an IANA name such as `Asia/Ho_Chi_Minh`): the one zone the app reads and types site dates in (contest times in the admin, day boundaries).",
+            "type": "string"
           }
         },
         "required": [
           "officialModeEndsAt",
           "config",
-          "officialMode"
+          "officialMode",
+          "timeZone"
         ],
         "type": "object"
       },
@@ -38708,7 +38713,7 @@
     },
     "/api/internal/site": {
       "get": {
-        "description": "Public. Returns what the web app needs on every load: the public misc config key/values, and whether official contest mode is on with its end time. Cached privately for 60 seconds.",
+        "description": "Public. Returns what the web app needs on every load: the public misc config key/values, whether official contest mode is on with its end time, and the site time zone. Cached privately for 60 seconds.",
         "operationId": "SiteController_site",
         "parameters": [],
         "responses": {

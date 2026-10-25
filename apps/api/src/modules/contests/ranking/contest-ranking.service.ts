@@ -172,21 +172,20 @@ export class ContestRankingService {
     return ranking;
   }
 
-  /** Legacy `ContestPublicRanking`: a plaintext code compared in constant time against the stored hash; wrong codes spend the IP's budget. */
+  /** Legacy `ContestPublicRanking`: a plaintext code compared in constant time against the stored hash; wrong codes spend the IP's budget. A contest without a code refuses before the budget: there is nothing to guess. */
   private async assertRankingCode(
     contest: ContestDocument,
     { accessCode, ip }: { accessCode: string; ip: string },
   ): Promise<void> {
+    const wrongCode = new AppError('forbidden', 403, 'Wrong ranking code');
+    if (contest.rankingAccessCodeHash === null) throw wrongCode;
     const release = await this.rateLimit.reserve(
       [`ranking-code:ip:${ip}`],
       ACCESS_CODE_IP_LIMIT,
       ACCESS_CODE_WINDOW_SECONDS,
     );
-    if (
-      contest.rankingAccessCodeHash === null ||
-      !constantTimeEqual(sha256(accessCode), contest.rankingAccessCodeHash)
-    )
-      throw new AppError('forbidden', 403, 'Wrong ranking code');
+    if (!constantTimeEqual(sha256(accessCode), contest.rankingAccessCodeHash))
+      throw wrongCode;
     await release();
   }
 
