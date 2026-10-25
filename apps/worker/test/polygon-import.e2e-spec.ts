@@ -957,6 +957,30 @@ describe('PolygonImportProcessor', () => {
     );
   });
 
+  it('refuses an update queued for a problem that was renamed and whose code another problem took', async () => {
+    await processor.process(job({ code: 'rename_src' }));
+    const original = (await worker.problems.findOne({ code: 'rename_src' }))!;
+    await worker.problems.updateOne(
+      { _id: original._id },
+      { $set: { code: 'rename_moved' } },
+    );
+    await processor.process(job({ code: 'rename_src' }));
+    const squatter = (await worker.problems.findOne({ code: 'rename_src' }))!;
+    await expect(
+      processor.process(
+        bareUpdate({ code: 'rename_src', problemId: original._id }),
+      ),
+    ).rejects.toThrow(`${POLYGON_ERROR_PREFIX}The problem was renamed`);
+    expect(
+      (await worker.problems.findOne({ _id: squatter._id }))!.dataVersion,
+    ).toBe(squatter.dataVersion);
+    await worker.problems.deleteMany({
+      code: { $in: ['rename_src', 'rename_moved'] },
+    });
+    for (const code of ['rename_src', 'rename_moved'])
+      rmSync(dataDirectory(code), { recursive: true, force: true });
+  });
+
   it.each([
     ['moving the data files into place', 'commitUpload'],
     ['writing init.yml', 'writeInit'],
