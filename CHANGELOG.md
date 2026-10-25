@@ -1,5 +1,25 @@
 # qhhoj-backend
 
+## 2.36.7
+
+### Patch Changes
+
+- ef32062: Social sign-in links can be removed by the user and by staff, and a staff e-mail change removes them; a social auto-link ends the account's other sessions and API token, and on a never-used account also its password; bans revoke the API token, the automatic cheating ban also signs the user out, and resetting another user's 2FA needs a browser session.
+- a0ec007: Every `/api` response says how caches may treat it: one without its own `Cache-Control` gets `private, no-store`, and one with a `private, max-age` also sends `Vary: Cookie`. nginx adds the same default (`20-qhhoj-api-cache.conf`).
+- df2764a: Event streams no longer spend the daily session-cookie refresh, a session short of 2FA or the password gate counts as a visitor in activity logs, access times and submission streams (the visitor detail limit applies when a submission stream opens), the "nested too deeply" 400 carries `issues`, and the signup e-mail lock is renewed while a slow signup waits for its password hash.
+- 11dec4b: Hardens social sign-in linking for unverified accounts.
+- dc2e9a0: New organization admins count against `slots`; organization problem tag, archive, bulk and usage routes respect problem visibility; mail, organization admin role and sign-in settings are superuser-only.
+- b4640d9: ioi16: a full AC on a problem with a plain pretest case, or on an externally judged problem, scores the full points; ticket internal notes go only to staff and assignees.
+- d9769d9: Bound per-address login work: password checks are served fairly across client networks and, inside one, across client addresses; one address holds at most 64 at once (running or queued), so a classroom behind one NAT signs in at once; per-address rate limits count an IPv6 client per /64. nginx mirrors the login bound of 64 (`deploy/nginx/login-limit.conf`).
+- 61c8dc0: Archive uploads read every entry, so a bad size or checksum is refused at upload; folder records get the same method and bounds checks as files, and a repeated folder record is refused.
+- 4b15056: Archive uploads refuse zips the judge would refuse or read differently; init.yml quotes every string; linematches weights above 2^53 are refused at save.
+- b137545: Failed logins are also counted per account and network (IPv6 /48).
+- 15d4606: Import jobs and Polygon sync runs follow the problem's id, not its code, so a renamed problem's job is never shown to another problem's editors and a failed run lands in the right history; the all-problems sync history needs `judge.edit_own_problem` as well as `judge.edit_all_problem`; the cached statement PDFs are dropped after every import that wrote statements, also one that ends needing attention.
+- fd4fbd6: An automatic Polygon sync that reaches a problem in a running contest waits until the contest ends instead of rewriting it (a week at most, then fails with `problem_in_running_contest`; a manual sync of the same package replaces it and runs now); a package header named like one of the problem's own data files (a kept local checker) is left out; contest export and data zips are swept after 7 days (crashed temp files after a day) and removed with their contest, and each kind is built at most 3 times per contest per day.
+- 1bff39e: Security update (GHSA-562v-ghpq-742g).
+- 307e9b2: Contest fixes: deleting a contest with live or virtual participations needs `judge.edit_all_contest`; a clone is refused when it holds a problem the cloner could not add to the copy; removing a user from a contest's authors, curators or testers ends the spectator access that role gave them.
+- 0b59588: The legacy statement-PDF and short-link redirects accept only code characters in the path.
+
 ## 2.36.6
 
 ### Patch Changes
