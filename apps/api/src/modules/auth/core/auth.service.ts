@@ -16,6 +16,7 @@ import type { AuthContext, SessionData, UserDocument } from '@libs/auth';
 import {
   AppError,
   ENV,
+  limiterAddress,
   RateLimitService,
   ValidationFailedError,
 } from '@libs/common';
@@ -35,8 +36,8 @@ const passwordSuccessBudget = (userId: string) => ({
   key: `password-success:user:${userId}`,
   limit: SUCCESS_ACCOUNT_LIMIT,
 });
-const loginSuccessIpBudget = (ip: string) => ({
-  key: `login-success:ip:${ip}`,
+const loginSuccessIpBudget = (address: string) => ({
+  key: `login-success:ip:${address}`,
   limit: SUCCESS_IP_LIMIT,
 });
 type Budget = { key: string; limit: number };
@@ -61,22 +62,29 @@ export class AuthService {
     previousSessionId: string | null,
   ) {
     const user = await this.users.findByUsername(username);
+    const address = limiterAddress(ip);
     // The tight budget is per (account, address): typos lock only that username from that address, and failures from
     // elsewhere never lock the owner out; the address ceiling brakes spraying across many usernames.
     const account = user
       ? `user:${user._id}`
       : `name:${username.normalize('NFKC').toLowerCase()}`;
     const failureBudgets = [
-      { key: `login:ip:${ip}`, limit: FAILURE_IP_LIMIT },
-      { key: `login:${account}:ip:${ip}`, limit: FAILURE_LIMIT },
+      { key: `login:ip:${address}`, limit: FAILURE_IP_LIMIT },
+      { key: `login:${account}:ip:${address}`, limit: FAILURE_LIMIT },
     ];
     const successBudgets = [
-      loginSuccessIpBudget(ip),
+      loginSuccessIpBudget(address),
       ...(user ? [passwordSuccessBudget(user._id)] : []),
     ];
     const passwordValid = await this.verifyMetered(
       { failureBudgets, successBudgets },
-      () => verifyPassword(password, user?.password ?? DUMMY_PASSWORD_HASH),
+      // One hash queue lane per address: another address's login waits for at most one check per hash slot.
+      () =>
+        verifyPassword(
+          password,
+          user?.password ?? DUMMY_PASSWORD_HASH,
+          address,
+        ),
     );
     if (!user || !passwordValid)
       throw new AppError(

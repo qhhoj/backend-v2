@@ -5,6 +5,7 @@ import {
   AppError,
   ENV,
   isDuplicateKey,
+  limiterAddress,
   MAIL_ADDRESS_PATTERN,
   RateLimitService,
   REDIS,
@@ -75,7 +76,7 @@ export class SocialService {
     const provider = this.provider(slug);
     // Never released; over the limit this throws the same 429 `rate_limited` as the other auth endpoints.
     await this.rateLimit.reserve(
-      [`oauth-start:ip:${ip}`],
+      [`oauth-start:ip:${limiterAddress(ip)}`],
       OAUTH_START_LIMIT,
       OAUTH_START_WINDOW_SECONDS,
     );

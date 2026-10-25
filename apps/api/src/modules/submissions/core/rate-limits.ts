@@ -1,3 +1,5 @@
+import { limiterAddress } from '@libs/common';
+
 /** Per user; every attempt counts (the budget is never released). */
 export const SUBMIT_LIMIT = 20;
 export const SUBMIT_WINDOW_SECONDS = 60;
@@ -12,4 +14,5 @@ export const BULK_REJUDGE_LIMIT = 10;
 /** Per IP, visitors only: a result page can read up to 10000 case rows. Signed-in viewers are not limited. */
 export const VISITOR_DETAIL_LIMIT = 300;
 export const VISITOR_DETAIL_WINDOW_SECONDS = 60;
-export const visitorDetailKey = (ip: string) => `submission-detail:ip:${ip}`;
+export const visitorDetailKey = (ip: string) =>
+  `submission-detail:ip:${limiterAddress(ip)}`;

@@ -17,7 +17,7 @@ import {
 import type { FastifyRequest } from 'fastify';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { ApiPaginatedResponse } from '@libs/common';
+import { ApiPaginatedResponse, limiterAddress } from '@libs/common';
 import type { Paginated } from '@libs/common';
 import { ContestParticipationService } from './contest-participation.service';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
@@ -86,7 +86,7 @@ export class ContestParticipationController {
     return this.participation.register(auth.principal, key, {
       accessCode,
       acceptRules: acceptRules === true,
-      ip: request.ip,
+      ip: limiterAddress(request.ip),
     });
   }
 
@@ -112,7 +112,7 @@ export class ContestParticipationController {
     return this.participation.join(auth.principal, key, {
       accessCode,
       acceptRules: acceptRules === true,
-      ip: request.ip,
+      ip: limiterAddress(request.ip),
     });
   }
 

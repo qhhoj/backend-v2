@@ -4,7 +4,7 @@ import type { FastifyReply } from 'fastify';
 import Redis from 'ioredis';
 import { PrincipalService, SessionService, UsersRepository } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, ENV, ipMatcher } from '@libs/common';
+import { AppError, ENV, ipMatcher, limiterAddress } from '@libs/common';
 import type { Env } from '@libs/common';
 import { HEARTBEAT_FRAME, openEventStream, sseFrame } from './sse';
 import type { EventStream } from './sse';
@@ -135,24 +135,25 @@ export class EventStreamHubService implements OnModuleInit, OnModuleDestroy {
       : this.limits.perIp;
   }
 
-  /** Throws 429 before anything is written; the returned release is idempotent and goes to `open`. */
+  /** Throws 429 before anything is written; the returned release is idempotent and goes to `open`. Streams count per `limiterAddress`; the allowlist matches the full address. */
   reserve(ip: string, userId: string | null): () => void {
+    const address = limiterAddress(ip);
     if (
       this.total >= this.limits.total ||
-      (this.perIp.get(ip) ?? 0) >= this.ipLimit(ip) ||
+      (this.perIp.get(address) ?? 0) >= this.ipLimit(ip) ||
       (userId !== null &&
         (this.perUser.get(userId) ?? 0) >= this.limits.perUser)
     )
       throw new AppError('rate_limited', 429, 'Too many open event streams');
     this.total += 1;
-    increment(this.perIp, ip);
+    increment(this.perIp, address);
     if (userId !== null) increment(this.perUser, userId);
     let released = false;
     return () => {
       if (released) return;
       released = true;
       this.total -= 1;
-      decrement(this.perIp, ip);
+      decrement(this.perIp, address);
       if (userId !== null) decrement(this.perUser, userId);
     };
   }

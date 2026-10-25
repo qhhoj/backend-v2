@@ -12,6 +12,7 @@ import type { UserDocument } from '@libs/auth';
 import {
   AppError,
   isDuplicateKey,
+  limiterAddress,
   MAILER,
   RateLimitService,
   REDIS,
@@ -77,7 +78,7 @@ export class RegistrationService {
   ): Promise<Result> {
     // Never released: every attempt, successful or not, spends budget.
     await this.rateLimit.reserve(
-      [`register:ip:${ip}`],
+      [`register:ip:${limiterAddress(ip)}`],
       REGISTRATION_IP_LIMIT,
       REGISTRATION_WINDOW_SECONDS,
     );
@@ -222,7 +223,7 @@ export class RegistrationService {
   /** Whether `username` could be registered now; spends the caller's per-IP budget. */
   async usernameAvailable(username: string, ip: string): Promise<boolean> {
     await this.rateLimit.reserve(
-      [`username-check:ip:${ip}`],
+      [`username-check:ip:${limiterAddress(ip)}`],
       USERNAME_CHECK_IP_LIMIT,
       USERNAME_CHECK_WINDOW_SECONDS,
     );

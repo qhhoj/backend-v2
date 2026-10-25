@@ -3,6 +3,7 @@ import { Controller, Get, Param, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { limiterAddress } from '@libs/common';
 import { ContestRankingService } from './contest-ranking.service';
 import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
 import { RankingQueryDto } from './dto/ranking.dto';
@@ -37,7 +38,9 @@ export class ContestRankingController {
     return this.rankings.ranking(optionalPrincipal(auth), key, {
       withVirtual: virtual,
       rankingAccess:
-        code === undefined ? undefined : { accessCode: code, ip: request.ip },
+        code === undefined
+          ? undefined
+          : { accessCode: code, ip: limiterAddress(request.ip) },
     });
   }
 }

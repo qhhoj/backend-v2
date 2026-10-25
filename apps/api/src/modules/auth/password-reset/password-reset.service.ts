@@ -14,6 +14,7 @@ import {
   AppError,
   assertMailAvailable,
   ENV,
+  limiterAddress,
   MAILER,
   RateLimitService,
   ValidationFailedError,
@@ -51,7 +52,7 @@ export class PasswordResetService {
     assertMailAvailable(this.mailer);
     // Never released: every request spends budget.
     await this.rateLimit.reserve(
-      [`password-reset:ip:${ip}`],
+      [`password-reset:ip:${limiterAddress(ip)}`],
       PASSWORD_RESET_IP_LIMIT,
       PASSWORD_RESET_WINDOW_SECONDS,
     );
