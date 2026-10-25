@@ -305,15 +305,16 @@ export class ParticipationsRepository {
     }
   }
 
-  /** The first join after registering starts the participation's clock (legacy rewrote the 1970 `real_start`). */
+  /** The first join after registering starts the participation's clock (legacy rewrote the 1970 `real_start`) and stores the acceptance of rules edited since the registration. */
   async start(
     participation: ParticipationDocument,
     now: Date,
+    acceptance: RulesAcceptance | null = null,
   ): Promise<ParticipationDocument> {
     const started = await this.participations
       .findOneAndUpdate(
         { _id: participation._id, isRegistered: true },
-        { $set: { isRegistered: false, realStart: now } },
+        { $set: { isRegistered: false, realStart: now, ...acceptance } },
         { new: true },
       )
       .exec();
