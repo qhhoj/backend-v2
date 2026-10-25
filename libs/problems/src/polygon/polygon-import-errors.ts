@@ -41,6 +41,8 @@ export const POLYGON_IMPORT_ERROR_CODES = [
   'problem_changed',
   /** A sync of a problem unlinked (or linked elsewhere) after it was queued. */
   'problem_unlinked',
+  /** `{until}`: an automatic sync waited a week for the contests using the problem to end; a manual sync applies the package. */
+  'problem_in_running_contest',
   'polygon_already_linked',
   /** The requester lost a right the job needs (sync, full markup). */
   'requester_forbidden',

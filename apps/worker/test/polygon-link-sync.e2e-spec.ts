@@ -45,9 +45,16 @@ import { softDeleteWorker } from './deleted-problem-fixtures';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
 
+/** Runs once while the next job reads its statements: after the download, before the write. */
+let whileReading: (() => Promise<unknown>) | null = null;
 const fakePandoc = {
   assertAvailable: () => Promise.resolve(),
-  texToMarkdown: (tex: string) => Promise.resolve(tex),
+  texToMarkdown: async (tex: string) => {
+    const hook = whileReading;
+    whileReading = null;
+    await hook?.();
+    return tex;
+  },
 };
 const POLYGON_ID = 4242;
 const fixtureNamed = (
@@ -115,7 +122,7 @@ describe('Polygon link, sync and auto-sync', () => {
       },
     } as unknown as Job<PolygonImportJob>;
     const outcome = await processor.process(job).then(
-      (result) => ({ result, error: null, final: true }),
+      (result) => ({ result, error: null, final: true, delayed: false }),
       (error: Error) => ({
         result: null,
         error: error.message,
@@ -1090,13 +1097,15 @@ describe('Polygon link, sync and auto-sync', () => {
       });
       await autoSync.run();
       const queued = (await imports.getJob(syncJobId(problem._id, 20)))!;
-      await worker.contests.updateOne(
-        { _id: contest._id },
-        { $set: { startTime: new Date(Date.now() - 60_000) } },
-      );
       polygon.reply('problem.package', {
         zip: buildPolygonPackage(fixtureNamed('Sum v2', 3000)),
       });
+      // The contest starts after the download, before the write.
+      whileReading = () =>
+        worker.contests.updateOne(
+          { _id: contest._id },
+          { $set: { startTime: new Date(Date.now() - 60_000) } },
+        );
       const held = await runJob(queued.data);
       expect(held).toMatchObject({ delayed: true, final: false });
       expect(held.delayedTo).toEqual([contest.endTime.getTime()]);
@@ -1105,6 +1114,10 @@ describe('Polygon link, sync and auto-sync', () => {
       expect(during.polygonLink).toMatchObject({ packageId: 10 });
       expect(during.polygonLink?.lastSyncResult).not.toBe('failed');
       expect(await runs.countDocuments({ jobId: held.jobId })).toBe(0);
+      // Woken while the contest still runs, it waits again without downloading.
+      const downloads = polygon.callsOf('problem.package').length;
+      expect((await runJob(queued.data)).delayed).toBe(true);
+      expect(polygon.callsOf('problem.package')).toHaveLength(downloads);
 
       await worker.contests.updateOne(
         { _id: contest._id },
@@ -1114,6 +1127,36 @@ describe('Polygon link, sync and auto-sync', () => {
       expect(
         await worker.problems.findOne({ code: 'auto_race' }),
       ).toMatchObject({ name: 'Sum v2', timeLimit: 3 });
+    });
+
+    it('fails an automatic sync still held by a contest a week after it was queued, recording why', async () => {
+      const problem = await linked('auto_week');
+      await seedContest(worker, {
+        problems: [{ problem: problem._id, points: 100, order: 0 }],
+      } as never);
+      const sync = syncJob(
+        'auto_week',
+        { packageId: 20, revision: 6 },
+        problem.dataVersion,
+      );
+      const job = {
+        ...sync,
+        polygon: { ...sync.polygon!, trigger: 'auto' as const },
+      };
+      const once = { attemptsMade: 0, opts: { attempts: 1 } };
+      const day = 86_400_000;
+      const queuedAt = Date.now() - 7 * day + 60_000;
+      const capped = await runJob(job, once, queuedAt);
+      expect(capped.delayedTo).toEqual([queuedAt + 7 * day]);
+      const failed = await runJob(job, once, Date.now() - 7 * day);
+      expect(failed).toMatchObject({ final: true, delayed: false });
+      expect(
+        (await worker.problems.findOne({ code: 'auto_week' }))!.polygonLink,
+      ).toMatchObject({
+        packageId: 10,
+        lastSyncResult: 'failed',
+        lastSyncErrorCode: 'problem_in_running_contest',
+      });
     });
 
     it('does nothing while Polygon is not connected', async () => {

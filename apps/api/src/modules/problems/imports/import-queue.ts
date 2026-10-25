@@ -17,6 +17,16 @@ export async function unfinishedJob(
   return job && !FINISHED.has(await job.getState()) ? job : null;
 }
 
+/** A delayed automatic sync (held for a running contest, or waiting out an outage) is removed, so a manual sync of the same package runs now instead of joining it; false when the job is none of those, or the worker took it meanwhile. */
+export async function removeDelayedAutoSync(job: ImportJob): Promise<boolean> {
+  if (job.data.polygon?.trigger !== 'auto') return false;
+  if ((await job.getState()) !== 'delayed') return false;
+  return job.remove().then(
+    () => true,
+    () => false,
+  );
+}
+
 /** A finished job is kept a day, and BullMQ ignores an `add` with its id meanwhile: a new sync of the same package replaces it. */
 export async function removeFinished(
   queue: ImportQueue,

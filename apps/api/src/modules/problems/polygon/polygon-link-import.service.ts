@@ -65,7 +65,7 @@ export class PolygonLinkImportService {
     return { jobId };
   }
 
-  /** Re-applies the newest READY package (full or standard; even the one already synced: a manual sync is also a repair) with the link's options; `overwriteLocalEdits` also replaces the settings edited on QHHOJ since the last import. A sync of that package already queued or running (manual or automatic) is answered with its job instead of a second one, and spends nothing. */
+  /** Re-applies the newest READY package (full or standard; even the one already synced: a manual sync is also a repair) with the link's options; `overwriteLocalEdits` also replaces the settings edited on QHHOJ since the last import. A sync of that package already queued or running (manual or automatic) is answered with its job instead of a second one, and spends nothing; an automatic one the worker delayed is replaced. */
   async sync(
     auth: AuthContext,
     code: string,
@@ -75,7 +75,7 @@ export class PolygonLinkImportService {
     const problem = linkedProblem(document);
     const latest = await this.latestReadyOf(problem.polygonLink.problemId);
     const jobId = syncJobId(document._id, latest.id);
-    const running = await this.imports.unfinishedJob(jobId);
+    const running = await this.imports.joinableSync(jobId);
     if (running) return joinedSync(running, overwriteLocalEdits);
     await assertOptionsFit(
       this.polygon,

@@ -131,6 +131,8 @@ interface ImportContext {
   /** Syncs only: the settings the setter may have edited since the last import. */
   local: LocalSettings | null;
   tracker: ImportTracker;
+  /** When the job was queued: bounds how long an automatic sync waits for a contest. */
+  queuedAt: Date;
 }
 
 /** What `commitWithData` needs beside the job: the read package, its staged files, and where the import goes. */
@@ -139,6 +141,7 @@ interface CommitInput {
   staged: StagedFile[];
   target: ImportTarget;
   tracker: ImportTracker;
+  queuedAt: Date;
 }
 
 /** The committed import and, when a data step failed after the commit, why it needs attention. */
@@ -146,6 +149,9 @@ interface WrittenImport {
   applied: AppliedImport;
   attention: PolygonImportResult['attention'];
 }
+
+/** How long an automatic sync may wait for running contests (from when it was queued) before it fails with `problem_in_running_contest`. */
+export const MAX_SYNC_DEFERRAL_MS = 7 * 86_400_000;
 
 /** How long an import waits for an API data write that holds the problem's data lock; a test may shorten it. */
 export const IMPORT_DATA_LOCK = { waitSeconds: 60 };
@@ -342,7 +348,7 @@ export class PolygonImportService {
     try {
       await this.pandoc.assertAvailable();
       const target = await this.repository.resolveTarget(job);
-      await this.assertNoRunningContest(job);
+      await this.assertNoRunningContest(job, run.queuedAt);
       await this.repository.assertFullMarkupWriter(job);
       if (job.polygon) {
         await this.download(run.id, job.polygon, tracker);
@@ -353,6 +359,7 @@ export class PolygonImportService {
         target,
         local,
         tracker,
+        queuedAt: run.queuedAt,
       });
     } finally {
       await rm(packagePath, { force: true });
@@ -360,11 +367,23 @@ export class PolygonImportService {
     }
   }
 
-  /** An automatic sync never changes a problem under a running contest; checked before the download and again under the data lock, right before the write. A sync someone started keeps its own rule. */
-  private async assertNoRunningContest(job: PolygonImportJob): Promise<void> {
+  /** An automatic sync never changes a problem under a running contest; checked before the download and again under the data lock, right before the write. It waits for the contest's end, `MAX_SYNC_DEFERRAL_MS` after it was queued at most, then fails. A sync someone started keeps its own rule. */
+  private async assertNoRunningContest(
+    job: PolygonImportJob,
+    queuedAt: Date,
+  ): Promise<void> {
     if (job.polygon?.trigger !== 'auto') return;
-    const until = await this.runningContests.runningUntil(job.code, new Date());
-    if (until) throw new SyncDeferredError(until);
+    const now = new Date();
+    const until = await this.runningContests.runningUntil(job.code, now);
+    if (!until) return;
+    const deadline = new Date(queuedAt.getTime() + MAX_SYNC_DEFERRAL_MS);
+    if (now >= deadline)
+      throw new PolygonImportError(
+        'a contest using the problem was still running a week after the automatic sync was queued; sync it by hand',
+        'problem_in_running_contest',
+        { until: until.toISOString() },
+      );
+    throw new SyncDeferredError(until < deadline ? until : deadline);
   }
 
   /** A Polygon failure (refused credentials, package not built for Linux, too large) is shown to the requester. */
@@ -396,7 +415,7 @@ export class PolygonImportService {
   private async importPackage(
     packagePath: string,
     job: PolygonImportJob,
-    { target, local, tracker }: ImportContext,
+    { target, local, tracker, queuedAt }: ImportContext,
   ): Promise<PolygonImportResult> {
     const pkg = await PolygonPackage.open(packagePath);
     const savedImages: string[] = [];
@@ -420,7 +439,7 @@ export class PolygonImportService {
       tracker.enter('saving');
       const written = await this.commitWithData(
         job,
-        { read, staged, target, tracker },
+        { read, staged, target, tracker, queuedAt },
         () => (committed = true),
       );
       const attention = await this.afterDataWrite(job, written, read);
@@ -566,11 +585,11 @@ export class PolygonImportService {
    */
   private async commitWithData(
     job: PolygonImportJob,
-    { read, staged, target, tracker }: CommitInput,
+    { read, staged, target, tracker, queuedAt }: CommitInput,
     onCommitted: () => void,
   ): Promise<WrittenImport> {
     const write = async (): Promise<WrittenImport> => {
-      await this.assertNoRunningContest(job);
+      await this.assertNoRunningContest(job, queuedAt);
       const applied = await this.repository.apply(job, read.imported, target);
       onCommitted();
       tracker.enter('finishing');

@@ -28,6 +28,7 @@ import {
   unfinishedJob,
   jobsOf,
   queuePositionsOf,
+  removeDelayedAutoSync,
   removeFinished,
   unfinishedJobOf,
 } from './import-queue';
@@ -137,9 +138,10 @@ export class ProblemImportsService {
     );
   }
 
-  /** The job while it is queued or running; null otherwise. */
-  unfinishedJob(jobId: string): Promise<ImportJob | null> {
-    return unfinishedJob(this.queue, jobId);
+  /** The queued or running sync a manual sync of the same package joins; a delayed automatic one is removed instead, so the manual one never waits for a contest. */
+  async joinableSync(jobId: string): Promise<ImportJob | null> {
+    const job = await unfinishedJob(this.queue, jobId);
+    return job && !(await removeDelayedAutoSync(job)) ? job : null;
   }
 
   /** The id of the queued or running import (a sync too) into `code`; null when none. */
