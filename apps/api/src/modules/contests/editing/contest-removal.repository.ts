@@ -61,6 +61,13 @@ export class ContestRemovalRepository {
     return (await this.ratings.exists({ contest: contestId }).exec()) !== null;
   }
 
+  /** Through the `{contest, user, virtual}` index. */
+  async hasParticipations(contestId: string): Promise<boolean> {
+    return (
+      (await this.participations.exists({ contest: contestId }).exec()) !== null
+    );
+  }
+
   /** Queued, judging or pending final submissions (`{status, contest, _id}` index): their results would land on a deleted contest. */
   async hasUnjudgedSubmissions(contestId: string): Promise<boolean> {
     return (

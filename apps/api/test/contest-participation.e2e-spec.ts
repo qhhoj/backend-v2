@@ -381,6 +381,25 @@ describe('contest participation', () => {
       expect(await pointerOf('erin')).toBe(joined.id);
     });
 
+    it('clears the spectator pointer of a user removed from the testers, keeping a contestant pointer', async () => {
+      const contest = await createContest(api, {
+        authors: [users.author._id],
+        testers: [users.tester._id, users.carol._id],
+      });
+      const spectating = dataOf<ParticipationSummaryResponse>(
+        await post('tester', contest.key, 'join').expect(201),
+      );
+      expect(spectating.virtual).toBe(-1);
+      const live = await joinParticipation(api, contest._id, users.carol._id);
+      await makeCurrent(api, users.carol._id, live._id);
+      await authed(
+        api.http().patch(contestUrl(contest.key)).send({ testers: [] }),
+        sessions.author,
+      ).expect(200);
+      expect(await pointerOf('tester')).toBeNull();
+      expect(await pointerOf('carol')).toBe(uuidStr(live._id));
+    });
+
     it('reports the current participation and clears it once it ended or became invisible', async () => {
       const current = () =>
         authed(api.http().get('/api/internal/contests/current'), sessions.dave);

@@ -383,7 +383,7 @@ export class ContestEditFieldsService {
     }
   }
 
-  /** Each problem once and existing; a problem not yet in the contest must be one the editor may put in it (`usableInContest`, `usableAsMembersOnly`); `order` is the request's order. */
+  /** Each problem once and existing, and admitted (`assertProblemsAdmitted`); `order` is the request's order. */
   private async contestProblems(
     principal: Principal,
     problems: ContestProblemDto[],
@@ -392,6 +392,24 @@ export class ContestEditFieldsService {
     const ids = problems.map((entry) => entry.problem);
     if (unique(ids).length !== ids.length)
       throw invalidField('problems', 'A problem appears twice.');
+    await this.assertProblemsAdmitted(principal, ids, contest);
+    return problems.map((entry, order) => ({
+      problem: entry.problem,
+      points: entry.points,
+      partial: entry.partial ?? true,
+      isPretested: entry.isPretested ?? false,
+      order,
+      outputPrefixOverride: entry.outputPrefixOverride ?? null,
+      maxSubmissions: entry.maxSubmissions ?? null,
+    }));
+  }
+
+  /** Each problem exists, and one not yet in the contest (`current`, null for create and clone) is one the editor may put in it under `scope` (`usableInContest`, `usableAsMembersOnly`). 400 on `problems` otherwise. */
+  async assertProblemsAdmitted(
+    principal: Principal,
+    ids: string[],
+    contest: { current: ContestDocument | null; scope: OrganizationScope },
+  ): Promise<void> {
     const found = new Map(
       (await this.problems.findByIds(ids)).map((problem) => [
         problem._id,
@@ -410,14 +428,5 @@ export class ContestEditFieldsService {
           (await this.usableAsMembersOnly(principal, problem, contest.scope)));
       if (!usable) throw invalidField('problems', 'Unknown problem.');
     }
-    return problems.map((entry, order) => ({
-      problem: entry.problem,
-      points: entry.points,
-      partial: entry.partial ?? true,
-      isPretested: entry.isPretested ?? false,
-      order,
-      outputPrefixOverride: entry.outputPrefixOverride ?? null,
-      maxSubmissions: entry.maxSubmissions ?? null,
-    }));
   }
 }

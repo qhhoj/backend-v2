@@ -258,6 +258,7 @@ afterAll(() => api.teardown());
     const sessions: Record<string, TestSession> = {};
     const users: Record<string, { _id: string }> = {};
     const problems: Record<string, { _id: string }> = {};
+    let cloneCatalog: Catalog;
     const clone = (who: string, key: string, body: object) =>
       authed(api.http().post(contestUrl(key, '/clone')), sessions[who]).send(
         body,
@@ -285,9 +286,13 @@ afterAll(() => api.teardown());
         });
         sessions[name] = await loginAs(api, users[name]._id);
       }
-      const catalog = await seedCatalog(api);
-      problems.one = await createProblem(api, catalog, { code: 'cloneone' });
-      problems.two = await createProblem(api, catalog, { code: 'clonetwo' });
+      cloneCatalog = await seedCatalog(api);
+      problems.one = await createProblem(api, cloneCatalog, {
+        code: 'cloneone',
+      });
+      problems.two = await createProblem(api, cloneCatalog, {
+        code: 'clonetwo',
+      });
     });
     beforeEach(() => finalJudges.obliterate({ force: true }));
 
@@ -456,6 +461,33 @@ afterAll(() => api.teardown());
       expect(
         await api.contests.findOne({ key: source.key }).lean(),
       ).toMatchObject({ startTime: new Date('2026-10-16T03:40:00Z') });
+    });
+
+    it('refuses a clone holding a problem the cloner could not add', async () => {
+      const organization = await createOrganization(api, {
+        slug: 'membersorg',
+      });
+      const membersOnly = await createProblem(api, cloneCatalog, {
+        code: 'membersonly',
+        isPublic: true,
+        isOrganizationPrivate: true,
+        organizations: [organization._id],
+      });
+      const source = await createContest(api, {
+        authors: [users.plainCloner._id],
+        isOrganizationPrivate: true,
+        organizations: [organization._id],
+        problems: [contestProblem(membersOnly._id, 0)],
+      });
+      const refused = await clone('plainCloner', source.key, {
+        key: 'members_clone',
+      }).expect(400);
+      expect(
+        (
+          refused.body as { error: { issues: { field: string }[] } }
+        ).error.issues.map((issue) => issue.field),
+      ).toEqual(['problems']);
+      expect(await api.contests.exists({ key: 'members_clone' })).toBeNull();
     });
 
     it('needs judge.clone_contest and edit rights, a free key and not a reserved one', async () => {
