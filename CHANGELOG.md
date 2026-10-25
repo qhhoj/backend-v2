@@ -1,5 +1,14 @@
 # qhhoj-backend
 
+## 2.36.6
+
+### Patch Changes
+
+- 2fa3082: A TOTP flag without a stored key no longer blocks sign-in and can be enrolled again; a run resumed after a bridge restart gets the same deadline as one that never left; a submission queued before a problem rename is assigned under the problem's current code; a user-aborted run whose Final cannot be stored ends AB instead of being judged again.
+- dc920be: A problem visible only through the viewer's current contest (live or virtual) lists and opens only that contest's submissions and the viewer's own.
+- 6fa996f: Contest fixes: solve times before a participation's start count as 0; spectators other than contest staff cannot submit to a running contest's problems; `GET /site` returns the site `timeZone`; scope edits re-check members-only problems; lifting an automatic cheating ban no longer activates an inactive account; `rankingAccessCode` needs `judge.contest_access_code`; the public heatmap counts public problems only; `testcaseVisibility` C keeps output hidden on a contest submission until its contest ends; a ranking code sent to a contest without one no longer spends the code budget.
+- 867db44: Tighten statement markup rendering rules, keep moderator post hides, narrow short-link create answers and PDF media access, and redact the legacy public ranking path in the activity log.
+
 ## 2.36.5
 
 ### Patch Changes
