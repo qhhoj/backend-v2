@@ -335,10 +335,10 @@ const ZIP_SCENARIOS: ZipScenario[] = [
     ]),
   },
   {
-    name: 'bad_crc_referenced',
+    name: 'bad_crc_unlisted',
     zip: zipOf([
-      { name: '1.in', content: '1\n', checksum: 0x12345678 },
-      { name: '1.out', content: '1\n' },
+      ...caseFiles(),
+      { name: '.notes', content: 'n\n', checksum: 0x12345678 },
     ]),
   },
 ];
