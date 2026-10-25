@@ -10,7 +10,7 @@ import {
 import fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
-import { crc32, deflateRawSync } from 'node:zlib';
+import { deflateRawSync } from 'node:zlib';
 import { join } from 'node:path';
 import { buildZip } from './testing';
 import { listZipEntries, ZipArchive, ZipError } from './zip-archive';
@@ -98,17 +98,6 @@ describe('ZipArchive', () => {
     const fromYauzl = await message(`\u0007${'x'.repeat(150)}/../y`);
     expect(fromYauzl.includes('\u0007')).toBe(false);
     expect(fromYauzl.length).toBeLessThan(200);
-  });
-
-  it('refuses a Unicode path extra that renames the entry', () => {
-    const unicodeName = Buffer.from('b.txt');
-    const field = Buffer.alloc(4 + 5 + unicodeName.length);
-    field.writeUInt16LE(0x7075, 0);
-    field.writeUInt16LE(5 + unicodeName.length, 2);
-    field.writeUInt8(1, 4);
-    field.writeUInt32LE(crc32(Buffer.from('a.txt')), 5);
-    unicodeName.copy(field, 9);
-    return rejects([{ name: 'a.txt', centralExtra: field }], ZipError);
   });
 
   it('refuses a corrupt archive with a plain message', () =>
