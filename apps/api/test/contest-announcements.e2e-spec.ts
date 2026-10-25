@@ -68,6 +68,7 @@ describe('contest announcements', () => {
           useValue: {
             ...DEFAULT_STREAM_LIMITS,
             contestTotal: 3,
+            perUser: 2,
             heartbeatMs: 100,
             recheckMs: 150,
           },
@@ -200,6 +201,16 @@ describe('contest announcements', () => {
     });
     expect((await open(hidden.key, 'editor')).status).toBe(200);
     expect((await open(hidden.key, 'pendingEditor')).status).toBe(404);
+  });
+
+  it('does not count the streams of a session short of its 2FA against its user', async () => {
+    const contest = await createContest(api);
+    sessions.pendingAlice = await loginAs(api, users.alice._id, {
+      twoFaPassed: false,
+    });
+    // perUser is 2: a third stream would be refused if the pending session used the user's cap.
+    for (let count = 0; count < 3; count += 1)
+      expect((await open(contest.key, 'pendingAlice')).status).toBe(200);
   });
 
   it('stores without pushing when pushAnnouncements is off', async () => {

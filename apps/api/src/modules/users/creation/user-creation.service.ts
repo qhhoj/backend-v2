@@ -15,7 +15,6 @@ import {
   MAILER,
   REDIS,
   ValidationFailedError,
-  withRedisLock,
 } from '@libs/common';
 import type { FieldIssue, Mailer } from '@libs/common';
 import { uuidStr } from '@libs/database';
@@ -25,6 +24,7 @@ import { OrganizationPointsService } from '../../organizations/core/organization
 import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { EMAIL_TAKEN, normaliseEmail } from '../core/dto/email';
+import { withEmailLock } from '../core/email-lock';
 import { USERNAME_TAKEN } from '../core/dto/username';
 import type { CreateUsersDto, NewUserDto } from './dto/user-creation.dto';
 import type { CreatedUserResponse } from './dto/user-creation.response';
@@ -34,7 +34,6 @@ const GENERATED_LENGTH = 12;
 /** Rows hashed at once: PBKDF2 runs on the libuv pool, so a few in parallel use it without starving other requests. */
 const PARALLEL_ROWS = 4;
 /** Same lock as registration and the staff e-mail edit, so no two accounts claim one address at once. */
-const EMAIL_LOCK_SECONDS = 30;
 const ROW_FAILED: FieldIssue = {
   field: 'username',
   code: 'row_failed',
@@ -153,13 +152,10 @@ export class UserCreationService {
     const insert = () => this.insertRow(principal, row, email, organizationId);
     try {
       return email
-        ? await withRedisLock(
+        ? await withEmailLock(
             this.redis,
-            {
-              key: `register-lock:email:${email.toLowerCase()}`,
-              ttlSeconds: EMAIL_LOCK_SECONDS,
-              busyMessage: 'This e-mail is being registered',
-            },
+            email,
+            'This e-mail is being registered',
             insert,
           )
         : await insert();

@@ -977,6 +977,19 @@ afterAll(() => api.teardown());
       );
     });
 
+    it('renews the e-mail lock while staff change an e-mail', async () => {
+      await createUserWith(api, 'hana');
+      const timers = jest.spyOn(global, 'setInterval');
+      try {
+        await authed(api.http().patch(`${USER('hana')}/profile`), admin)
+          .send({ currentPassword: OLD, email: 'hana.new@example.com' })
+          .expect(200);
+        expect(timers.mock.calls.map(([, delay]) => delay)).toContain(10_000);
+      } finally {
+        timers.mockRestore();
+      }
+    });
+
     it('keeps e-mails unique case-insensitively, normalises the domain and audits the changed fields', async () => {
       const erin = await createUserWith(api, 'erin');
       await createUserWith(api, 'frank', { email: 'Frank@Example.com' });
@@ -1142,6 +1155,27 @@ afterAll(() => api.teardown());
         .post('/api/internal/auth/login')
         .send({ username: 'pupil1', password: rows[0].generatedPassword })
         .expect(200);
+    });
+
+    it('renews the e-mail lock while staff create an account with an e-mail', async () => {
+      const creator = await loginAs(
+        api,
+        (
+          await createUserWith(api, 'lockmaker', {
+            permissions: ['auth.add_user'],
+          })
+        )._id,
+      );
+      const timers = jest.spyOn(global, 'setInterval');
+      try {
+        await authed(api.http().post('/api/internal/admin/users'), creator)
+          .send({ users: [{ username: 'locked1', email: 'l1@example.com' }] })
+          .expect(201);
+        // The lock's renewal runs every third of its 30 s expiry.
+        expect(timers.mock.calls.map(([, delay]) => delay)).toContain(10_000);
+      } finally {
+        timers.mockRestore();
+      }
     });
 
     it('mails a reset link to an active user', async () => {

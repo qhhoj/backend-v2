@@ -6,7 +6,6 @@ import {
   conflictIssue,
   REDIS,
   ValidationFailedError,
-  withRedisLock,
 } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type Redis from 'ioredis';
@@ -14,6 +13,7 @@ import { linkedProviders } from '../../auth/social/oauth-provider';
 import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { EMAIL_TAKEN, normaliseEmail } from '../core/dto/email';
+import { withEmailLock } from '../core/email-lock';
 import type { UpdateUserByStaffDto } from './dto/user-edit.dto';
 import { UserEditResponse } from './dto/user-edit.response';
 import { asCurrentSuperuser } from '../access/superuser-lock';
@@ -24,7 +24,6 @@ import type { Changes } from './user-field-changes';
 import { UserMembershipEditor } from './user-membership-editor';
 
 /** Same lock as registration, so a signup and a staff edit cannot claim one address together. */
-const EMAIL_LOCK_SECONDS = 30;
 
 /** A 403 for a field only `auth.change_user` holders may change, with its issue code. */
 const needsChangeUser = (field: string, code: string) =>
@@ -106,7 +105,12 @@ export class UserProfileEditingService {
         };
       }
       if (email !== undefined) {
-        await this.withEmailLock(email, () => this.writeEmail(user, email));
+        await withEmailLock(
+          this.redis,
+          email,
+          'This e-mail is being registered; try again',
+          () => this.writeEmail(user, email),
+        );
         Object.assign(changes, emailChanges(user, email));
       }
     } finally {
@@ -200,21 +204,6 @@ export class UserProfileEditingService {
       apiTokenHash: null,
     });
     await this.sessions.destroyAllForUser(user._id);
-  }
-
-  private async withEmailLock(
-    email: string,
-    work: () => Promise<void>,
-  ): Promise<void> {
-    await withRedisLock(
-      this.redis,
-      {
-        key: `register-lock:email:${email.toLowerCase()}`,
-        ttlSeconds: EMAIL_LOCK_SECONDS,
-        busyMessage: 'This e-mail is being registered; try again',
-      },
-      work,
-    );
   }
 
   /** E-mails are not uniquely indexed (legacy duplicates): checked case-insensitively before any write, and again under the lock. */
