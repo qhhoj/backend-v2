@@ -38,7 +38,7 @@ import {
 } from '../src/jobs/polygon-import/local-edits';
 import { ProblemPurgeService } from '../src/jobs/problem-purge/problem-purge.service';
 import { PolygonAutoSyncService } from '../src/jobs/polygon-autosync/polygon-autosync.service';
-import { seedContest } from './effects-fixtures';
+import { seedContest, seedProblem } from './effects-fixtures';
 import { buildPolygonPackage, properties } from './polygon-fixtures';
 import type { PolygonFixture } from './polygon-fixtures';
 import { softDeleteWorker } from './deleted-problem-fixtures';
@@ -1127,6 +1127,31 @@ describe('Polygon link, sync and auto-sync', () => {
       expect(
         await worker.problems.findOne({ code: 'auto_race' }),
       ).toMatchObject({ name: 'Sum v2', timeLimit: 3 });
+    });
+
+    it('holds a sync of a root while a contest runs one of its mirrors', async () => {
+      const problem = await linked('auto_root');
+      const mirror = await seedProblem(worker, {
+        code: 'auto_mirror',
+        mirrorOf: problem._id,
+        mirrorRoot: problem._id,
+      });
+      const contest = await seedContest(worker, {
+        problems: [{ problem: mirror._id, points: 100, order: 0 }],
+      } as never);
+      const sync = syncJob(
+        'auto_root',
+        { packageId: 20, revision: 6 },
+        problem.dataVersion,
+      );
+      const held = await runJob({
+        ...sync,
+        polygon: { ...sync.polygon!, trigger: 'auto' as const },
+      });
+      expect(held.delayedTo).toEqual([contest.endTime.getTime()]);
+      expect(
+        await worker.problems.findOne({ code: 'auto_root' }),
+      ).toMatchObject({ name: 'Sum', timeLimit: 1 });
     });
 
     it('fails an automatic sync still held by a contest a week after it was queued, recording why', async () => {

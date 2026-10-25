@@ -18,10 +18,15 @@ export class RunningContestsRepository {
       .lean()
       .exec();
     if (!problem) return null;
+    const mirrors = await this.problems
+      .find({ mirrorRoot: problem._id }, { _id: 1 })
+      .lean()
+      .exec();
+    const judgedWithIt = [problem._id, ...mirrors.map((mirror) => mirror._id)];
     const contest = await this.contests
       .findOne(
         {
-          'problems.problem': problem._id,
+          'problems.problem': { $in: judgedWithIt },
           startTime: { $lte: now },
           endTime: { $gt: now },
         },
