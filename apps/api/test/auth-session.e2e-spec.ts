@@ -379,6 +379,58 @@ describe('auth session endpoints', () => {
     expect(session.user.username).toBe('victor');
   });
 
+  it('locks only the mistyped username on a shared address, never the whole classroom', async () => {
+    const auth = api.app.get(AuthService);
+    const classroom = '192.0.2.10';
+    const password = 'correct horse battery';
+    const students = await Promise.all(
+      Array.from({ length: 60 }, (_unused, index) =>
+        createUser(api.users, {
+          username: `student${index}`,
+          email: `student${index}@example.com`,
+        }),
+      ),
+    );
+    const typeThenSignIn = async (username: string) => {
+      for (let typo = 0; typo < 3; typo++)
+        await expect(
+          auth.login(username, 'wrong password', classroom, null),
+        ).rejects.toMatchObject({ code: 'invalid_credentials' });
+      return (await auth.login(username, password, classroom, null)).user;
+    };
+    const signedIn = await Promise.all(
+      students.map(({ username }) => typeThenSignIn(username)),
+    );
+    expect(signedIn).toHaveLength(60);
+
+    const typist = await createUser(api.users, {
+      username: 'typist',
+      email: 'typist@example.com',
+    });
+    const codes: string[] = [];
+    for (let attempt = 0; attempt < 15; attempt++)
+      codes.push(
+        await auth.login('typist', 'wrong password', classroom, null).then(
+          () => 'signed_in',
+          (error: AppError) => error.code,
+        ),
+      );
+    expect(codes).toEqual([
+      ...Array<string>(10).fill('invalid_credentials'),
+      ...Array<string>(5).fill('rate_limited'),
+    ]);
+    const redis = api.app.get<Redis>(REDIS);
+    // refused attempts are not counted
+    expect(
+      await redis.get(`rate:login:user:${typist._id}:ip:${classroom}`),
+    ).toBe('10');
+    await expect(
+      auth.login('typist', password, classroom, null),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
+    const classmate = await auth.login('student0', password, classroom, null);
+    expect(classmate.user.username).toBe('student0');
+  });
+
   it('meters correct passwords per account, shared by login and confirmation, even in a concurrent burst', async () => {
     const owner = await createUser(api.users, {
       username: 'looper',

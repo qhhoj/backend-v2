@@ -59,6 +59,22 @@ describe('RateLimitService', () => {
     expect(await redis.get('rate:reserve:c')).toBe('2');
     expect(await redis.get('rate:reserve:d')).toBe('1');
   });
+  it('refuses a claim over any limit without counting it on any key', async () => {
+    await limiter.claim([{ key: 'claim:full', limit: 1 }], 60);
+    await expect(
+      limiter.claim(
+        [
+          { key: 'claim:full', limit: 1 },
+          { key: 'claim:fresh', limit: 5 },
+        ],
+        60,
+      ),
+    ).rejects.toMatchObject({ code: 'rate_limited', status: 429 });
+    expect(await redis.mget('rate:claim:full', 'rate:claim:fresh')).toEqual([
+      '1',
+      null,
+    ]);
+  });
   it('tells a refused caller how long until the window ends', async () => {
     await limiter.reserve(['wait'], 1, 60);
     const refused = await limiter

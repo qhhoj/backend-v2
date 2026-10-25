@@ -1,5 +1,7 @@
 export const FAILURE_LIMIT = 10;
 export const FAILURE_WINDOW_SECONDS = 15 * 60;
+/** Login failures per address and window, across every username: a ceiling against spraying, high enough that a 60-student room behind one NAT, each with a few typos, never reaches it. */
+export const FAILURE_IP_LIMIT = 300;
 /** Correct passwords per account and window (login, and confirmation): each check is a full PBKDF2 hash. */
 export const SUCCESS_ACCOUNT_LIMIT = 20;
 /** Correct logins per address and window: high enough for a classroom behind one NAT signing in together. */
