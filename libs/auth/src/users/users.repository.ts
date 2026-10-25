@@ -1,13 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import {
-  CI,
-  isUuid,
-  SocialAuth,
-  User,
-  uuidStr,
-  WebauthnCredential,
-} from '@libs/database';
+import { CI, isUuid, User, uuidStr, WebauthnCredential } from '@libs/database';
 import { AppError } from '@libs/common';
 import { HydratedDocument, Model } from 'mongoose';
 
@@ -99,20 +92,6 @@ export class UsersRepository {
         'socialAuth.uid': { $exists: true },
       })
       .exec();
-  }
-
-  /** False when the user already has a link for this provider (one account per provider). */
-  async linkSocial(userId: string, link: SocialAuth): Promise<boolean> {
-    const { matchedCount } = await this.users
-      .updateOne(
-        {
-          _id: userId,
-          socialAuth: { $not: { $elemMatch: { provider: link.provider } } },
-        },
-        { $push: { socialAuth: link } },
-      )
-      .exec();
-    return matchedCount === 1;
   }
 
   /** False when the user has no link for this provider. */
