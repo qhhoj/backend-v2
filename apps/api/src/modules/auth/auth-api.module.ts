@@ -16,6 +16,8 @@ import { RegistrationService } from './registration/registration.service';
 import { SecondFactorService } from './two-factor/second-factor.service';
 import { OAuthProvidersService } from './social/oauth-providers.service';
 import { SocialController } from './social/social.controller';
+import { SocialLinksController } from './social/social-links.controller';
+import { SocialLinksService } from './social/social-links.service';
 import { SocialService } from './social/social.service';
 import { TotpController } from './two-factor/totp.controller';
 import { TotpService } from './two-factor/totp.service';
@@ -32,6 +34,7 @@ import { WebauthnService } from './two-factor/webauthn.service';
     TotpController,
     WebauthnController,
     SocialController,
+    SocialLinksController,
   ],
   providers: [
     AuthService,
@@ -45,6 +48,7 @@ import { WebauthnService } from './two-factor/webauthn.service';
     WebauthnService,
     RateLimitService,
     SocialService,
+    SocialLinksService,
     OAuthProvidersService,
   ],
   exports: [AuthService, PasswordResetService],

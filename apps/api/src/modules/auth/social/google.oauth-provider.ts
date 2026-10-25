@@ -1,11 +1,12 @@
 import type { OAuthClientSetting as OAuthClient } from '@libs/settings';
 import { fetchJson, requireText } from './fetch-json';
 import { challengeOf } from './pkce';
+import { SOCIAL_PROVIDER_NAMES } from './oauth-provider';
 import type { OAuthProvider, SocialIdentity } from './oauth-provider';
 
 export class GoogleOAuthProvider implements OAuthProvider {
   readonly slug = 'google';
-  readonly legacyName = 'google-oauth2';
+  readonly legacyName = SOCIAL_PROVIDER_NAMES.google;
 
   constructor(private readonly client: OAuthClient) {}
 

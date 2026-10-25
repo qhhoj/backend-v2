@@ -1,6 +1,7 @@
 import { uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
 import type { UserDocument } from '@libs/auth';
+import { linkedProviders } from '../../../auth/social/oauth-provider';
 import { OrganizationSummaryResponse } from '../../../organizations/core/dto/organization.response';
 
 /** The fields staff edit on a user, plus the flags the panel needs to explain what it may do. */
@@ -27,6 +28,8 @@ export class UserEditResponse {
   inContest!: boolean;
   /** Whether TOTP or a security key is set up (reset through `reset-two-factor`). */
   hasTwoFactor!: boolean;
+  /** Slugs of the social sign-in providers linked to the account (removed through `DELETE social-links`). */
+  socialProviders!: string[];
   isActive!: boolean;
   isStaff!: boolean;
   isSuperuser!: boolean;
@@ -58,6 +61,7 @@ export class UserEditResponse {
       notes: user.notes ?? '',
       inContest: user.currentParticipation !== null,
       hasTwoFactor: user.isTotpEnabled || user.isWebauthnEnabled,
+      socialProviders: linkedProviders(user.socialAuth),
       isActive: user.isActive,
       isStaff: user.isStaff,
       isSuperuser: user.isSuperuser,

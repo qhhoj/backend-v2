@@ -14,8 +14,10 @@ import {
   createUser,
   errorCode,
   sessionCookie,
+  issueCodes,
   setupApiTest,
 } from './setup';
+import { authed, loginAs } from './problem-fixtures';
 
 const SOCIAL = '/api/internal/auth/social';
 const SITE = 'http://localhost:5173';
@@ -149,20 +151,45 @@ describe('social login', () => {
     expect((await api.users.findOne())!.lastLogin).not.toBeNull();
   });
 
-  it('links a verified email of exactly one active user and logs in', async () => {
-    await createUser(api.users, {});
+  it('links a verified email of exactly one active user and logs in; a never-signed-in account loses its earlier credentials', async () => {
+    const created = await createUser(api.users, { apiTokenHash: 'earlier' });
+    const earlier = await loginAs(api, created._id);
+    const kept = await createUser(api.users, {
+      username: 'bob',
+      email: 'bob@example.com',
+      lastLogin: new Date(),
+    });
     github.identities.set('code-1', {
       uid: 'g-9',
       email: 'ALICE@example.com',
       emailVerified: true,
     });
+    google.identities.set('code-2', {
+      uid: 'go-9',
+      email: 'bob@example.com',
+      emailVerified: true,
+    });
     const response = await login('code-1');
     expect(response.headers.location).toBe(`${SITE}/`);
     expect(cookieValue(response.headers, 'qhhoj_session')).toBeTruthy();
-    const user = (await api.users.findOne())!;
+    const user = (await api.users.findById(created._id))!;
     expect(user.socialAuth.map(({ provider, uid }) => [provider, uid])).toEqual(
       [['github-secure', 'g-9']],
     );
+    expect(user.apiTokenHash).toBeNull();
+    await authed(api.http().get('/api/internal/auth/me'), earlier).expect(401);
+    const passwordLogin = (username: string) =>
+      api
+        .http()
+        .post('/api/internal/auth/login')
+        .send({ username, password: PASSWORD });
+    await passwordLogin('alice').expect(401);
+    await callback((await start('google')).state, {
+      code: 'code-2',
+      slug: 'google',
+    }).expect('location', `${SITE}/`);
+    expect((await api.users.findById(kept._id))!.socialAuth).toHaveLength(1);
+    await passwordLogin('bob').expect(200);
   });
 
   it('does not link by an unverified email', async () => {
@@ -472,5 +499,95 @@ describe('social login', () => {
     await complete({ token, username: 'third', password: PASSWORD })
       .expect(400)
       .expect(errorCode('invalid_token'));
+  });
+
+  it('removes one social link with the current password, never from an account without a usable password', async () => {
+    const user = await createUser(api.users, {
+      socialAuth: [
+        { provider: 'github-secure', uid: 'g-1', extraData: {} },
+        { provider: 'google-oauth2', uid: 'go-1', extraData: {} },
+      ],
+    });
+    const session = await loginAs(api, user._id);
+    const unlink = (provider: string, currentPassword = PASSWORD) =>
+      authed(api.http().delete(`${SOCIAL}/links/${provider}`), session).send({
+        currentPassword,
+      });
+    await authed(api.http().get(`${SOCIAL}/links`), session)
+      .expect(200)
+      .expect(({ body }) =>
+        expect((body as { data: { providers: string[] } }).data).toEqual({
+          providers: ['github', 'google'],
+        }),
+      );
+    await unlink('github', 'wrong password')
+      .expect(400)
+      .expect(errorCode('invalid_credentials'));
+    await unlink('github').expect(204);
+    await unlink('github').expect(404);
+    expect(
+      (await api.users.findById(user._id))!.socialAuth.map(({ uid }) => uid),
+    ).toEqual(['go-1']);
+    github.identities.set('code-1', {
+      uid: 'g-1',
+      email: null,
+      emailVerified: false,
+    });
+    expect((await login('code-1')).headers.location).toBe(
+      `${SITE}/login?error=email_unverified`,
+    );
+    await api.users.updateOne({ _id: user._id }, { password: '!unusable' });
+    await unlink('google')
+      .expect(409)
+      .expect(issueCodes(['password_unusable']));
+  });
+
+  it('staff recovery cuts the social links: an e-mail change clears them and the remove action removes them, both audited', async () => {
+    const alice = await createUser(api.users, linkOf('google-oauth2', 'go-1'));
+    const admin = await createUser(api.users, {
+      username: 'admin',
+      email: 'admin@example.com',
+      permissions: ['judge.change_profile', 'auth.change_user'],
+    });
+    const staff = await loginAs(api, admin._id);
+    const profile = '/api/internal/admin/users/alice/profile';
+    const providersOf = ({ body }: { body: unknown }) =>
+      (body as { data: { socialProviders: string[] } }).data.socialProviders;
+    expect(
+      providersOf(await authed(api.http().get(profile), staff).expect(200)),
+    ).toEqual(['google']);
+    const edited = await authed(api.http().patch(profile), staff)
+      .send({ email: 'alice-new@example.com', currentPassword: PASSWORD })
+      .expect(200);
+    expect(providersOf(edited)).toEqual([]);
+    google.identities.set('code-1', {
+      uid: 'go-1',
+      email: 'alice@example.com',
+      emailVerified: true,
+    });
+    const again = await callback((await start('google')).state, {
+      code: 'code-1',
+      slug: 'google',
+    });
+    expect(again.headers.location).toMatch(
+      new RegExp(`^${SITE}/register/social\\?token=`),
+    );
+    await api.users.updateOne(
+      { _id: alice._id },
+      linkOf('github-secure', 'g-1'),
+    );
+    await authed(
+      api.http().delete('/api/internal/admin/users/alice/social-links'),
+      staff,
+    ).expect(204);
+    expect((await api.users.findById(alice._id))!.socialAuth).toEqual([]);
+    const audit = await api.revisions
+      .find({ entity: 'user', entityId: alice._id })
+      .sort({ _id: 1 })
+      .lean();
+    expect(audit.map((row) => [row.action, row.changes.socialAuth])).toEqual([
+      ['staff_edit', { before: ['google'], after: [] }],
+      ['staff_remove_social_links', { before: ['github'], after: [] }],
+    ]);
   });
 });

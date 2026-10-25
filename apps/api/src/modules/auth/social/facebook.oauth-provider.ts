@@ -1,10 +1,11 @@
 import type { OAuthClientSetting as OAuthClient } from '@libs/settings';
 import { fetchJson, requireText } from './fetch-json';
+import { SOCIAL_PROVIDER_NAMES } from './oauth-provider';
 import type { OAuthProvider, SocialIdentity } from './oauth-provider';
 
 export class FacebookOAuthProvider implements OAuthProvider {
   readonly slug = 'facebook';
-  readonly legacyName = 'facebook';
+  readonly legacyName = SOCIAL_PROVIDER_NAMES.facebook;
 
   constructor(private readonly client: OAuthClient) {}
 

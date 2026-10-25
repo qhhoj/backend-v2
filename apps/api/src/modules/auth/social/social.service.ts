@@ -1,5 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { constantTimeEqual, randomToken, UsersRepository } from '@libs/auth';
+import {
+  constantTimeEqual,
+  randomToken,
+  unusablePasswordHash,
+  UsersRepository,
+} from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
 import {
   AppError,
@@ -213,8 +218,10 @@ export class SocialService {
         uid,
         extraData: {},
       }))
-    )
+    ) {
+      await this.endCreatorCredentials(match);
       return this.login(match, previousSessionId);
+    }
 
     const token = randomToken();
     const pending: PendingLogin = {
@@ -232,6 +239,13 @@ export class SocialService {
       location: `${this.env.siteUrl}/register/social?token=${token}`,
       pendingToken: token,
     };
+  }
+
+  /** An account never signed in to may have been registered by someone else with this address: its password, sessions and API token go, so only the provider identity opens it until a password is set with the reset form. */
+  private async endCreatorCredentials(user: UserDocument): Promise<void> {
+    if (user.lastLogin !== null) return;
+    await this.users.update(user._id, { password: unusablePasswordHash() });
+    await this.auth.logoutAll(user._id);
   }
 
   private async login(

@@ -109,7 +109,9 @@ describe('disqualification', () => {
   });
 
   it('bans the account at the threshold of disqualifications outside organisation-private contests, and lifts only that ban', async () => {
-    const repeat = await createUserWith(api, 'repeat_cheater');
+    const repeat = await createUserWith(api, 'repeat_cheater', {
+      apiTokenHash: 'minted before the ban',
+    });
     const session = await loginAs(api, repeat._id);
     const inContest = async (extra = {}) => {
       const contest = await createContest(api, {
@@ -144,6 +146,7 @@ describe('disqualification', () => {
       banReason: CONTEST_CHEATING_BAN_REASON,
       isUnlisted: true,
       displayRank: 'banned',
+      apiTokenHash: null,
     });
     await authed(
       api.http().get('/api/internal/contests/current'),
@@ -158,6 +161,11 @@ describe('disqualification', () => {
       displayRank: 'user',
       isActive: true,
     });
+    // The ban ended the session: lifting it does not bring it back.
+    await authed(
+      api.http().get('/api/internal/contests/current'),
+      session,
+    ).expect(401);
     await api.users.updateOne({ _id: repeat._id }, { banReason: 'Spam' });
     await disqualify(first.contest.key, first.participation._id, true).expect(
       201,

@@ -73,7 +73,7 @@ export class SocialController {
    *
    * @remarks
    * Public. The provider redirects the browser here. Always answers with a 302 to the site: to `/` (or `/login/2fa` when a second factor is pending) after signing in, to `/register/social?token=...` when a new account must be completed with `POST /auth/social/complete`, or to `/login?error=<code>` with `oauth_state`, `oauth_failed`, `email_unverified`, `banned`, `account_not_activated` or `account_disabled`.
-   * A verified email that matches exactly one active account links the provider to it. The state is single use.
+   * A verified email that matches exactly one active account links the provider to it; when that account was never signed in to, its password stops working (set one with the reset form) and its other sessions and API token end. The state is single use.
    */
   @ApiParam({
     name: 'provider',

@@ -1,6 +1,7 @@
 import type { OAuthClientSetting as OAuthClient } from '@libs/settings';
 import { fetchJson, requireText } from './fetch-json';
 import { challengeOf } from './pkce';
+import { SOCIAL_PROVIDER_NAMES } from './oauth-provider';
 import type { OAuthProvider, SocialIdentity } from './oauth-provider';
 
 const API_HEADERS = {
@@ -10,7 +11,7 @@ const API_HEADERS = {
 
 export class GithubOAuthProvider implements OAuthProvider {
   readonly slug = 'github';
-  readonly legacyName = 'github-secure';
+  readonly legacyName = SOCIAL_PROVIDER_NAMES.github;
 
   constructor(private readonly client: OAuthClient) {}
 
