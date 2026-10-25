@@ -5,6 +5,23 @@ import { REDIS } from '../redis/redis.module';
 import { execOrThrow } from '../redis/redis-exec';
 
 const rateKey = (key: string) => `rate:${key}`;
+/**
+ * KEYS: the rate keys; ARGV[1]: the window, ARGV[1 + i]: KEYS[i]'s limit. Returns the 1-based indexes of the keys
+ * already at their limit and then counts nothing (a refusal never touches a window, so it cannot give back a hit of a
+ * later one); otherwise counts one hit on every key, starting a window where none runs.
+ */
+const CLAIM_SCRIPT = `
+local over = {}
+for i, key in ipairs(KEYS) do
+  if tonumber(redis.call('GET', key) or '0') >= tonumber(ARGV[i + 1]) then over[#over + 1] = i end
+end
+if #over > 0 then return over end
+for _, key in ipairs(KEYS) do
+  redis.call('INCR', key)
+  redis.call('EXPIRE', key, ARGV[1], 'NX')
+end
+return over
+`;
 
 @Injectable()
 export class RateLimitService {
@@ -26,26 +43,25 @@ export class RateLimitService {
   }
 
   /**
-   * Hits every key before the guarded work, each against its own limit; over any limit gives every hit back and throws,
-   * else returns a release that gives them back. Unlike `reserve`, a refusal costs nothing, so callers can claim a
-   * budget that only finished work keeps.
+   * Hits every key before the guarded work, each against its own limit, in one atomic step; over any limit throws and
+   * counts nothing, else returns a release that gives the hits back. Unlike `reserve`, a refusal costs nothing, so
+   * callers can claim a budget that only finished work keeps.
    */
   async claim(
     budgets: ReadonlyArray<{ key: string; limit: number }>,
     windowSeconds: number,
   ): Promise<() => Promise<void>> {
     const keys = budgets.map(({ key }) => key);
-    const counts = await this.hitAll(keys, windowSeconds);
-    const release = () => this.releaseAll(keys);
-    const overLimit = keys.filter(
-      (_key, index) => counts[index] > budgets[index].limit,
-    );
-    if (overLimit.length === 0) return release;
-    try {
-      throw await this.refusal(overLimit);
-    } finally {
-      await release();
-    }
+    const overLimit = (await this.redis.eval(
+      CLAIM_SCRIPT,
+      keys.length,
+      ...keys.map(rateKey),
+      windowSeconds,
+      ...budgets.map(({ limit }) => limit),
+    )) as number[];
+    if (overLimit.length > 0)
+      throw await this.refusal(overLimit.map((index) => keys[index - 1]));
+    return () => this.releaseAll(keys);
   }
 
   /** Hits every key before the guarded work; over the limit throws (hits stay counted), else returns a release that gives the attempt back. */
