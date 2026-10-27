@@ -23016,7 +23016,7 @@
     },
     "/api/internal/auth/social/{provider}/callback": {
       "get": {
-        "description": "Public. The provider redirects the browser here. Always answers with a 302 to the site: to `/` (or `/login/2fa` when a second factor is pending) after signing in, to `/register/social?token=...` when a new account must be completed with `POST /auth/social/complete`, or to `/login?error=<code>` with `oauth_state`, `oauth_failed`, `email_unverified`, `banned`, `account_not_activated` or `account_disabled`.\nA verified email that matches exactly one active account links the provider to it and ends that account's other sessions and API token; when it was never signed in to, its password also stops working (set one with the reset form). The state is single use.",
+        "description": "Public. The provider redirects the browser here. Always answers with a 302 to the site: to `/` (or `/login/2fa` when a second factor is pending) after signing in, to `/register/social?token=...` when a new account must be completed with `POST /auth/social/complete`, or to `/login?error=<code>` with `oauth_state`, `oauth_failed`, `email_unverified`, `social_email_in_use`, `banned`, `account_not_activated` or `account_disabled`.\nA provider account that is not linked never attaches to an existing account by email: a verified email already used by an active account answers `social_email_in_use` and changes nothing (the person signs in with the password). The state is single use.",
         "operationId": "SocialController_callback",
         "parameters": [
           {
