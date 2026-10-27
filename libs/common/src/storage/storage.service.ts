@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { rm, stat } from 'node:fs/promises';
+import { readFile, rm, stat } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { ENV, type Env } from '../env/env';
 import { assertRealPathInside, writeFileAtomically } from './atomic-write';
@@ -24,6 +24,11 @@ export class StorageService {
       this.root,
     );
     return this.publicUrl(relativePath);
+  }
+
+  /** Copies a stored file to a new path and returns the new url. */
+  async copy(fromPath: string, toPath: string): Promise<string> {
+    return this.save(toPath, await readFile(this.resolveInside(fromPath)));
   }
 
   /** Refuses a path whose directory resolves outside MEDIA_ROOT through a symlink (an rsync'd legacy tree may hold one), so `rm` never reaches a file outside the root; a symlinked file itself is fine, `rm` removes only the link. */

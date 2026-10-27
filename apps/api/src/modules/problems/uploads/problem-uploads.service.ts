@@ -148,7 +148,7 @@ export class ProblemUploadsService {
       );
     const url = await this.replaceFile(auth, problem, {
       field: 'materialUrl',
-      relativePath: `materials/${problem._id}/${name}`,
+      relativePath: `materials/${newId()}/${name}`,
       content,
     });
     this.events.emit('statementChanged', problem._id);
