@@ -7,6 +7,7 @@ import {
   ContestParticipation,
   Flatpage,
   Group,
+  Judge,
   License,
   Organization,
   Problem,
@@ -39,6 +40,7 @@ const LABEL_FIELDS: Record<string, { model: string; field: string | null }> = {
   license: { model: License.name, field: 'key' },
   group: { model: Group.name, field: 'name' },
   submission: { model: Submission.name, field: null },
+  judge: { model: Judge.name, field: 'name' },
 };
 
 /** Kinds with no name of their own: the id is the reference. */

@@ -5,11 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Redis from 'ioredis';
 import { sha256 } from '@libs/auth';
+import type { Principal } from '@libs/auth';
 import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import { JudgeError, Status } from '@libs/judge-proto';
 import { BridgeCommandsService } from '@libs/judging';
 import { JudgesRepository } from '../../api/src/modules/judges/judges.repository';
 import { JudgesService } from '../../api/src/modules/judges/judges.service';
+import type { RevisionsRepository } from '../../api/src/modules/problems/core/revisions.repository';
 import { FakeJudge } from './fake-judge';
 import {
   seedCatalog,
@@ -181,7 +183,10 @@ describe('Judge link (gRPC)', () => {
       new JudgesService(
         new JudgesRepository(bridge.judges, bridge.submissions),
         commands,
+        // the admin audit trail is the api's concern; this suite drives only the bridge side
+        { append: () => Promise.resolve() } as unknown as RevisionsRepository,
       );
+    const staff = { userId: 'staff' } as Principal;
 
     it('rotating the key closes the judge, refuses the old key and serves the new one', async () => {
       await seedJudge(bridge, 'admin-rot', 'admin-rot-key');
@@ -195,7 +200,7 @@ describe('Judge link (gRPC)', () => {
         judge('admin-rot'),
       );
       await handshakeSeen(bridge, 'admin-rot');
-      const { authKey } = await admin().rotateKey('admin-rot');
+      const { authKey } = await admin().rotateKey(staff, 'admin-rot');
       expect((await fake.closed).code).toBe(status.PERMISSION_DENIED);
       expect((await handshaking.closed).code).toBe(status.PERMISSION_DENIED);
       const old = FakeJudge.open(bridge.judgePort(), judge('admin-rot'));
@@ -220,13 +225,13 @@ describe('Judge link (gRPC)', () => {
         judge('admin-block'),
       );
       await handshakeSeen(bridge, 'admin-block');
-      await admin().update('admin-block', { isBlocked: true });
+      await admin().update(staff, 'admin-block', { isBlocked: true });
       expect((await fake.closed).code).toBe(status.PERMISSION_DENIED);
       expect((await handshaking.closed).code).toBe(status.PERMISSION_DENIED);
       const refused = FakeJudge.open(bridge.judgePort(), judge('admin-block'));
       refused.hello();
       expect((await refused.closed).code).toBe(status.UNAUTHENTICATED);
-      await admin().update('admin-block', { isBlocked: false });
+      await admin().update(staff, 'admin-block', { isBlocked: false });
       const back = await FakeJudge.online(
         bridge.judgePort(),
         judge('admin-block'),
