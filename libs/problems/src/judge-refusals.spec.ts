@@ -95,6 +95,17 @@ describe('judgeRefusal', () => {
     ).toBe('cases.1.outputLimit');
   });
 
+  it('refuses an explicit output limit of 0 or less, and keeps null as the default', () => {
+    expect(judgeRefusal({ ...base, outputLimit: 0 })?.field).toBe(
+      'outputLimit',
+    );
+    expect(
+      judgeRefusal(withCases(plain, { ...plain, outputLimit: -1 }))?.field,
+    ).toBe('cases.1.outputLimit');
+    expect(judgeRefusal({ ...base, outputLimit: 1 })).toBeNull();
+    expect(judgeRefusal(base)).toBeNull();
+  });
+
   it('accepts an output limit of exactly 64 MiB', () => {
     const limit = JUDGE_MAX_OUTPUT_LIMIT;
     expect(
