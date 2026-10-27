@@ -160,7 +160,9 @@ describe('similarity run', () => {
       .spyOn(engine, 'compare')
       // Through `then`, so a throwing answer rejects like the real engine.
       .mockImplementation((request) =>
-        Promise.resolve().then(() => answer(request)),
+        Promise.resolve()
+          .then(() => answer(request))
+          .then((pairs) => ({ pairs, droppedByCap: 0 })),
       );
   /** Pairs every two submissions of a group: for tests about what reaches the engine and what the run does around it; the real engine (a Dolos child per group) is kept for the tests about how pairs are found. */
   const pairEveryone = ({ submissions }: EngineRequest): EnginePair[] =>
@@ -232,18 +234,18 @@ describe('similarity run', () => {
     });
   });
 
-  it('never pairs two submissions of one user', async () => {
+  it('never pairs two submissions of one user, and pairs two users once', async () => {
     const [ann, bob] = await newUsers(2);
-    const first = await submit(ann, SIEVE);
-    const second = await submit(ann, SIEVE_RENAMED);
+    await submit(ann, SIEVE);
+    await submit(ann, SIEVE_RENAMED);
     expect((await runAndLoad()).pairs).toHaveLength(0);
     await submit(bob, SIEVE);
     const { pairs } = await runAndLoad();
-    expect(pairs).toHaveLength(2);
-    for (const pair of pairs)
-      expect(uuidStr(pair.left.user)).not.toBe(uuidStr(pair.right.user));
-    const keys = pairs.map((pair) => idsOf(pair).join());
-    expect(keys).not.toContain([first._id, second._id].sort().join());
+    expect(
+      pairs.map((pair) =>
+        [uuidStr(pair.left.user), uuidStr(pair.right.user)].sort(),
+      ),
+    ).toEqual([[ann, bob].map(uuidStr).sort()]);
   });
 
   it('compares C with C++ as one family and lists languages without a grammar, eligible submissions only', async () => {
@@ -306,7 +308,7 @@ describe('similarity run', () => {
       limits: { ...limits, maxPairs: 2 },
     });
     expect(pairs).toHaveLength(2);
-    expect(run.groups[0].pairCount).toBe(2);
+    expect(run.groups[0]).toMatchObject({ pairCount: 2, droppedByCap: 4 });
   });
 
   it('applies maxPairs across groups, keeping the best pairs of any group', async () => {

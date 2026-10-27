@@ -58,27 +58,61 @@ export const toStoredPairs = (
     .filter((pair) => pair.leftUser !== pair.rightUser);
 };
 
-/** `maxPairs` bounds the whole run, not each group: the strongest of the kept and the added pairs, from any group. */
+/** The pairs a run keeps so far, and per group how many the run-wide cap left out. */
+export interface StrongestPairs {
+  pairs: StoredPair[];
+  cutPerGroup: Map<string, number>;
+}
+
+const userPairKey = (pair: StoredPair): string =>
+  [pair.problem, ...[pair.leftUser, pair.rightUser].sort()].join('/');
+
+/** One pair per problem and two users, the strongest: the language families of one problem are separate groups. */
+const strongestPerUserPair = (pairs: StoredPair[]): StoredPair[] => {
+  const strongest = new Map<string, StoredPair>();
+  for (const pair of pairs) {
+    const kept = strongest.get(userPairKey(pair));
+    if (!kept || strongestFirst(pair, kept) < 0)
+      strongest.set(userPairKey(pair), pair);
+  }
+  return [...strongest.values()];
+};
+
+const countPerGroup = (
+  counts: Map<string, number>,
+  pairs: StoredPair[],
+): Map<string, number> => {
+  const counted = new Map(counts);
+  for (const pair of pairs)
+    counted.set(groupKey(pair), (counted.get(groupKey(pair)) ?? 0) + 1);
+  return counted;
+};
+
+/** `maxPairs` bounds the whole run, not each group: the strongest of the kept and the added pairs, from any group, one per problem and two users. */
 export const keepStrongest = (
-  keptPairs: StoredPair[],
+  kept: StrongestPairs,
   addedPairs: StoredPair[],
   maxPairs: number,
-): StoredPair[] =>
-  keptPairs.concat(addedPairs).sort(strongestFirst).slice(0, maxPairs);
+): StrongestPairs => {
+  const ranked = strongestPerUserPair(kept.pairs.concat(addedPairs)).sort(
+    strongestFirst,
+  );
+  return {
+    pairs: ranked.slice(0, maxPairs),
+    cutPerGroup: countPerGroup(kept.cutPerGroup, ranked.slice(maxPairs)),
+  };
+};
 
-/** Each group's `pairCount`: how many of its pairs survived the run-wide cap. */
+/** Each group's `pairCount`, how many of its pairs survived the run-wide cap, and `droppedByCap`, how many the engine's and the run's caps left out. */
 export const withKeptPairCounts = (
   groups: SimilarityGroup[],
-  keptPairs: StoredPair[],
+  strongest: StrongestPairs,
 ): SimilarityGroup[] => {
-  const keptPerGroup = new Map<string, number>();
-  for (const pair of keptPairs)
-    keptPerGroup.set(
-      groupKey(pair),
-      (keptPerGroup.get(groupKey(pair)) ?? 0) + 1,
-    );
+  const keptPerGroup = countPerGroup(new Map(), strongest.pairs);
   return groups.map((group) => ({
     ...group,
     pairCount: keptPerGroup.get(groupKey(group)) ?? 0,
+    droppedByCap:
+      group.droppedByCap + (strongest.cutPerGroup.get(groupKey(group)) ?? 0),
   }));
 };

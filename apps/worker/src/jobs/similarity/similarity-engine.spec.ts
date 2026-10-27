@@ -66,9 +66,11 @@ const swappedBlocks = (): EngineRequest['submissions'] => [
 
 describe('SimilarityEngine', () => {
   const engine = new InspectableEngine();
+  const pairsOf = async (engineRequest: EngineRequest) =>
+    (await engine.compare(engineRequest)).pairs;
 
   it('scores a copy with renamed variables high and an unrelated solution low', async () => {
-    const pairs = await engine.compare(
+    const pairs = await pairsOf(
       request(
         [
           { id: 'sub-1', user: 'ann', source: SIEVE },
@@ -86,7 +88,7 @@ describe('SimilarityEngine', () => {
   });
 
   it('drops pairs under the minimum similarity', async () => {
-    const pairs = await engine.compare(
+    const pairs = await pairsOf(
       request([
         { id: 'sub-1', user: 'ann', source: SIEVE },
         { id: 'sub-2', user: 'bob', source: SIEVE_RENAMED },
@@ -98,21 +100,45 @@ describe('SimilarityEngine', () => {
     ]);
   });
 
-  it('never pairs two submissions of the same user, even identical ones both copied by someone else', async () => {
-    const pairs = await engine.compare(
+  it('never pairs two submissions of the same user, and pairs two users once however often they submitted', async () => {
+    const pairs = await pairsOf(
       request([
         { id: 'sub-1', user: 'ann', source: SIEVE },
         { id: 'sub-2', user: 'ann', source: SIEVE },
         { id: 'sub-3', user: 'bob', source: SIEVE_RENAMED },
       ]),
     );
-    const keys = pairs.map((pair) => `${pair.leftId}/${pair.rightId}`).sort();
-    expect(keys).toEqual(['sub-1/sub-3', 'sub-2/sub-3']);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].rightId).toBe('sub-3');
   });
+
+  it('spends maxPairs on distinct user pairs, one per two users however often they submitted, and counts what the cap left out', async () => {
+    const resubmissions = Array.from({ length: 50 }, (_item, index) => [
+      { id: `a${String(index).padStart(2, '0')}`, user: 'ann', source: SIEVE },
+      {
+        id: `b${String(index).padStart(2, '0')}`,
+        user: 'bob',
+        source: SIEVE_RENAMED,
+      },
+    ]).flat();
+    const submissions = [
+      ...resubmissions,
+      { id: 'c0', user: 'cat', source: KNAPSACK },
+      { id: 'd0', user: 'dan', source: KNAPSACK + '\n' + SIEVE },
+    ];
+    const userPair = (pair: { leftId: string; rightId: string }) =>
+      pair.leftId[0] + pair.rightId[0];
+    const { pairs, droppedByCap } = await engine.compare(
+      request(submissions, { maxPairs: 2 }),
+    );
+    expect(pairs.map(userPair)).toEqual(['ab', 'cd']);
+    // dan's file holds SIEVE too, so ann/dan and bob/dan clear the minimum (about 56%): the two the cap left out.
+    expect(droppedByCap).toBe(2);
+  }, 30_000);
 
   it('puts the lower submission id on the left whatever the input order, ranges following', async () => {
     const shifted = '// a\n'.repeat(5) + SIEVE_RENAMED;
-    const [pair] = await engine.compare(
+    const [pair] = await pairsOf(
       request([
         { id: 'sub-9', user: 'ann', source: SIEVE },
         { id: 'sub-2', user: 'bob', source: shifted },
@@ -128,7 +154,7 @@ describe('SimilarityEngine', () => {
   });
 
   it('keeps only the most similar pairs', async () => {
-    const pairs = await engine.compare(
+    const pairs = await pairsOf(
       request(
         [
           { id: 'sub-1', user: 'ann', source: SIEVE },
@@ -144,7 +170,7 @@ describe('SimilarityEngine', () => {
   });
 
   it('reports matched line ranges inside both sources', async () => {
-    const [pair] = await engine.compare(
+    const [pair] = await pairsOf(
       request([
         { id: 'sub-1', user: 'ann', source: SIEVE },
         { id: 'sub-2', user: 'bob', source: SIEVE_RENAMED },
@@ -169,7 +195,7 @@ describe('SimilarityEngine', () => {
       'program Sum;\nvar n, i: longint; total: int64; x: longint;\nbegin\n  readln(n); total := 0;\n  for i := 1 to n do begin read(x); total := total + x; end;\n  writeln(total);\nend.\n';
     const edited =
       '{ my solution }\nPROGRAM sum;\nVAR n, i: longint; total: int64; x: longint;\nBEGIN\n  readln(n); total := 0; // start\n  for i := 1 to n do begin read(x); total := total + x; end;\n  writeln(total);\nEND.\n';
-    const pairs = await engine.compare(
+    const pairs = await pairsOf(
       request(
         [
           { id: 'sub-1', user: 'ann', source: pascal.prepare(original) },
@@ -187,7 +213,7 @@ describe('SimilarityEngine', () => {
       await engine.compare(
         request([{ id: 'sub-1', user: 'ann', source: SIEVE }]),
       ),
-    ).toEqual([]);
+    ).toEqual({ pairs: [], droppedByCap: 0 });
   });
 
   it('kills the child at the deadline', async () => {
@@ -237,7 +263,7 @@ describe('SimilarityEngine', () => {
     const original = process.cwd();
     process.chdir(tmpdir());
     try {
-      const pairs = await engine.compare(request(twoCopies()));
+      const pairs = await pairsOf(request(twoCopies()));
       expect(pairs).toHaveLength(1);
     } finally {
       process.chdir(original);
@@ -245,9 +271,9 @@ describe('SimilarityEngine', () => {
   });
 
   it('keeps at most maxFragments ranges per pair, widest first', async () => {
-    const uncapped = await engine.compare(request(swappedBlocks()));
+    const uncapped = await pairsOf(request(swappedBlocks()));
     expect(uncapped[0].fragments.length).toBeGreaterThan(1);
-    const [capped] = await engine.compare(
+    const [capped] = await pairsOf(
       request(swappedBlocks(), { maxFragments: 1 }),
     );
     expect(capped.fragments).toHaveLength(1);

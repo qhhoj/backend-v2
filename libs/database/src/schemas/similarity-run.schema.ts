@@ -54,6 +54,8 @@ export class SimilarityGroup {
   /** More than `limits.maxSubmissions` submissions: only the newest were compared. */
   @Prop({ default: false }) truncated!: boolean;
   @Prop({ default: 0, min: 0 }) pairCount!: number;
+  /** Pairs of two users at or above `limits.minPercent` that the `maxPairs` cap left out (each two users count once per group). */
+  @Prop({ default: 0, min: 0 }) droppedByCap!: number;
   /** The engine failed on this group alone (an unusual parse): it is listed with no pairs and the rest of the run still completes. */
   @Prop({ default: false }) failed!: boolean;
 }
