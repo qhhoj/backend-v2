@@ -46,26 +46,25 @@ export class TicketMessagesService {
     return this.responses.messageOf(message);
   }
 
-  /** Rate limit, then the capped push; a refused write gives its hit back. */
+  /** Rate limit, then the render and the capped push; a refused body or write gives its hit back. */
   private async save(
     principal: Principal,
     ticketId: string,
     body: string,
   ): Promise<TicketMessage> {
-    const bodyHtml = renderField(body, 'user', 'body');
     const releaseHit = await this.rateLimits.reserve(
       [`ticket-message:${principal.userId}`],
       TICKET_MESSAGE_LIMIT,
       TICKET_WINDOW_SECONDS,
     );
-    const message = {
-      _id: newId(),
-      user: principal.userId,
-      body,
-      bodyHtml,
-      createdAt: new Date(),
-    };
     try {
+      const message = {
+        _id: newId(),
+        user: principal.userId,
+        body,
+        bodyHtml: renderField(body, 'user', 'body'),
+        createdAt: new Date(),
+      };
       if (
         !(await this.tickets.pushMessage(
           ticketId,
@@ -78,11 +77,11 @@ export class TicketMessagesService {
           409,
           'This ticket reached its limit of 500 messages',
         );
+      return message;
     } catch (error) {
       await releaseHit();
       throw error;
     }
-    return message;
   }
 
   /** The SSE feed, Discord and the inboxes. */

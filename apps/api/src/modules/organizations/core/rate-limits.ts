@@ -8,3 +8,6 @@ export const JOIN_REQUEST_WINDOW_SECONDS = 60 * 60;
 export const MEMBER_SLOTS_LOCK_SECONDS = 10;
 /** A join or signup waits for the lock this long: each holder keeps it for one count and one write. */
 export const MEMBER_SLOTS_WAIT_SECONDS = 5;
+/** `about` changes per user over every organization they administer (new; legacy had none), as many as profile `about` changes; a body the renderer refuses gives its hit back. */
+export const ORGANIZATION_ABOUT_LIMIT = 20;
+export const ORGANIZATION_ABOUT_WINDOW_SECONDS = 5 * 60;

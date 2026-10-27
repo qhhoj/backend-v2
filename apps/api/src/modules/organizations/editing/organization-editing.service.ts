@@ -6,6 +6,7 @@ import {
   conflictIssue,
   invalidField,
   isDuplicateKey,
+  RateLimitService,
   REDIS,
   unique,
   withRedisLock,
@@ -21,7 +22,11 @@ import { OrganizationMembersRepository } from '../core/organization-members.repo
 import { OrganizationPointsService } from '../core/organization-points.service';
 import { OrganizationsRepository } from '../core/organizations.repository';
 import { OrganizationsService } from '../core/organizations.service';
-import { ORGANIZATION_ADMIN_LOCK_SECONDS } from '../core/rate-limits';
+import {
+  ORGANIZATION_ABOUT_LIMIT,
+  ORGANIZATION_ABOUT_WINDOW_SECONDS,
+  ORGANIZATION_ADMIN_LOCK_SECONDS,
+} from '../core/rate-limits';
 import type { OrganizationDetailResponse } from '../core/dto/organization.response';
 import type {
   CreateOrganizationDto,
@@ -70,6 +75,7 @@ export class OrganizationEditingService {
     private readonly history: OrganizationRevisionsService,
     private readonly settings: SettingsService,
     @Inject(REDIS) private readonly redis: Redis,
+    private readonly rateLimits: RateLimitService,
   ) {}
 
   /** Legacy `CreateOrganization`: `short_name = slug[:20]`, unlisted until staff lists it, the creator always an admin. */
@@ -126,11 +132,6 @@ export class OrganizationEditingService {
     this.checkStaffFields(principal, dto);
     const { adminIds: requestedAdmins, about, ...fields } = dto;
     const changes: Partial<Organization> = { ...fields };
-    if (about !== undefined)
-      Object.assign(changes, {
-        about,
-        aboutHtml: renderField(about, 'user', 'about'),
-      });
     let added: string[] = [];
     if (requestedAdmins !== undefined) {
       const adminIds = unique(requestedAdmins);
@@ -140,6 +141,10 @@ export class OrganizationEditingService {
       added = adminIds.filter((id) => !current.includes(id));
       changes.adminIds = adminIds;
     }
+    Object.assign(
+      changes,
+      await this.aboutChange(principal, organization.about, about),
+    );
     const write = () =>
       withSlugTaken(() => this.organizations.update(organization._id, changes));
     if (added.length)
@@ -154,6 +159,26 @@ export class OrganizationEditingService {
       after: { ...organization.toObject(), ...changes },
     });
     return this.organizationsService.detail(principal, dto.slug ?? slug);
+  }
+
+  /** `about` with its rendered HTML when it differs from the stored text, rate limited per user before the render; a body the renderer refuses gives its hit back. */
+  private async aboutChange(
+    principal: Principal,
+    storedAbout: string,
+    about: string | undefined,
+  ): Promise<Partial<Organization>> {
+    if (about === undefined || about === storedAbout) return {};
+    const releaseHit = await this.rateLimits.reserve(
+      [`organization-about:${principal.userId}`],
+      ORGANIZATION_ABOUT_LIMIT,
+      ORGANIZATION_ABOUT_WINDOW_SECONDS,
+    );
+    try {
+      return { about, aboutHtml: renderField(about, 'user', 'about') };
+    } catch (error) {
+      await releaseHit();
+      throw error;
+    }
   }
 
   private checkStaffFields(

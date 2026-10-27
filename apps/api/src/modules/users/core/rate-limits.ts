@@ -7,3 +7,6 @@ export const ADMIN_CREDENTIAL_WINDOW_SECONDS = 3600;
 /** Username suggestions per user per minute: enough for typing in several pickers (the client debounces), too few to walk the whole user list. */
 export const USER_SUGGEST_LIMIT = 60;
 export const USER_SUGGEST_WINDOW_SECONDS = 60;
+/** Profile `about` changes per user (new; legacy had none), as many as comment edits; a body the renderer refuses gives its hit back. */
+export const ABOUT_EDIT_LIMIT = 20;
+export const ABOUT_EDIT_WINDOW_SECONDS = 5 * 60;

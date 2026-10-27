@@ -19,7 +19,7 @@ import { setupApiTest, errorCode } from './setup';
 import type { ApiTest } from './setup';
 import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
-import { REDIS } from '@libs/common';
+import { AppError, REDIS } from '@libs/common';
 import {
   newId,
   OrganizationCreditEntry,
@@ -32,6 +32,8 @@ import type { Model } from 'mongoose';
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
 import { QuotaLedger } from '@libs/problems';
 import { seedOrganizationWorld } from './organization-problem-fixtures';
+import * as markup from '../src/modules/problems/editing/problem-markup';
+import { ORGANIZATION_ABOUT_LIMIT } from '../src/modules/organizations/core/rate-limits';
 import type { OrganizationWorld } from './organization-problem-fixtures';
 import { contestProblem, createContest } from './contest-fixtures';
 import { getQueueToken } from '@nestjs/bullmq';
@@ -932,6 +934,29 @@ afterAll(() => api.teardown());
         await post(url, ownerSession, { markdown: '<b>hi</b>' }).expect(200),
       );
       expect(html).toContain('&lt;b&gt;hi&lt;/b&gt;');
+    });
+
+    it('limits about changes per user, refusing before any render; a refused body costs nothing', async () => {
+      const { user: owner, session } = await person();
+      const { slug } = await createOrganization(api, { adminIds: [owner._id] });
+      const render = jest
+        .spyOn(markup, 'renderField')
+        .mockImplementationOnce(() => {
+          throw new AppError('validation_failed', 400, 'Too much math');
+        });
+      await patch(organizationUrl(slug), session, { about: 'refused' }).expect(
+        400,
+      );
+      for (let index = 0; index < ORGANIZATION_ABOUT_LIMIT; index += 1)
+        await patch(organizationUrl(slug), session, {
+          about: `about ${index}`,
+        }).expect(200);
+      render.mockClear();
+      await patch(organizationUrl(slug), session, { about: 'one too many' })
+        .expect(429)
+        .expect(errorCode('rate_limited'));
+      expect(render).not.toHaveBeenCalled();
+      render.mockRestore();
     });
 
     it('searches members by username and ranks only the matches', async () => {

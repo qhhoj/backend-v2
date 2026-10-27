@@ -22,6 +22,8 @@ import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 import { createTicket, signedIn, ticketUrl } from './ticket-fixtures';
+import * as markup from '../src/modules/problems/editing/problem-markup';
+import { TICKET_MESSAGE_LIMIT } from '../src/modules/tickets/core/rate-limits';
 
 describe('filing tickets and posting messages', () => {
   let api: ApiTest;
@@ -179,6 +181,20 @@ describe('filing tickets and posting messages', () => {
     await post('muted', ticketUrl(muted._id, '/messages'), {
       body: 'hi',
     }).expect(403);
+  });
+
+  it('refuses a message over the rate limit before rendering it', async () => {
+    const ticket = await createTicket(api, { creator: people.filer.id });
+    for (let index = 0; index < TICKET_MESSAGE_LIMIT; index += 1)
+      await post('filer', ticketUrl(ticket._id, '/messages'), {
+        body: `reply ${index}`,
+      }).expect(201);
+    const render = jest.spyOn(markup, 'renderField');
+    await post('filer', ticketUrl(ticket._id, '/messages'), { body: 'more' })
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+    expect(render).not.toHaveBeenCalled();
+    render.mockRestore();
   });
 
   it('keeps at most 500 messages under parallel posts', async () => {

@@ -42,7 +42,7 @@ import type { ApiTest } from './setup';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
-import { REDIS } from '@libs/common';
+import { AppError, REDIS } from '@libs/common';
 import type { ContributionPointsJob, DiscordWebhookJob } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
@@ -50,6 +50,7 @@ import type { CommentVoteEntryResponse } from '../src/modules/comments/moderatio
 import type { VoteResponse } from '../src/modules/contributions/dto/vote.response';
 import { CommentPostingService } from '../src/modules/comments/posting/comment-posting.service';
 import { CommentsRepository } from '../src/modules/comments/core/comments.repository';
+import * as commentMarkup from '../src/modules/comments/core/comment-markup';
 import { RevisionsRepository } from '../src/modules/problems/core/revisions.repository';
 
 let api: ApiTest;
@@ -1120,7 +1121,7 @@ describe('comment posting and editing', () => {
       .expect(errorCode('rate_limited'));
   });
 
-  it('limits a user to 20 comment edits in 5 minutes; a refused edit costs nothing', async () => {
+  it('limits a user to 20 comment edits in 5 minutes, refusing before any render; a refused edit costs nothing', async () => {
     const { user, session } = await person();
     const page = await createPost(api);
     const comment = await createComment(api, {
@@ -1132,11 +1133,20 @@ describe('comment posting and editing', () => {
       .mockResolvedValueOnce(false);
     await edit(comment._id, session, 'conflict').expect(409);
     conflict.mockRestore();
+    const render = jest
+      .spyOn(commentMarkup, 'renderCommentBody')
+      .mockImplementationOnce(() => {
+        throw new AppError('validation_failed', 400, 'Too much math');
+      });
+    await edit(comment._id, session, 'refused').expect(400);
     for (let index = 0; index < 20; index += 1)
       await edit(comment._id, session, `edit ${index}`).expect(200);
+    render.mockClear();
     await edit(comment._id, session, 'one too many')
       .expect(429)
       .expect(errorCode('rate_limited'));
+    expect(render).not.toHaveBeenCalled();
+    render.mockRestore();
   });
 
   it('edits with a revision row per accepted edit, for the author and change_comment only', async () => {
