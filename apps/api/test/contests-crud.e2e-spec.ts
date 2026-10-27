@@ -640,7 +640,11 @@ describe('contest CRUD', () => {
           await profileQueries(api.db, () =>
             authed(api.http().get(contestUrl(key)), sessions.plain).expect(200),
           )
-        ).filter(({ collection }) => collection === 'users').length;
+        ).filter(
+          // Reads only: the activity buffer's lastAccess writes for earlier requests can land inside the window.
+          ({ collection, operation }) =>
+            collection === 'users' && operation === 'query',
+        ).length;
       const bare = await createContest(api);
       const named = await createContest(api, {
         curators: [users.tester._id, users.author._id],

@@ -1,10 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  constantTimeEqual,
-  randomToken,
-  unusablePasswordHash,
-  UsersRepository,
-} from '@libs/auth';
+import { constantTimeEqual, randomToken, UsersRepository } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
 import {
   AppError,
@@ -210,10 +205,9 @@ export class SocialService {
     if (!emailVerified || !usableEmail)
       return this.loginError('email_unverified');
 
-    // Several matches are ambiguous: never guess, let registration reject the taken email.
-    const [match, ...others] = await this.users.findActiveByEmail(usableEmail);
-    if (match && !others.length && (await this.autoLink(match, provider, uid)))
-      return this.login(match, previousSessionId);
+    // A provider account never attaches to an existing account by e-mail: that is done while signed in.
+    if ((await this.users.findActiveByEmail(usableEmail)).length)
+      return this.loginError('social_email_in_use');
 
     const token = randomToken();
     const pending: PendingLogin = {
@@ -231,29 +225,6 @@ export class SocialService {
       location: `${this.env.siteUrl}/register/social?token=${token}`,
       pendingToken: token,
     };
-  }
-
-  /** Ends the account's earlier credentials before the link is saved, so a failure in between leaves no link that would skip this on the next sign-in. False when the account already has a link for this provider. */
-  private async autoLink(
-    user: UserDocument,
-    provider: OAuthProvider,
-    uid: string,
-  ): Promise<boolean> {
-    if (user.socialAuth.some((link) => link.provider === provider.legacyName))
-      return false;
-    await this.endEarlierCredentials(user);
-    return this.users.linkSocial(user._id, {
-      provider: provider.legacyName,
-      uid,
-      extraData: {},
-    });
-  }
-
-  /** An auto-linked account may have been registered by someone else with this address: its other sessions and API token always end; a password chosen before the mailbox was proven also becomes unusable until one is set with the reset form. */
-  private async endEarlierCredentials(user: UserDocument): Promise<void> {
-    if (user.passwordSetBeforeVerification === true)
-      await this.users.update(user._id, { password: unusablePasswordHash() });
-    await this.auth.logoutAll(user._id);
   }
 
   private async login(
