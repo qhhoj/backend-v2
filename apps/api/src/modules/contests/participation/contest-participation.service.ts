@@ -101,7 +101,7 @@ export interface JoinCredentials {
   accessCode: string | undefined;
   /** Whether the request ticked the rules box. */
   acceptRules: boolean;
-  /** The rules revision the contestant read; absent from older clients. */
+  /** The rules revision the contestant read; absent from older clients, which are refused. */
   acceptRulesRevision: number | undefined;
   ip: string;
 }
@@ -276,7 +276,7 @@ export class ContestParticipationService {
     );
   }
 
-  /** The acceptance to store with a new row: none when the contest has no rules; `rules_not_accepted` when it has and the request did not tick the box; `rules_changed` when the revision the request read is no longer the current one. A request without a revision (older client) is accepted as before and logged. */
+  /** The acceptance to store with a new row: none when the contest has no rules; `rules_not_accepted` when it has and the request did not tick the box; `rules_changed` when the revision the request read is no longer the current one. A request without a revision (a client from an older cached bundle) is refused with `rules_changed`, so it reloads the rules and asks again. */
   private acceptanceFor(
     contest: ContestDocument,
     { acceptRules, acceptRulesRevision }: JoinCredentials,
@@ -284,10 +284,7 @@ export class ContestParticipationService {
   ): RulesAcceptance | null {
     if (contest.rules === '') return null;
     if (!acceptRules) throw rulesNotAccepted();
-    if (acceptRulesRevision === undefined)
-      this.logger.warn(`Rules accepted without a revision: ${contest.key}`);
-    else if (acceptRulesRevision !== contest.rulesRevision)
-      throw rulesChanged();
+    if (acceptRulesRevision !== contest.rulesRevision) throw rulesChanged();
     return {
       rulesAcceptedAt: now,
       rulesAcceptedRevision: contest.rulesRevision,

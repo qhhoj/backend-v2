@@ -6652,7 +6652,7 @@
             "type": "boolean"
           },
           "acceptRulesRevision": {
-            "description": "The `rulesRevision` the contestant read; a different current revision answers 409 `rules_changed`. Optional for one release.",
+            "description": "The `rulesRevision` the contestant read; a missing or different current revision answers 409 `rules_changed`. Required when the contest has rules.",
             "minimum": 0,
             "type": "number"
           },
@@ -28511,7 +28511,7 @@
     },
     "/api/internal/contests/{key}/register": {
       "post": {
-        "description": "Registers the signed-in user for a contest that requires registration,\nbefore registration closes. Send `accessCode` when the contest has one\n(editors skip it), `acceptRules` true and the `acceptRulesRevision` shown\nto the user when the contest has rules.\nRefusals are 409 `editor_cannot_register`, `registration_not_required`,\n`registration_closed`, `contest_ended` or `already_registered`; 403\n`banned_from_contest`, `access_code_required` or `wrong_access_code`; 400\n`rules_not_accepted`; and 409 `rules_changed` when the rules were saved\nafter the user read them. Wrong access codes are rate limited per user and\nper IP.",
+        "description": "Registers the signed-in user for a contest that requires registration,\nbefore registration closes. Send `accessCode` when the contest has one\n(editors skip it), `acceptRules` true and the `acceptRulesRevision` shown\nto the user when the contest has rules.\nRefusals are 409 `editor_cannot_register`, `registration_not_required`,\n`registration_closed`, `contest_ended` or `already_registered`; 403\n`banned_from_contest`, `access_code_required` or `wrong_access_code`; 400\n`rules_not_accepted`; and 409 `rules_changed` when the revision is missing or the rules were saved\nafter the user read them. Wrong access codes are rate limited per user and\nper IP.",
         "operationId": "ContestParticipationController_register",
         "parameters": [
           {

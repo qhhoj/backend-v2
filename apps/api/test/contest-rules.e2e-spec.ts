@@ -170,6 +170,7 @@ afterAll(() => api.teardown());
       expect(await rowsOf(contest._id, 'alice')).toHaveLength(0);
       await post('alice', contest.key, 'register', {
         acceptRules: true,
+        acceptRulesRevision: 1,
       }).expect(201);
       const [row] = await rowsOf(contest._id, 'alice');
       expect(row.rulesAcceptedRevision).toBe(1);
@@ -182,9 +183,10 @@ afterAll(() => api.teardown());
       await post('bob', withRules.key, 'join')
         .expect(400)
         .expect(errorCode('rules_not_accepted'));
-      await post('bob', withRules.key, 'join', { acceptRules: true }).expect(
-        201,
-      );
+      await post('bob', withRules.key, 'join', {
+        acceptRules: true,
+        acceptRulesRevision: 1,
+      }).expect(201);
       await post('bob', without.key, 'join').expect(201);
       expect((await rowsOf(without._id, 'bob'))[0].rulesAcceptedAt).toBeNull();
     });
@@ -200,9 +202,10 @@ afterAll(() => api.teardown());
         await post('tester', contest.key, 'join').expect(201),
       );
       expect(spectated.virtual).toBe(-1);
-      await post('dave', contest.key, 'register', { acceptRules: true }).expect(
-        201,
-      );
+      await post('dave', contest.key, 'register', {
+        acceptRules: true,
+        acceptRulesRevision: 1,
+      }).expect(201);
       await post('dave', contest.key, 'join').expect(201);
       await api.contests.updateOne(
         { _id: contest._id },
@@ -222,16 +225,18 @@ afterAll(() => api.teardown());
       await post('alice', contest.key, 'join')
         .expect(400)
         .expect(errorCode('rules_not_accepted'));
-      await post('alice', contest.key, 'join', { acceptRules: true }).expect(
-        201,
-      );
+      await post('alice', contest.key, 'join', {
+        acceptRules: true,
+        acceptRulesRevision: 1,
+      }).expect(201);
       await api.contests.updateOne({ _id: contest._id }, { rulesRevision: 2 });
       await post('alice', contest.key, 'join')
         .expect(400)
         .expect(errorCode('rules_not_accepted'));
-      await post('alice', contest.key, 'join', { acceptRules: true }).expect(
-        201,
-      );
+      await post('alice', contest.key, 'join', {
+        acceptRules: true,
+        acceptRulesRevision: 2,
+      }).expect(201);
       const rows = await rowsOf(contest._id, 'alice');
       expect(
         rows.map((row) => [row.virtual, row.rulesAcceptedRevision]),
@@ -271,6 +276,19 @@ afterAll(() => api.teardown());
         rulesAcceptedRevision: 3,
         isRegistered: false,
       });
+    });
+
+    it('refuses a boolean-only acceptance of a contest with rules and stores nothing', async () => {
+      const contest = await createContest(api, {
+        ...rules,
+        registrationStart: hoursFromNow(-2),
+        registrationEnd: hoursFromNow(1),
+      });
+      for (const action of ['register', 'join'])
+        await post('carol', contest.key, action, { acceptRules: true })
+          .expect(409)
+          .expect(errorCode('rules_changed'));
+      expect(await rowsOf(contest._id, 'carol')).toHaveLength(0);
     });
   });
 }

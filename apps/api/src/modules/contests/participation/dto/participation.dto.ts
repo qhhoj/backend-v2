@@ -28,7 +28,7 @@ export class AccessCodeDto {
 /** Body of register and join: the access code and the rules acceptance a new participation needs. */
 export class JoinBodyDto extends AccessCodeDto {
   @IsOptional() @IsBoolean() acceptRules?: boolean;
-  /** The `rulesRevision` the contestant read; a different current revision answers 409 `rules_changed`. Optional for one release. */
+  /** The `rulesRevision` the contestant read; a missing or different current revision answers 409 `rules_changed`. Required when the contest has rules. */
   @IsOptional() @IsInt() @Min(0) acceptRulesRevision?: number;
 }
 
