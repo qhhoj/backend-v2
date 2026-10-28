@@ -233,7 +233,7 @@ export class CommentsRepository {
     return unique(authors.map(uuidStr));
   }
 
-  /** Soft delete; false when the row was already deleted (a concurrent delete). */
+  /** Soft delete, counted in `revisions` like the `delete` history row it comes with; false when the row was already deleted (a concurrent delete). */
   async softDelete(id: string, deletedBy: string, now: Date): Promise<boolean> {
     const { modifiedCount } = await this.comments
       .updateOne(
@@ -245,6 +245,7 @@ export class CommentsRepository {
             deletedAt: now,
             deletedBy,
           },
+          $inc: { revisions: 1 },
         },
       )
       .exec();

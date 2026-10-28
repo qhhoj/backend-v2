@@ -342,7 +342,10 @@ describe('comment preview, post blocks, hidden listings, delete, reports, locate
       const comment = await blogComment(page._id, author._id, {
         body: 'original text',
       });
-      await remove(comment._id, session).expect(200);
+      const deleted = dataOf<CommentResponse>(
+        await remove(comment._id, session).expect(200),
+      );
+      expect(deleted.revisions).toBe(1);
       expect(
         (await history(comment._id, moderator)).map((row) => [
           row.before,
