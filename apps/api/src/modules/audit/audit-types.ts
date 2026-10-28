@@ -19,6 +19,7 @@ export const AUDIT_TYPES = [
   'blogPost',
   'comment',
   'flatpage',
+  'judge',
   'setting',
 ] as const;
 export type AuditType = (typeof AUDIT_TYPES)[number];

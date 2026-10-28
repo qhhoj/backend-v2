@@ -108,6 +108,13 @@ afterAll(() => api.teardown());
         api.http().get('/api/internal/admin/discord-webhooks'),
         session,
       ).expect(403);
+      await authed(
+        api.http().put('/api/internal/admin/discord-webhooks/default'),
+        session,
+      )
+        .send({ url: 'https://discord.test/api/webhooks/tok-ops' })
+        .expect(403)
+        .expect(issueCodes(['superuser_only']));
       await patch('auth.sessionMaxDays', 7).expect(200);
       await restore(
         'auth.sessionMaxDays',
@@ -119,7 +126,7 @@ afterAll(() => api.teardown());
       await patch('pdf.maxBytes', 1_000_000, session).expect(200);
     });
 
-    it("refuses an API token, a superuser's too, on every settings write", async () => {
+    it("refuses an API token, a superuser's too, on every settings and site config write", async () => {
       const { token, hash } = generateApiToken(rootId, TEST_ENV.TOKEN_SECRET);
       await api.users.updateOne({ _id: rootId }, { apiTokenHash: hash });
       const bearer = (request: Test) =>
@@ -133,6 +140,19 @@ afterAll(() => api.teardown());
       )
         .send({ url: 'https://discord.test/api/webhooks/tok-bearer' })
         .expect(403);
+      await patch('pdf.maxBytes', 2_000_000).expect(200);
+      const revisionId = await newestRevisionId('pdf.maxBytes');
+      await bearer(
+        api
+          .http()
+          .post(`${SETTINGS}/pdf.maxBytes/revisions/${revisionId}/restore`),
+      ).expect(403);
+      await bearer(api.http().put('/api/internal/admin/site/config/notice'))
+        .send({ value: 'by token' })
+        .expect(403);
+      await bearer(
+        api.http().delete('/api/internal/admin/site/config/notice'),
+      ).expect(403);
     });
 
     it('merges social login fields and never returns or stores a secret in clear', async () => {

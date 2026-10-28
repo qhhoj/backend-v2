@@ -9,7 +9,7 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import { CurrentAuth, RequirePermission } from '@libs/auth';
+import { CurrentAuth, RequirePermission, SessionOnly } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
@@ -33,8 +33,9 @@ export class MiscConfigAdminController {
    * Set a public config value
    *
    * @remarks
-   * Requires `judge.change_miscconfig`. Creates or replaces a free-form key/value text served to everyone by `GET /site`, so it must never hold a secret. The empty string is a valid value. A changed value records a revision.
+   * Requires `judge.change_miscconfig` and a browser session (API tokens are refused). Creates or replaces a free-form key/value text served to everyone by `GET /site`, so it must never hold a secret. The empty string is a valid value. A changed value records a revision.
    */
+  @SessionOnly()
   @Put(':key')
   put(
     @CurrentAuth() auth: AuthContext,
@@ -63,8 +64,9 @@ export class MiscConfigAdminController {
    * Delete a public config value
    *
    * @remarks
-   * Requires `judge.change_miscconfig`. Removes the key and records a revision. 404 `not_found` if it does not exist. Returns 204.
+   * Requires `judge.change_miscconfig` and a browser session. Removes the key and records a revision. 404 `not_found` if it does not exist. Returns 204.
    */
+  @SessionOnly()
   @Delete(':key')
   @HttpCode(204)
   delete(

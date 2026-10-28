@@ -17683,6 +17683,7 @@
                 "contestParticipation",
                 "flatpage",
                 "group",
+                "judge",
                 "license",
                 "organization",
                 "problem",
@@ -19699,7 +19700,7 @@
     },
     "/api/internal/admin/site/config/{key}": {
       "delete": {
-        "description": "Requires `judge.change_miscconfig`. Removes the key and records a revision. 404 `not_found` if it does not exist. Returns 204.",
+        "description": "Requires `judge.change_miscconfig` and a browser session. Removes the key and records a revision. 404 `not_found` if it does not exist. Returns 204.",
         "operationId": "MiscConfigAdminController_delete",
         "parameters": [
           {
@@ -19745,7 +19746,7 @@
         ]
       },
       "put": {
-        "description": "Requires `judge.change_miscconfig`. Creates or replaces a free-form key/value text served to everyone by `GET /site`, so it must never hold a secret. The empty string is a valid value. A changed value records a revision.",
+        "description": "Requires `judge.change_miscconfig` and a browser session (API tokens are refused). Creates or replaces a free-form key/value text served to everyone by `GET /site`, so it must never hold a secret. The empty string is a valid value. A changed value records a revision.",
         "operationId": "MiscConfigAdminController_put",
         "parameters": [
           {
@@ -30065,7 +30066,7 @@
         ]
       },
       "post": {
-        "description": "Needs `judge.change_judge`. `name` uses letters, digits, `_`, `.` or `-` (at\nmost 50) and is what the judge sends when it connects. Returns the judge and\nits `authKey`, shown only this once (only a hash is stored). Responds 409\n`conflict` (issue `name_taken`) when the name exists.",
+        "description": "Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. `name` uses letters, digits, `_`, `.` or `-` (at\nmost 50) and is what the judge sends when it connects. Returns the judge and\nits `authKey`, shown only this once (only a hash is stored). Responds 409\n`conflict` (issue `name_taken`) when the name exists.",
         "operationId": "JudgesController_create",
         "parameters": [],
         "requestBody": {
@@ -30175,7 +30176,7 @@
     },
     "/api/internal/judges/{name}": {
       "delete": {
-        "description": "Needs `judge.change_judge`. Only an offline judge can be deleted: 409\n`conflict` (issue `judge_online`) while it is connected, 404 `not_found` for\nan unknown name. Queued submissions pinned to it fall back to any judge.\nAnswers 204.",
+        "description": "Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. Only an offline judge can be deleted: 409\n`conflict` (issue `judge_online`) while it is connected, 404 `not_found` for\nan unknown name. Queued submissions pinned to it fall back to any judge.\nAnswers 204.",
         "operationId": "JudgesController_remove",
         "parameters": [
           {
@@ -30218,7 +30219,7 @@
         ]
       },
       "patch": {
-        "description": "Needs `judge.change_judge`. Send only the fields to change: `isBlocked`,\n`blockReason`, `isDisabled` and `description`. Blocking disconnects the\njudge and refuses it until unblocked; `blockReason` is kept only while the\njudge is blocked and cleared on unblock.\nDisabling tells a connected judge to stop taking work, enabling lets it\nresume. Responds 404 `not_found` (issue `judge_not_found`)\nfor an unknown name.",
+        "description": "Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. Send only the fields to change: `isBlocked`,\n`blockReason`, `isDisabled` and `description`. Blocking disconnects the\njudge and refuses it until unblocked; `blockReason` is kept only while the\njudge is blocked and cleared on unblock.\nDisabling tells a connected judge to stop taking work, enabling lets it\nresume. Responds 404 `not_found` (issue `judge_not_found`)\nfor an unknown name.",
         "operationId": "JudgesController_update",
         "parameters": [
           {
@@ -30288,7 +30289,7 @@
     },
     "/api/internal/judges/{name}/disconnect": {
       "post": {
-        "description": "Needs `judge.change_judge`. Asks the bridge to disconnect the judge; it may\nreconnect. With `force` every session and socket of the judge is retired at\nonce. Answers 204; 404 `not_found` for an unknown name.",
+        "description": "Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. Asks the bridge to disconnect the judge; it may\nreconnect. With `force` every session and socket of the judge is retired at\nonce. Answers 204; 404 `not_found` for an unknown name.",
         "operationId": "JudgesController_disconnect",
         "parameters": [
           {
@@ -30343,7 +30344,7 @@
     },
     "/api/internal/judges/{name}/key": {
       "post": {
-        "description": "Needs `judge.change_judge`. The old key stops working and a connected judge\nis disconnected; it can only reconnect with the new `authKey`, returned only\nthis once. Responds 404 `not_found` for an unknown name.",
+        "description": "Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. The old key stops working and a connected judge\nis disconnected; it can only reconnect with the new `authKey`, returned only\nthis once. Responds 404 `not_found` for an unknown name.",
         "operationId": "JudgesController_rotateKey",
         "parameters": [
           {
@@ -30403,7 +30404,7 @@
     },
     "/api/internal/judges/{name}/rename": {
       "post": {
-        "description": "Needs `judge.change_judge`. Only an offline judge can be renamed: 409\n`conflict` (issue `judge_online`) while it is connected, and (issue\n`judge_busy`) while submissions handed to it are still in flight. The new\nname follows the creation rule; 409 (issue `name_taken`) when it exists.\nThe judge reconnects only with its config set to the new name; a session\nstill opening under the old name is dropped. Queued and pending final\nsubmissions pinned to it follow. 404 `not_found` for an unknown name.",
+        "description": "Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. Only an offline judge can be renamed: 409\n`conflict` (issue `judge_online`) while it is connected, and (issue\n`judge_busy`) while submissions handed to it are still in flight. The new\nname follows the creation rule; 409 (issue `name_taken`) when it exists.\nThe judge reconnects only with its config set to the new name; a session\nstill opening under the old name is dropped. Queued and pending final\nsubmissions pinned to it follow. 404 `not_found` for an unknown name.",
         "operationId": "JudgesController_rename",
         "parameters": [
           {

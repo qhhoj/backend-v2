@@ -38,7 +38,12 @@ import { sha256, generateApiToken, PERMISSION_CATALOG } from '@libs/auth';
 
 import { getModelToken } from '@nestjs/mongoose';
 
-import { IntegrationClient, SettingRevision, newId } from '@libs/database';
+import {
+  IntegrationClient,
+  SettingRevision,
+  newId,
+  uuidStr,
+} from '@libs/database';
 
 import type { Model } from 'mongoose';
 
@@ -496,6 +501,7 @@ afterAll(() => api.teardown());
   describe('/api/internal/judges', () => {
     beforeAll(() => api.reset());
     let admin: TestSession;
+    let adminId: string;
     let member: TestSession;
     const create = async (name: string) =>
       dataOf<{ judge: { name: string }; authKey: string }>(
@@ -504,15 +510,31 @@ afterAll(() => api.teardown());
     const storedHash = async (name: string) =>
       (await api.judges.findOne({ name }).lean())?.authKeyHash;
 
+    // every write, so a test proves a refusal changed nothing
+    const writes = (name: string) => [
+      api.http().post(JUDGES).send({ name: 'judge-denied' }),
+      api.http().patch(`${JUDGES}/${name}`).send({ isBlocked: true }),
+      api.http().post(`${JUDGES}/${name}/key`),
+      api.http().post(`${JUDGES}/${name}/disconnect`).send({}),
+      api.http().delete(`${JUDGES}/${name}`),
+      api.http().post(`${JUDGES}/${name}/rename`).send({ name: 'x' }),
+    ];
+    const expectUnchanged = async (name: string, hash: string | undefined) => {
+      expect(await storedHash('judge-denied')).toBeUndefined();
+      expect(await api.judges.findOne({ name }).lean()).toMatchObject({
+        isBlocked: false,
+        authKeyHash: hash,
+      });
+      expect(await bridgeCommands(api)).toEqual([]);
+    };
+
     beforeAll(async () => {
-      admin = await loginAs(
-        api,
-        (
-          await createUserWith(api, 'admin', {
-            permissions: ['judge.change_judge'],
-          })
-        )._id,
-      );
+      adminId = (
+        await createUserWith(api, 'admin', {
+          permissions: ['judge.change_judge', 'judge.change_settings'],
+        })
+      )._id;
+      admin = await loginAs(api, adminId);
       member = await loginAs(api, (await createUserWith(api, 'member'))._id);
     });
     beforeEach(() => clearBridgeCommands(api));
@@ -539,6 +561,103 @@ afterAll(() => api.teardown());
         },
       );
       expect(await bridgeCommands(api)).toEqual([]);
+    });
+
+    it('refuses a user API token on every judge write, and still lists judges to it', async () => {
+      await create('judge-tok');
+      const hash = await storedHash('judge-tok');
+      await clearBridgeCommands(api);
+      const { token, hash: tokenHash } = generateApiToken(
+        adminId,
+        TEST_ENV.TOKEN_SECRET,
+      );
+      await api.users.updateOne({ _id: adminId }, { apiTokenHash: tokenHash });
+      const bearer = `Bearer ${token}`;
+      await api.http().get(JUDGES).set('Authorization', bearer).expect(200);
+      for (const route of writes('judge-tok'))
+        await route
+          .set('Authorization', bearer)
+          .expect(403)
+          .expect(errorCode('forbidden'));
+      await expectUnchanged('judge-tok', hash);
+    });
+
+    it('refuses every judge write while impersonating', async () => {
+      await create('judge-imp');
+      const hash = await storedHash('judge-imp');
+      await clearBridgeCommands(api);
+      const root = await createUserWith(api, 'judge-root', {
+        isSuperuser: true,
+      });
+      const { id, session } = await api.sessions.create({
+        userId: adminId,
+        twoFaPassed: true,
+        passwordPwned: false,
+        impersonatorId: root._id,
+      });
+      for (const route of writes('judge-imp')) {
+        const refused = await route
+          .set('Cookie', sessionCookie(id))
+          .set('X-CSRF-Token', session.csrf)
+          .expect(403);
+        expect(refused.body).toMatchObject({
+          error: { message: 'Not allowed while impersonating' },
+        });
+      }
+      await expectUnchanged('judge-imp', hash);
+    });
+
+    it('records each write with the acting user and never the key, and lists it in the change log', async () => {
+      const { authKey } = await create('judge-log');
+      const { authKey: rotated } = dataOf<{ authKey: string }>(
+        await authed(api.http().post(`${JUDGES}/judge-log/key`), admin).expect(
+          200,
+        ),
+      );
+      await authed(api.http().patch(`${JUDGES}/judge-log`), admin)
+        .send({ isBlocked: true, blockReason: 'leaked' })
+        .expect(200);
+      const judgeId = uuidStr(
+        (await api.judges.findOne({ name: 'judge-log' }).lean())!._id,
+      );
+      const rows = (
+        await api.revisions
+          .find({ entity: 'judge', entityId: judgeId })
+          .sort({ _id: 1 })
+          .lean()
+      ).map((row) => ({ ...row, userId: uuidStr(row.userId!) }));
+      expect(rows).toMatchObject([
+        { action: 'create', userId: adminId, comment: 'judge-log' },
+        { action: 'rotate_key', userId: adminId },
+        {
+          action: 'block',
+          changes: {
+            isBlocked: { before: false, after: true },
+            blockReason: { before: '', after: 'leaked' },
+          },
+        },
+      ]);
+      const stored = JSON.stringify(rows);
+      for (const secret of [authKey, rotated, sha256(authKey), sha256(rotated)])
+        expect(stored).not.toContain(secret);
+      expect(stored).not.toContain('authKey');
+      const feed = dataOf<AuditFeedResponse>(
+        await authed(
+          api.http().get('/api/internal/admin/audit').query({ type: 'judge' }),
+          admin,
+        ).expect(200),
+      );
+      const logged = feed.items.filter((item) => item.object.id === judgeId);
+      expect(logged.map((item) => item.action)).toEqual([
+        'block',
+        'rotate_key',
+        'create',
+      ]);
+      expect(logged[0].object).toEqual({
+        id: judgeId,
+        label: 'judge-log',
+        deleted: false,
+      });
     });
 
     it('creates a judge whose key is shown once and stored only as its hash', async () => {

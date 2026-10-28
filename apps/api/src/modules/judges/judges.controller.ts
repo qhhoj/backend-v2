@@ -9,7 +9,13 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { RequirePermission } from '@libs/auth';
+import {
+  CurrentAuth,
+  NoImpersonation,
+  RequirePermission,
+  SessionOnly,
+} from '@libs/auth';
+import type { AuthContext } from '@libs/auth';
 import { RefuseNullFieldsPipe } from '@libs/common';
 import {
   CreateJudgeDto,
@@ -68,21 +74,26 @@ export class JudgesController {
    * Register a judge server
    *
    * @remarks
-   * Needs `judge.change_judge`. `name` uses letters, digits, `_`, `.` or `-` (at
+   * Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. `name` uses letters, digits, `_`, `.` or `-` (at
    * most 50) and is what the judge sends when it connects. Returns the judge and
    * its `authKey`, shown only this once (only a hash is stored). Responds 409
    * `conflict` (issue `name_taken`) when the name exists.
    */
+  @SessionOnly()
+  @NoImpersonation()
   @Post()
-  create(@Body() dto: CreateJudgeDto): Promise<CreatedJudgeResponse> {
-    return this.judges.create(dto);
+  create(
+    @CurrentAuth() auth: AuthContext,
+    @Body() dto: CreateJudgeDto,
+  ): Promise<CreatedJudgeResponse> {
+    return this.judges.create(auth.principal, dto);
   }
 
   /**
    * Update a judge server
    *
    * @remarks
-   * Needs `judge.change_judge`. Send only the fields to change: `isBlocked`,
+   * Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. Send only the fields to change: `isBlocked`,
    * `blockReason`, `isDisabled` and `description`. Blocking disconnects the
    * judge and refuses it until unblocked; `blockReason` is kept only while the
    * judge is blocked and cleared on unblock.
@@ -90,19 +101,22 @@ export class JudgesController {
    * resume. Responds 404 `not_found` (issue `judge_not_found`)
    * for an unknown name.
    */
+  @SessionOnly()
+  @NoImpersonation()
   @Patch(':name')
   update(
+    @CurrentAuth() auth: AuthContext,
     @Param() { name }: JudgeNameParamDto,
     @Body(new RefuseNullFieldsPipe()) dto: UpdateJudgeDto,
   ): Promise<JudgeResponse> {
-    return this.judges.update(name, dto);
+    return this.judges.update(auth.principal, name, dto);
   }
 
   /**
    * Rename a judge server
    *
    * @remarks
-   * Needs `judge.change_judge`. Only an offline judge can be renamed: 409
+   * Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. Only an offline judge can be renamed: 409
    * `conflict` (issue `judge_online`) while it is connected, and (issue
    * `judge_busy`) while submissions handed to it are still in flight. The new
    * name follows the creation rule; 409 (issue `name_taken`) when it exists.
@@ -110,58 +124,74 @@ export class JudgesController {
    * still opening under the old name is dropped. Queued and pending final
    * submissions pinned to it follow. 404 `not_found` for an unknown name.
    */
+  @SessionOnly()
+  @NoImpersonation()
   @Post(':name/rename')
   @HttpCode(200)
   rename(
+    @CurrentAuth() auth: AuthContext,
     @Param() { name }: JudgeNameParamDto,
     @Body() dto: RenameJudgeDto,
   ): Promise<JudgeResponse> {
-    return this.judges.rename(name, dto.name);
+    return this.judges.rename(auth.principal, name, dto.name);
   }
 
   /**
    * Delete a judge server
    *
    * @remarks
-   * Needs `judge.change_judge`. Only an offline judge can be deleted: 409
+   * Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. Only an offline judge can be deleted: 409
    * `conflict` (issue `judge_online`) while it is connected, 404 `not_found` for
    * an unknown name. Queued submissions pinned to it fall back to any judge.
    * Answers 204.
    */
+  @SessionOnly()
+  @NoImpersonation()
   @Delete(':name')
   @HttpCode(204)
-  remove(@Param() { name }: JudgeNameParamDto): Promise<void> {
-    return this.judges.remove(name);
+  remove(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { name }: JudgeNameParamDto,
+  ): Promise<void> {
+    return this.judges.remove(auth.principal, name);
   }
 
   /**
    * Issue a new authentication key for a judge
    *
    * @remarks
-   * Needs `judge.change_judge`. The old key stops working and a connected judge
+   * Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. The old key stops working and a connected judge
    * is disconnected; it can only reconnect with the new `authKey`, returned only
    * this once. Responds 404 `not_found` for an unknown name.
    */
+  @SessionOnly()
+  @NoImpersonation()
   @Post(':name/key')
   @HttpCode(200)
-  rotateKey(@Param() { name }: JudgeNameParamDto): Promise<JudgeKeyResponse> {
-    return this.judges.rotateKey(name);
+  rotateKey(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { name }: JudgeNameParamDto,
+  ): Promise<JudgeKeyResponse> {
+    return this.judges.rotateKey(auth.principal, name);
   }
 
   /**
    * Disconnect a judge server
    *
    * @remarks
-   * Needs `judge.change_judge`. Asks the bridge to disconnect the judge; it may
+   * Needs `judge.change_judge` and a browser session, not while impersonating (API tokens are refused); each change is recorded in the change log. Asks the bridge to disconnect the judge; it may
    * reconnect. With `force` every session and socket of the judge is retired at
    * once. Answers 204; 404 `not_found` for an unknown name.
    */
+  @SessionOnly()
+  @NoImpersonation()
   @Post(':name/disconnect')
   @HttpCode(204)
   disconnect(
+    @CurrentAuth() auth: AuthContext,
     @Param() { name }: JudgeNameParamDto,
     @Body() { force }: DisconnectJudgeDto,
   ): Promise<void> {
-    return this.judges.disconnect(name, force);
+    return this.judges.disconnect(auth.principal, name, force);
   }
 }
