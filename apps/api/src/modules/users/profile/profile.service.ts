@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal, UserDocument } from '@libs/auth';
 import { UsersRepository } from '@libs/auth';
-import { AppError, invalidField } from '@libs/common';
+import { AppError, invalidField, RateLimitService } from '@libs/common';
 import {
   canInteract,
   assertNotLockedByOfficialMode,
@@ -19,6 +19,10 @@ import { OrganizationsRepository } from '../../organizations/core/organizations.
 import { OrganizationSummaryResponse } from '../../organizations/core/dto/organization.response';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
 import { renderField } from '../../problems/editing/problem-markup';
+import {
+  ABOUT_EDIT_LIMIT,
+  ABOUT_EDIT_WINDOW_SECONDS,
+} from '../core/rate-limits';
 import type { UpdateProfileDto } from './dto/profile.dto';
 import type { ProfileResponse } from './dto/profile.response';
 
@@ -52,6 +56,7 @@ export class ProfileService {
     private readonly members: OrganizationMembersRepository,
     private readonly points: OrganizationPointsService,
     private readonly languages: LanguagesQuerier,
+    private readonly rateLimits: RateLimitService,
   ) {}
 
   async get(principal: Principal): Promise<ProfileResponse> {
@@ -74,10 +79,10 @@ export class ProfileService {
       ...appearanceChange(appearance),
       ...bitRoamChange(bitRoam),
       ...this.firstNameChange(principal, user, firstName),
-      ...this.aboutChange(principal, user, about),
     };
     this.assertAppearanceUnlocked(principal, user, dto);
     this.assertReferences(user, dto);
+    Object.assign(changes, await this.aboutChange(principal, user, about));
     if (organizations !== undefined)
       await this.reorder(
         principal,
@@ -104,12 +109,12 @@ export class ProfileService {
     return { firstName: trimmed };
   }
 
-  /** Returns `about` with its rendered HTML when it differs from the stored text. Throws in official contest mode, or below the interaction threshold, when it differs. Pure otherwise. */
-  private aboutChange(
+  /** Returns `about` with its rendered HTML when it differs from the stored text. Throws in official contest mode, below the interaction threshold, or over the rate limit, when it differs; a body the renderer refuses gives its hit back. */
+  private async aboutChange(
     principal: Principal,
     user: UserDocument,
     about: string | undefined,
-  ): Partial<User> {
+  ): Promise<Partial<User>> {
     if (about === undefined || about === (user.about ?? '')) return {};
     this.refuseInOfficialContest(principal);
     if (!canInteract(user))
@@ -118,7 +123,17 @@ export class ProfileService {
         403,
         `Solve at least ${INTERACT_MIN_PROBLEM_COUNT} problems before editing your profile`,
       );
-    return { about, aboutHtml: renderField(about, 'user', 'about') };
+    const releaseHit = await this.rateLimits.reserve(
+      [`profile-about:${principal.userId}`],
+      ABOUT_EDIT_LIMIT,
+      ABOUT_EDIT_WINDOW_SECONDS,
+    );
+    try {
+      return { about, aboutHtml: renderField(about, 'user', 'about') };
+    } catch (error) {
+      await releaseHit();
+      throw error;
+    }
   }
 
   /** The order of organizations is part of how a user appears on the boards, so it freezes with `about` and the name. Resending the stored value is not a change. */

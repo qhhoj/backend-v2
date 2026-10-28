@@ -155,13 +155,13 @@ export class CommentPostingService {
       if ((await this.users.signedIn(principal)).mute)
         throw forbidden('Muted users cannot edit comments');
     }
-    const bodyHtml = renderCommentBody(body);
     const releaseHit = await this.rateLimits.reserve(
       [`comment-edit:${principal.userId}`],
       EDIT_LIMIT,
       EDIT_WINDOW_SECONDS,
     );
     try {
+      const bodyHtml = renderCommentBody(body);
       await this.saveEdit(principal, { id, comment, body, bodyHtml });
     } catch (error) {
       await releaseHit();

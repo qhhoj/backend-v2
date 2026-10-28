@@ -11,7 +11,7 @@ import { dataOf } from './submission-fixtures';
 import type { ApiTest } from './setup';
 import { signedIn } from './ticket-fixtures';
 import type Redis from 'ioredis';
-import { REDIS } from '@libs/common';
+import { AppError, REDIS } from '@libs/common';
 import { profileQueries } from '@libs/database/testing';
 import {
   createComment,
@@ -42,6 +42,8 @@ import { waitUntil } from '@libs/common/testing';
 import { ProblemEvents } from '../src/modules/problems/core/problem.events';
 import { VotesService } from '../src/modules/contributions/votes.service';
 import { clearRateLimits } from './contest-fixtures';
+import * as markup from '../src/modules/problems/editing/problem-markup';
+import { ABOUT_EDIT_LIMIT } from '../src/modules/users/core/rate-limits';
 
 let api: ApiTest;
 beforeAll(async () => {
@@ -253,6 +255,24 @@ describe('profile', () => {
     await newcomer
       .patch({ about: 'kept', timezone: 'Asia/Ho_Chi_Minh' })
       .expect(200);
+  });
+
+  it('limits about changes per user, refusing before any render; a refused body costs nothing', async () => {
+    const { patch } = await person({ problemCount: 50 });
+    const render = jest
+      .spyOn(markup, 'renderField')
+      .mockImplementationOnce(() => {
+        throw new AppError('validation_failed', 400, 'Too much math');
+      });
+    await patch({ about: 'refused' }).expect(400);
+    for (let index = 0; index < ABOUT_EDIT_LIMIT; index += 1)
+      await patch({ about: `about ${index}` }).expect(200);
+    render.mockClear();
+    await patch({ about: 'one too many' })
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+    expect(render).not.toHaveBeenCalled();
+    render.mockRestore();
   });
 
   it('stores a personal appearance, returns it, replaces it as a whole and clears it with null', async () => {
