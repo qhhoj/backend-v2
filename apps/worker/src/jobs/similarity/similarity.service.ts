@@ -9,7 +9,7 @@ import type {
   SimilarityUnsupported,
 } from '@libs/database';
 import { SimilarityEngine, SimilarityEngineError } from './similarity-engine';
-import type { EnginePair, EngineSubmission } from './similarity-engine';
+import type { EngineResult, EngineSubmission } from './similarity-engine';
 import { familyOf } from './similarity-languages';
 import type { SimilarityFamily } from './similarity-languages';
 import {
@@ -17,12 +17,11 @@ import {
   toStoredPairs,
   withKeptPairCounts,
 } from './similarity-outcome';
-import type { GroupComparison } from './similarity-outcome';
+import type { GroupComparison, StrongestPairs } from './similarity-outcome';
 import { SimilarityRepository } from './similarity.repository';
 import type {
   ProblemScope,
   RunOutcome,
-  StoredPair,
   SubmissionRow,
 } from './similarity.repository';
 
@@ -126,7 +125,7 @@ export class SimilarityService {
     const languages = await this.splitLanguages();
     const problemScopes = await this.repository.problemScopes(run);
     const groups: SimilarityGroup[] = [];
-    let strongestPairs: StoredPair[] = [];
+    let strongest: StrongestPairs = { pairs: [], cutPerGroup: new Map() };
     for (const scope of problemScopes)
       for (const familyLanguages of languages.families) {
         const comparison = await this.compareGroup(
@@ -138,15 +137,15 @@ export class SimilarityService {
         if (!comparison) continue;
         groups.push(comparison.group);
         // Trimmed after every group, so a run holds about maxPairs pairs however many groups its scope has.
-        strongestPairs = keepStrongest(
-          strongestPairs,
+        strongest = keepStrongest(
+          strongest,
           comparison.pairs,
           run.limits.maxPairs,
         );
       }
     return {
-      groups: withKeptPairCounts(groups, strongestPairs),
-      pairs: strongestPairs,
+      groups: withKeptPairCounts(groups, strongest),
+      pairs: strongest.pairs,
       unsupported: await this.countUnsupported(
         problemScopes,
         languages.unsupported,
@@ -168,14 +167,17 @@ export class SimilarityService {
     );
     if (!prepared) return null;
     const { group, submissions } = prepared;
-    const enginePairs = await this.compareOrNullOnEngineFailure(
+    const result = await this.compareOrNullOnEngineFailure(
       run.limits,
       familyLanguages.family,
       submissions,
       timeLeftOrThrow(deadlineAt),
     );
-    if (enginePairs)
-      return { group, pairs: toStoredPairs(group, enginePairs, submissions) };
+    if (result)
+      return {
+        group: { ...group, droppedByCap: result.droppedByCap },
+        pairs: toStoredPairs(group, result.pairs, submissions),
+      };
     this.logger.warn(
       `Similarity engine failed on run ${uuidStr(run._id)}, problem ${scope.problemId}, family ${group.language}; the group is listed as failed`,
     );
@@ -207,6 +209,7 @@ export class SimilarityService {
       skippedTooLarge,
       truncated: submissionCount > limits.maxSubmissions,
       pairCount: 0,
+      droppedByCap: 0,
       failed: false,
     };
     return { group, submissions };
@@ -221,7 +224,7 @@ export class SimilarityService {
     family: SimilarityFamily,
     submissions: EngineSubmission[],
     timeoutMs: number,
-  ): Promise<EnginePair[] | null> {
+  ): Promise<EngineResult | null> {
     try {
       return await this.engine.compare({
         family,

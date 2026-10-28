@@ -46,6 +46,8 @@ export class SimilarityGroupResponse {
   truncated!: boolean;
   /** Pairs found in this group. */
   pairCount!: number;
+  /** Pairs of two users at or above `limits.minPercent` left out by the `maxPairs` cap; above 0, the list is incomplete. */
+  droppedByCap!: number;
   /** The engine failed on this group alone: it has no pairs, the rest of the run completed. */
   failed!: boolean;
 
@@ -66,6 +68,8 @@ export class SimilarityGroupResponse {
       skippedTooLarge: group.skippedTooLarge,
       truncated: group.truncated,
       pairCount: group.pairCount,
+      // Runs stored before the count was kept have none.
+      droppedByCap: group.droppedByCap ?? 0,
       failed: group.failed,
     };
   }

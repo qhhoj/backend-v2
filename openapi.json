@@ -12628,6 +12628,10 @@
             "description": "Actually compared, after the cap and the skips.",
             "type": "number"
           },
+          "droppedByCap": {
+            "description": "Pairs of two users at or above `limits.minPercent` left out by the `maxPairs` cap; above 0, the list is incomplete.",
+            "type": "number"
+          },
           "failed": {
             "description": "The engine failed on this group alone: it has no pairs, the rest of the run completed.",
             "type": "boolean"
@@ -12684,6 +12688,7 @@
           "skippedTooLarge",
           "truncated",
           "pairCount",
+          "droppedByCap",
           "failed"
         ],
         "type": "object"

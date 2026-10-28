@@ -50,6 +50,11 @@ export interface EnginePair {
   overlap: number;
   fragments: LineRange[];
 }
+/** At most one pair per two users (their strongest), at most `maxPairs` pairs; `droppedByCap` counts the user pairs the cap left out. */
+export interface EngineResult {
+  pairs: EnginePair[];
+  droppedByCap: number;
+}
 
 /** `code` is safe to show to staff: the child's own output (paths, stack traces) never reaches it, only the log. */
 export class SimilarityEngineError extends Error {
@@ -91,12 +96,14 @@ function* requestLines(request: EngineRequest): Generator<string> {
     yield JSON.stringify(submission);
 }
 
-const decodePairs = (chunks: Buffer[]): EnginePair[] | null => {
+const decodeResult = (chunks: Buffer[]): EngineResult | null => {
   try {
-    const { pairs } = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
-      pairs?: EnginePair[];
-    };
-    return Array.isArray(pairs) ? pairs : null;
+    const { pairs, droppedByCap } = JSON.parse(
+      Buffer.concat(chunks).toString('utf8'),
+    ) as Partial<EngineResult>;
+    return Array.isArray(pairs) && Number.isInteger(droppedByCap)
+      ? { pairs, droppedByCap: droppedByCap! }
+      : null;
   } catch {
     return null;
   }
@@ -127,9 +134,10 @@ export class SimilarityEngine implements BeforeApplicationShutdown {
   }
 
   /** Sources must already be prepared (`family.prepare`): the engine is a transport. */
-  compare(request: EngineRequest): Promise<EnginePair[]> {
+  compare(request: EngineRequest): Promise<EngineResult> {
     if (this.isShuttingDown) return Promise.reject(new EngineShutdownError());
-    if (request.submissions.length < 2) return Promise.resolve([]);
+    if (request.submissions.length < 2)
+      return Promise.resolve({ pairs: [], droppedByCap: 0 });
     return new Promise((resolve, reject) => {
       const child = this.spawnEngine();
       let isSettled = false;
@@ -167,15 +175,15 @@ export class SimilarityEngine implements BeforeApplicationShutdown {
     });
   }
 
-  /** The child's pairs, or why there are none. */
+  /** The child's result, or why there is none. */
   private exitResult(
     exitCode: number | null,
     signal: NodeJS.Signals | null,
     stdout: Buffer[],
     stderrTail: () => Buffer,
-  ): EnginePair[] | Error {
-    const pairs = exitCode === 0 ? decodePairs(stdout) : null;
-    if (pairs) return pairs;
+  ): EngineResult | Error {
+    const result = exitCode === 0 ? decodeResult(stdout) : null;
+    if (result) return result;
     this.logger.warn(
       `similarity engine failed (exit ${exitCode}, signal ${signal}): ${stderrTail().toString('utf8')}`,
     );
