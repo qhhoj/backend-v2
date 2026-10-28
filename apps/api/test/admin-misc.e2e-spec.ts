@@ -1764,6 +1764,54 @@ afterAll(() => api.teardown());
       }
     });
 
+    it('shows a score-override reason only with judge.change_submission, and hides notes of unmapped kinds', async () => {
+      const [override, unmapped, fixed] = [newId(), newId(), newId()];
+      const row = (id: string, entity: string, comment: string) => ({
+        _id: id,
+        entity,
+        entityId: newId(),
+        action: 'edit',
+        userId: editorId,
+        changes: {},
+        comment,
+      });
+      await api.revisions.create([
+        row(override, 'submission', 'Override: names a private user'),
+        row(unmapped, 'futureKind', 'free text'),
+        row(fixed, 'group', 'Edited from site'),
+      ]);
+      try {
+        const commentsOf = async (viewer: TestSession) =>
+          new Map(
+            dataOf<AuditFeedResponse>(
+              await authed(
+                api.http().get(AUDIT).query({ limit: 50 }),
+                viewer,
+              ).expect(200),
+            ).items.map((item) => [item.id, item.comment]),
+          );
+        const settingsOnly = await commentsOf(admin);
+        expect(settingsOnly.get(override)).toBe('');
+        expect(settingsOnly.get(unmapped)).toBe('');
+        expect(settingsOnly.get(fixed)).toBe('Edited from site');
+        const judge = await loginAs(
+          api,
+          (
+            await createUserWith(api, 'overrider', {
+              permissions: ['judge.change_settings', 'judge.change_submission'],
+            })
+          )._id,
+        );
+        expect((await commentsOf(judge)).get(override)).toBe(
+          'Override: names a private user',
+        );
+      } finally {
+        await api.revisions.deleteMany({
+          _id: { $in: [override, unmapped, fixed] },
+        });
+      }
+    });
+
     it('filters by actor across both collections, and an unknown actor gives an empty feed', async () => {
       const { body } = await feed({ actor: 'EDITOR' });
       expect(body.items.map((item) => item.id)).toEqual([ids[3], ids[0]]);
