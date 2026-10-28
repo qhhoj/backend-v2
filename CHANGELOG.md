@@ -1,5 +1,12 @@
 # qhhoj-backend
 
+## 2.36.9
+
+### Patch Changes
+
+- 39a7dd0: Hide audit-feed notes from staff who lack the permission for the record's kind.
+- 7934b44: A deleted comment's revision count includes the deletion, so its history shows for moderators.
+
 ## 2.36.8
 
 ### Patch Changes
