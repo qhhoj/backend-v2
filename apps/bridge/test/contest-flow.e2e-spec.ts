@@ -172,6 +172,7 @@ describe('a contest across the api, the bridge and the worker', () => {
     for (const who of ['alice', 'bob'])
       await post(who, contestUrl(contest.key, '/join'), {
         acceptRules: true,
+        acceptRulesRevision: 3,
       }).expect(201);
     expect(
       await api.participations.findOne({
