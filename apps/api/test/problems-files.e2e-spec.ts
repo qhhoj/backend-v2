@@ -847,28 +847,19 @@ afterAll(() => api.teardown());
       }).expect(404);
       expect(await api.revisions.countDocuments({ action: 'upload' })).toBe(1);
     });
-    it('stores materials under materials/<problem id>/<safe name>', async () => {
-      const problemId = (await api.problems.findOne({ code: 'sum' }))!._id;
+    it('stores each material upload under its own materials/<id>/<safe name>', async () => {
       const url = urlOf(
         await upload(`${PROBLEMS}/sum/material`, editor, {
           content: Buffer.from('zip'),
           filename: 'my file (final).zip',
         }).expect(201),
       );
-      expect(url).toBe(`/media/materials/${problemId}/my_file_final.zip`);
       expect(url).toMatch(
         /^\/media\/materials\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\/my_file_final\.zip$/,
       );
-      expect(
-        existsSync(
-          join(
-            api.mediaRoot,
-            'materials',
-            String(problemId),
-            'my_file_final.zip',
-          ),
-        ),
-      ).toBe(true);
+      expect(existsSync(join(api.mediaRoot, url.replace('/media/', '')))).toBe(
+        true,
+      );
       expect((await api.problems.findOne({ code: 'sum' }))!.materialUrl).toBe(
         url,
       );
@@ -942,6 +933,40 @@ afterAll(() => api.teardown());
         (await api.problems.findOne({ code: 'src2' }))!.pdfStatementUrl,
       ).toBe(sharedUrl);
     });
+    it('gives a clone its own copy of the material', async () => {
+      const cloner = await createUserWith(api, 'matcloner', {
+        permissions: [
+          'judge.clone_problem',
+          'judge.edit_own_problem',
+          'judge.upload_problem_material',
+        ],
+      });
+      const session = await loginAs(api, cloner._id);
+      await createProblem(api, catalog, {
+        code: 'srcm',
+        authors: [cloner._id],
+      });
+      const put = (code: string, text: string) =>
+        upload(`${PROBLEMS}/${code}/material`, session, {
+          content: Buffer.from(text),
+          filename: 'attach.zip',
+        }).expect(201);
+      await put('srcm', 'v1 attachment');
+      await authed(api.http().post(`${PROBLEMS}/srcm/clone`), session)
+        .send({ code: 'copym' })
+        .expect(201);
+      await put('srcm', 'a longer second upload');
+      const copy = (await api.problems.findOne({ code: 'copym' }))!;
+      const source = (await api.problems.findOne({ code: 'srcm' }))!;
+      expect(copy.materialUrl).not.toBe(source.materialUrl);
+      expect(copy.materialBytes).toBe(13);
+      expect(
+        readFileSync(
+          join(api.mediaRoot, copy.materialUrl!.replace('/media/', '')),
+          'utf8',
+        ),
+      ).toBe('v1 attachment');
+    });
     it.each([
       ['../../../evil.zip', 'evil.zip'],
       ['..%2F..%2Fevil.zip', '2F.2Fevil.zip'],
@@ -950,7 +975,6 @@ afterAll(() => api.teardown());
     ])(
       'never lets the material name %s leave its directory',
       async (name, safeName) => {
-        const problemId = (await api.problems.findOne({ code: 'sum' }))!._id;
         expect(
           urlOf(
             await upload(`${PROBLEMS}/sum/material`, editor, {
@@ -958,7 +982,11 @@ afterAll(() => api.teardown());
               filename: name,
             }).expect(201),
           ),
-        ).toBe(`/media/materials/${problemId}/${safeName}`);
+        ).toMatch(
+          new RegExp(
+            `^/media/materials/[0-9a-f-]{36}/${safeName.replace('.', '\\.')}$`,
+          ),
+        );
       },
     );
     it.each([
