@@ -1,5 +1,20 @@
 # qhhoj-backend
 
+## 2.36.8
+
+### Patch Changes
+
+- 6a72562: The audit feed hides the notes of user, problem and contest records, and the rows of superuser-only settings, from viewers who lack the matching permission; deleting user activity needs a browser session, refuses oneself and superusers (unless a superuser) and is recorded as a revision.
+- ec84107: A comment's revision history lists the deletion (so moderators can read the text of an unedited deleted comment) and pages with `?page=` instead of stopping at the newest 100 rows; an author making a post visible can no longer overwrite a moderator hide that landed in between.
+- d257bf9: An output limit of 0 or less is refused when a problem is saved; empty stays the default.
+- a71477e: A Polygon sync's failure record and its "synced meanwhile" check find the problem by id, so a rename and relink of the same code no longer moves them onto the new problem's link.
+- 8362aef: Register and join take `acceptRulesRevision` and answer 409 `rules_changed` when the rules were saved after the user read them.
+- 83ff8b6: Security update (GHSA-6r54-269m-m38h).
+- 0a8c02c: Security update (GHSA-9w2x-v4j6-g3c2).
+- 97b4557: Security update (GHSA-539j-ccv3-qjff).
+- af8fc65: Security update (GHSA-34qw-26f6-mx5r).
+- d315d21: A social sign-in whose provider account is not linked no longer attaches to an existing account by e-mail: it is refused with `social_email_in_use` and changes nothing.
+
 ## 2.36.7
 
 ### Patch Changes
