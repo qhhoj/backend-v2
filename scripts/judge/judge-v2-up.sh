@@ -19,6 +19,7 @@ fi
 
 dir="$RUN/judge-v2"
 mkdir -p "$dir/cache" "$FULLSTACK_CONTROL_DIR"
+chmod 700 "$dir/cache"
 (umask 077 && printf '%s\n' "$FAKE_JUDGE_KEY" > "$dir/key")
 cat > "$dir/config.toml" <<TOML
 name = "${FAKE_JUDGE_NAME:-e2e-judge}"
