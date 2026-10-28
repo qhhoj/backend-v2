@@ -12,13 +12,30 @@ import type {
   AuditFeedResponse,
 } from './dto/audit-entry.response';
 
-/** The permission that lets a viewer read the free-text note of a record of this kind: notes can carry values (an e-mail address, a user id, a contest name) that the kind's own routes protect. Kinds not listed carry fixed notes. */
+/** The permission that lets a viewer read the free-text note of a record of this kind: notes can carry values (an e-mail address, a user id, a contest name, a score-override reason) that the kind's own routes protect. */
 const NOTE_PERMISSION: Partial<Record<string, Permission>> = {
   user: 'auth.change_user',
   problem: 'judge.edit_all_problem',
   contest: 'judge.edit_all_contest',
   contestParticipation: 'judge.edit_all_contest',
+  submission: 'judge.change_submission',
 };
+
+/** Kinds whose writers store only fixed notes ("Edited from site", a judge name), shown to every viewer. Any other kind without a permission above is redacted, so a new writer cannot leak by omission. */
+const FIXED_NOTE_KINDS: ReadonlySet<string> = new Set([
+  'tagProblem',
+  'problemType',
+  'problemGroup',
+  'license',
+  'submission_batch',
+  'group',
+  'organization',
+  'blogPost',
+  'comment',
+  'flatpage',
+  'judge',
+  'setting',
+]);
 
 const EMPTY: AuditFeedResponse = { items: [], nextBefore: null };
 
@@ -94,8 +111,9 @@ export class AuditFeedService {
   }
 }
 
-/** The note, or empty when the viewer lacks the permission its kind of record needs. */
+/** The note, or empty when its kind needs a permission the viewer lacks or has no mapped permission and no fixed notes. */
 function noteFor(record: AuditRecord, viewer: Principal): string {
+  if (FIXED_NOTE_KINDS.has(record.type)) return record.comment;
   const needed = NOTE_PERMISSION[record.type];
-  return needed && !hasPermission(viewer, needed) ? '' : record.comment;
+  return needed && hasPermission(viewer, needed) ? record.comment : '';
 }
