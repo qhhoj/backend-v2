@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.36.10
+
+### Patch Changes
+
+- f97f31a: Accepting a contest's rules requires the rules revision the user read; a request without it is refused with `rules_changed`.
+
 ## 2.36.9
 
 ### Patch Changes
