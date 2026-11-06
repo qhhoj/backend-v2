@@ -1,13 +1,9 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
-import { RateLimitService } from '@libs/common';
+import { JobsModule, RateLimitService } from '@libs/common';
 import { CONTEST_RESCORE_QUEUE } from '@libs/contests';
-import {
-  JudgingModule,
-  PROBLEM_RESCORE_QUEUE,
-  SUBMISSION_GRADED_QUEUE,
-} from '@libs/judging';
+import { JudgingModule, judgingJobs } from '@libs/judging';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { EventsModule } from '../events/events.module';
 import { JudgesApiModule } from '../judges/judges-api.module';
@@ -41,11 +37,8 @@ import { SubmissionsService } from './core/submissions.service';
     ProblemsApiModule,
     JudgesApiModule,
     JudgingModule,
-    BullModule.registerQueue(
-      { name: SUBMISSION_GRADED_QUEUE },
-      { name: PROBLEM_RESCORE_QUEUE },
-      { name: CONTEST_RESCORE_QUEUE },
-    ),
+    JobsModule.register(judgingJobs.graded, judgingJobs.problemRescore),
+    BullModule.registerQueue({ name: CONTEST_RESCORE_QUEUE }),
   ],
   controllers: [
     SubmissionCreateController,

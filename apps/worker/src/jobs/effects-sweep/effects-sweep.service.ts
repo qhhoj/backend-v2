@@ -3,12 +3,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { DAY_MS, HOUR_MS, MINUTE_MS, REDIS } from '@libs/common';
-import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import { judgingJobs, SWEEP_INTERVAL_MS } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { SubmissionEffectsRepository } from '../submission-effects/submission-effects.repository';
 import { SubmissionEffectsService } from '../submission-effects/submission-effects.service';
 
-export const SWEEP_INTERVAL_MS = 10 * MINUTE_MS;
 /** `judgedDate` is grading-begin: a grading that began up to this long before the last sweep and finished after it is still covered. */
 const SWEEP_OVERLAP_MS = 10 * MINUTE_MS;
 /** After a long outage the sweep looks back at most this far; graded jobs wait in Redis meanwhile. */
@@ -45,7 +44,7 @@ export class EffectsSweepService {
     private readonly repository: SubmissionEffectsRepository,
     private readonly effects: SubmissionEffectsService,
     @Inject(REDIS) private readonly redis: Redis,
-    @InjectQueue(SUBMISSION_GRADED_QUEUE)
+    @InjectQueue(judgingJobs.graded.queue)
     private readonly graded: Queue<SubmissionGradedJob>,
   ) {}
 

@@ -1,77 +1,18 @@
-import { InjectModel } from '@nestjs/mongoose';
-import {
-  InjectQueue,
-  OnWorkerEvent,
-  Processor,
-  WorkerHost,
-} from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
-import type { OnApplicationBootstrap } from '@nestjs/common';
-import type { Job, Queue } from 'bullmq';
-import type { Model } from 'mongoose';
-import { OrganizationJudgingCharge, Submission } from '@libs/database';
-import {
-  EFFECTS_SWEEP_JOB,
-  EFFECTS_SWEEP_QUEUE,
-  EFFECTS_SWEEP_SCHEDULER,
-} from '@libs/judging';
-import { startAfterIndexes } from '../start-after-indexes';
-import {
-  EffectsSweepService,
-  SWEEP_INTERVAL_MS,
-} from './effects-sweep.service';
+import { Injectable } from '@nestjs/common';
+import { JobProcessor } from '@libs/common';
+import { judgingJobs } from '@libs/judging';
+import { EffectsSweepService } from './effects-sweep.service';
 import type { SweepResult } from './effects-sweep.service';
 
-@Processor(EFFECTS_SWEEP_QUEUE, { concurrency: 1, autorun: false })
-export class EffectsSweepProcessor
-  extends WorkerHost
-  implements OnApplicationBootstrap
-{
-  private readonly logger = new Logger(EffectsSweepProcessor.name);
-
-  constructor(
-    private readonly sweeps: EffectsSweepService,
-    @InjectQueue(EFFECTS_SWEEP_QUEUE) private readonly queue: Queue,
-    @InjectModel(Submission.name)
-    private readonly submissions: Model<Submission>,
-    @InjectModel(OrganizationJudgingCharge.name)
-    private readonly judgingCharges: Model<OrganizationJudgingCharge>,
-  ) {
+@Injectable()
+export class EffectsSweepProcessor extends JobProcessor<void, SweepResult>(
+  judgingJobs.effectsSweep,
+) {
+  constructor(private readonly sweeps: EffectsSweepService) {
     super();
   }
 
-  /**
-   * One schedule for every worker process (the upsert is idempotent). BullMQ adds the next run when the current one starts, so a slow sweep would overlap it on another process; global concurrency 1 makes the next one wait (no Redis lock).
-   * BullMQ queues a first sweep when the schedule is created or its slot has passed, so a first boot or a restart after a missed slot sweeps at once; a warm restart within the interval does not. A finished row whose graded job was lost is found by its `effectsDueAt`, whatever its dates; the window (watermark less the overlap) recomputes the users and problems touched meanwhile.
-   * The window reads are index-bound; a repair charges judging time, which relies on the charges' unique index, so both are built before the first sweep.
-   */
-  async onApplicationBootstrap(): Promise<void> {
-    await this.queue.setGlobalConcurrency(1);
-    await this.queue.upsertJobScheduler(
-      EFFECTS_SWEEP_SCHEDULER,
-      { every: SWEEP_INTERVAL_MS },
-      {
-        name: EFFECTS_SWEEP_JOB,
-        opts: { removeOnComplete: true, removeOnFail: 100 },
-      },
-    );
-    await startAfterIndexes(this.worker, this.submissions, [
-      this.judgingCharges,
-    ]);
-  }
-
-  process(): Promise<SweepResult> {
+  run(): Promise<SweepResult> {
     return this.sweeps.sweep();
-  }
-
-  /** Without a listener a worker error (e.g. Redis flushed under a running job) is an unhandled event and throws. */
-  @OnWorkerEvent('error')
-  onError(error: Error): void {
-    this.logger.error(`Effects sweep worker error: ${error.message}`);
-  }
-
-  @OnWorkerEvent('failed')
-  onFailed(_job: Job | undefined, error: Error): void {
-    this.logger.error(`Effects sweep failed: ${error.message}`);
   }
 }

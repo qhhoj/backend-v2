@@ -12,7 +12,7 @@ import {
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_PUBLISH_QUEUE,
 } from '@libs/contests';
-import { EFFECTS_SWEEP_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import {
   Contest,
   ContestAnnouncement,
@@ -106,7 +106,7 @@ export async function setupWorkerTest({
     if (!seedBeforeBoot) {
       // Boot-time sweeps must finish before the flush, or they fail on their vanished jobs and race the tests.
       const sweepQueues = [
-        EFFECTS_SWEEP_QUEUE,
+        judgingJobs.effectsSweep.queue,
         CONTEST_FINAL_JUDGE_QUEUE,
         CONTEST_PUBLISH_QUEUE,
         USER_DATA_QUEUE,

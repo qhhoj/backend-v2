@@ -1,3 +1,4 @@
+import { JobProducer } from '@libs/common';
 import { Logger } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -11,7 +12,7 @@ import {
 } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { newId, toUuid } from '@libs/database';
-import { enqueueRescore, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import { profileQueries } from '@libs/database/testing';
 import type { UUID } from 'mongodb';
 import { ContestRescoreRepository } from '../src/jobs/contest-rescore/contest-rescore.repository';
@@ -381,7 +382,7 @@ describe('contest rescore', () => {
   it('retries a problem rescore whose contest rescore could not be queued, and the retry queues it', async () => {
     const { problem, participation } = await contestWith();
     const problemQueue = worker.module.get<Queue>(
-      getQueueToken(PROBLEM_RESCORE_QUEUE),
+      getQueueToken(judgingJobs.problemRescore.queue),
     );
     // eslint-disable-next-line @typescript-eslint/unbound-method -- re-applied with the queue as `this`
     const add = Queue.prototype.add;
@@ -398,7 +399,9 @@ describe('contest rescore', () => {
     });
     try {
       await worker.problems.updateOne({ _id: problem._id }, { partial: false });
-      await enqueueRescore(problemQueue, problem._id);
+      await new JobProducer(judgingJobs.problemRescore, problemQueue).add({
+        problemId: problem._id,
+      });
       await waitUntil(async () => (await problemQueue.getDelayedCount()) === 1);
       expect((await participationOf(participation._id)).score).toBe(0);
       const [retry] = await problemQueue.getJobs(['delayed']);

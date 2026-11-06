@@ -1,7 +1,6 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { RateLimitService } from '@libs/common';
-import { SIMILARITY_QUEUE } from '@libs/judging';
+import { JobsModule, RateLimitService } from '@libs/common';
+import { judgingJobs } from '@libs/judging';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { SimilarityAccessService } from './core/similarity-access.service';
 import { SimilarityRunsRepository } from './core/similarity-runs.repository';
@@ -20,10 +19,7 @@ import { SimilarityStartService } from './start/similarity-start.service';
  * sources).
  */
 @Module({
-  imports: [
-    BullModule.registerQueue({ name: SIMILARITY_QUEUE }),
-    SubmissionsApiModule,
-  ],
+  imports: [JobsModule.register(judgingJobs.similarity), SubmissionsApiModule],
   controllers: [
     SimilarityStartController,
     SimilarityRunsController,

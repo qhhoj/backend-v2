@@ -1,7 +1,11 @@
 import type { Logger } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
-import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
-import { MINUTE_MS } from '@libs/common';
+import {
+  JOB_RETENTION,
+  JOB_RETRY,
+  MINUTE_MS,
+  withinTimeout,
+} from '@libs/common';
 import {
   CONTEST_ENQUEUE_TIMEOUT_MS,
   contestActionState,

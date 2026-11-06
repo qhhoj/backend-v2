@@ -1,0 +1,161 @@
+{
+  "ids": {
+    "submission": "0190f0c0-0000-7000-8000-000000000001",
+    "user": "0190f0c0-0000-7000-8000-000000000002",
+    "problem": "0190f0c0-0000-7000-8000-000000000003",
+    "otherProblem": "0190f0c0-0000-7000-8000-000000000004",
+    "run": "0190f0c0-0000-7000-8000-000000000005"
+  },
+  "jobs": [
+    {
+      "producer": "api notifyGraded (abort, reject, score override)",
+      "queue": "submission-graded",
+      "name": "graded",
+      "id": null,
+      "data": {
+        "submissionId": "0190f0c0-0000-7000-8000-000000000001",
+        "userId": "0190f0c0-0000-7000-8000-000000000002",
+        "problemId": "0190f0c0-0000-7000-8000-000000000003"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "bridge notifyGraded with gradedJobId",
+      "queue": "submission-graded",
+      "name": "graded",
+      "id": "0190f0c0-0000-7000-8000-000000000001.3",
+      "data": {
+        "submissionId": "0190f0c0-0000-7000-8000-000000000001",
+        "userId": "0190f0c0-0000-7000-8000-000000000002",
+        "problemId": "0190f0c0-0000-7000-8000-000000000003"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "jobId": "0190f0c0-0000-7000-8000-000000000001.3",
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api/worker notifyRescore",
+      "queue": "problem-rescore",
+      "name": "rescore",
+      "id": null,
+      "data": {
+        "problemId": "0190f0c0-0000-7000-8000-000000000003"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api enqueueRescores (bulk rescore)",
+      "queue": "problem-rescore",
+      "name": "rescore",
+      "id": null,
+      "data": {
+        "problemId": "0190f0c0-0000-7000-8000-000000000004"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api enqueueRescores (bulk rescore)",
+      "queue": "problem-rescore",
+      "name": "rescore",
+      "id": null,
+      "data": {
+        "problemId": "0190f0c0-0000-7000-8000-000000000003"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api enqueueSimilarity",
+      "queue": "similarity",
+      "name": "compare",
+      "id": "similarity-0190f0c0-0000-7000-8000-000000000005",
+      "data": {
+        "runId": "0190f0c0-0000-7000-8000-000000000005"
+      },
+      "opts": {
+        "attempts": 1,
+        "jobId": "similarity-0190f0c0-0000-7000-8000-000000000005",
+        "removeOnComplete": true,
+        "removeOnFail": {
+          "age": 604800
+        }
+      }
+    }
+  ],
+  "schedulers": [
+    {
+      "queue": "effects-sweep",
+      "key": "effects-sweep-every-10-minutes",
+      "name": "sweep",
+      "every": 600000,
+      "template": {
+        "opts": {
+          "removeOnFail": 100,
+          "removeOnComplete": true
+        }
+      }
+    }
+  ],
+  "queues": {
+    "submission-graded": {
+      "globalConcurrency": null
+    },
+    "problem-rescore": {
+      "globalConcurrency": 1
+    },
+    "similarity": {
+      "globalConcurrency": 1
+    },
+    "effects-sweep": {
+      "globalConcurrency": 1
+    }
+  }
+}

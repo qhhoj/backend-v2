@@ -1,13 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
-import { REDIS } from '@libs/common';
+import { REDIS, withinTimeout } from '@libs/common';
 import {
   BRIDGE_COMMANDS_MAX_LENGTH,
   BRIDGE_COMMANDS_STREAM,
   JUDGE_COMMAND_BATCH,
 } from './bridge-commands';
 import type { BridgeCommand } from './bridge-commands';
-import { withinTimeout } from './within-timeout';
 
 /** Longest a request waits for a command to reach Redis. */
 export const PUBLISH_TIMEOUT_MS = 1000;

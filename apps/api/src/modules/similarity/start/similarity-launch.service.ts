@@ -1,10 +1,8 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
-import { AppError } from '@libs/common';
+import { AppError, InjectJob, JobProducer } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { SimilarityError, SimilarityLimits } from '@libs/database';
-import { enqueueSimilarity, SIMILARITY_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { SimilarityJob } from '@libs/judging';
 import { SettingsService } from '@libs/settings';
 import type { ScopeTarget } from '../core/similarity-access.service';
@@ -20,7 +18,8 @@ export class SimilarityLaunchService {
   constructor(
     private readonly runs: SimilarityRunsRepository,
     private readonly settings: SettingsService,
-    @InjectQueue(SIMILARITY_QUEUE) private readonly queue: Queue<SimilarityJob>,
+    @InjectJob(judgingJobs.similarity)
+    private readonly similarity: JobProducer<SimilarityJob>,
   ) {}
 
   /** Returns the run id; 409 while the scope has an active run. */
@@ -42,7 +41,7 @@ export class SimilarityLaunchService {
       );
     const runId = uuidStr(run._id);
     try {
-      await enqueueSimilarity(this.queue, runId);
+      await this.similarity.add({ runId });
     } catch (enqueueError) {
       await this.discardUnqueued(runId);
       throw enqueueError;

@@ -3,7 +3,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { createReadStream } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
-import { AppError, atomicWrite, DAY_MS, StorageService } from '@libs/common';
+import {
+  AppError,
+  atomicWrite,
+  DAY_MS,
+  InjectJob,
+  JobProducer,
+  StorageService,
+} from '@libs/common';
 import {
   dataFileNamesOf,
   emptyProblemData,
@@ -15,7 +22,7 @@ import type {
   ProblemData,
   SyncedSettingFingerprints,
 } from '@libs/database';
-import { notifyRescore, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { ProblemRescoreJob } from '@libs/judging';
 import {
   compileInitYaml,
@@ -332,8 +339,8 @@ export class PolygonImportService {
     private readonly sourceChecks: ImportSourceChecks,
     private readonly runningContests: RunningContestsRepository,
     @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
-    @InjectQueue(PROBLEM_RESCORE_QUEUE)
-    private readonly rescoreQueue: Queue<ProblemRescoreJob>,
+    @InjectJob(judgingJobs.problemRescore)
+    private readonly rescores: JobProducer<ProblemRescoreJob>,
   ) {}
 
   /** A sync another sync of the same package already applied ends at once; then pre-checks that cost nothing come first; the package (uploaded, or downloaded here from Polygon) is removed however the job ends. */
@@ -619,7 +626,7 @@ export class PolygonImportService {
   ): Promise<PolygonImportResult['attention']> {
     // Points, partial and the cases may all have changed; a create has no submissions yet. Never throws: the import stands.
     if (job.mode === 'update')
-      await notifyRescore(this.rescoreQueue, applied.problemId, this.logger);
+      await this.rescores.enqueue({ problemId: applied.problemId });
     // The statements were written by the commit itself, so the cached PDFs go even when the data files need attention.
     const pdfAttention = await this.attentionOnFailure(job.code, () =>
       this.runSteps(job.code, [

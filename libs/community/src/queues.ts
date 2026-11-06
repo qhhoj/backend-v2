@@ -1,9 +1,8 @@
 import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
-import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
+import { HOUR_MS, JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/common';
 import type { DiscordEvent, DiscordMessage } from './discord';
-import { HOUR_MS } from '@libs/common';
 
 export const COMMUNITY_ENQUEUE_TIMEOUT_MS = 1000;
 

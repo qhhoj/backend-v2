@@ -3,16 +3,12 @@ import { Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, unique } from '@libs/common';
+import { AppError, InjectJob, JobProducer, unique } from '@libs/common';
 import { CONTEST_RESCORE_QUEUE, enqueueContestRescore } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
 import type { Revision, Submission } from '@libs/database';
-import {
-  BridgeCommandsService,
-  enqueueRescores,
-  PROBLEM_RESCORE_QUEUE,
-} from '@libs/judging';
+import { BridgeCommandsService, judgingJobs } from '@libs/judging';
 import type { ProblemRescoreJob } from '@libs/judging';
 import type { FilterQuery } from 'mongoose';
 import { BULK_REJUDGE_LIMIT } from '../core/rate-limits';
@@ -53,8 +49,8 @@ export class SubmissionBatchService {
     private readonly commands: BridgeCommandsService,
     private readonly log: BatchLogRepository,
     private readonly users: UsersRepository,
-    @InjectQueue(PROBLEM_RESCORE_QUEUE)
-    private readonly problemRescores: Queue<ProblemRescoreJob>,
+    @InjectJob(judgingJobs.problemRescore)
+    private readonly problemRescores: JobProducer<ProblemRescoreJob>,
     @InjectQueue(CONTEST_RESCORE_QUEUE)
     private readonly contestRescores: Queue<ContestRescoreJob>,
   ) {}
@@ -140,7 +136,9 @@ export class SubmissionBatchService {
       return;
     }
     if (problemIds.length)
-      await enqueueRescores(this.problemRescores, problemIds);
+      await this.problemRescores.addBulk(
+        problemIds.map((problemId) => ({ problemId })),
+      );
   }
 
   private async sampleOf(

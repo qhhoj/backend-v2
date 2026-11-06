@@ -1,6 +1,6 @@
 import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
+import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/common';
 import { COMMUNITY_ENQUEUE_TIMEOUT_MS } from '../queues';
 
 export const NOTIFICATION_FANOUT_QUEUE = 'notification-fanout';

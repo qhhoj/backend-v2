@@ -1,8 +1,7 @@
 import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import { JOB_RETENTION, JOB_RETRY } from '@libs/judging';
 import { attempt } from './queues';
-import { MINUTE_MS } from '@libs/common';
+import { JOB_RETENTION, JOB_RETRY, MINUTE_MS } from '@libs/common';
 
 export const CONTEST_PUBLISH_QUEUE = 'contest-publish';
 export const CONTEST_PUBLISH_JOB = 'publish';

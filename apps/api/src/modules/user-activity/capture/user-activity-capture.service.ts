@@ -4,7 +4,7 @@ import { HttpAdapterHost } from '@nestjs/core';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { optionalPrincipal } from '@libs/auth';
-import { execOrThrow, REDIS } from '@libs/common';
+import { execOrThrow, REDIS, withinTimeout } from '@libs/common';
 import {
   ACCESS_WRITE_SECONDS,
   ACTIVITY_TEXT_MAX,
@@ -13,7 +13,6 @@ import {
   redactCredentials,
   stripQuery,
 } from '@libs/community';
-import { withinTimeout } from '@libs/judging';
 import { ActiveUsersStore } from './active-users.store';
 import { ActivityBuffer } from './activity-buffer';
 import { ActivityWriterRepository } from './activity-writer.repository';

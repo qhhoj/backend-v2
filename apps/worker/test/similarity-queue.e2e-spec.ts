@@ -1,8 +1,9 @@
+import { JobProducer } from '@libs/common';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
 import { newId, uuidStr } from '@libs/database';
-import { enqueueSimilarity, SIMILARITY_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { SimilarityRun } from '@libs/database';
 import type { SimilarityJob } from '@libs/judging';
 import { SimilarityProcessor } from '../src/jobs/similarity/similarity.processor';
@@ -14,7 +15,9 @@ import type { WorkerTest } from './setup';
 describe('similarity queue', () => {
   let worker: WorkerTest;
   const queueOf = () =>
-    worker.module.get<Queue<SimilarityJob>>(getQueueToken(SIMILARITY_QUEUE));
+    worker.module.get<Queue<SimilarityJob>>(
+      getQueueToken(judgingJobs.similarity.queue),
+    );
   beforeAll(async () => {
     worker = await setupWorkerTest();
   });
@@ -56,7 +59,9 @@ describe('similarity queue', () => {
   it('consumes an enqueued run and finishes it', async () => {
     const run = await createRun();
     await seedCopies(run);
-    await enqueueSimilarity(queueOf(), run._id);
+    await new JobProducer(judgingJobs.similarity, queueOf()).add({
+      runId: uuidStr(run._id),
+    });
     await waitUntil(
       async () =>
         (await worker.similarityRuns.findById(run._id))?.status === 'done',
@@ -72,8 +77,8 @@ describe('similarity queue', () => {
     // Paused, so the live worker cannot finish (and, with removeOnComplete, free) the jobId between the two adds.
     await queue.pause();
     try {
-      await enqueueSimilarity(queue, runId);
-      await enqueueSimilarity(queue, runId);
+      await new JobProducer(judgingJobs.similarity, queue).add({ runId });
+      await new JobProducer(judgingJobs.similarity, queue).add({ runId });
       expect(await queue.getJobCounts('waiting', 'paused')).toEqual(
         expect.objectContaining({ waiting: 0, paused: 1 }),
       );

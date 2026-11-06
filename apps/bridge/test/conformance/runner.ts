@@ -13,7 +13,7 @@ import type {
 import { mismatch } from '@libs/judge-proto/conformance/matcher';
 import type { Json } from '@libs/judge-proto/conformance/matcher';
 import { waitUntil } from '@libs/common/testing';
-import { withinTimeout } from '@libs/judging';
+import { withinTimeout } from '@libs/common';
 import { FakeJudge } from '../fake-judge';
 import type { BridgeTimings } from '../../src/bridge-timings';
 import { JudgeLinkServer } from '../../src/link/judge-link.server';

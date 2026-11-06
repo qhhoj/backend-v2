@@ -13,7 +13,7 @@ import {
   NOTIFICATION_TRIM_QUEUE,
   NOTIFICATION_TRIM_SCHEDULER,
 } from '@libs/community';
-import { JOB_RETRY } from '@libs/judging';
+import { JOB_RETRY } from '@libs/common';
 import { NotificationTrimService } from './notification-trim.service';
 
 @Processor(NOTIFICATION_TRIM_QUEUE, { concurrency: 1 })
