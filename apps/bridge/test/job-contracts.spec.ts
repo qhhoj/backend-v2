@@ -1,9 +1,9 @@
 import { DECLARED_JOBS, JOB_PROCESSORS, PRODUCED_JOBS } from '@libs/common';
 import type { JobContract } from '@libs/common';
-// Loading the three apps' modules declares every contract, processor and producer injection.
+// Loading the three apps' modules declares every contract, processor and producer injection (in the bridge's tests, which already load the api and the worker).
 import '../../api/src/app.module';
-import '../../bridge/src/bridge.module';
-import '../src/worker.module';
+import '../src/bridge.module';
+import '../../worker/src/worker.module';
 
 const label = (contract: JobContract<never>) =>
   `${contract.queue}/${contract.name}`;
