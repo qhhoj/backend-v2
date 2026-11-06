@@ -1,6 +1,10 @@
-import { canonicalTimeZone, MAIL_ADDRESS_PATTERN } from '@libs/common';
+import {
+  canonicalTimeZone,
+  ipMatcher,
+  MAIL_ADDRESS_PATTERN,
+} from '@libs/common';
 import { isUuid } from '@libs/database';
-import { BlockList, isIP } from 'node:net';
+import { isIP } from 'node:net';
 
 /** A rejected value; the message is safe to show an admin and never contains the value. */
 export class SettingError extends Error {}
@@ -39,27 +43,23 @@ export const oneOfType = <Value extends string>(
 
 /**
  * Addresses a production server must not be pointed at: loopback, private, link-local, unspecified
- * and IPv4-mapped IPv6. Two lists: a BlockList mixing families matches IPv4 against the IPv6 ranges.
+ * and IPv4-mapped IPv6. Two matchers: one matcher mixing families matches IPv4 against the IPv6 ranges.
  */
-const internalIpv4 = new BlockList();
-for (const [network, prefix] of [
-  ['0.0.0.0', 8],
-  ['10.0.0.0', 8],
-  ['127.0.0.0', 8],
-  ['169.254.0.0', 16],
-  ['172.16.0.0', 12],
-  ['192.168.0.0', 16],
-] as const)
-  internalIpv4.addSubnet(network, prefix, 'ipv4');
-const internalIpv6 = new BlockList();
-for (const [network, prefix] of [
-  ['::', 128],
-  ['::1', 128],
-  ['::ffff:0:0', 96],
-  ['fc00::', 7],
-  ['fe80::', 10],
-] as const)
-  internalIpv6.addSubnet(network, prefix, 'ipv6');
+const isInternalIpv4 = ipMatcher([
+  '0.0.0.0/8',
+  '10.0.0.0/8',
+  '127.0.0.0/8',
+  '169.254.0.0/16',
+  '172.16.0.0/12',
+  '192.168.0.0/16',
+]);
+const isInternalIpv6 = ipMatcher([
+  '::/128',
+  '::1/128',
+  '::ffff:0:0/96',
+  'fc00::/7',
+  'fe80::/10',
+]);
 
 /** Literal internal hosts only: a name that resolves to an internal address is not caught (accepted residual risk). */
 const isInternalHost = (hostname: string): boolean => {
@@ -67,8 +67,8 @@ const isInternalHost = (hostname: string): boolean => {
   if (name === 'localhost' || name.endsWith('.localhost')) return true;
   const address = hostname.replace(/^\[|\]$/g, '');
   const family = isIP(address);
-  if (family === 4) return internalIpv4.check(address, 'ipv4');
-  return family === 6 && internalIpv6.check(address, 'ipv6');
+  if (family === 4) return isInternalIpv4(address);
+  return family === 6 && isInternalIpv6(address);
 };
 
 /**

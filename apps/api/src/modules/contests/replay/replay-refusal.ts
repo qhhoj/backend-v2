@@ -1,4 +1,4 @@
-import { AppError } from '@libs/common';
+import { AppError, issueError } from '@libs/common';
 
 /** Field every replay issue is reported on. */
 const REPLAY_ISSUE_FIELD = 'replay';
@@ -10,8 +10,10 @@ export const replayRefusal = (
   message: string,
   issueCode = code,
 ): AppError =>
-  new AppError(code, status, message, undefined, undefined, {
-    issues: [{ field: REPLAY_ISSUE_FIELD, code: issueCode, message }],
+  issueError(code, status, {
+    field: REPLAY_ISSUE_FIELD,
+    code: issueCode,
+    message,
   });
 
 /** Gives a refusal that has no `issues` (the viewer's 404 and 403, the rate limit's 429) one coded after its error code; headers such as `Retry-After` survive. */

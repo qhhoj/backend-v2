@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, RateLimitService } from '@libs/common';
+import { AppError, RateLimitService, issueError } from '@libs/common';
 import { contestPhase } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import {
@@ -183,7 +183,9 @@ export class ContestPublishService {
 
 const contestNotEnded = (): AppError => {
   const message = 'Problems can be published after the contest ends';
-  return new AppError('contest_not_ended', 409, message, undefined, undefined, {
-    issues: [{ field: 'endTime', code: 'contest_not_ended', message }],
+  return issueError('contest_not_ended', 409, {
+    field: 'endTime',
+    code: 'contest_not_ended',
+    message,
   });
 };

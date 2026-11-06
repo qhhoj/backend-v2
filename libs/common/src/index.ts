@@ -1,5 +1,7 @@
 export * from './errors/app.error';
 export * from './errors/conflict-issue';
+export * from './errors/envelope';
+export * from './errors/issue-error';
 export * from './errors/invalid-field';
 export * from './errors/validation-failed.error';
 export * from './errors/document-too-large';
@@ -11,6 +13,7 @@ export * from './pipes/validation.pipe';
 export * from './bootstrap';
 export * from './env/env';
 export * from './env/ip-allowlist';
+export * from './net/ip';
 export * from './env/removed-env';
 export * from './env/env.module';
 export * from './querier/base-catalog.querier';

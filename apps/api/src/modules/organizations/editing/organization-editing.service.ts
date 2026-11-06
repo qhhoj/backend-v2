@@ -10,6 +10,7 @@ import {
   REDIS,
   unique,
   withRedisLock,
+  issueError,
 } from '@libs/common';
 import { ORGANIZATION_ADMIN_LIMIT, SHORT_NAME_LENGTH } from '@libs/community';
 import type { Organization } from '@libs/database';
@@ -41,8 +42,10 @@ const invalid = (field: string, message: string) =>
 const ADMIN_CAP = 'admin_cap';
 const ownAdminCap = () => {
   const message = `You may administer at most ${ORGANIZATION_ADMIN_LIMIT} organizations`;
-  return new AppError('forbidden', 403, message, undefined, undefined, {
-    issues: [{ field: 'adminIds', code: ADMIN_CAP, message }],
+  return issueError('forbidden', 403, {
+    field: 'adminIds',
+    code: ADMIN_CAP,
+    message,
   });
 };
 const otherAdminCap = () =>

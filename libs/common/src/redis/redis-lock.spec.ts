@@ -1,6 +1,6 @@
 import type Redis from 'ioredis';
 import { AppError } from '../errors/app.error';
-import { RENEW_LOCK_SCRIPT, withRedisLock } from './redis-lock';
+import { EXTEND_LOCK_SCRIPT, withRedisLock } from './redis-lock';
 
 const lock = { key: 'k', ttlSeconds: 5, busyMessage: 'Busy, retry' };
 
@@ -72,7 +72,7 @@ describe('withRedisLock', () => {
       );
       await jest.advanceTimersByTimeAsync(4900);
       const renewals = evalMock.mock.calls.filter(
-        ([script]) => script === RENEW_LOCK_SCRIPT,
+        ([script]) => script === EXTEND_LOCK_SCRIPT,
       );
       expect(renewals.length).toBeGreaterThanOrEqual(2);
       await jest.advanceTimersByTimeAsync(200);
@@ -92,5 +92,18 @@ describe('withRedisLock', () => {
       'Busy, retry',
     );
     expect(set).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the work result when the release fails, and the work error when it throws', async () => {
+    const redis = {
+      set: jest.fn().mockResolvedValue('OK'),
+      eval: jest.fn().mockRejectedValue(new Error('redis down')),
+    } as unknown as Redis;
+    await expect(
+      withRedisLock(redis, lock, () => Promise.resolve('done')),
+    ).resolves.toBe('done');
+    await expect(
+      withRedisLock(redis, lock, () => Promise.reject(new Error('boom'))),
+    ).rejects.toThrow('boom');
   });
 });
