@@ -37,6 +37,8 @@ const UPLOAD_PREFIX = '.upload-';
 /** Covers the largest upload plus its recompile; the lock is not renewed, so a write must finish within it. */
 const DATA_WRITE_LOCK_SECONDS = 15 * 60;
 const STALE_UPLOAD_MS = 60 * 60 * 1000;
+/** Creating a missing problem directory: a rename holds the lock for a move and one Mongo write. */
+const STAGE_DIRECTORY_LOCK_SECONDS = 10;
 /** The worker removes a package when its job ends; one left past a failed job's retention (a day) belongs to a lost job. */
 const STALE_IMPORT_MS = 2 * 24 * 60 * 60 * 1000;
 
@@ -127,7 +129,7 @@ export class ProblemDataFilesService {
     );
   }
 
-  /** Runs a code rename (`work`: its Mongo write, then `rename`) under the data locks of both codes, so no data write runs on either side of the move. A write holding either lock refuses the rename at once with the 409 `busy` conflict. */
+  /** Runs a code rename (`work`: `rename`, then its Mongo write, then `rename` back if that write fails) under the data locks of both codes, so no data write runs on either side of the move. A write holding either lock refuses the rename at once with the 409 `busy` conflict. */
   withRenameLocks<T>(
     oldCode: string,
     newCode: string,
@@ -259,13 +261,29 @@ export class ProblemDataFilesService {
 
   /** A fresh temporary path inside the problem directory, for streaming uploads before they are validated. */
   async stageUpload(code: string): Promise<string> {
-    await mkdir(this.directoryOf(code), { recursive: true });
+    await this.ensureDirectory(code);
     const stagedPath = this.resolveInside(
       `${this.codeOf(code)}/${UPLOAD_PREFIX}${randomUUID()}`,
     );
     await assertRealPathInside(this.root, stagedPath);
     await this.sweepStaleUploads(code);
     return stagedPath;
+  }
+
+  /** A missing directory is created under the data lock, so it is never recreated behind a rename that moved it away (its move back would find the name taken); waits out a rename, a longer data write gets the 409 `busy` conflict. An existing directory needs no lock: staging a file never creates its directory. */
+  private async ensureDirectory(code: string): Promise<void> {
+    if (await this.exists(code)) return;
+    await withRedisLock(
+      this.redis,
+      {
+        key: this.lockKey(code),
+        ttlSeconds: STAGE_DIRECTORY_LOCK_SECONDS,
+        waitSeconds: STAGE_DIRECTORY_LOCK_SECONDS,
+        busyMessage:
+          "Another change to this problem's data is in progress, try again",
+      },
+      () => mkdir(this.directoryOf(code), { recursive: true }),
+    );
   }
 
   /** Staged files left by a crashed request, and a writing marker whose lock is gone (its process was killed): dropped once an hour old, so abandoned uploads never pile up and no problem waits on a dead marker. */

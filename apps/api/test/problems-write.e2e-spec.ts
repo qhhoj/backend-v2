@@ -1,4 +1,10 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { ProblemEvents } from '../src/modules/problems/core/problem.events';
 import {
@@ -8,6 +14,7 @@ import {
   detailOf,
   loginAs,
   seedCatalog,
+  writeDataArchive,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
 import { errorCode, setupApiTest } from './setup';
@@ -16,11 +23,13 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
 import {
+  ProblemDataFilesService,
   PROBLEM_PURGE_QUEUE,
   PROBLEM_SOLVERS_QUEUE,
   problemPurgeJobId,
 } from '@libs/problems';
 import type { ProblemPurgeJob, ProblemSolversJob } from '@libs/problems';
+import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 import { ContestsRepository } from '../src/modules/contests/core/contests.repository';
 import { clearRateLimits, createContest } from './contest-fixtures';
 import { softDelete, tombstone } from './deleted-problem-fixtures';
@@ -364,6 +373,109 @@ afterAll(() => api.teardown());
       await authed(api.http().get(`${PROBLEMS}/second`), setter).expect(404);
       await authed(api.http().get(`${PROBLEMS}/third`), setter).expect(200);
       expect(events).toContainEqual(['codeRenamed', 'second', 'third']);
+    });
+    it('keeps the test data at the stored code when a rename fails at the move or at the save', async () => {
+      await createProblem(api, catalog, {
+        code: 'judged',
+        authors: [setterId],
+        isPublic: false,
+      });
+      writeDataArchive(api, 'judged', [{ name: '1.in', content: '1' }]);
+      const archiveOf = (code: string) =>
+        join(api.problemDataRoot, code, 'tests.zip');
+      const renameTo = (code: string) =>
+        authed(api.http().patch(`${PROBLEMS}/judged`), setter)
+          .send({ code })
+          .expect(500);
+      const failures = [
+        jest
+          .spyOn(api.app.get(ProblemDataFilesService), 'rename')
+          .mockRejectedValueOnce(new Error('disk full')),
+        jest
+          .spyOn(api.app.get(ProblemsRepository), 'update')
+          .mockRejectedValueOnce(new Error('mongo down')),
+      ];
+      for (const failure of failures) {
+        await renameTo('judged_new');
+        failure.mockRestore();
+        expect(await api.problems.countDocuments({ code: 'judged' })).toBe(1);
+        expect(existsSync(archiveOf('judged'))).toBe(true);
+        expect(existsSync(join(api.problemDataRoot, 'judged_new'))).toBe(false);
+      }
+      expect(events).not.toContainEqual(
+        expect.arrayContaining(['codeRenamed']),
+      );
+    });
+    it('leaves the test data with a save that landed, refuses a target taken under the lock, and fails loudly when the data cannot be put back', async () => {
+      const repository = api.app.get(ProblemsRepository);
+      const dataFiles = api.app.get(ProblemDataFilesService);
+      const directoryOf = (code: string) => join(api.problemDataRoot, code);
+      const withData = async (code: string) => {
+        await createProblem(api, catalog, {
+          code,
+          authors: [setterId],
+          isPublic: false,
+        });
+        writeDataArchive(api, code, [{ name: '1.in', content: '1' }]);
+      };
+      const rename = (from: string, to: string, status: number) =>
+        authed(api.http().patch(`${PROBLEMS}/${from}`), setter)
+          .send({ code: to })
+          .expect(status);
+      const storedCodes = async () =>
+        (await api.problems.find({}, { code: 1 }).lean()).map(
+          (problem) => problem.code,
+        );
+
+      await withData('landed');
+      const update = repository.update.bind(repository);
+      const lostReply = jest
+        .spyOn(repository, 'update')
+        .mockImplementationOnce(async (...args) => {
+          await update(...args);
+          throw new Error('reply lost');
+        });
+      await rename('landed', 'landed_new', 500);
+      lostReply.mockRestore();
+      expect(await storedCodes()).toContain('landed_new');
+      expect(existsSync(join(directoryOf('landed_new'), 'tests.zip'))).toBe(
+        true,
+      );
+      expect(existsSync(directoryOf('landed'))).toBe(false);
+
+      await withData('raced');
+      mkdirSync(directoryOf('raced_new'));
+      const checkedBeforeTheLock = jest
+        .spyOn(dataFiles, 'exists')
+        .mockResolvedValueOnce(false);
+      expect(issueCodesOf(await rename('raced', 'raced_new', 400))).toEqual([
+        'data_directory_taken',
+      ]);
+      checkedBeforeTheLock.mockRestore();
+      expect(existsSync(join(directoryOf('raced'), 'tests.zip'))).toBe(true);
+
+      await withData('stranded');
+      const failedSave = jest
+        .spyOn(repository, 'update')
+        .mockRejectedValueOnce(new Error('mongo down'));
+      const move = dataFiles.rename.bind(dataFiles);
+      const failedMoveBack = jest
+        .spyOn(dataFiles, 'rename')
+        .mockImplementationOnce(move)
+        .mockRejectedValueOnce(new Error('EEXIST'));
+      const response = await rename('stranded', 'stranded_new', 500);
+      failedSave.mockRestore();
+      failedMoveBack.mockRestore();
+      const { error } = response.body as {
+        error: { code: string; message: string };
+      };
+      expect(error.code).toBe('rename_data_stranded');
+      expect(error.message).toContain('Stored code: stranded;');
+      expect(error.message).toContain('<problem data root>/stranded_new/');
+      expect(await storedCodes()).toContain('stranded');
+      expect(existsSync(join(directoryOf('stranded_new'), 'tests.zip'))).toBe(
+        true,
+      );
     });
     it('refuses to create, suggest or clone a problem onto a leftover data directory, keeping its files', async () => {
       const leftover = join(api.problemDataRoot, 'leftover');
