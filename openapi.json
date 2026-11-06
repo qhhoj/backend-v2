@@ -19465,7 +19465,7 @@
     },
     "/api/internal/admin/settings/{key}": {
       "patch": {
-        "description": "Requires `judge.change_settings` and a browser session (API tokens are refused); `mail.smtpUrl`, `organization.adminRoleId`, every `auth.*` key, `discord.webhooks`, `polygon.apiKey`, `polygon.apiSecret`, `polygon.accountName`, `externalJudge.baseUrl` and `externalJudge.apiToken` also need a superuser, to read as well. Sets the value of one setting and records a revision with the acting user. Object-valued settings are merged into the stored value. `null` is refused. Errors: 400 `validation_failed` on `value` when it does not fit the setting, 403 `superuser_only` on `key` for a superuser-only key, 404 `not_found` for an unknown key.",
+        "description": "Requires `judge.change_settings` and a browser session (API tokens are refused); `mail.smtpUrl`, `organization.adminRoleId`, every `auth.*` key, `discord.webhooks`, `polygon.apiKey`, `polygon.apiSecret`, `polygon.accountName`, `externalJudge.baseUrl` and `externalJudge.apiToken` also need a superuser, to read as well. Sets the value of one setting and records a revision with the acting user. Object-valued settings are merged into the stored value. `null` is refused. Errors: 400 `validation_failed` on `key` for an unknown key and on `value` when it does not fit the setting, 403 `superuser_only` on `key` for a superuser-only key.",
         "operationId": "SettingsController_update",
         "parameters": [
           {
@@ -19474,7 +19474,41 @@
             "name": "key",
             "required": true,
             "schema": {
-              "pattern": "^[A-Za-z][A-Za-z.]{0,63}$",
+              "enum": [
+                "auth.facebook",
+                "auth.github",
+                "auth.google",
+                "auth.pwnedApiUrl",
+                "auth.sessionMaxDays",
+                "contest.banAfterDisqualifications",
+                "contest.officialMode",
+                "contest.officialModeEndsAt",
+                "discord.webhooks",
+                "externalJudge.apiToken",
+                "externalJudge.baseUrl",
+                "externalJudge.maxInFlight",
+                "externalJudge.maxWaitMinutes",
+                "mail.from",
+                "mail.smtpUrl",
+                "organization.adminRoleId",
+                "pdf.maxBytes",
+                "pdf.renderTimeoutMs",
+                "polygon.accountName",
+                "polygon.apiKey",
+                "polygon.apiSecret",
+                "problem.deleteGraceDays",
+                "quota.cost.contest",
+                "quota.cost.dataPer10MiB",
+                "quota.cost.problem",
+                "quota.defaultJudgingMs",
+                "quota.defaultMonthlyCredits",
+                "quota.defaultStorageBytes",
+                "quota.enforce",
+                "similarity.maxPairs",
+                "similarity.maxSubmissions",
+                "similarity.minPercent",
+                "site.timeZone"
+              ],
               "type": "string"
             }
           }
@@ -19536,7 +19570,7 @@
     },
     "/api/internal/admin/settings/{key}/revisions": {
       "get": {
-        "description": "Requires `judge.change_settings`; the superuser-only keys of `PATCH` also need a superuser. Returns the change history of one setting, newest first, with the values before and after, the changed fields and the acting user. Paged, default 20 per page (max 100). Errors: 403 `superuser_only` on `key` for a superuser-only key, 404 `not_found` for an unknown key.",
+        "description": "Requires `judge.change_settings`; the superuser-only keys of `PATCH` also need a superuser. Returns the change history of one setting, newest first, with the values before and after, the changed fields and the acting user. Paged, default 20 per page (max 100). Errors: 400 `validation_failed` on `key` for an unknown key, 403 `superuser_only` on `key` for a superuser-only key.",
         "operationId": "SettingsController_revisions",
         "parameters": [
           {
@@ -19545,7 +19579,41 @@
             "name": "key",
             "required": true,
             "schema": {
-              "pattern": "^[A-Za-z][A-Za-z.]{0,63}$",
+              "enum": [
+                "auth.facebook",
+                "auth.github",
+                "auth.google",
+                "auth.pwnedApiUrl",
+                "auth.sessionMaxDays",
+                "contest.banAfterDisqualifications",
+                "contest.officialMode",
+                "contest.officialModeEndsAt",
+                "discord.webhooks",
+                "externalJudge.apiToken",
+                "externalJudge.baseUrl",
+                "externalJudge.maxInFlight",
+                "externalJudge.maxWaitMinutes",
+                "mail.from",
+                "mail.smtpUrl",
+                "organization.adminRoleId",
+                "pdf.maxBytes",
+                "pdf.renderTimeoutMs",
+                "polygon.accountName",
+                "polygon.apiKey",
+                "polygon.apiSecret",
+                "problem.deleteGraceDays",
+                "quota.cost.contest",
+                "quota.cost.dataPer10MiB",
+                "quota.cost.problem",
+                "quota.defaultJudgingMs",
+                "quota.defaultMonthlyCredits",
+                "quota.defaultStorageBytes",
+                "quota.enforce",
+                "similarity.maxPairs",
+                "similarity.maxSubmissions",
+                "similarity.minPercent",
+                "site.timeZone"
+              ],
               "type": "string"
             }
           },
@@ -19629,7 +19697,7 @@
     },
     "/api/internal/admin/settings/{key}/revisions/{revisionId}/restore": {
       "post": {
-        "description": "Requires `judge.change_settings` and a browser session; the superuser-only keys of `PATCH` also need a superuser. Writes the value the setting had before the given revision, as a new revision. Secret values are not stored in revisions, so they are never restored. Errors: 403 `superuser_only` on `key` for a superuser-only key, 404 `not_found` for an unknown setting or revision, 409 `secret_unrestorable` when the revision has nothing restorable because the value is secret.",
+        "description": "Requires `judge.change_settings` and a browser session; the superuser-only keys of `PATCH` also need a superuser. Writes the value the setting had before the given revision, as a new revision. Secret values are not stored in revisions, so they are never restored. Errors: 400 `validation_failed` on `key` for an unknown key, 403 `superuser_only` on `key` for a superuser-only key, 404 `not_found` for an unknown revision, 409 `secret_unrestorable` when the revision has nothing restorable because the value is secret.",
         "operationId": "SettingsController_restore",
         "parameters": [
           {
@@ -19638,7 +19706,41 @@
             "name": "key",
             "required": true,
             "schema": {
-              "pattern": "^[A-Za-z][A-Za-z.]{0,63}$",
+              "enum": [
+                "auth.facebook",
+                "auth.github",
+                "auth.google",
+                "auth.pwnedApiUrl",
+                "auth.sessionMaxDays",
+                "contest.banAfterDisqualifications",
+                "contest.officialMode",
+                "contest.officialModeEndsAt",
+                "discord.webhooks",
+                "externalJudge.apiToken",
+                "externalJudge.baseUrl",
+                "externalJudge.maxInFlight",
+                "externalJudge.maxWaitMinutes",
+                "mail.from",
+                "mail.smtpUrl",
+                "organization.adminRoleId",
+                "pdf.maxBytes",
+                "pdf.renderTimeoutMs",
+                "polygon.accountName",
+                "polygon.apiKey",
+                "polygon.apiSecret",
+                "problem.deleteGraceDays",
+                "quota.cost.contest",
+                "quota.cost.dataPer10MiB",
+                "quota.cost.problem",
+                "quota.defaultJudgingMs",
+                "quota.defaultMonthlyCredits",
+                "quota.defaultStorageBytes",
+                "quota.enforce",
+                "similarity.maxPairs",
+                "similarity.maxSubmissions",
+                "similarity.minPercent",
+                "site.timeZone"
+              ],
               "type": "string"
             }
           },
