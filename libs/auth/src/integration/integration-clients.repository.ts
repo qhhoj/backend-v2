@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { IntegrationClient, isUuid } from '@libs/database';
+import { MINUTE_MS } from '@libs/common';
 import type { HydratedDocument, Model } from 'mongoose';
 
 export type IntegrationClientDocument = HydratedDocument<IntegrationClient>;
 
-const TOUCH_INTERVAL_MS = 60_000;
+const TOUCH_INTERVAL_MS = MINUTE_MS;
 
 /** A key works until it is revoked or its expiry passes; both end it on the very next request. */
 export const isUsableClient = (

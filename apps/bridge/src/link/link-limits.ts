@@ -1,3 +1,4 @@
+import { MINUTE_MS } from '@libs/common';
 /** Bounds of the judge link (`bridge-timings.ts` has the timings); `Welcome.limits` tells the judge the ones it must respect. */
 
 /** gRPC max receive per message; grpc-js refuses a larger one with RESOURCE_EXHAUSTED before the handler sees it. */
@@ -23,6 +24,6 @@ export const MAX_UNAUTHENTICATED_PER_ADDRESS = 8;
 export const SOURCE_CHUNK_BYTES = 1024 * 1024;
 /** Failed key checks per address in `FAILED_AUTH_WINDOW_MS`; the address is then refused until the window ends. */
 export const MAX_FAILED_AUTH_PER_ADDRESS = 20;
-export const FAILED_AUTH_WINDOW_MS = 60_000;
+export const FAILED_AUTH_WINDOW_MS = MINUTE_MS;
 /** A socket closed by the bridge (judge revoked, replaced by a newer socket) gets this long to deliver its sessions' final statuses. */
 export const SOCKET_FLUSH_MS = 1000;

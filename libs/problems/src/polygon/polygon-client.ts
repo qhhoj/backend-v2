@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SettingsService } from '@libs/settings';
+import { MINUTE_MS } from '@libs/common';
 import { failureOf, PolygonApiError } from './polygon-api.error';
 import type { PolygonErrorCode } from './polygon-api.error';
 import { failureTextOf, IdleWatch, writeCappedBody } from './polygon-download';
@@ -20,7 +21,7 @@ export type PolygonFetch = typeof fetch;
 
 const CALL_TIMEOUT_MS = 30_000;
 /** A download fails after this long without a byte (headers or body); a slow one that keeps moving runs to the end. */
-const DOWNLOAD_IDLE_MS = 60_000;
+const DOWNLOAD_IDLE_MS = MINUTE_MS;
 /** How much of an error page the log keeps: enough to tell a Cloudflare page from a Polygon one. */
 const LOGGED_BODY_CHARS = 160;
 

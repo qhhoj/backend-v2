@@ -1,3 +1,4 @@
+import { MINUTE_MS } from '@libs/common';
 export interface BridgeTimings {
   /** Absolute deadlines from the connection: a socket with no authenticated session, and a session without Hello, are closed after this; trickling bytes does not extend it. */
   handshakeMs: number;
@@ -37,22 +38,22 @@ export const BRIDGE_TIMINGS = Symbol('BRIDGE_TIMINGS');
 /** Judge link timings: Hello 15 s, idle 60 s, a ping every 10 s, Accepted 20 s, resync 30 s, resume grace 30 s. */
 export const DEFAULT_BRIDGE_TIMINGS: BridgeTimings = {
   handshakeMs: 15_000,
-  idleMs: 60_000,
+  idleMs: MINUTE_MS,
   pingIntervalMs: 10_000,
   resyncMs: 30_000,
   acceptMs: 20_000,
   resumeGraceMs: 30_000,
-  runMarginMs: 10 * 60_000,
+  runMarginMs: 10 * MINUTE_MS,
   runCaseBudget: 100,
-  pinFallbackMs: 5 * 60_000,
+  pinFallbackMs: 5 * MINUTE_MS,
   externalTickMs: 2000,
   externalPollMs: 5000,
   externalSubmitGapMs: 1000,
-  generationGraceMs: 60_000,
+  generationGraceMs: MINUTE_MS,
   finalWriteRetryMs: 500,
   deferralBackoffMs: 15_000,
-  deferralMaxBackoffMs: 5 * 60_000,
-  deferralWindowMs: 30 * 60_000,
+  deferralMaxBackoffMs: 5 * MINUTE_MS,
+  deferralWindowMs: 30 * MINUTE_MS,
 };
 
 /** Deadline of one run from its Assign; `null` (no deadline) when the inputs are not finite. */

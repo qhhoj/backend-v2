@@ -1,6 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import type { UserDocument } from '@libs/auth';
-import { participationEnd, problemLabel } from '@libs/contests';
+import {
+  orderedProblems,
+  participationEnd,
+  problemLabel,
+} from '@libs/contests';
 import type { ProblemCell } from '@libs/contests';
 import { unique } from '@libs/common';
 import { LABEL_STYLES, SCOREBOARD_VISIBILITIES, uuidStr } from '@libs/database';
@@ -238,12 +242,10 @@ export class ContestSettingsResponse {
           : uuidStr(contest.publishAfterEndBy),
       ogImage: contest.ogImage ?? '',
       hasRankingAccessCode: contest.rankingAccessCodeHash !== null,
-      problemOutputPrefixes: [...contest.problems]
-        .sort((left, right) => left.order - right.order)
-        .map((entry) => ({
-          problemId: uuidStr(entry.problem),
-          outputPrefixOverride: entry.outputPrefixOverride,
-        })),
+      problemOutputPrefixes: orderedProblems(contest).map((entry) => ({
+        problemId: uuidStr(entry.problem),
+        outputPrefixOverride: entry.outputPrefixOverride,
+      })),
       users: users.map((user) => UserSummaryResponse.from(user)),
     };
   }
@@ -268,30 +270,28 @@ function labelledProblems(
   const summaryOf = new Map(
     facts.summaries.map((summary) => [summary._id, summary]),
   );
-  return [...contest.problems]
-    .sort((left, right) => left.order - right.order)
-    .flatMap((entry, index) => {
-      const problemId = uuidStr(entry.problem);
-      const summary = summaryOf.get(problemId);
-      if (!summary) return [];
-      return [
-        {
-          problemId,
-          code: summary.code,
-          name: summary.name,
-          label: problemLabel(index, contest.labelStyle),
-          points: entry.points,
-          partial: entry.partial,
-          isPretested: entry.isPretested,
-          maxSubmissions: entry.maxSubmissions,
-          timeLimit: facts.limits.get(problemId)?.timeLimit ?? null,
-          memoryLimit: facts.limits.get(problemId)?.memoryLimit ?? null,
-          solverCount:
-            facts.solverCounts && (facts.solverCounts.get(problemId) ?? 0),
-          viewerResult: facts.viewerResults?.get(problemId) ?? null,
-        },
-      ];
-    });
+  return orderedProblems(contest).flatMap((entry, index) => {
+    const problemId = uuidStr(entry.problem);
+    const summary = summaryOf.get(problemId);
+    if (!summary) return [];
+    return [
+      {
+        problemId,
+        code: summary.code,
+        name: summary.name,
+        label: problemLabel(index, contest.labelStyle),
+        points: entry.points,
+        partial: entry.partial,
+        isPretested: entry.isPretested,
+        maxSubmissions: entry.maxSubmissions,
+        timeLimit: facts.limits.get(problemId)?.timeLimit ?? null,
+        memoryLimit: facts.limits.get(problemId)?.memoryLimit ?? null,
+        solverCount:
+          facts.solverCounts && (facts.solverCounts.get(problemId) ?? 0),
+        viewerResult: facts.viewerResults?.get(problemId) ?? null,
+      },
+    ];
+  });
 }
 
 export class ContestDetailResponse extends ContestSummaryResponse {

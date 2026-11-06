@@ -6,6 +6,7 @@ export * from './errors/invalid-field';
 export * from './errors/validation-failed.error';
 export * from './errors/document-too-large';
 export * from './errors/duplicate-key';
+export * from './errors/retry-on-conflict';
 export * from './filters/exception.filter';
 export * from './interceptors/response.interceptor';
 export * from './pipes/refuse-null-fields.pipe';

@@ -12,6 +12,7 @@ import {
   PROBLEM_DATABYTES_JOB_ID,
   PROBLEM_DATABYTES_QUEUE,
 } from '@libs/problems';
+import { MINUTE_MS } from '@libs/common';
 import { ProblemDataBytesService } from './problem-databytes.service';
 
 @Processor(PROBLEM_DATABYTES_QUEUE, { concurrency: 1 })
@@ -36,7 +37,7 @@ export class ProblemDataBytesProcessor
       {
         jobId: PROBLEM_DATABYTES_JOB_ID,
         attempts: 3,
-        backoff: { type: 'exponential', delay: 60_000 },
+        backoff: { type: 'exponential', delay: MINUTE_MS },
         removeOnComplete: false,
         removeOnFail: false,
       },

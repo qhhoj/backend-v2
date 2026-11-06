@@ -11,13 +11,14 @@ import {
 } from '@libs/common';
 import {
   compareStandings,
-  sameStanding,
   isFrozenFor,
+  orderedProblems,
   problemLabel,
   problemSummaries,
   rankingCacheKey,
-  standingOf,
+  sameStanding,
   type Standing,
+  standingOf,
 } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { ContestParticipation } from '@libs/database';
@@ -245,9 +246,7 @@ export class ContestRankingService {
     contest: ContestDocument,
     standings: RankedStanding[],
   ): Promise<RankingResponse['problems']> {
-    const ordered = [...contest.problems].sort(
-      (left, right) => left.order - right.order,
-    );
+    const ordered = orderedProblems(contest);
     const codes = new Map(
       (
         await this.problems.findSummaries(

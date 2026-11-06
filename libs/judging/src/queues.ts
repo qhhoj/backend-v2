@@ -1,5 +1,6 @@
 import type { Queue } from 'bullmq';
 import { uuidStr } from '@libs/database';
+import { MINUTE_MS } from '@libs/common';
 
 const FAILED_JOB_RETENTION_SECONDS = 7 * 24 * 60 * 60;
 /** Finished jobs are dropped at once; failed ones stay a week for inspection. */
@@ -101,7 +102,7 @@ export interface SimilarityJob {
 }
 export const similarityJobId = (runId: string) => `similarity-${runId}`;
 /** The worker's budget for one run, all its groups. The queue runs one job at a time, so this also bounds the wait of the next scope; the api treats a run still running past it (plus a margin) as abandoned. */
-export const SIMILARITY_DEADLINE_MS = 30 * 60 * 1000;
+export const SIMILARITY_DEADLINE_MS = 30 * MINUTE_MS;
 /** One attempt: a failed run is recorded as failed and the staff member starts another; a retry would compare the same sources again for the same failure. */
 export const enqueueSimilarity = async (
   queue: Queue<SimilarityJob>,

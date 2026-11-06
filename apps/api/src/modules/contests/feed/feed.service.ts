@@ -3,11 +3,12 @@ import {
   buildFeedEvents,
   frozenTime,
   isFrozen,
+  orderedProblems,
   participationStart,
   problemLabel,
 } from '@libs/contests';
 import type { FeedEvent, FeedInput } from '@libs/contests';
-import { AppError } from '@libs/common';
+import { AppError, MINUTE_MS } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { FeedLineResponse } from './dto/feed-frame.response';
 import type { FeedContext } from './feed-auth.service';
@@ -48,9 +49,9 @@ export const newFeedSession = (): FeedSession => ({
   since: null,
   loadedAt: 0,
 });
-const FULL_RELOAD_MS = 10 * 60_000;
+const FULL_RELOAD_MS = 10 * MINUTE_MS;
 /** Re-reads a minute of overlap: merging by id makes a repeated row harmless, and a clock gap cannot lose one. */
-const TICK_OVERLAP_MS = 60_000;
+const TICK_OVERLAP_MS = MINUTE_MS;
 
 /** The first tick and every tenth minute read all rows; a count first keeps a contest that outgrew the cap from loading them. */
 const isFullRead = (session: FeedSession, now: Date): boolean =>
@@ -101,15 +102,13 @@ const problemsOf = (
   contest: ContestDocument,
   rows: FeedParts['problemRows'],
 ): FeedInput['problems'] =>
-  [...contest.problems]
-    .sort((left, right) => left.order - right.order)
-    .map((entry, index) => ({
-      id: uuidStr(entry.problem),
-      label: problemLabel(index, contest.labelStyle),
-      ordinal: index,
-      name: rows.get(uuidStr(entry.problem))?.name ?? '',
-      code: rows.get(uuidStr(entry.problem))?.code ?? '',
-    }));
+  orderedProblems(contest).map((entry, index) => ({
+    id: uuidStr(entry.problem),
+    label: problemLabel(index, contest.labelStyle),
+    ordinal: index,
+    name: rows.get(uuidStr(entry.problem))?.name ?? '',
+    code: rows.get(uuidStr(entry.problem))?.code ?? '',
+  }));
 
 @Injectable()
 export class FeedService {

@@ -2,26 +2,26 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
-import { MINUTE_MS, REDIS } from '@libs/common';
+import { DAY_MS, HOUR_MS, MINUTE_MS, REDIS } from '@libs/common';
 import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { SubmissionEffectsRepository } from '../submission-effects/submission-effects.repository';
 import { SubmissionEffectsService } from '../submission-effects/submission-effects.service';
 
-export const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+export const SWEEP_INTERVAL_MS = 10 * MINUTE_MS;
 /** `judgedDate` is grading-begin: a grading that began up to this long before the last sweep and finished after it is still covered. */
-const SWEEP_OVERLAP_MS = 10 * 60 * 1000;
+const SWEEP_OVERLAP_MS = 10 * MINUTE_MS;
 /** After a long outage the sweep looks back at most this far; graded jobs wait in Redis meanwhile. */
-const SWEEP_MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
+const SWEEP_MAX_WINDOW_MS = DAY_MS;
 /** End of the last successful sweep (epoch ms). */
 export const SWEEP_WATERMARK_KEY = 'effects:sweep:until';
 /** A row due for less than this still has its graded job on the way (BullMQ retries 10 s, then 20 s, apart); the sweep leaves it to the job. */
-export const EFFECTS_DUE_GRACE_MS = 2 * 60 * 1000;
+export const EFFECTS_DUE_GRACE_MS = 2 * MINUTE_MS;
 /** Rows repaired per sweep, oldest first; the rest wait for the next one. */
 const EFFECTS_DUE_BATCH = 1000;
 
 /** A row whose repair keeps failing is logged once per this long, not on every sweep; its retries go on. */
-const REPAIR_LOG_BACKOFF_MS = 60 * 60 * 1000;
+const REPAIR_LOG_BACKOFF_MS = HOUR_MS;
 
 export interface SweepResult {
   users: number;

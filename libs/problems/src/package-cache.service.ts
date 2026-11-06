@@ -6,6 +6,7 @@ import {
   assertRealPathInside,
   atomicWrite,
   ENV,
+  HOUR_MS,
   resolveInside,
 } from '@libs/common';
 import type { Env } from '@libs/common';
@@ -22,7 +23,7 @@ const ignoreMissing =
   };
 
 /** A temporary file this old is the debris of a crashed build. */
-const STRAY_TEMPORARY_MS = 60 * 60 * 1000;
+const STRAY_TEMPORARY_MS = HOUR_MS;
 
 /** `<PDF_CACHE_ROOT>/packages/<code>.<key>.zip`, written by the worker and served by the api. Only the newest key of a problem is kept; a code rename or a purge drops them all. */
 @Injectable()

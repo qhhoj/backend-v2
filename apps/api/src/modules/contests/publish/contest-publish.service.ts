@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, RateLimitService, issueError } from '@libs/common';
-import { contestPhase } from '@libs/contests';
+import { contestPhase, orderedProblems } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import {
   isEditorialReleased,
@@ -77,9 +77,7 @@ export class ContestPublishService {
     run: PublishRun,
   ): Promise<PublishedProblemResponse[]> {
     const items: PublishedProblemResponse[] = [];
-    for (const entry of [...contest.problems].sort(
-      (left, right) => left.order - right.order,
-    ))
+    for (const entry of orderedProblems(contest))
       items.push(await this.publishOne(auth, uuidStr(entry.problem), run));
     return items;
   }

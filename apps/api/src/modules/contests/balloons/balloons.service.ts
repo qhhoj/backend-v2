@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { Paginated, RateLimitService, unique } from '@libs/common';
-import { balloonItems, isFrozen, problemLabel } from '@libs/contests';
+import {
+  balloonItems,
+  isFrozen,
+  orderedProblems,
+  problemLabel,
+} from '@libs/contests';
 import type { BalloonItem } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
@@ -42,9 +47,7 @@ const keyOf = (participationId: string, problemId: string) =>
 const isShown = (entry: QueueEntry, state: BalloonState) =>
   state === 'all' || (state === 'delivered') === (entry.delivery !== null);
 const orderedProblemIds = (contest: ContestDocument): string[] =>
-  [...contest.problems]
-    .sort((left, right) => left.order - right.order)
-    .map((entry) => uuidStr(entry.problem));
+  orderedProblems(contest).map((entry) => uuidStr(entry.problem));
 
 @Injectable()
 export class BalloonsService {
@@ -223,12 +226,10 @@ export class BalloonsService {
       this.balloons.liveRows(contest._id),
       this.balloons.deliveries(contest._id),
     ]);
-    const problems = [...contest.problems]
-      .sort((left, right) => left.order - right.order)
-      .map((entry) => ({
-        problemId: uuidStr(entry.problem),
-        points: entry.points,
-      }));
+    const problems = orderedProblems(contest).map((entry) => ({
+      problemId: uuidStr(entry.problem),
+      points: entry.points,
+    }));
     const items = balloonItems(
       { name: contest.formatName, config: contest.formatConfig },
       problems,

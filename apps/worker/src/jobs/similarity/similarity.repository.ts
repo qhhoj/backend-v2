@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Connection, FilterQuery, Model } from 'mongoose';
-import { LIVE, SPECTATE } from '@libs/contests';
+import { LIVE, orderedProblems, SPECTATE } from '@libs/contests';
 import {
   Contest,
   ContestParticipation,
@@ -217,9 +217,9 @@ export class SimilarityRepository {
       .findById(contestId, { problems: 1 })
       .lean()
       .exec();
-    return [...(contest?.problems ?? [])]
-      .sort((left, right) => left.order - right.order)
-      .map((entry) => uuidStr(entry.problem));
+    return orderedProblems({ problems: contest?.problems ?? [] }).map((entry) =>
+      uuidStr(entry.problem),
+    );
   }
 
   /** Live and spectating participations only: virtual participations run after the contest, when its solutions may already be public. */

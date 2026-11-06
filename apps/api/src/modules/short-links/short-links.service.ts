@@ -7,6 +7,7 @@ import {
   isDuplicateKey,
   Paginated,
   RateLimitService,
+  retryOnDuplicateKey,
 } from '@libs/common';
 import type { ShortLink } from '@libs/database';
 import type {
@@ -135,23 +136,26 @@ export class ShortLinksService {
     chosenCode: string | undefined,
   ): Promise<ShortLink> {
     const attempts = chosenCode === undefined ? MAX_CODE_ATTEMPTS : 1;
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      try {
-        return await this.links.create({
-          ...fields,
-          code: chosenCode ?? this.codes.next(),
-        });
-      } catch (error) {
-        if (!isDuplicateKey(error, 'code')) throw error;
-      }
+    try {
+      return await retryOnDuplicateKey(
+        () =>
+          this.links.create({
+            ...fields,
+            code: chosenCode ?? this.codes.next(),
+          }),
+        attempts,
+        'code',
+      );
+    } catch (error) {
+      if (!isDuplicateKey(error, 'code')) throw error;
+      throw new AppError(
+        'conflict',
+        409,
+        chosenCode === undefined
+          ? 'Could not find a free short code; try again'
+          : 'This code is taken',
+      );
     }
-    throw new AppError(
-      'conflict',
-      409,
-      chosenCode === undefined
-        ? 'Could not find a free short code; try again'
-        : 'This code is taken',
-    );
   }
 
   async list(
