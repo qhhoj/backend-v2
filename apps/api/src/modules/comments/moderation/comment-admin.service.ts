@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, escapeRegExp, Paginated } from '@libs/common';
-import { excerpt } from '@libs/community';
+import { AppError, escapeRegExp, excerpt, Paginated } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Comment } from '@libs/database';
 import type { FilterQuery } from 'mongoose';

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import { ACTIVE_WINDOW_MS, ACTIVITY_PAGE_SIZE } from '@libs/community';
+import { MINUTE_MS } from '@libs/common';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import { ActiveUsersStore } from '../capture/active-users.store';
 import type { LiveActivityResponse } from './dto/activity.response';
@@ -24,7 +25,7 @@ export class ActivityLiveService {
       ),
     );
     return {
-      windowMinutes: ACTIVE_WINDOW_MS / 60_000,
+      windowMinutes: ACTIVE_WINDOW_MS / MINUTE_MS,
       ...counts,
       hasMore: page * ACTIVITY_PAGE_SIZE < counts.authenticatedUsers,
       users: entries.flatMap((entry) => {

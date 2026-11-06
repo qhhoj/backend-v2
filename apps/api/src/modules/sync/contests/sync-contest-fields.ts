@@ -1,4 +1,5 @@
 import { canonicalJson, unique } from '@libs/common';
+import { orderedProblems } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest, ContestProblem } from '@libs/database';
 import type { UpdateContestDto } from '../../contests/editing/dto/contest-edit.dto';
@@ -76,9 +77,11 @@ export const comparableOf = (contest: SyncedFields) => ({
   frozenLastMinutes: contest.frozenLastMinutes,
   formatName: contest.formatName,
   formatConfig: canonicalJson(contest.formatConfig),
-  problems: [...contest.problems]
-    .sort((left, right) => left.order - right.order)
-    .map((entry) => [uuidStr(entry.problem), entry.points, entry.partial]),
+  problems: orderedProblems(contest).map((entry) => [
+    uuidStr(entry.problem),
+    entry.points,
+    entry.partial,
+  ]),
 });
 
 export const isSameSyncedContest = (

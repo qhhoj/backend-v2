@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { codePointLength, MAX_SOURCE_LENGTH } from '@libs/database';
 import { IsString, registerDecorator } from 'class-validator';
 import { SubmitFileDto } from './submit-file.dto';
@@ -19,6 +20,10 @@ const IsSourceLength = () => (target: object, propertyName: string) =>
   });
 
 export class SubmitDto extends SubmitFileDto {
-  /** Source code, 1 to 65536 characters. */
-  @IsString() @IsSourceLength() source!: string;
+  @ApiProperty({
+    description: `Source code, 1 to ${MAX_SOURCE_LENGTH} characters.`,
+  })
+  @IsString()
+  @IsSourceLength()
+  source!: string;
 }

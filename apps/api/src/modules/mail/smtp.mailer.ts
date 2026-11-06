@@ -1,14 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { createTransport, type Transporter } from 'nodemailer';
-import {
-  MAIL_ADDRESS_PATTERN,
-  type MailMessage,
-  type Mailer,
-} from '@libs/common';
+import { assertMailMessage, type MailMessage, type Mailer } from '@libs/common';
 import { SettingsService } from '@libs/settings';
-
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHARACTER = /[\x00-\x1F\x7F]/;
 
 const DEFAULT_TIMEOUTS = {
   connectionTimeout: 10_000,
@@ -46,10 +39,7 @@ export class SmtpMailer implements Mailer {
   }
 
   async send(message: MailMessage): Promise<void> {
-    if (!MAIL_ADDRESS_PATTERN.test(message.to))
-      throw new Error('Invalid mail recipient');
-    if (CONTROL_CHARACTER.test(message.subject))
-      throw new Error('Invalid mail subject');
+    assertMailMessage(message);
     await this.transport().sendMail({
       from: this.settings.get('mail.from'),
       to: message.to,

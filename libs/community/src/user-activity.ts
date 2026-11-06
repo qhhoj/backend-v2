@@ -1,3 +1,4 @@
+import { MINUTE_MS } from '@libs/common';
 import { createHash } from 'node:crypto';
 
 /** Rows kept in memory; the oldest are dropped past it (legacy `deque(maxlen=5000)`). */
@@ -7,7 +8,7 @@ export const ACTIVITY_FLUSH_MS = 2000;
 /** `users.lastAccess` and the IP are written at most this often per user. */
 export const ACCESS_WRITE_SECONDS = 300;
 /** Legacy realtime window. */
-export const ACTIVE_WINDOW_MS = 30 * 60_000;
+export const ACTIVE_WINDOW_MS = 30 * MINUTE_MS;
 export const ACTIVITY_TEXT_MAX = 500;
 export const ACTIVITY_DAYS_MAX = 90;
 export const ACTIVITY_DAYS_DEFAULT = 7;

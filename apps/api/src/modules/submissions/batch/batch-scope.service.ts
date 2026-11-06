@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { AppError, issueError } from '@libs/common';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { ContestsRepository } from '../../contests/core/contests.repository';
 import { ProblemAccess } from '../../problems/core/problem-access';
@@ -12,9 +12,7 @@ import type { BatchRefs, BatchScope } from './batch-filter';
 import type { SubmissionBatchFilterDto } from './dto/submission-batch.dto';
 
 const notFound = (field: string, message: string): AppError =>
-  new AppError('not_found', 404, message, undefined, undefined, {
-    issues: [{ field, code: 'not_found', message }],
-  });
+  issueError('not_found', 404, { field, code: 'not_found', message });
 
 /** Resolves a batch filter's names to ids and checks the caller may run a batch over that scope. */
 @Injectable()

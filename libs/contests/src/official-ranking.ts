@@ -1,4 +1,4 @@
-import { CsvError, readCsv } from '@libs/common';
+import { CsvError, hasControlCharacter, readCsv } from '@libs/common';
 import type { OfficialRankingRow } from '@libs/database';
 
 export const OFFICIAL_RANKING_LIMITS = {
@@ -8,10 +8,6 @@ export const OFFICIAL_RANKING_LIMITS = {
   fieldLength: 200,
 } as const;
 const DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
-
-/** Any C0 control or DEL; a CSV field holding one is refused by both the ranking and the ghost import. */
-// eslint-disable-next-line no-control-regex
-export const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 
 const number = (value: string, what: string): number => {
   const trimmed = value.trim();
@@ -31,7 +27,7 @@ export function parseOfficialRanking(csv: string): {
     throw new CsvError('The CSV is larger than 1 MiB');
   const [header, ...lines] = readCsv(csv, OFFICIAL_RANKING_LIMITS);
   if (!header) throw new CsvError('The CSV is empty');
-  if (header.some((cell) => CONTROL_CHARACTER.test(cell)))
+  if (header.some((cell) => hasControlCharacter(cell)))
     throw new CsvError('The header holds a control character');
   const column = (name: string) => {
     const position = header.indexOf(name);
@@ -50,7 +46,7 @@ export function parseOfficialRanking(csv: string): {
       throw new CsvError(
         `Row ${line + 2} has ${fields.length} fields, the header ${header.length}`,
       );
-    if (fields.some((field) => CONTROL_CHARACTER.test(field)))
+    if (fields.some((field) => hasControlCharacter(field)))
       throw new CsvError(`Row ${line + 2} holds a control character`);
     return {
       username: fields[username],

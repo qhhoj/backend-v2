@@ -4,11 +4,11 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import type Redis from 'ioredis';
 import { conflictIssue } from '../errors/conflict-issue';
 
-export const RELEASE_LOCK_SCRIPT =
+const RELEASE_LOCK_SCRIPT =
   "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
-/** Extends the lock's expiry only while `token` still holds it. */
-export const RENEW_LOCK_SCRIPT =
-  "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0";
+/** Owner-checked: extends the lock `KEYS[1]` and every further key (`EXPIRE` of a missing key is a no-op) only while `ARGV[1]` still holds the lock. */
+const EXTEND_LOCK_SCRIPT =
+  "if redis.call('GET', KEYS[1]) == ARGV[1] then for index = 2, #KEYS do redis.call('EXPIRE', KEYS[index], ARGV[2]) end return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0";
 const logger = new Logger('RedisLock');
 
 /** How often a waiting lock taker tries the lock again. */
@@ -20,32 +20,39 @@ export interface RedisLock {
   busyMessage: string;
   /** How long a held lock is waited for, retried every LOCK_RETRY_MS; 0 (the default) refuses it at once. */
   waitSeconds?: number;
-  /** Extends the expiry every third of `ttlSeconds` while `work` runs, so slow work (a queued password hash) never outlives its lock. A crashed process still frees the lock after `ttlSeconds`. */
+  /** Extends the expiry while `work` runs (see `keepLockAlive`): for slow work such as a queued password hash. */
   renew?: boolean;
 }
 
-/** Runs `work` while holding `key` (expires after `ttlSeconds`); a lock still held after `waitSeconds` (default: at once) is a 409 `conflict` with `issues: [{ field: 'lock', code: 'busy', message }]`. The owner-checked release never throws: a failure is logged, the work's result stands. */
+/** Runs `work` while holding `key` (expires after `ttlSeconds`); a lock still held after `waitSeconds` (default: at once) is a 409 `conflict` with `issues: [{ field: 'lock', code: 'busy', message }]`. The release never throws. */
 export async function withRedisLock<Result>(
   redis: Redis,
   lock: RedisLock,
   work: () => Promise<Result>,
 ): Promise<Result> {
-  const token = randomBytes(16).toString('hex');
+  const token = newLockToken();
   if (!(await acquire(redis, lock, token)))
     throw conflictIssue('lock', 'busy', lock.busyMessage);
-  const renewal = lock.renew ? startRenewal(redis, lock, token) : null;
+  const stopRenewal = lock.renew
+    ? keepLockAlive(redis, [lock.key], token, lock.ttlSeconds)
+    : null;
   try {
     return await work();
   } finally {
-    if (renewal) clearInterval(renewal);
-    try {
-      await redis.eval(RELEASE_LOCK_SCRIPT, 1, lock.key, token);
-    } catch (error) {
-      logger.error(
-        `Lock ${lock.key} release failed: ${(error as Error).message}`,
-      );
-    }
+    stopRenewal?.();
+    await releaseLock(redis, lock.key, token);
   }
+}
+
+export const newLockToken = () => randomBytes(16).toString('hex');
+
+export async function tryLock(
+  redis: Redis,
+  key: string,
+  token: string,
+  ttlSeconds: number,
+): Promise<boolean> {
+  return (await redis.set(key, token, 'EX', ttlSeconds, 'NX')) === 'OK';
 }
 
 /** SET NX until it succeeds or `waitSeconds` are over; true when `token` holds the lock. */
@@ -56,30 +63,52 @@ async function acquire(
 ): Promise<boolean> {
   const deadline = Date.now() + waitSeconds * 1000;
   for (;;) {
-    if ((await redis.set(key, token, 'EX', ttlSeconds, 'NX')) === 'OK')
-      return true;
+    if (await tryLock(redis, key, token, ttlSeconds)) return true;
     if (Date.now() + LOCK_RETRY_MS > deadline) return false;
     await sleep(LOCK_RETRY_MS);
   }
 }
 
-function startRenewal(
+/** Extends the lock and `alsoKeys` every third of `ttlSeconds` until the returned function is called, so slow work never outlives its lock; a crashed process still frees it after `ttlSeconds`. */
+export function keepLockAlive(
   redis: Redis,
-  { key, ttlSeconds }: RedisLock,
+  [key, ...alsoKeys]: [string, ...string[]],
   token: string,
-): NodeJS.Timeout {
+  ttlSeconds: number,
+): () => void {
   const timer = setInterval(
     () => {
       redis
-        .eval(RENEW_LOCK_SCRIPT, 1, key, token, ttlSeconds)
+        .eval(
+          EXTEND_LOCK_SCRIPT,
+          1 + alsoKeys.length,
+          key,
+          ...alsoKeys,
+          token,
+          ttlSeconds,
+        )
         .catch((error: unknown) =>
-          logger.error(
-            `Lock ${key} renewal failed: ${(error as Error).message}`,
-          ),
+          logRedisFailure(`Lock ${key} extension`, error),
         );
     },
     (ttlSeconds * 1000) / 3,
   );
   timer.unref();
-  return timer;
+  return () => clearInterval(timer);
 }
+
+/** Owner-checked release. Redis failing after the work ran must not mask the work's own error or fail a run that succeeded: a failure is logged and the expiry recovers. */
+export async function releaseLock(
+  redis: Redis,
+  key: string,
+  token: string,
+): Promise<void> {
+  try {
+    await redis.eval(RELEASE_LOCK_SCRIPT, 1, key, token);
+  } catch (error) {
+    logRedisFailure(`Lock ${key} release`, error);
+  }
+}
+
+const logRedisFailure = (what: string, error: unknown) =>
+  logger.error(`${what} failed: ${(error as Error).message}`);

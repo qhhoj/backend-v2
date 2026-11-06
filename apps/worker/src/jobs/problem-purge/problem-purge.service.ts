@@ -1,7 +1,7 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import { DAY_MS, StorageService } from '@libs/common';
+import { DAY_MS, HOUR_MS, StorageService } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import {
   enqueuePurge,
@@ -21,7 +21,7 @@ export interface PurgeCounts {
 }
 
 /** A purge claim this old belongs to a job that died. */
-const STALE_CLAIM_MS = 60 * 60 * 1000;
+const STALE_CLAIM_MS = HOUR_MS;
 
 /** Takes a deleted problem's heavy data and leaves the tombstone. Every step is idempotent and `purgeStartedAt` is claimed first, so a killed run is simply run again (by the job's retry, or by the sweep once the claim is an hour old) and a restore can no longer slip in; `purgedAt` is written last. Submissions and everything that points at them are never touched. */
 @Injectable()

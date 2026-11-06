@@ -4,6 +4,7 @@ import type {
   StatementLanguage,
   SyncedSetting,
 } from '@libs/database';
+import { MINUTE_MS } from '@libs/common';
 import type {
   ImportErrorParams,
   PolygonImportErrorCode,
@@ -26,7 +27,7 @@ export interface SourceCheckJob {
 /** A Polygon import job runs twice at most: an outage it may outlast (`AUTO_RETRIED_IMPORT_ERRORS`) is retried once, two minutes later; every other failure is final. */
 export const POLYGON_JOB_RETRY = {
   attempts: 2,
-  backoff: { type: 'fixed', delay: 2 * 60 * 1000 },
+  backoff: { type: 'fixed', delay: 2 * MINUTE_MS },
 };
 /** Automatic syncs wait behind every import and manual sync: BullMQ takes jobs without a priority first. */
 export const AUTO_SYNC_PRIORITY = 10;
@@ -34,8 +35,6 @@ export const SOURCE_CHECK_JOB_OPTIONS = {
   removeOnComplete: true,
   removeOnFail: 100,
 } as const;
-/** Largest Polygon package accepted, uploaded or downloaded from Polygon. */
-export const POLYGON_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 /** Marks a job failure reason as written for the requester; any other reason (I/O errors with absolute paths, driver messages) stays in the logs and is never shown. */
 export const POLYGON_ERROR_PREFIX = 'polygon-import: ';
 

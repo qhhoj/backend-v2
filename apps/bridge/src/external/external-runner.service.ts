@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { clipBytes, sleep } from '@libs/common';
+import { clipBytes, MINUTE_MS, sleep } from '@libs/common';
 import { MAX_CASE_FEEDBACK_LENGTH } from '@libs/database';
 import type { ExternalRun, SubmissionCase } from '@libs/database';
 import {
@@ -172,7 +172,7 @@ export class ExternalRunnerService {
 
   private isTimedOut(run: ExternalRun): boolean {
     const maxWaitMs =
-      this.settings.get('externalJudge.maxWaitMinutes') * 60_000;
+      this.settings.get('externalJudge.maxWaitMinutes') * MINUTE_MS;
     return (
       !!run.submittedAt && Date.now() - run.submittedAt.getTime() > maxWaitMs
     );

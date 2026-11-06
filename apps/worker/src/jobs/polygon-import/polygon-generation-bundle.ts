@@ -1,14 +1,13 @@
 import { posix } from 'node:path';
 import type { Readable } from 'node:stream';
-import { POLYGON_PACKAGE_MAX_BYTES } from '@libs/problems';
+import { ARCHIVE_MAX_BYTES } from '@libs/problems';
 import type { GenerationPlan } from '@libs/judging';
 import type { XmlElement } from '@libs/problems';
+import { MIB } from '@libs/common';
 import { headerPathsOf } from './polygon-headers';
 import { PolygonImportError } from './polygon-import.error';
 import { repackMembers, shown } from './polygon-package';
 import type { PolygonPackage, RepackMember } from './polygon-package';
-
-const BYTES_PER_MIB = 1024 * 1024;
 
 /**
  * Where every file goes in the bundle: the program sources and manual inputs at their package paths, and each header
@@ -41,9 +40,9 @@ export function generationBundle(
 ): Readable {
   const members = bundleMembersOf(pkg, root, plan);
   const bytes = members.reduce((sum, { from }) => sum + pkg.sizeOf(from), 0);
-  if (bytes > POLYGON_PACKAGE_MAX_BYTES)
+  if (bytes > ARCHIVE_MAX_BYTES)
     throw new PolygonImportError(
-      `the sources and manual tests of the package are larger than ${POLYGON_PACKAGE_MAX_BYTES / BYTES_PER_MIB} MiB`,
+      `the sources and manual tests of the package are larger than ${ARCHIVE_MAX_BYTES / MIB} MiB`,
     );
   return repackMembers(
     pkg,

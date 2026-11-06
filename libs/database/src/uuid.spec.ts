@@ -1,6 +1,7 @@
 import { UUID } from 'mongodb';
 import mongoose from 'mongoose';
-import { isUuid, newId, toUuid, uuidStr } from './uuid';
+import { v7 } from 'uuid';
+import { firstIdAt, isUuid, newId, toUuid, uuidStr } from './uuid';
 
 describe('uuid', () => {
   it('generates time-ordered v7 ids', () => {
@@ -9,6 +10,15 @@ describe('uuid', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
     expect(first < second).toBe(true);
+  });
+  it('places every id of a millisecond at or after its first id and before the next', () => {
+    const at = new Date('2026-10-11T08:00:00.123Z');
+    const next = new Date(at.getTime() + 1);
+    for (let index = 0; index < 20; index++) {
+      const id = v7({ msecs: at.getTime() });
+      expect(id >= firstIdAt(at)).toBe(true);
+      expect(id < firstIdAt(next)).toBe(true);
+    }
   });
   it('round-trips through BSON UUID', () => {
     const id = newId();

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, RateLimitService } from '@libs/common';
-import { contestPhase } from '@libs/contests';
+import { AppError, RateLimitService, issueError } from '@libs/common';
+import { contestPhase, orderedProblems } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import {
   isEditorialReleased,
@@ -77,9 +77,7 @@ export class ContestPublishService {
     run: PublishRun,
   ): Promise<PublishedProblemResponse[]> {
     const items: PublishedProblemResponse[] = [];
-    for (const entry of [...contest.problems].sort(
-      (left, right) => left.order - right.order,
-    ))
+    for (const entry of orderedProblems(contest))
       items.push(await this.publishOne(auth, uuidStr(entry.problem), run));
     return items;
   }
@@ -183,7 +181,9 @@ export class ContestPublishService {
 
 const contestNotEnded = (): AppError => {
   const message = 'Problems can be published after the contest ends';
-  return new AppError('contest_not_ended', 409, message, undefined, undefined, {
-    issues: [{ field: 'endTime', code: 'contest_not_ended', message }],
+  return issueError('contest_not_ended', 409, {
+    field: 'endTime',
+    code: 'contest_not_ended',
+    message,
   });
 };

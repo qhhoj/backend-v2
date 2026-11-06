@@ -1,14 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, RateLimitService, unique } from '@libs/common';
+import { AppError, excerpt, RateLimitService, unique } from '@libs/common';
 import {
   canReplyAfter,
   childPath,
   COMMENT_MAX_DEPTH,
   commentLink,
   depthOf,
-  excerpt,
   INTERACT_MIN_PROBLEM_COUNT,
   rootOf,
 } from '@libs/community';

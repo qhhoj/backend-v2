@@ -3,6 +3,7 @@ import type {
   SubmissionResult,
   SubmissionStatus,
 } from '@libs/database';
+import { HOUR_MS, MINUTE_MS } from '@libs/common';
 import { frozenTime } from './contest-time';
 import { parseFormatConfig } from './formats/registry';
 
@@ -98,8 +99,8 @@ const pad = (value: number, width = 2) => String(value).padStart(width, '0');
 /** `H:MM:SS.mmm`, with a leading `-` before the start. */
 export function contestTime(milliseconds: number): string {
   const total = Math.abs(Math.trunc(milliseconds));
-  const hours = Math.floor(total / 3_600_000);
-  const minutes = Math.floor(total / 60_000) % 60;
+  const hours = Math.floor(total / HOUR_MS);
+  const minutes = Math.floor(total / MINUTE_MS) % 60;
   const seconds = Math.floor(total / 1000) % 60;
   const sign = milliseconds < 0 ? '-' : '';
   return `${sign}${hours}:${pad(minutes)}:${pad(seconds)}.${pad(total % 1000, 3)}`;

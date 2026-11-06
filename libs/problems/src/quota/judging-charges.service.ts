@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model, PipelineStage } from 'mongoose';
-import { isDuplicateKey } from '@libs/common';
+import { DAY_MS, isDuplicateKey } from '@libs/common';
 import {
   JUDGING_CHARGE_STATUSES,
   OrganizationJudgingCharge,
@@ -18,7 +18,7 @@ import { quotaMonthOf } from './quota-month';
 import type { UsageKey } from './quota.types';
 
 /** A run whose grading began longer ago than this before its graded job is not charged: only an api action (score override, reject) re-sends such a job, for a run judged long ago, possibly before the meter existed. A worker outage longer than this loses charges (an under-charge, never a double charge). */
-export const STALE_RUN_MS = 7 * 24 * 60 * 60 * 1000;
+export const STALE_RUN_MS = 7 * DAY_MS;
 
 /** What a finished grading attempt left on its submission row. */
 interface FinishedRun {

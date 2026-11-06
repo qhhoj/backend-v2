@@ -1,3 +1,4 @@
+import { chunked } from '@libs/common';
 import type { ProblemCell, ScoringContext, ScoringRow } from './formats/format';
 import { scoreParticipation } from './formats/registry';
 import type { FormatSetting } from './formats/registry';
@@ -83,8 +84,5 @@ export function chunkEvents(
   events: readonly ReplayEvent[],
   size = REPLAY_CHUNK_EVENTS,
 ): ReplayEvent[][] {
-  return Array.from(
-    { length: Math.ceil(events.length / size) },
-    (_unused, chunk) => events.slice(chunk * size, (chunk + 1) * size),
-  );
+  return chunked(events, size);
 }

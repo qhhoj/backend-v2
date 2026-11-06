@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { AppError, retryOnConflict } from '@libs/common';
 import { timelineEventsOf } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import { TicketNotificationsService } from '../alerts/ticket-notifications.service';
@@ -67,14 +67,17 @@ export class TicketClaimsService {
     next: AssigneesChange,
     { openOnly = false } = {},
   ): Promise<TicketDetailResponse> {
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++)
-      if (await this.tryChange(principal, ticketId, next, openOnly))
-        return this.detail(principal, ticketId);
-    throw new AppError(
-      'conflict',
-      409,
-      'The ticket changed while you were editing it; reload and try again',
+    const changed = await retryOnConflict(
+      () => this.tryChange(principal, ticketId, next, openOnly),
+      MAX_ATTEMPTS,
     );
+    if (!changed)
+      throw new AppError(
+        'conflict',
+        409,
+        'The ticket changed while you were editing it; reload and try again',
+      );
+    return this.detail(principal, ticketId);
   }
 
   /** False when another write changed the assignees between the read and this write. */

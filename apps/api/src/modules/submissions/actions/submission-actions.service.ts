@@ -2,7 +2,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { AppError, issueError } from '@libs/common';
 import {
   SUBMISSION_PRIORITY,
   UNFINISHED_STATUSES,
@@ -78,8 +78,10 @@ const cannotManageProblem = (): AppError =>
 function assertProblemLive(problem: { deletedAt?: Date | null }): void {
   if (!problem.deletedAt) return;
   const message = 'The problem is deleted; restore it first';
-  throw new AppError('problem_deleted', 409, message, undefined, undefined, {
-    issues: [{ field: 'problem', code: 'problem_deleted', message }],
+  throw issueError('problem_deleted', 409, {
+    field: 'problem',
+    code: 'problem_deleted',
+    message,
   });
 }
 

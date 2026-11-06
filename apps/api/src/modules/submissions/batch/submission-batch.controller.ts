@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import {
@@ -10,29 +10,30 @@ import {
   SubmissionBatchLogResponse,
 } from './dto/submission-batch.dto';
 import { SubmissionBatchService } from './submission-batch.service';
+import { BULK_REJUDGE_LIMIT } from '../core/rate-limits';
 
 @ApiTags('Judging')
 @Controller('api/internal/submissions')
 export class SubmissionBatchController {
   constructor(private readonly batches: SubmissionBatchService) {}
 
-  /**
-   * Rejudge many submissions
-   *
-   * @remarks
-   * Needs `judge.rejudge_submission` plus edit rights on the scope: the contest
-   * named by `contest` (its submissions only), else the problem named by
-   * `problem`, else `judge.edit_all_problem` for a site-wide batch (403
-   * `forbidden`). Narrow it with `user`, `ids`, `idFrom`/`idTo`,
-   * `dateFrom`/`dateTo`, `languages`, `results` and `judgedOn`. Submissions a
-   * judge currently holds and pending final-submission rows are skipped, and
-   * locked ones unless `force` is set. More than 10 matches also need
-   * `judge.rejudge_submission_lot` (403 `forbidden`). With `dryRun` nothing
-   * changes: `count`, `allowed` and a `sample` of the newest matches report what
-   * would happen. Otherwise the matches are queued at batch priority, the run is
-   * logged and `count` is how many were reset. 404 `not_found` for an unknown
-   * contest or user or a problem the caller cannot see.
-   */
+  @ApiOperation({
+    summary: 'Rejudge many submissions',
+    description: [
+      'Needs `judge.rejudge_submission` plus edit rights on the scope: the contest',
+      'named by `contest` (its submissions only), else the problem named by',
+      '`problem`, else `judge.edit_all_problem` for a site-wide batch (403',
+      '`forbidden`). Narrow it with `user`, `ids`, `idFrom`/`idTo`,',
+      '`dateFrom`/`dateTo`, `languages`, `results` and `judgedOn`. Submissions a',
+      'judge currently holds and pending final-submission rows are skipped, and',
+      `locked ones unless \`force\` is set. More than ${BULK_REJUDGE_LIMIT} matches also need`,
+      '`judge.rejudge_submission_lot` (403 `forbidden`). With `dryRun` nothing',
+      'changes: `count`, `allowed` and a `sample` of the newest matches report what',
+      'would happen. Otherwise the matches are queued at batch priority, the run is',
+      'logged and `count` is how many were reset. 404 `not_found` for an unknown',
+      'contest or user or a problem the caller cannot see.',
+    ].join('\n'),
+  })
   @Post('rejudge')
   @HttpCode(200)
   rejudge(

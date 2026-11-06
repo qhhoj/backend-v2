@@ -11,6 +11,7 @@ import {
   type Env,
   ENV,
   limiterAddress,
+  matchesAnyCidr,
   RateLimitService,
   STREAM_ROUTE,
 } from '@libs/common';
@@ -38,7 +39,6 @@ import { PrincipalService } from '../principal/principal.service';
 import { SESSION_COOKIE, setSessionCookie } from '../session/session-cookie';
 import { COOKIE_REFRESH_MS, SessionService } from '../session/session.service';
 import { apiTokenMatches, parseApiToken } from '../token/api-token';
-import { matchesAnyCidr } from '../token/cidr';
 import { isServiceKey, SERVICE_KEY_PREFIX } from '../token/service-key';
 import { isActiveSuperuser } from '../users/active-superuser';
 import { UsersRepository } from '../users/users.repository';

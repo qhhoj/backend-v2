@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { REDIS } from '@libs/common';
+import { REDIS, SECOND_MS } from '@libs/common';
 import type Redis from 'ioredis';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
 import { JudgesRepository } from '../judges.repository';
@@ -10,7 +10,6 @@ import {
   RuntimesResponse,
 } from './dto/runtimes.response';
 
-const MS_PER_SECOND = 1000;
 export const RUNTIMES_CACHE_KEY = 'runtimes:overview';
 /** Every visitor polls every few seconds: one shared answer this long is the rate limit. */
 export const RUNTIMES_CACHE_SECONDS = 3;
@@ -22,7 +21,7 @@ const judgeView = (judge: PublicJudgeRow): RuntimeJudgeResponse => ({
   busy: judge.online ? judge.busy : 0,
   pingMs:
     judge.online && judge.ping !== null
-      ? Math.round(judge.ping * MS_PER_SECOND)
+      ? Math.round(judge.ping * SECOND_MS)
       : null,
   startedAt: judge.online ? judge.startTime : null,
 });

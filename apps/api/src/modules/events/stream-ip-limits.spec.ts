@@ -1,4 +1,3 @@
-import { ipMatcher } from '@libs/common';
 import type { Env } from '@libs/common';
 import { EventStreamHubService } from './event-stream-hub.service';
 import { DEFAULT_STREAM_LIMITS } from './stream-limits';
@@ -62,21 +61,4 @@ describe('per-IP stream cap with SSE_IP_ALLOWLIST', () => {
     });
     expect(granted).toEqual([true, true, true, false, false]);
   });
-});
-
-describe('ipMatcher', () => {
-  it.each([
-    ['10.0.0.0/8', '10.255.0.1', true],
-    ['10.0.0.0/8', '11.0.0.1', false],
-    ['10.0.0.0/8', '::ffff:10.0.0.5', true],
-    ['203.0.113.7', '203.0.113.7', true],
-    ['2001:db8::/32', '2001:db8:1::5', true],
-    ['2001:db8::/32', '2001:db9::1', false],
-    ['10.0.0.0/8', 'not-an-ip', false],
-  ])('%s matches %s: %s', (entry, ip, expected) =>
-    expect(ipMatcher([entry])(ip)).toBe(expected),
-  );
-
-  it('matches nothing for an empty list', () =>
-    expect(ipMatcher([])('10.0.0.1')).toBe(false));
 });

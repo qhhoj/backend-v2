@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { ServiceClientPrincipal } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { issueError } from '@libs/common';
 import { isFrozenFor } from '@libs/contests';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { ContestRankingService } from '../../contests/ranking/contest-ranking.service';
@@ -12,10 +12,10 @@ import { SyncRateLimit } from './sync-rate-limit.service';
 const BOARD_HIDDEN = 'The ranking of this contest is hidden';
 /** Same wire shape as the contest replay's refusal: `forbidden`, with the reason as the issue code. */
 const boardHidden = () =>
-  new AppError('forbidden', 403, BOARD_HIDDEN, undefined, undefined, {
-    issues: [
-      { field: 'standings', code: 'board_hidden', message: BOARD_HIDDEN },
-    ],
+  issueError('forbidden', 403, {
+    field: 'standings',
+    code: 'board_hidden',
+    message: BOARD_HIDDEN,
   });
 
 @Injectable()
