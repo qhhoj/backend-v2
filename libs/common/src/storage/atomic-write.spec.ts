@@ -35,9 +35,10 @@ describe('atomicWrite', () => {
   it('hands a function the temp path and renames what it wrote', async () => {
     const target = join(root, 'fn', 'a.pdf');
     let seen = '';
-    await atomicWrite(target, async (temporary) => {
+    await atomicWrite(target, (temporary) => {
       seen = temporary;
       writeFileSync(temporary, 'pdf');
+      return Promise.resolve();
     });
     expect(isTempName(basename(seen))).toBe(true);
     expect(readFileSync(target, 'utf8')).toBe('pdf');
