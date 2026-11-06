@@ -101,6 +101,11 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
       'S',
       "recomputes every problem's dataBytes from disk, deleted and purged ones included",
     ],
+  'apps/worker/src/migrations/problem-visibility-flags/problem-visibility-flags.migration.ts':
+    [
+      'S',
+      'fills missing visibility flags on every problem, deleted and purged ones included',
+    ],
   'apps/worker/src/jobs/problem-purge/problem-purge.repository.ts': [
     'S',
     'the purge reads the deleted problems it is removing',

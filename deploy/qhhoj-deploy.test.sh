@@ -37,6 +37,7 @@ fail() { echo "FAIL: $*" >&2; cat "$calls" >&2; exit 1; }
 fresh; deploy backend v2.1.0 >/dev/null || fail "first deploy"
 grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.1.0 ghcr.io/qhhoj/backend-v2:current" "$calls" || fail "tag current"
 grep -q "systemctl restart qhhoj.target" "$calls" || fail "restart"
+grep -qx 'sleep 30' "$calls" || fail "health check settles 30 s"
 [ "$(hist)" = v2.1.0 ] || fail "history after first deploy"
 grep -q "podman run .* ghcr.io/qhhoj/backend-v2:v2.1.0 indexes" "$calls" || fail "index step"
 line_of() { grep -n "$1" "$calls" | head -1 | cut -d: -f1; }
