@@ -14,6 +14,5 @@ import { SimilarityService } from './similarity.service';
     SimilarityEngine,
     SimilarityProcessor,
   ],
-  exports: [SimilarityService],
 })
 export class SimilarityModule {}
