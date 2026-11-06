@@ -4,7 +4,12 @@ import type { FastifyRequest } from 'fastify';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { MAX_SOURCE_LENGTH } from '@libs/database';
-import { SUBMIT_LIMIT, UNFINISHED_LIMIT } from '../core/rate-limits';
+import { windowName } from '@libs/common';
+import {
+  SUBMIT_LIMIT,
+  SUBMIT_WINDOW_SECONDS,
+  UNFINISHED_LIMIT,
+} from '../core/rate-limits';
 import { ProblemCodeParamDto } from '../../problems/core/dto/problem-params.dto';
 import { SubmitDto } from './dto/submit.dto';
 import { SubmitResponse } from './dto/submit.response';
@@ -28,7 +33,7 @@ export class SubmissionCreateController {
       '`contest_submission_limit`); a spectator who is not contest staff (author,',
       'curator, tester or contest editor) cannot submit to it until the contest',
       'ends (403 `spectator_cannot_submit`). Other errors: 403 `banned_from_problem`, 429',
-      `\`rate_limited\` (${SUBMIT_LIMIT} per minute per user) and 429`,
+      `\`rate_limited\` (${SUBMIT_LIMIT} per ${windowName(SUBMIT_WINDOW_SECONDS)} per user) and 429`,
       `\`unfinished_submission_limit\` (${UNFINISHED_LIMIT} unfinished submissions, waived by`,
       '`judge.spam_submission`). Queues the submission for judging and returns its',
       '`id`.',

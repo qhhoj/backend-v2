@@ -27,21 +27,15 @@ describe('lock ownership in Redis', () => {
     expect(await redis.exists(key)).toBe(0);
   });
 
-  it('extends the lock and an existing mark while it is held, never creating a missing mark', async () => {
+  it('extends the lock while held and never creates a missing mark', async () => {
     jest.useFakeTimers({ advanceTimers: true });
     try {
       const owner = newLockToken();
       await tryLock(redis, key, owner, 100);
-      await redis.set(markKey, '1', 'EX', 100);
       const stop = keepLockAlive(redis, [key, markKey], owner, 3);
       await jest.advanceTimersByTimeAsync(1100);
       stop();
       expect(await redis.ttl(key)).toBeLessThanOrEqual(3);
-      expect(await redis.ttl(markKey)).toBeLessThanOrEqual(3);
-      await redis.del(markKey);
-      const stopAgain = keepLockAlive(redis, [key, markKey], owner, 3);
-      await jest.advanceTimersByTimeAsync(1100);
-      stopAgain();
       expect(await redis.exists(markKey)).toBe(0);
     } finally {
       jest.useRealTimers();

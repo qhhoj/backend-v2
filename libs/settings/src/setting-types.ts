@@ -44,7 +44,7 @@ export const oneOfType = <Value extends string>(
 
 /**
  * Addresses a production server must not be pointed at: loopback, private, link-local, unspecified
- * and IPv4-mapped IPv6. Two matchers: one matcher mixing families matches IPv4 against the IPv6 ranges.
+ * and IPv4-mapped IPv6. Matched per family: one mixed list would match every IPv4 address against `::ffff:0:0/96`.
  */
 const isInternalIpv4 = ipMatcher([
   '0.0.0.0/8',

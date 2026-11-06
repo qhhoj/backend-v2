@@ -1,11 +1,13 @@
+import { Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
 import {
   keepLockAlive,
-  logRedisFailure,
   newLockToken,
   releaseLock,
   tryLock,
 } from './redis-lock';
+
+const logger = new Logger('RedisCoalesce');
 
 /** How long a crashed owner keeps the key; a live owner extends the lock and the pending mark every third of this while `work` runs, so no recompute length lets a second owner in. Its pending mark expires with it (the effects sweep catches up). */
 export const COALESCE_TTL_SECONDS = 60;
@@ -40,7 +42,9 @@ export async function runCoalesced(
       while ((await redis.getdel(dirtyKey)) !== null) await work();
     } catch (error) {
       await markDirty().catch((failure: unknown) =>
-        logRedisFailure(`Mark ${dirtyKey} restore`, failure),
+        logger.error(
+          `Mark ${dirtyKey} restore failed: ${(failure as Error).message}`,
+        ),
       );
       throw error;
     } finally {

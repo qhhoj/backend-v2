@@ -18,9 +18,12 @@ describe('assertMailMessage', () => {
     'Name <a@example.com>',
     'a@example.com, b@example.com',
     '"a b"@example.com',
-    'a@localhost',
     'a@example.com\r\nBcc: x@example.com',
     'a@exämple.com',
+    'x:bob@example.com',
+    'b\x01ob@example.com',
+    'bob%evil.test@example.com',
+    'bob@localhost',
   ])('refuses the recipient %j', (to) =>
     expect(() => assertMailMessage(message(to))).toThrow(
       'Invalid mail recipient',
@@ -38,12 +41,12 @@ describe('assertMailMessage', () => {
 });
 
 describe('InMemoryMailer', () => {
-  it('keeps what a real transport would send and rejects what it would refuse', async () => {
+  it('keeps what a real transport would send and refuses a control-character subject', async () => {
     const mailer = new InMemoryMailer();
     await mailer.send(message('a@example.com'));
-    await expect(mailer.send(message('bad'))).rejects.toThrow(
-      'Invalid mail recipient',
-    );
+    await expect(
+      mailer.send(message('a@example.com', 'Hi\r\nBcc: x')),
+    ).rejects.toThrow('Invalid mail subject');
     expect(mailer.sent).toHaveLength(1);
   });
 });

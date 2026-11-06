@@ -5,7 +5,11 @@ import type { AuthContext } from '@libs/auth';
 import { ScopeQueryDto } from '../core/dto/scope-query.dto';
 import { StartedSimilarityRunResponse } from './dto/started-run.response';
 import { SimilarityStartService } from './similarity-start.service';
-import { SIMILARITY_START_LIMIT } from '../core/rate-limits';
+import { windowName } from '@libs/common';
+import {
+  SIMILARITY_START_LIMIT,
+  SIMILARITY_START_WINDOW_SECONDS,
+} from '../core/rate-limits';
 
 @ApiTags('Judging')
 @RequirePermission('judge.moss_contest')
@@ -21,7 +25,7 @@ export class SimilarityStartController {
       'unknown or not editable scope is 404 `not_found`. A background job compares',
       'the submitted sources of the scope using the limits in the site settings at',
       'this moment. Responds 409 `conflict` while the scope has a run in progress',
-      `and 429 \`rate_limited\` after ${SIMILARITY_START_LIMIT} starts per hour per user. Answers 202 with`,
+      `and 429 \`rate_limited\` after ${SIMILARITY_START_LIMIT} starts per ${windowName(SIMILARITY_START_WINDOW_SECONDS)} per user. Answers 202 with`,
       'the new `runId`; poll `GET /similarity/runs/{runId}`.',
     ].join('\n'),
   })

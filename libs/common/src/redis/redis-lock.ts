@@ -4,10 +4,10 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import type Redis from 'ioredis';
 import { conflictIssue } from '../errors/conflict-issue';
 
-export const RELEASE_LOCK_SCRIPT =
+const RELEASE_LOCK_SCRIPT =
   "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
 /** Owner-checked: extends the lock `KEYS[1]` and every further key (`EXPIRE` of a missing key is a no-op) only while `ARGV[1]` still holds the lock. */
-export const EXTEND_LOCK_SCRIPT =
+const EXTEND_LOCK_SCRIPT =
   "if redis.call('GET', KEYS[1]) == ARGV[1] then for index = 2, #KEYS do redis.call('EXPIRE', KEYS[index], ARGV[2]) end return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0";
 const logger = new Logger('RedisLock');
 
@@ -46,7 +46,6 @@ export async function withRedisLock<Result>(
 
 export const newLockToken = () => randomBytes(16).toString('hex');
 
-/** SET NX with an expiry; true when `token` now holds `key`. */
 export async function tryLock(
   redis: Redis,
   key: string,
@@ -73,7 +72,7 @@ async function acquire(
 /** Extends the lock and `alsoKeys` every third of `ttlSeconds` until the returned function is called, so slow work never outlives its lock; a crashed process still frees it after `ttlSeconds`. */
 export function keepLockAlive(
   redis: Redis,
-  [key, ...alsoKeys]: string[],
+  [key, ...alsoKeys]: [string, ...string[]],
   token: string,
   ttlSeconds: number,
 ): () => void {
@@ -111,5 +110,5 @@ export async function releaseLock(
   }
 }
 
-export const logRedisFailure = (what: string, error: unknown) =>
+const logRedisFailure = (what: string, error: unknown) =>
   logger.error(`${what} failed: ${(error as Error).message}`);

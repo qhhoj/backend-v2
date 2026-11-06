@@ -1,4 +1,4 @@
-import { MINUTE_MS } from '@libs/common';
+import { MIB, MINUTE_MS } from '@libs/common';
 import { Injectable } from '@nestjs/common';
 import { spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -203,9 +203,9 @@ export class PandocService {
   protected readonly limiter: string = 'prlimit';
   protected readonly limits: ProcessLimits = {
     timeoutMs: MINUTE_MS,
-    maxInputBytes: 1024 * 1024,
-    maxOutputBytes: 8 * 1024 * 1024,
-    maxMemoryBytes: 768 * 1024 * 1024,
+    maxInputBytes: MIB,
+    maxOutputBytes: 8 * MIB,
+    maxMemoryBytes: 768 * MIB,
   };
 
   async texToMarkdown(tex: string): Promise<string> {

@@ -9,7 +9,7 @@ const defaultIssues = (code: string, message: string): FieldIssue[] => [
   { field: '', code: ISSUE_CODES[code] ?? code, message },
 ];
 
-/** The one builder of the wire error `{ error: { code, message, issues?, fields?, ...extra } }`; a 5xx carries no issues. */
+/** The wire error `{ error: { code, message, issues?, fields?, ...extra } }`; a 5xx carries no issues. */
 export function errorEnvelope(error: AppError) {
   return {
     error: {
