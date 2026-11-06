@@ -73,6 +73,22 @@ export class QuotaService implements OnApplicationBootstrap {
     return result;
   }
 
+  /** Refuses (403 `quota_exceeded`) a charge this month's credits can no longer cover, spending nothing: a check before slow work (a chunked upload's create). `charged` stays the authority. */
+  async assertAffordable(
+    organizationId: string | null,
+    request: ChargeRequest,
+    now = new Date(),
+  ): Promise<void> {
+    if (organizationId === null) return;
+    const amount = this.priceOf(request);
+    const { credits: limit, unlimited } =
+      await this.ledger.limitsOf(organizationId);
+    if (amount === 0 || unlimited || !(await this.ledger.isEnforcing())) return;
+    const key = { organizationId, month: this.ledger.monthKeyOf(now) };
+    if ((await this.creditsUsed(key)) + amount > limit)
+      throw await this.refusalFor(key, limit, amount);
+  }
+
   /** The once-a-month 80% credit warning; it sits outside the refund `try`, so a failure here can never refund finished work, and it is caught so it never fails the request whose work is done. */
   private async warnIfCreditsNear(key: UsageKey): Promise<void> {
     try {

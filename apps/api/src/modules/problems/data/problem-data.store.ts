@@ -22,6 +22,10 @@ import { RevisionsRepository } from '../core/revisions.repository';
 import { SourceChecksService } from './source-checks.service';
 
 /** Access checks, compile-and-persist and the response shape shared by the data and upload services. */
+/** A data write lost to another one that landed first (409 `conflict`). */
+export const testDataChanged = () =>
+  new AppError('conflict', 409, 'Test data changed meanwhile, reload');
+
 @Injectable()
 export class ProblemDataStore {
   private readonly logger = new Logger(ProblemDataStore.name);
@@ -152,12 +156,7 @@ export class ProblemDataStore {
         throw invalidField('cases', 'The test data is too large.');
       throw error;
     }
-    if (!matched)
-      throw new AppError(
-        'conflict',
-        409,
-        'Test data changed meanwhile, reload',
-      );
+    if (!matched) throw testDataChanged();
     if (yaml === null) await this.dataFiles.removeInit(problem.code);
     else await this.dataFiles.writeInit(problem.code, yaml);
     return { stored, archiveFiles };

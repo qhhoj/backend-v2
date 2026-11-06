@@ -10,6 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { ProblemCodeParamDto } from '../../../core/dto/problem-params.dto';
 import { CHUNKED_UPLOAD_MAX_BYTES } from '../chunked-upload.limits';
 
 export class CreateChunkedUploadDto {
@@ -21,9 +22,7 @@ export class CreateChunkedUploadDto {
   @Matches(HEX_SHA256) sha256!: string;
 }
 
-export class ChunkedUploadParamsDto {
-  /** Problem code. */
-  @IsString() code!: string;
+export class ChunkedUploadParamsDto extends ProblemCodeParamDto {
   /** Upload session id, from create. */
   @LowercaseUuid() @IsUUID('4') id!: string;
 }

@@ -1,6 +1,6 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
@@ -9,6 +9,7 @@ import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
 import { buildZip } from '@libs/problems/testing';
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
 import { CHUNK_BYTES } from '../src/modules/problems/data/chunked/chunked-upload.limits';
+import { UploadSessionsStore } from '../src/modules/problems/data/chunked/upload-sessions.store';
 import { createOrganization } from './organization-fixtures';
 import {
   authed,
@@ -110,6 +111,8 @@ const complete = (code: string, id: string, session = editor) =>
   authed(api.http().post(`${uploadsOf(code)}/${id}/complete`), session);
 const status = (code: string, id: string, session = editor) =>
   authed(api.http().get(`${uploadsOf(code)}/${id}`), session);
+const cancel = (code: string, id: string, session = editor) =>
+  authed(api.http().delete(`${uploadsOf(code)}/${id}`), session);
 const partsDirectory = (id: string) =>
   join(api.problemDataRoot, '.uploads', id);
 const filesOf = (code: string) =>
@@ -123,7 +126,7 @@ describe('chunked data upload', () => {
     ]);
     const chunked = await newProblem();
     const session = sessionOf(await create(chunked.code, content).expect(201));
-    expect(session).toMatchObject({ chunkBytes: CHUNK_BYTES, chunkCount: 2 });
+    expect(session.chunkCount).toBe(2);
     await putChunk(
       chunked.code,
       { id: session.id, index: 0 },
@@ -135,11 +138,21 @@ describe('chunked data upload', () => {
     expect(
       sessionOf(await status(chunked.code, session.id).expect(200)).received,
     ).toEqual([0]);
-    await putChunk(
-      chunked.code,
-      { id: session.id, index: 1 },
-      chunkOf(content, 1),
-    ).expect(200);
+    const sendSecond = () =>
+      putChunk(
+        chunked.code,
+        { id: session.id, index: 1 },
+        chunkOf(content, 1),
+      ).expect(200);
+    await sendSecond();
+    rmSync(join(partsDirectory(session.id), '1'));
+    await complete(chunked.code, session.id)
+      .expect(409)
+      .expect(issueCodes(['chunks_missing']));
+    expect(
+      sessionOf(await status(chunked.code, session.id).expect(200)).received,
+    ).toEqual([0]);
+    await sendSecond();
     const viaChunks = await complete(chunked.code, session.id).expect(201);
 
     const single = await newProblem();
@@ -174,7 +187,7 @@ describe('chunked data upload', () => {
         ({ reason, amount }) => [reason, amount],
       );
 
-    it('refuses a wrong hash before anything is staged or charged, and ends the session', async () => {
+    it('ends the session on a wrong hash or a refused zip, with nothing stored or charged', async () => {
       const { code, organizationId } = await newProblem(true);
       const session = sessionOf(
         await create(
@@ -193,9 +206,32 @@ describe('chunked data upload', () => {
       expect(filesOf(code)).toEqual([]);
       expect(existsSync(partsDirectory(session.id))).toBe(false);
       await status(code, session.id).expect(404);
+
+      const notZip = Buffer.from('not a zip');
+      const refused = sessionOf(await create(code, notZip).expect(201));
+      await putChunk(code, { id: refused.id, index: 0 }, notZip).expect(200);
+      await complete(code, refused.id)
+        .expect(400)
+        .expect(issueCodes(['zip_invalid']));
+      await status(code, refused.id).expect(404);
+      expect(existsSync(partsDirectory(refused.id))).toBe(false);
+      expect(await ledgerOf(organizationId!)).toEqual([]);
     });
 
-    it('sweeps the chunks of an expired session with nothing charged, and charges a completed one once', async () => {
+    it('refuses at create an upload the credits cannot cover', async () => {
+      const { code, organizationId } = await newProblem(true);
+      await api.setSetting('quota.cost.dataPer10MiB', 300);
+      try {
+        await create(code, smallZip)
+          .expect(403)
+          .expect(errorCode('quota_exceeded'));
+      } finally {
+        await api.setSetting('quota.cost.dataPer10MiB', 1);
+      }
+      expect(await creditsOf(organizationId!)).toBe(0);
+    });
+
+    it('sweeps the chunks of an expired session with nothing charged, and charges a completed one once, even with its marker lost', async () => {
       const { code, organizationId } = await newProblem(true);
       const expired = sessionOf(await create(code, smallZip).expect(201));
       await putChunk(code, { id: expired.id, index: 0 }, smallZip).expect(200);
@@ -212,13 +248,19 @@ describe('chunked data upload', () => {
       const stored = await complete(code, next.id).expect(201);
       const repeated = await complete(code, next.id).expect(201);
       expect(repeated.body).toEqual(stored.body);
+      await api.app
+        .get<Redis>(REDIS)
+        .hdel(`chunked-upload:${next.id}`, 'completed');
+      const afterLostMarker = await complete(code, next.id).expect(201);
+      expect(afterLostMarker.body).toEqual(stored.body);
       expect(await creditsOf(organizationId!)).toBe(1);
       expect(await ledgerOf(organizationId!)).toEqual([['upload', 1]]);
     });
   });
 
-  it("refuses another user's session, even an editor of the same problem", async () => {
+  it("refuses another user's session or another problem's, and a cancel while a chunk or complete runs", async () => {
     const { code } = await newProblem();
+    const other = await newProblem();
     const session = sessionOf(await create(code, smallZip).expect(201));
     const target = { id: session.id, index: 0 };
     await status(code, session.id, coEditor)
@@ -226,15 +268,17 @@ describe('chunked data upload', () => {
       .expect(errorCode('not_found'));
     await putChunk(code, target, smallZip, coEditor).expect(404);
     await complete(code, session.id, coEditor).expect(404);
-    await authed(
-      api.http().delete(`${uploadsOf(code)}/${session.id}`),
-      coEditor,
-    ).expect(404);
+    await cancel(code, session.id, coEditor).expect(404);
+    await status(other.code, session.id).expect(404);
     await putChunk(code, target, smallZip).expect(200);
-    await authed(
-      api.http().delete(`${uploadsOf(code)}/${session.id}`),
-      editor,
-    ).expect(204);
+    await api.app
+      .get(UploadSessionsStore)
+      .withSessionLock(session.id, async () => {
+        await cancel(code, session.id)
+          .expect(409)
+          .expect(issueCodes(['busy']));
+      });
+    await cancel(code, session.id).expect(204);
     expect(existsSync(partsDirectory(session.id))).toBe(false);
   });
 

@@ -118,7 +118,12 @@ export class UploadSessionsStore {
     );
   }
 
-  /** One chunk write or completion of a session at a time; another is the 409 `busy` conflict. */
+  /** A part the session lists but the disk lost (an operator `rm`, a disk error): it must be sent again. */
+  async unmarkReceived(id: string, index: number): Promise<void> {
+    await this.redis.srem(receivedKey(id), index);
+  }
+
+  /** One chunk write, completion or cancel of a session at a time; another is the 409 `busy` conflict. */
   withSessionLock<Result>(
     id: string,
     work: () => Promise<Result>,
@@ -128,19 +133,21 @@ export class UploadSessionsStore {
       {
         key: lockKey(id),
         ttlSeconds: UPLOAD_SESSION_LOCK_SECONDS,
-        busyMessage: 'Another chunk of this upload is being written, try again',
+        busyMessage:
+          'This upload is busy with a chunk, its completion or a cancel, try again',
         renew: true,
       },
       work,
     );
   }
 
-  /** Kept until it expires so a complete retried after a lost answer finds it; it no longer counts among the user's open sessions. */
+  /** Kept until it expires so a complete retried after a lost answer finds it; it no longer counts among the user's open sessions. The expiry is set again, so a key that was gone meanwhile is not recreated forever (a past expiry deletes it at once). */
   async markCompleted(session: UploadSession): Promise<void> {
     await execOrThrow(
       this.redis
         .multi()
         .hset(sessionKey(session.id), 'completed', 'true')
+        .pexpireat(sessionKey(session.id), session.expiresAt)
         .zrem(userKey(session.userId), session.id),
     );
   }

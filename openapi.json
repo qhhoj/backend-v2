@@ -36225,7 +36225,7 @@
     },
     "/api/internal/problems/{code}/data/uploads": {
       "post": {
-        "description": "For archives too large for one request (above `chunkBytes`, 48 MiB). Same\nrights as the archive upload; mirror problems are refused. `name` must end\nin `.zip` (400 `zip_required`), `size` is at most 2 GiB. Spends one upload of\nthe 30 per hour per user and checks the organization's storage now (403\n`quota_exceeded`); credits are charged at complete. At most 2 open uploads per\nuser (409 `upload_sessions_full`); a session expires 24 hours after create.",
+        "description": "For archives too large for one request (above `chunkBytes`, 48 MiB). Same\nrights as the archive upload; mirror problems are refused. `name` must end\nin `.zip` (400 `zip_required`), `size` is at most 2 GiB. Spends one upload of\nthe 30 per hour per user and checks the organization's storage and credits\nnow (403 `quota_exceeded`); credits are charged at complete. At most 2 open uploads per\nuser (409 `upload_sessions_full`); a session expires 24 hours after create.",
         "operationId": "ChunkedUploadsController_create",
         "parameters": [
           {
@@ -36295,11 +36295,11 @@
     },
     "/api/internal/problems/{code}/data/uploads/{id}": {
       "delete": {
-        "description": "Drops the session and its chunks. Nothing was charged.",
+        "description": "Drops the session and its chunks; nothing was charged. While a chunk or\ncomplete of this upload runs it is 409 `busy`: try again once it ends.",
         "operationId": "ChunkedUploadsController_cancel",
         "parameters": [
           {
-            "description": "Problem code.",
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -36352,7 +36352,7 @@
         "operationId": "ChunkedUploadsController_status",
         "parameters": [
           {
-            "description": "Problem code.",
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -36422,6 +36422,15 @@
         "operationId": "ChunkedUploadsController_putChunk",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "description": "Chunk index, from 0 to `chunkCount - 1`.",
             "in": "path",
             "name": "index",
@@ -36429,15 +36438,6 @@
             "schema": {
               "minimum": 0,
               "type": "number"
-            }
-          },
-          {
-            "description": "Problem code.",
-            "in": "path",
-            "name": "code",
-            "required": true,
-            "schema": {
-              "type": "string"
             }
           },
           {
@@ -36517,11 +36517,11 @@
     },
     "/api/internal/problems/{code}/data/uploads/{id}/complete": {
       "post": {
-        "description": "Needs every chunk (409 `chunks_missing`). Joins them and checks the size and\nSHA-256 given at create: a mismatch is 400 `upload_hash_mismatch` and ends\nthe upload. Then stores the archive exactly like the archive upload, with its\nanswer and its errors (zip codes, `quota_exceeded`, 409 `busy`); after such\nan error the chunks are kept, so complete can be retried or the upload\ncancelled. Once stored, completing again answers the stored data and\ncharges nothing (for an answer lost on the way); its chunks are refused.",
+        "description": "Needs every chunk (409 `chunks_missing`). Joins them and checks the size and\nSHA-256 given at create: a mismatch is 400 `upload_hash_mismatch` and ends\nthe upload. Then stores the archive exactly like the archive upload, with its\nanswer and its errors (zip codes, `quota_exceeded`, 409 `busy`); after such\nan error the chunks are kept, so complete can be retried or the upload\ncancelled; a refused zip (zip codes) ends the upload like a hash mismatch.\nA data write that lands meanwhile is 409 `conflict` (retry). Spends one\nupload of the 30 per hour per user. Once stored, completing again answers\nthe stored data and charges nothing (for an answer lost on the way); its\nchunks and cancel are refused (404).",
         "operationId": "ChunkedUploadsController_complete",
         "parameters": [
           {
-            "description": "Problem code.",
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,

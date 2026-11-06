@@ -37,6 +37,7 @@ import { ProblemTypesQuerier } from './catalog/problem-types.querier';
 import { ChunkedUploadsController } from './data/chunked/chunked-uploads.controller';
 import { ChunkedUploadsService } from './data/chunked/chunked-uploads.service';
 import { UploadPartsStore } from './data/chunked/upload-parts.store';
+import { UploadPartsSweeper } from './data/chunked/upload-parts.sweeper';
 import { UploadSessionsStore } from './data/chunked/upload-sessions.store';
 import { ProblemDataController } from './data/problem-data.controller';
 import { ProblemDataLifecycleService } from './data/problem-data-lifecycle.service';
@@ -162,6 +163,7 @@ const repositories = [
     ChunkedUploadsService,
     UploadSessionsStore,
     UploadPartsStore,
+    UploadPartsSweeper,
     SourceChecksService,
     ProblemStorageQuota,
     ProblemDataLifecycleService,

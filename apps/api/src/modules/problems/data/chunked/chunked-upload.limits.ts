@@ -8,8 +8,10 @@ export const CHUNKED_UPLOAD_MAX_BYTES = ZIP_LIMITS.maxTotalBytes;
 export const UPLOAD_SESSION_TTL_SECONDS = 24 * 60 * 60;
 /** Open sessions per user: each can hold up to 2 GiB of parts on disk. */
 export const MAX_OPEN_UPLOAD_SESSIONS = 2;
-/** One chunk write or the completion of a session at a time; renewed while it runs. */
+/** One chunk write, completion or cancel of a session at a time; renewed while it runs. */
 export const UPLOAD_SESSION_LOCK_SECONDS = 60;
+/** How often every API process removes the parts of sessions that are gone, besides the sweep at each create. */
+export const UPLOAD_PARTS_SWEEP_MS = 60 * 60 * 1000;
 
 export const chunkCountOf = (size: number): number =>
   Math.ceil(size / CHUNK_BYTES);

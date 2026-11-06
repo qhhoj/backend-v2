@@ -2,9 +2,14 @@ import { Injectable } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { rm, stat } from 'node:fs/promises';
 import type { AuthContext } from '@libs/auth';
-import { RateLimitService, atomicWrite } from '@libs/common';
+import {
+  RateLimitService,
+  ValidationFailedError,
+  atomicWrite,
+} from '@libs/common';
 import { dataFileNamesOf } from '@libs/database';
 import type { DataFileKind, ProblemData } from '@libs/database';
+import type { ChargeRequest } from '@libs/problems';
 import {
   ARCHIVE_MAX_BYTES,
   extensionOf,
@@ -24,7 +29,7 @@ import {
 import { QuotaService } from '../../organizations/quota/quota.service';
 import type { ProblemDocument } from '../core/problems.repository';
 import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';
-import { ProblemDataStore } from './problem-data.store';
+import { ProblemDataStore, testDataChanged } from './problem-data.store';
 import { SourceChecksService } from './source-checks.service';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from '../core/rate-limits';
 
@@ -42,6 +47,16 @@ export function archiveNameOf(clientName: string): string {
   if (extensionOf(name) !== 'zip')
     throw rejectFile('The archive must be a .zip file.', 'zip_required');
   return name;
+}
+
+/** `assertZip`'s refusal: the archive itself is not an acceptable zip (a `zip_*` issue), so the same bytes can never pass. */
+export class ZipRefusedError extends ValidationFailedError {}
+
+/** A staged archive on its way to storage; `expectedVersion` pins the data version the caller checked (a write meanwhile is 409 `conflict`). */
+export interface StagedArchive {
+  staged: string;
+  name: string;
+  expectedVersion?: number;
 }
 
 @Injectable()
@@ -87,7 +102,7 @@ export class ProblemDataUploadService {
   async commitStagedArchive(
     auth: AuthContext,
     problem: ProblemDocument,
-    upload: { staged: string; name: string },
+    upload: StagedArchive,
   ): Promise<ProblemDataResponse> {
     try {
       await this.assertZip(upload.staged);
@@ -98,28 +113,47 @@ export class ProblemDataUploadService {
     }
   }
 
-  /** An archive of `bytes` must fit the organization's storage before its bytes move (the chunked upload's create); spends nothing. `storeArchive` checks again as the authority. */
+  /** An archive of `bytes` must fit the organization's storage and credits before its bytes move (the chunked upload's create); spends nothing. `storeArchive` checks again as the authority. */
   async assertArchiveFits(
     auth: AuthContext,
     problem: ProblemDocument,
     bytes: number,
   ): Promise<void> {
     const { data } = await this.store.loadData(problem);
-    await this.assertStorageFits(
-      this.storage.organizationOf(auth.principal, problem),
-      problem,
-      { bytes, replaced: data.archive },
+    const organizationId = this.storage.organizationOf(auth.principal, problem);
+    await this.assertStorageFits(organizationId, problem, {
+      bytes,
+      replaced: data.archive,
+    });
+    await this.quota.assertAffordable(
+      organizationId,
+      this.archiveCharge(auth, problem, bytes),
     );
+  }
+
+  private archiveCharge(
+    auth: AuthContext,
+    problem: ProblemDocument,
+    bytes: number,
+  ): ChargeRequest {
+    return {
+      kind: 'upload',
+      userId: auth.principal.userId,
+      ref: problem.code,
+      bytes,
+    };
   }
 
   /** Storage check, then the credits are spent around the whole locked write (compile, commit of the staged file, stamp) and given back if any of it throws. */
   private async storeArchive(
     auth: AuthContext,
     problem: ProblemDocument,
-    upload: { staged: string; name: string },
+    upload: StagedArchive,
   ): Promise<ProblemDataResponse> {
-    const { staged, name } = upload;
+    const { staged, name, expectedVersion } = upload;
     const { data: previous, version } = await this.store.loadData(problem);
+    if (expectedVersion !== undefined && version !== expectedVersion)
+      throw testDataChanged();
     this.assertNameFree(previous, 'archive', name);
     const data = { ...previous, archive: name };
     this.store.assertJudgeAccepts(data);
@@ -132,12 +166,7 @@ export class ProblemDataUploadService {
     });
     const { stored, archiveFiles } = await this.quota.charged(
       organizationId,
-      {
-        kind: 'upload',
-        userId: auth.principal.userId,
-        ref: problem.code,
-        bytes,
-      },
+      this.archiveCharge(auth, problem, bytes),
       () =>
         this.store.withDataWrite(problem, async () => {
           const written = await this.store.compileAndStore(
@@ -287,9 +316,10 @@ export class ProblemDataUploadService {
     try {
       await checkUploadedZip(path);
     } catch (error) {
-      throw error instanceof ZipError
-        ? rejectFile(error.message, error.code)
-        : error;
+      if (!(error instanceof ZipError)) throw error;
+      throw new ZipRefusedError(error.message, [
+        { field: 'file', code: error.code, message: error.message },
+      ]);
     }
   }
 }

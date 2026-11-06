@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { rm } from 'node:fs/promises';
+import { rm, stat } from 'node:fs/promises';
 import type { AuthContext } from '@libs/auth';
 import {
   AppError,
@@ -8,6 +8,7 @@ import {
   invalidField,
   RateLimitService,
 } from '@libs/common';
+import type { ProblemData } from '@libs/database';
 import { ProblemDataFilesService } from '@libs/problems';
 import { rejectFile, saveMultipartFile } from '../../core/multipart';
 import type { ProblemDocument } from '../../core/problems.repository';
@@ -19,13 +20,19 @@ import { ProblemDataResponse } from '../dto/problem-data.response';
 import {
   archiveNameOf,
   ProblemDataUploadService,
+  ZipRefusedError,
 } from '../problem-data-upload.service';
 import { ProblemDataService } from '../problem-data.service';
 import { ProblemDataStore } from '../problem-data.store';
 import { CHUNK_BYTES, chunkLengthOf } from './chunked-upload.limits';
 import type { CreateChunkedUploadDto } from './dto/chunked-upload.dto';
 import { ChunkedUploadResponse } from './dto/chunked-upload.response';
-import { UploadPartsStore } from './upload-parts.store';
+import {
+  MissingPartError,
+  sha256OfFile,
+  UploadPartsStore,
+} from './upload-parts.store';
+import { UploadPartsSweeper } from './upload-parts.sweeper';
 import { UploadSessionsStore } from './upload-sessions.store';
 import type { UploadSession } from './upload-sessions.store';
 
@@ -39,6 +46,8 @@ const noSuchUpload = () => new AppError('not_found', 404, 'No such upload');
  */
 @Injectable()
 export class ChunkedUploadsService {
+  private readonly logger = new Logger(ChunkedUploadsService.name);
+
   constructor(
     private readonly store: ProblemDataStore,
     private readonly data: ProblemDataService,
@@ -46,10 +55,11 @@ export class ChunkedUploadsService {
     private readonly dataFiles: ProblemDataFilesService,
     private readonly sessions: UploadSessionsStore,
     private readonly parts: UploadPartsStore,
+    private readonly sweeper: UploadPartsSweeper,
     private readonly rateLimit: RateLimitService,
   ) {}
 
-  /** Spends one upload of the user's budget and checks storage up front; credits are only charged at complete. Sweeps the parts of sessions that are gone. */
+  /** Spends one upload of the user's budget and checks storage and credits up front; credits are only charged at complete. Sweeps the parts of sessions that are gone. */
   async create(
     auth: AuthContext,
     code: string,
@@ -59,7 +69,7 @@ export class ChunkedUploadsService {
     const name = archiveNameOf(body.name);
     await this.uploads.reserveUpload(auth);
     await this.uploads.assertArchiveFits(auth, problem, body.size);
-    await this.parts.sweep((id) => this.sessions.isOpen(id));
+    await this.sweeper.sweep();
     const session = await this.sessions.create({
       userId: auth.principal.userId,
       problemId: problem._id,
@@ -70,7 +80,7 @@ export class ChunkedUploadsService {
     return this.responseOf(session, []);
   }
 
-  /** Stores chunk `index` (multipart `file`, exactly its length); a resend replaces it. */
+  /** Stores chunk `index` (multipart `file`, exactly its length); a resend replaces it. The session is read again under its lock, so a chunk never lands after complete or cancel, and a 409 `busy` spends no chunk budget. */
   async putChunk(
     auth: AuthContext,
     target: { code: string; id: string; index: number },
@@ -78,20 +88,21 @@ export class ChunkedUploadsService {
   ): Promise<ChunkedUploadResponse> {
     const { session } = await this.ownSession(auth, target);
     const { index } = target;
-    if (session.completed) throw noSuchUpload();
     if (index >= session.chunkCount)
       throw invalidField(
         'index',
         `The chunk index must be below ${session.chunkCount}.`,
         'chunk_index_out_of_range',
       );
-    await this.rateLimit.reserve(
-      [`upload-chunk:user:${auth.principal.userId}`],
-      UPLOAD_CHUNK_LIMIT,
-      UPLOAD_CHUNK_WINDOW_SECONDS,
-    );
     const length = chunkLengthOf(session.size, index);
     await this.sessions.withSessionLock(session.id, async () => {
+      if ((await this.currentSession(session.id)).completed)
+        throw noSuchUpload();
+      await this.rateLimit.reserve(
+        [`upload-chunk:user:${auth.principal.userId}`],
+        UPLOAD_CHUNK_LIMIT,
+        UPLOAD_CHUNK_WINDOW_SECONDS,
+      );
       await this.parts.write(session.id, index, async (path) => {
         const { bytes } = await saveMultipartFile(request, length, path);
         if (bytes !== length)
@@ -113,37 +124,102 @@ export class ChunkedUploadsService {
     return this.responseOf(session, await this.sessions.received(session.id));
   }
 
-  /** Answers like the single archive upload; a repeated complete (an answer lost on the way) answers the stored data and charges nothing. A size or sha256 mismatch drops the session (400 `upload_hash_mismatch`, nothing charged); any later refusal keeps the chunks, so complete can be retried. */
+  /**
+   * Answers like the single archive upload. Already stored (the archive in place has the session's name and sha256, or
+   * the session is marked completed) answers the stored data and charges nothing, so a complete retried after a lost
+   * answer, a lost marker or a restart never stores twice. Otherwise it spends one upload of the budget, joins and
+   * checks the chunks, and stores them pinned to the data version it checked: a write that lands meanwhile, including a
+   * second complete after a lost lock, makes this one 409 `conflict` before any charge. A size or sha256 mismatch, or a
+   * refused zip, drops the session (nothing charged); any other refusal keeps the chunks, so complete can be retried.
+   */
   async complete(
     auth: AuthContext,
     target: { code: string; id: string },
   ): Promise<ProblemDataResponse> {
     const { problem, session } = await this.ownSession(auth, target);
     const answer = await this.sessions.withSessionLock(session.id, async () => {
-      if ((await this.sessions.get(session.id))?.completed)
+      const { completed } = await this.currentSession(session.id);
+      const { data, version } = await this.store.loadData(problem);
+      if (completed || (await this.isStored(problem, data, session))) {
+        await this.sessions.markCompleted(session);
         return this.data.get(auth, problem.code);
+      }
       await this.assertAllReceived(session);
+      await this.uploads.reserveUpload(auth);
       const staged = await this.assembleVerified(problem, session);
-      const stored = await this.uploads.commitStagedArchive(auth, problem, {
+      const stored = await this.commitVerified(auth, problem, {
+        session,
         staged,
-        name: session.name,
+        version,
       });
       await this.sessions.markCompleted(session);
       return stored;
     });
-    await this.parts.remove(session.id);
+    await this.removePartsAfterStore(session.id);
     return answer;
   }
 
+  /** Under the session's lock: a chunk or complete running is 409 `busy`, so a cancel never answers while a complete may still store. A stored upload can no longer be cancelled (404). */
   async cancel(
     auth: AuthContext,
     target: { code: string; id: string },
   ): Promise<void> {
     const { session } = await this.ownSession(auth, target);
-    await this.drop(session);
+    await this.sessions.withSessionLock(session.id, async () => {
+      if ((await this.currentSession(session.id)).completed)
+        throw noSuchUpload();
+      await this.drop(session);
+    });
   }
 
-  /** The chunks in one `stageUpload` file, refused (and the session dropped) unless they are the announced file. */
+  /** The durable "already stored": the problem's archive is this session's file (name, then size, then sha256, so a different archive is rarely read). */
+  private async isStored(
+    problem: ProblemDocument,
+    data: ProblemData,
+    session: UploadSession,
+  ): Promise<boolean> {
+    if (data.archive !== session.name) return false;
+    const path = this.dataFiles.pathOf(problem.code, session.name);
+    const size = await stat(path).then(
+      (stats) => stats.size,
+      () => null,
+    );
+    return (
+      size === session.size && (await sha256OfFile(path)) === session.sha256
+    );
+  }
+
+  /** Hands the verified file to the archive upload's tail; a refused zip ends the session, since the same bytes can never pass. */
+  private async commitVerified(
+    auth: AuthContext,
+    problem: ProblemDocument,
+    upload: { session: UploadSession; staged: string; version: number },
+  ): Promise<ProblemDataResponse> {
+    const { session, staged, version } = upload;
+    try {
+      return await this.uploads.commitStagedArchive(auth, problem, {
+        staged,
+        name: session.name,
+        expectedVersion: version,
+      });
+    } catch (error) {
+      if (error instanceof ZipRefusedError) await this.drop(session);
+      throw error;
+    }
+  }
+
+  /** The archive is stored and charged: a failed cleanup is only logged, the sweep removes the parts once the session expires. */
+  private async removePartsAfterStore(id: string): Promise<void> {
+    try {
+      await this.parts.remove(id);
+    } catch (error) {
+      this.logger.warn(
+        `Removing the parts of upload ${id} failed: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /** The chunks in one `stageUpload` file, refused (and the session dropped) unless they are the announced file; a part lost on disk is 409 `chunks_missing` and must be sent again. */
   private async assembleVerified(
     problem: ProblemDocument,
     session: UploadSession,
@@ -158,6 +234,8 @@ export class ChunkedUploadsService {
       if (bytes === session.size && sha256 === session.sha256) return staged;
     } catch (error) {
       await rm(staged, { force: true });
+      if (error instanceof MissingPartError)
+        throw await this.lost(session, error);
       throw error;
     }
     await rm(staged, { force: true });
@@ -165,6 +243,18 @@ export class ChunkedUploadsService {
     throw rejectFile(
       'The uploaded chunks do not match the size and SHA-256 given at create; upload the file again.',
       'upload_hash_mismatch',
+    );
+  }
+
+  private async lost(
+    session: UploadSession,
+    error: MissingPartError,
+  ): Promise<AppError> {
+    await this.sessions.unmarkReceived(session.id, error.index);
+    return conflictIssue(
+      'upload',
+      'chunks_missing',
+      `Chunk ${error.index} is missing; send it again.`,
     );
   }
 
@@ -195,6 +285,13 @@ export class ChunkedUploadsService {
     )
       throw noSuchUpload();
     return { problem, session };
+  }
+
+  /** The session as Redis holds it now (read again under its lock); gone is 404. */
+  private async currentSession(id: string): Promise<UploadSession> {
+    const session = await this.sessions.get(id);
+    if (session === null) throw noSuchUpload();
+    return session;
   }
 
   /** Redis first: once the session is gone, the sweep removes parts a failed `rm` left. */

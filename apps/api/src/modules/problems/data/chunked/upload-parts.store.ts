@@ -16,6 +16,21 @@ import { UUID_PATTERN } from '@libs/database';
 /** Beside `.imports`; dot-prefixed, so no problem code names it. */
 const UPLOADS_DIRECTORY = '.uploads';
 
+/** Part `index` is listed as received but its file is gone. */
+export class MissingPartError extends Error {
+  constructor(readonly index: number) {
+    super(`Upload part ${index} is missing`);
+  }
+}
+
+/** The sha256 (hex) of a file, streamed. */
+export async function sha256OfFile(path: string): Promise<string> {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(path) as AsyncIterable<Buffer>)
+    hash.update(chunk);
+  return hash.digest('hex');
+}
+
 /** The bytes of chunked uploads: `<PROBLEM_DATA_ROOT>/.uploads/<session id>/<index>`, outside every problem directory (the judge contract). */
 @Injectable()
 export class UploadPartsStore {
@@ -34,7 +49,7 @@ export class UploadPartsStore {
     await atomicWrite(this.partPath(sessionId, index), write, this.root);
   }
 
-  /** Parts `0..count-1` concatenated into `target` (a new file); returns its length and sha256 (hex). */
+  /** Parts `0..count-1` concatenated into `target` (a new file); returns its length and sha256 (hex). A part file that is gone is `MissingPartError`. */
   async assemble(
     sessionId: string,
     count: number,
@@ -47,13 +62,19 @@ export class UploadPartsStore {
     const hash = createHash('sha256');
     let bytes = 0;
     async function* concatenated() {
-      for (const path of paths)
-        for await (const chunk of createReadStream(
-          path,
-        ) as AsyncIterable<Buffer>) {
-          hash.update(chunk);
-          bytes += chunk.length;
-          yield chunk;
+      for (const [index, path] of paths.entries())
+        try {
+          for await (const chunk of createReadStream(
+            path,
+          ) as AsyncIterable<Buffer>) {
+            hash.update(chunk);
+            bytes += chunk.length;
+            yield chunk;
+          }
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+            throw new MissingPartError(index);
+          throw error;
         }
     }
     await pipeline(concatenated, createWriteStream(target, { flags: 'wx' }));

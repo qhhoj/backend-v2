@@ -36,8 +36,8 @@ export class ChunkedUploadsController {
    * For archives too large for one request (above `chunkBytes`, 48 MiB). Same
    * rights as the archive upload; mirror problems are refused. `name` must end
    * in `.zip` (400 `zip_required`), `size` is at most 2 GiB. Spends one upload of
-   * the 30 per hour per user and checks the organization's storage now (403
-   * `quota_exceeded`); credits are charged at complete. At most 2 open uploads per
+   * the 30 per hour per user and checks the organization's storage and credits
+   * now (403 `quota_exceeded`); credits are charged at complete. At most 2 open uploads per
    * user (409 `upload_sessions_full`); a session expires 24 hours after create.
    */
   @Post(':code/data/uploads')
@@ -93,8 +93,11 @@ export class ChunkedUploadsController {
    * the upload. Then stores the archive exactly like the archive upload, with its
    * answer and its errors (zip codes, `quota_exceeded`, 409 `busy`); after such
    * an error the chunks are kept, so complete can be retried or the upload
-   * cancelled. Once stored, completing again answers the stored data and
-   * charges nothing (for an answer lost on the way); its chunks are refused.
+   * cancelled; a refused zip (zip codes) ends the upload like a hash mismatch.
+   * A data write that lands meanwhile is 409 `conflict` (retry). Spends one
+   * upload of the 30 per hour per user. Once stored, completing again answers
+   * the stored data and charges nothing (for an answer lost on the way); its
+   * chunks and cancel are refused (404).
    */
   @Post(':code/data/uploads/:id/complete')
   complete(
@@ -108,7 +111,8 @@ export class ChunkedUploadsController {
    * Cancel a chunked upload
    *
    * @remarks
-   * Drops the session and its chunks. Nothing was charged.
+   * Drops the session and its chunks; nothing was charged. While a chunk or
+   * complete of this upload runs it is 409 `busy`: try again once it ends.
    */
   @Delete(':code/data/uploads/:id')
   @HttpCode(204)
