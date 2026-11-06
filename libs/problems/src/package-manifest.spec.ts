@@ -129,8 +129,23 @@ describe('buildManifest', () => {
 });
 
 describe('packageKey', () => {
-  const key = (extra: Record<string, unknown> = {}) =>
-    packageKey(problem({ ...extra, _id: 'fixed' }));
+  const key = (
+    extra: Record<string, unknown> = {},
+    pdfs: Parameters<typeof packageKey>[1] = [],
+  ) => packageKey(problem({ ...extra, _id: 'fixed' }), pdfs);
+
+  it('changes when a PDF is cached or re-rendered', () => {
+    const en = { language: 'en' as const, bytes: 10, mtimeMs: 1 };
+    const keys = [
+      key({}, []),
+      key({}, [en]),
+      key({}, [{ ...en, mtimeMs: 2 }]),
+      key({}, [{ ...en, bytes: 11 }]),
+      key({}, [en, { ...en, language: 'vi' as const }]),
+    ];
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(key({}, [en])).toBe(key({}, [{ ...en }]));
+  });
 
   it('changes with everything the package states', () => {
     const base = key({ data: withData([caseRow('1.in')]) });

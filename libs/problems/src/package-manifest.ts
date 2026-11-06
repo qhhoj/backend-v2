@@ -13,6 +13,7 @@ import type {
   StatementLanguage,
 } from '@libs/database';
 import { safeFileName } from './file-names';
+import type { CachedPdf } from './pdf-cache.service';
 
 const PACKAGE_FORMAT = 'qhhoj-package';
 const PACKAGE_FORMAT_VERSION = 1;
@@ -161,13 +162,17 @@ export function buildManifest(problem: Problem): PackageManifest {
   };
 }
 
-/** `<dataVersion>.<hash>`: the hash covers the manifest, every statement text and the two upload URLs. A re-uploaded PDF gets a new URL (`pdf/<newId>.pdf`), so the URL moves the key; a same-named material keeps its URL, so `ProblemUploadsService.replaceFile` also drops the problem's cached packages. A build already running during an upload can still write one stale zip under the old key until the next request: accepted. */
-export function packageKey(problem: Problem): string {
+/** `<dataVersion>.<hash>`: the hash covers the manifest, every statement text, the two upload URLs and the cached PDFs (language, size, mtime), so the key moves when a PDF is rendered or replaced, whichever step ran first. A re-uploaded PDF gets a new URL (`pdf/<newId>.pdf`), so the URL moves the key; a same-named material keeps its URL, so `ProblemUploadsService.replaceFile` also drops the problem's cached packages. A build already running during an upload can still write one stale zip under the old key until the next request: accepted. `pdfs` is the same listing the build zips. */
+export function packageKey(
+  problem: Problem,
+  pdfs: readonly Omit<CachedPdf, 'path'>[],
+): string {
   const content = JSON.stringify([
     buildManifest(problem),
     packageStatements(problem).map((statement) => statement.text),
     problem.pdfStatementUrl ?? null,
     problem.materialUrl ?? null,
+    pdfs.map(({ language, bytes, mtimeMs }) => [language, bytes, mtimeMs]),
   ]);
   const hash = createHash('sha256').update(content).digest('hex').slice(0, 12);
   return `${problem.dataVersion ?? 0}.${hash}`;

@@ -7,11 +7,7 @@ import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Problem, StatementLanguage } from '@libs/database';
-import {
-  PackageCacheService,
-  PdfCacheService,
-  statementFor,
-} from '@libs/problems';
+import { PdfCacheService, statementFor } from '@libs/problems';
 import type { PdfRenderJob } from '@libs/problems';
 import { BrowserService } from './browser.service';
 import { PdfRenderRepository } from './pdf-render.repository';
@@ -34,11 +30,10 @@ export class PdfRenderService {
     private readonly repository: PdfRenderRepository,
     private readonly browser: BrowserService,
     private readonly pdfCache: PdfCacheService,
-    private readonly packages: PackageCacheService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  /** Renders `<code>.<lang>.pdf` into the cache from the stored statement HTML; a problem deleted meanwhile is skipped (visibility was checked by the api), and a render whose template input changed before it was cached is discarded (the next request renders the new text). A new PDF drops the problem's cached packages: the package key does not cover the PDF cache, so a package built without it would be served as current. */
+  /** Renders `<code>.<lang>.pdf` into the cache from the stored statement HTML; a problem deleted meanwhile is skipped (visibility was checked by the api), and a render whose template input changed before it was cached is discarded (the next request renders the new text). */
   async render({
     code,
     lang,
@@ -68,7 +63,6 @@ export class PdfRenderService {
     } finally {
       await rm(htmlPath, { force: true });
     }
-    await this.packages.deleteAll(code);
     return 'rendered';
   }
 

@@ -11,6 +11,7 @@ import {
   PackageCacheService,
   packageJobId,
   packageKey,
+  PdfCacheService,
 } from '@libs/problems';
 import type { ProblemPackageJob } from '@libs/problems';
 import { clearRateLimits } from './contest-fixtures';
@@ -78,10 +79,16 @@ afterAll(() => api.teardown());
             );
           });
         });
-    const keyOf = async (id: string) =>
-      packageKey(
-        (await api.problems.findById(id).select('+data').lean<Problem>())!,
+    const keyOf = async (id: string) => {
+      const problem = (await api.problems
+        .findById(id)
+        .select('+data')
+        .lean<Problem>())!;
+      return packageKey(
+        problem,
+        await api.app.get(PdfCacheService).listing(problem.code),
       );
+    };
     const cached = async (code: string, key: string, content: string) => {
       await cache.write(code, key, (temporary) =>
         Promise.resolve(writeFileSync(temporary, content)),
