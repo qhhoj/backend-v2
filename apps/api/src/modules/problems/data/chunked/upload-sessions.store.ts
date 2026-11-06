@@ -29,9 +29,13 @@ const sessionKey = (id: string) => `chunked-upload:${id}`;
 const receivedKey = (id: string) => `chunked-upload:${id}:received`;
 const lockKey = (id: string) => `chunked-upload:${id}:lock`;
 const userKey = (userId: string) => `chunked-upload:user:${userId}`;
+const heldChargeKey = (id: string) => `chunked-upload:${id}:charge`;
+const HELD_CHARGES_KEY = 'chunked-upload:held-charges';
+/** A held charge outlives its session this long: the hourly sweep gives it back well before. */
+const HELD_CHARGE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** A charge a complete spent for its write: `claim` makes giving it back happen once. */
-export interface OpenCharge {
+export interface HeldCharge {
   claim: string;
   spent: SpentCharge;
 }
@@ -159,27 +163,38 @@ export class UploadSessionsStore {
     );
   }
 
-  /** Kept while complete's write runs; left behind only when the process died inside it. */
-  async openCharge(
+  /** Held while complete's write runs, in its own key that outlives the session by `HELD_CHARGE_GRACE_MS`, so the sweep can still give it back once the session expired; listed in one set for the sweep. */
+  async holdCharge(
     session: Pick<UploadSession, 'id' | 'expiresAt'>,
     spent: SpentCharge,
   ): Promise<void> {
-    const charge: OpenCharge = { claim: randomUUID(), spent };
+    const charge: HeldCharge = { claim: randomUUID(), spent };
     await execOrThrow(
       this.redis
         .multi()
-        .hset(sessionKey(session.id), 'charge', JSON.stringify(charge))
-        .pexpireat(sessionKey(session.id), session.expiresAt),
+        .set(heldChargeKey(session.id), JSON.stringify(charge))
+        .pexpireat(
+          heldChargeKey(session.id),
+          session.expiresAt + HELD_CHARGE_GRACE_MS,
+        )
+        .sadd(HELD_CHARGES_KEY, session.id),
     );
   }
 
-  async openChargeOf(id: string): Promise<OpenCharge | null> {
-    const charge = await this.redis.hget(sessionKey(id), 'charge');
-    return charge === null ? null : (JSON.parse(charge) as OpenCharge);
+  async heldCharge(id: string): Promise<HeldCharge | null> {
+    const charge = await this.redis.get(heldChargeKey(id));
+    return charge === null ? null : (JSON.parse(charge) as HeldCharge);
   }
 
-  async closeCharge(id: string): Promise<void> {
-    await this.redis.hdel(sessionKey(id), 'charge');
+  async releaseCharge(id: string): Promise<void> {
+    await execOrThrow(
+      this.redis.multi().del(heldChargeKey(id)).srem(HELD_CHARGES_KEY, id),
+    );
+  }
+
+  /** Every session id that holds (or held, until released) a charge. */
+  heldChargeIds(): Promise<string[]> {
+    return this.redis.smembers(HELD_CHARGES_KEY);
   }
 
   async remove(session: Pick<UploadSession, 'id' | 'userId'>): Promise<void> {

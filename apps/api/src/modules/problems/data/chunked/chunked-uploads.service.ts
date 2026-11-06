@@ -9,7 +9,7 @@ import {
   RateLimitService,
 } from '@libs/common';
 import type { ProblemData } from '@libs/database';
-import { ProblemDataFilesService, QuotaLedger } from '@libs/problems';
+import { ProblemDataFilesService } from '@libs/problems';
 import { rejectFile, saveMultipartFile } from '../../core/multipart';
 import type { ProblemDocument } from '../../core/problems.repository';
 import {
@@ -22,7 +22,6 @@ import {
   ProblemDataUploadService,
   ZipRefusedError,
 } from '../problem-data-upload.service';
-import type { ChargeJournal } from '../problem-data-upload.service';
 import { ProblemDataService } from '../problem-data.service';
 import { ProblemDataStore } from '../problem-data.store';
 import { CHUNK_BYTES, chunkLengthOf } from './chunked-upload.limits';
@@ -33,6 +32,7 @@ import {
   sha256OfFile,
   UploadPartsStore,
 } from './upload-parts.store';
+import { HeldCharges } from './held-charges.service';
 import { UploadPartsSweeper } from './upload-parts.sweeper';
 import { UploadSessionsStore } from './upload-sessions.store';
 import type { UploadSession } from './upload-sessions.store';
@@ -58,7 +58,7 @@ export class ChunkedUploadsService {
     private readonly parts: UploadPartsStore,
     private readonly sweeper: UploadPartsSweeper,
     private readonly rateLimit: RateLimitService,
-    private readonly ledger: QuotaLedger,
+    private readonly charges: HeldCharges,
   ) {}
 
   /** Spends one upload of the user's budget and checks storage and credits up front; credits are only charged at complete. Sweeps the parts of sessions that are gone. */
@@ -129,7 +129,7 @@ export class ChunkedUploadsService {
   /**
    * Answers like the single archive upload. Already stored (see `storedState`) answers the stored data and charges
    * nothing, so a complete retried after a lost answer, a lost marker or a restart never stores twice. Otherwise it gives
-   * back a charge a previous complete left open (the process died inside its write), spends one upload of the budget,
+   * back a charge a previous complete still holds (the process died inside its write), spends one upload of the budget,
    * joins and checks the chunks, and stores them pinned to the data version it read: a write that lands meanwhile,
    * including a second complete after a lost lock, makes this one 409 `conflict` (refunded if it had spent). A size or
    * sha256 mismatch, or a refused zip, drops the session (nothing charged); any other refusal keeps the chunks, so
@@ -143,11 +143,12 @@ export class ChunkedUploadsService {
     const answer = await this.sessions.withSessionLock(session.id, async () => {
       const { stored, version } = await this.storedState(problem, session);
       if (stored) {
+        await this.sessions.releaseCharge(session.id);
         await this.sessions.markCompleted(session);
         return this.data.get(auth, problem.code);
       }
       await this.assertAllReceived(session);
-      await this.refundOpenCharge(session);
+      await this.charges.giveBack(session.id);
       await this.uploads.reserveUpload(auth);
       const staged = await this.assembleVerified(problem, session);
       await this.assertStillOpen(session, staged);
@@ -163,7 +164,7 @@ export class ChunkedUploadsService {
     return answer;
   }
 
-  /** Under the session's lock: a chunk or complete running is 409 `busy`, so a cancel never answers while a complete may still store. A stored upload (the same durable check as complete) can no longer be cancelled (404); a charge a dead complete left open is given back. */
+  /** Under the session's lock: a chunk or complete running is 409 `busy`, so a cancel never answers while a complete may still store. A stored upload (the same durable check as complete) can no longer be cancelled (404); dropping it gives back a charge a crashed complete still holds. */
   async cancel(
     auth: AuthContext,
     target: { code: string; id: string },
@@ -172,7 +173,6 @@ export class ChunkedUploadsService {
     await this.sessions.withSessionLock(session.id, async () => {
       if ((await this.storedState(problem, session)).stored)
         throw noSuchUpload();
-      await this.refundOpenCharge(session);
       await this.drop(session);
     });
   }
@@ -210,17 +210,6 @@ export class ChunkedUploadsService {
     );
   }
 
-  /** A charge a previous complete spent and never closed (the process died inside its write, nothing stored): given back once (`refundOnce` by its claim), then forgotten. */
-  private async refundOpenCharge(session: UploadSession): Promise<void> {
-    const open = await this.sessions.openChargeOf(session.id);
-    if (open === null) return;
-    await this.ledger.refundOnce(
-      `chunked-upload:${session.id}:${open.claim}`,
-      open.spent,
-    );
-    await this.sessions.closeCharge(session.id);
-  }
-
   /** Narrows a lapsed lock: a session cancelled while the chunks were joined is not stored. */
   private async assertStillOpen(
     session: UploadSession,
@@ -246,25 +235,12 @@ export class ChunkedUploadsService {
         staged,
         name: session.name,
         expectedVersion: version,
-        journal: this.journalOf(session),
+        journal: this.charges.journalOf(session),
       });
     } catch (error) {
       if (error instanceof ZipRefusedError) await this.drop(session);
       throw error;
     }
-  }
-
-  /** The write's charge kept on the session while it runs. Closing never throws: if it fails (Redis down) the charge stays open after `charged` refunded it, and a retry gives it back a second time; that is logged. */
-  private journalOf(session: UploadSession): ChargeJournal {
-    return {
-      opened: (spent) => this.sessions.openCharge(session, spent),
-      closed: () =>
-        this.sessions.closeCharge(session.id).catch((error: Error) => {
-          this.logger.error(
-            `Closing the charge of upload ${session.id} failed: ${error.message}`,
-          );
-        }),
-    };
   }
 
   /** The archive is stored and charged: a failed cleanup is only logged, the sweep removes the parts once the session expires. */
@@ -353,8 +329,9 @@ export class ChunkedUploadsService {
     return session;
   }
 
-  /** Redis first: once the session is gone, the sweep removes parts a failed `rm` left. */
+  /** Ends the session: gives back a charge a crashed complete still holds, then Redis, then the parts (once the session is gone, the sweep removes parts a failed `rm` left). */
   private async drop(session: UploadSession): Promise<void> {
+    await this.charges.giveBack(session.id);
     await this.sessions.remove(session);
     await this.parts.remove(session.id);
   }

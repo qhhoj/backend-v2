@@ -56,8 +56,8 @@ export class ZipRefusedError extends ValidationFailedError {}
 export interface ChargeJournal {
   /** Right after the spend, before anything is written. */
   opened(spent: SpentCharge): Promise<void>;
-  /** The write threw and `charged` refunds it now; must not throw. */
-  closed(): Promise<void>;
+  /** The write ended, either way (`charged` refunds a failed one); must not throw. */
+  ended(): Promise<void>;
 }
 
 /** A staged archive on its way to storage; `expectedVersion` pins the data version the caller checked (a write meanwhile is 409 `conflict`), `journal` records the charge while the write runs. */
@@ -78,9 +78,8 @@ async function journaled<Result>(
   await journal.opened(spent);
   try {
     return await write();
-  } catch (error) {
-    await journal.closed();
-    throw error;
+  } finally {
+    await journal.ended();
   }
 }
 

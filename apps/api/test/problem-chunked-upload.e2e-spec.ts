@@ -10,6 +10,7 @@ import { ProblemDataFilesService, QuotaLedger } from '@libs/problems';
 import { buildZip } from '@libs/problems/testing';
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
 import { CHUNK_BYTES } from '../src/modules/problems/data/chunked/chunked-upload.limits';
+import { UploadPartsSweeper } from '../src/modules/problems/data/chunked/upload-parts.sweeper';
 import { UploadSessionsStore } from '../src/modules/problems/data/chunked/upload-sessions.store';
 import { createOrganization } from './organization-fixtures';
 import {
@@ -257,19 +258,24 @@ describe('chunked data upload', () => {
       ).not.toBeNull();
     });
 
-    it('gives back the charge of a complete that died inside its write before charging again', async () => {
-      const { code, organizationId, id } = await readySession();
+    /** A complete whose process dies inside the charged write: the write fails, and neither the refund nor the release of the held charge happens. */
+    async function crashInsideWrite(code: string, id: string) {
       const mocks = [
         failStampOnce(),
         jest
           .spyOn(QuotaLedger.prototype, 'refund')
           .mockResolvedValueOnce(undefined),
         jest
-          .spyOn(UploadSessionsStore.prototype, 'closeCharge')
+          .spyOn(UploadSessionsStore.prototype, 'releaseCharge')
           .mockResolvedValueOnce(undefined),
       ];
       await complete(code, id).expect(500);
       mocks.forEach((mock) => mock.mockRestore());
+    }
+
+    it('gives back the charge of a complete that died inside its write before charging again', async () => {
+      const { code, organizationId, id } = await readySession();
+      await crashInsideWrite(code, id);
       expect(await creditsOf(organizationId)).toBe(1);
       await complete(code, id).expect(201);
       expect(await creditsOf(organizationId)).toBe(1);
@@ -278,6 +284,28 @@ describe('chunked data upload', () => {
         ['refund', -1],
         ['upload', 1],
       ]);
+    });
+
+    it('gives back once, at the sweep, the charge of a crashed complete whose session expired', async () => {
+      const { code, organizationId, id } = await readySession();
+      await crashInsideWrite(code, id);
+      expect(await creditsOf(organizationId)).toBe(1);
+      const redis = api.app.get<Redis>(REDIS);
+      await redis.pexpire(`chunked-upload:${id}`, 1);
+      await redis.zadd(`chunked-upload:user:${editorIds[0]}`, 1, id);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const sweeper = api.app.get(UploadPartsSweeper);
+      await sweeper.sweep();
+      await sweeper.sweep();
+      expect(await creditsOf(organizationId)).toBe(0);
+      const entries = await ledgerOf(organizationId);
+      expect(entries).toHaveLength(2);
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          ['upload', 1],
+          ['refund', -1],
+        ]),
+      );
     });
 
     it('sweeps the chunks of an expired session with nothing charged, and charges a completed one once, even with its marker lost', async () => {

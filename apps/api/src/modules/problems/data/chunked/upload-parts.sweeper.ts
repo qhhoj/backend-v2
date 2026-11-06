@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { UPLOAD_PARTS_SWEEP_MS } from './chunked-upload.limits';
+import { HeldCharges } from './held-charges.service';
 import { UploadPartsStore } from './upload-parts.store';
 import { UploadSessionsStore } from './upload-sessions.store';
 
-/** Removes the parts of sessions that are gone (expired, cancelled, lost with Redis): hourly in every API process, and at each create. Removals are idempotent, so processes never need to agree. */
+/** Ends what sessions that are gone (expired, cancelled, lost with Redis) left behind: gives back a charge a crashed complete still holds, then removes the parts. Hourly in every API process, and at each create; both steps are idempotent, so processes never need to agree. */
 @Injectable()
 export class UploadPartsSweeper implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(UploadPartsSweeper.name);
@@ -13,6 +14,7 @@ export class UploadPartsSweeper implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly parts: UploadPartsStore,
     private readonly sessions: UploadSessionsStore,
+    private readonly charges: HeldCharges,
   ) {}
 
   onModuleInit(): void {
@@ -24,14 +26,24 @@ export class UploadPartsSweeper implements OnModuleInit, OnModuleDestroy {
     clearInterval(this.timer);
   }
 
-  /** Never throws: a failed sweep is logged and the next one tries again. */
+  /** Never throws: a failed step is logged and the next sweep tries again. */
   async sweep(): Promise<void> {
+    await this.logFailure('Giving back held charges', () =>
+      this.charges.giveBackAbandoned(),
+    );
+    await this.logFailure('Sweeping chunked upload parts', () =>
+      this.parts.sweep((id) => this.sessions.isOpen(id)),
+    );
+  }
+
+  private async logFailure(
+    step: string,
+    work: () => Promise<void>,
+  ): Promise<void> {
     try {
-      await this.parts.sweep((id) => this.sessions.isOpen(id));
+      await work();
     } catch (error) {
-      this.logger.error(
-        `Sweeping chunked upload parts failed: ${(error as Error).message}`,
-      );
+      this.logger.error(`${step} failed: ${(error as Error).message}`);
     }
   }
 }
