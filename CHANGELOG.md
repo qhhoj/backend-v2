@@ -1,5 +1,12 @@
 # qhhoj-backend
 
+## 2.36.11
+
+### Patch Changes
+
+- c3f20db: A problem's package key now covers its cached PDF statements, so a package built before a PDF was rendered is rebuilt with the PDF instead of being served as current.
+- 0709e55: Every setting in the registry can be read, changed and restored through the settings API; `quota.cost.dataPer10MiB` was refused because its key contains digits.
+
 ## 2.36.10
 
 ### Patch Changes
