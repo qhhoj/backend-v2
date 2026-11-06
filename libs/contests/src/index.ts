@@ -1,3 +1,4 @@
+export * from './attempt-cap';
 export * from './contest-events';
 export * from './contest-data';
 export * from './contest-export';
@@ -26,5 +27,6 @@ export * from './first-solves';
 export * from './rating/elo-mmr';
 export * from './official-ranking';
 export * from './publish-queue';
+export * from './attempt-cap';
 export * from './balloons';
 export * from './feed-events';

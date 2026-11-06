@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
+import { attemptCap } from '@libs/contests';
 import type { Permission, Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
 import {
@@ -220,7 +221,8 @@ export class ProblemsService {
       (candidate) => uuidStr(candidate.problem) === problem._id,
     );
     if (!current || !entry) return null;
-    if (entry.maxSubmissions === null)
+    const cap = attemptCap(entry.maxSubmissions);
+    if (cap === null)
       return { contestKey: current.contest.key, attemptsLeft: null };
     const attempts = await this.participations.countAttempts(
       current.participation._id,
@@ -228,7 +230,7 @@ export class ProblemsService {
     );
     return {
       contestKey: current.contest.key,
-      attemptsLeft: Math.max(0, entry.maxSubmissions - attempts),
+      attemptsLeft: Math.max(0, cap - attempts),
     };
   }
 

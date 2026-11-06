@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import type { UserDocument } from '@libs/auth';
-import { participationEnd, problemLabel } from '@libs/contests';
+import { attemptCap, participationEnd, problemLabel } from '@libs/contests';
 import type { ProblemCell } from '@libs/contests';
 import { unique } from '@libs/common';
 import { LABEL_STYLES, SCOREBOARD_VISIBILITIES, uuidStr } from '@libs/database';
@@ -283,7 +283,7 @@ function labelledProblems(
           points: entry.points,
           partial: entry.partial,
           isPretested: entry.isPretested,
-          maxSubmissions: entry.maxSubmissions,
+          maxSubmissions: attemptCap(entry.maxSubmissions),
           timeLimit: facts.limits.get(problemId)?.timeLimit ?? null,
           memoryLimit: facts.limits.get(problemId)?.memoryLimit ?? null,
           solverCount:

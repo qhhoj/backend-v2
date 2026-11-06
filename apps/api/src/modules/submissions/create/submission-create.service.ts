@@ -15,7 +15,7 @@ import {
   validationPipe,
   withRedisLock,
 } from '@libs/common';
-import { contestPhase, LIVE, SPECTATE } from '@libs/contests';
+import { attemptCap, contestPhase, LIVE, SPECTATE } from '@libs/contests';
 import { isLanguageActive, SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
 import type { Language } from '@libs/database';
 import {
@@ -361,7 +361,7 @@ export class SubmissionCreateService {
         problem: problemId,
         isPretest,
       },
-      maxSubmissions: entry.maxSubmissions,
+      maxSubmissions: attemptCap(entry.maxSubmissions),
       finalOnly,
       isFinalFormat,
     };
