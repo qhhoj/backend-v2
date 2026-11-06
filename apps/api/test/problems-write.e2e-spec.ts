@@ -1,4 +1,10 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { ProblemEvents } from '../src/modules/problems/core/problem.events';
 import {
@@ -8,6 +14,7 @@ import {
   detailOf,
   loginAs,
   seedCatalog,
+  writeDataArchive,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
 import { errorCode, setupApiTest } from './setup';
@@ -16,11 +23,13 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
 import {
+  ProblemDataFilesService,
   PROBLEM_PURGE_QUEUE,
   PROBLEM_SOLVERS_QUEUE,
   problemPurgeJobId,
 } from '@libs/problems';
 import type { ProblemPurgeJob, ProblemSolversJob } from '@libs/problems';
+import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 import { ContestsRepository } from '../src/modules/contests/core/contests.repository';
 import { clearRateLimits, createContest } from './contest-fixtures';
 import { softDelete, tombstone } from './deleted-problem-fixtures';
@@ -364,6 +373,38 @@ afterAll(() => api.teardown());
       await authed(api.http().get(`${PROBLEMS}/second`), setter).expect(404);
       await authed(api.http().get(`${PROBLEMS}/third`), setter).expect(200);
       expect(events).toContainEqual(['codeRenamed', 'second', 'third']);
+    });
+    it('keeps the test data at the stored code when a rename fails at the move or at the save', async () => {
+      await createProblem(api, catalog, {
+        code: 'judged',
+        authors: [setterId],
+        isPublic: false,
+      });
+      writeDataArchive(api, 'judged', [{ name: '1.in', content: '1' }]);
+      const archiveOf = (code: string) =>
+        join(api.problemDataRoot, code, 'tests.zip');
+      const renameTo = (code: string) =>
+        authed(api.http().patch(`${PROBLEMS}/judged`), setter)
+          .send({ code })
+          .expect(500);
+      const failures = [
+        jest
+          .spyOn(api.app.get(ProblemDataFilesService), 'rename')
+          .mockRejectedValueOnce(new Error('disk full')),
+        jest
+          .spyOn(api.app.get(ProblemsRepository), 'update')
+          .mockRejectedValueOnce(new Error('mongo down')),
+      ];
+      for (const failure of failures) {
+        await renameTo('judged_new');
+        failure.mockRestore();
+        expect(await api.problems.countDocuments({ code: 'judged' })).toBe(1);
+        expect(existsSync(archiveOf('judged'))).toBe(true);
+        expect(existsSync(join(api.problemDataRoot, 'judged_new'))).toBe(false);
+      }
+      expect(events).not.toContainEqual(
+        expect.arrayContaining(['codeRenamed']),
+      );
     });
     it('refuses to create, suggest or clone a problem onto a leftover data directory, keeping its files', async () => {
       const leftover = join(api.problemDataRoot, 'leftover');

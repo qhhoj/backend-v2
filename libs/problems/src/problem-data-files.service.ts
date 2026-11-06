@@ -127,7 +127,7 @@ export class ProblemDataFilesService {
     );
   }
 
-  /** Runs a code rename (`work`: its Mongo write, then `rename`) under the data locks of both codes, so no data write runs on either side of the move. A write holding either lock refuses the rename at once with the 409 `busy` conflict. */
+  /** Runs a code rename (`work`: `rename`, then its Mongo write, then `rename` back if that write fails) under the data locks of both codes, so no data write runs on either side of the move. A write holding either lock refuses the rename at once with the 409 `busy` conflict. */
   withRenameLocks<T>(
     oldCode: string,
     newCode: string,
