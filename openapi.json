@@ -1527,6 +1527,52 @@
         ],
         "type": "string"
       },
+      "ChunkedUploadResponse": {
+        "properties": {
+          "chunkBytes": {
+            "description": "Bytes of every chunk but the last, which holds the rest.",
+            "type": "number"
+          },
+          "chunkCount": {
+            "description": "Number of chunks.",
+            "type": "number"
+          },
+          "expiresAt": {
+            "description": "When the session and its chunks are dropped.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "description": "Session id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The archive's name once stored.",
+            "type": "string"
+          },
+          "received": {
+            "description": "Indexes of the chunks the server holds, ascending; send the others.",
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "size": {
+            "description": "Size of the whole file in bytes.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "size",
+          "chunkBytes",
+          "chunkCount",
+          "received",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
       "ClampedLimitResponse": {
         "properties": {
           "applied": {
@@ -3668,6 +3714,32 @@
         "required": [
           "title",
           "body"
+        ],
+        "type": "object"
+      },
+      "CreateChunkedUploadDto": {
+        "properties": {
+          "name": {
+            "description": "File name of the archive; it must end in `.zip` (400 `zip_required`) and becomes the archive's name.",
+            "maxLength": 255,
+            "pattern": "^[^\\0]+$",
+            "type": "string"
+          },
+          "sha256": {
+            "description": "SHA-256 of the whole file, lowercase hex; checked at complete.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size of the whole file in bytes, 1 to 2 GiB.",
+            "maximum": 2147483648,
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "size",
+          "sha256"
         ],
         "type": "object"
       },
@@ -36149,6 +36221,368 @@
           "Problem editing"
         ],
         "x-raw": true
+      }
+    },
+    "/api/internal/problems/{code}/data/uploads": {
+      "post": {
+        "description": "For archives too large for one request (above `chunkBytes`, 48 MiB). Same\nrights as the archive upload; mirror problems are refused. `name` must end\nin `.zip` (400 `zip_required`), `size` is at most 2 GiB. Spends one upload of\nthe 30 per hour per user and checks the organization's storage now (403\n`quota_exceeded`); credits are charged at complete. At most 2 open uploads per\nuser (409 `upload_sessions_full`); a session expires 24 hours after create.",
+        "operationId": "ChunkedUploadsController_create",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChunkedUploadDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ChunkedUploadResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Start a chunked upload of the test data archive",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/problems/{code}/data/uploads/{id}": {
+      "delete": {
+        "description": "Drops the session and its chunks. Nothing was charged.",
+        "operationId": "ChunkedUploadsController_cancel",
+        "parameters": [
+          {
+            "description": "Problem code.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Upload session id, from create.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Cancel a chunked upload",
+        "tags": [
+          "Problem editing"
+        ]
+      },
+      "get": {
+        "description": "`received` lists the chunks the server holds; resume by sending the others.",
+        "operationId": "ChunkedUploadsController_status",
+        "parameters": [
+          {
+            "description": "Problem code.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Upload session id, from create.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ChunkedUploadResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a chunked upload",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/problems/{code}/data/uploads/{id}/chunks/{index}": {
+      "put": {
+        "description": "One multipart `file` holding bytes `index * chunkBytes` onwards, exactly\n`chunkBytes` long (the last chunk: the rest; 400 `chunk_size_mismatch`, 413\n`file_too_large`). An index past the last chunk is 400\n`chunk_index_out_of_range`. Sending a chunk again replaces it. Chunks of one\nupload are written one at a time (409 `busy`). Limited to 300 chunks per hour\nper user. Another user's upload, or an expired one, is 404 `not_found`.",
+        "operationId": "ChunkedUploadsController_putChunk",
+        "parameters": [
+          {
+            "description": "Chunk index, from 0 to `chunkCount - 1`.",
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Problem code.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Upload session id, from create.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ChunkedUploadResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Send one chunk of a chunked upload",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/problems/{code}/data/uploads/{id}/complete": {
+      "post": {
+        "description": "Needs every chunk (409 `chunks_missing`). Joins them and checks the size and\nSHA-256 given at create: a mismatch is 400 `upload_hash_mismatch` and ends\nthe upload. Then stores the archive exactly like the archive upload, with its\nanswer and its errors (zip codes, `quota_exceeded`, 409 `busy`); after such\nan error the chunks are kept, so complete can be retried or the upload\ncancelled.",
+        "operationId": "ChunkedUploadsController_complete",
+        "parameters": [
+          {
+            "description": "Problem code.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Upload session id, from create.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ProblemDataResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Complete a chunked upload",
+        "tags": [
+          "Problem editing"
+        ]
       }
     },
     "/api/internal/problems/{code}/editorial": {

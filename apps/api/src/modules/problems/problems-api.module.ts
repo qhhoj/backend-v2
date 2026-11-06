@@ -34,6 +34,10 @@ import { ProblemBulkVisibilityService } from './bulk/problem-bulk-visibility.ser
 import { LicensesQuerier } from './catalog/licenses.querier';
 import { ProblemGroupsQuerier } from './catalog/problem-groups.querier';
 import { ProblemTypesQuerier } from './catalog/problem-types.querier';
+import { ChunkedUploadsController } from './data/chunked/chunked-uploads.controller';
+import { ChunkedUploadsService } from './data/chunked/chunked-uploads.service';
+import { UploadPartsStore } from './data/chunked/upload-parts.store';
+import { UploadSessionsStore } from './data/chunked/upload-sessions.store';
 import { ProblemDataController } from './data/problem-data.controller';
 import { ProblemDataLifecycleService } from './data/problem-data-lifecycle.service';
 import { ProblemDataService } from './data/problem-data.service';
@@ -125,6 +129,7 @@ const repositories = [
     OrganizationProblemCreationController,
     ProblemUploadsController,
     ProblemDataController,
+    ChunkedUploadsController,
     ProblemPdfController,
     ProblemLifecycleController,
     ProblemPackageController,
@@ -154,6 +159,9 @@ const repositories = [
     ProblemDataStore,
     ProblemDataService,
     ProblemDataUploadService,
+    ChunkedUploadsService,
+    UploadSessionsStore,
+    UploadPartsStore,
     SourceChecksService,
     ProblemStorageQuota,
     ProblemDataLifecycleService,
