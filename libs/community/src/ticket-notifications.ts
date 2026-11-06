@@ -1,5 +1,4 @@
-import { unique } from '@libs/common';
-import { excerpt } from './discord';
+import { excerpt, unique } from '@libs/common';
 import type { NotificationDraft } from './notifications';
 
 /** Holders of `change_ticket` alerted about a ticket nobody is assigned to. */

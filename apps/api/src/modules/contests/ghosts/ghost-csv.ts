@@ -1,11 +1,10 @@
 import type { GhostCell, GhostInput } from '@libs/contests';
 import {
-  CONTROL_CHARACTER,
   GHOST_CAPTION_MAX,
   GHOST_LABEL_MAX,
   GHOST_LIMIT,
 } from '@libs/contests';
-import { CsvError, readCsv, writeCsv } from '@libs/common';
+import { CsvError, hasControlCharacter, readCsv, writeCsv } from '@libs/common';
 
 /** Machine codes of a refused ghost CSV; the SPA words each one itself. `label_invalid` and `caption_invalid` mean "too long"; a leading = + - @ has its own `label_formula` and `caption_formula`. */
 export const GHOST_CSV_ISSUE_CODES = [
@@ -120,7 +119,7 @@ function textIssues(
     issues.push(
       rowIssue('caption_formula', row, 'the caption starts with = + - or @'),
     );
-  if (CONTROL_CHARACTER.test(label) || CONTROL_CHARACTER.test(caption))
+  if (hasControlCharacter(label) || hasControlCharacter(caption))
     issues.push(
       rowIssue('control_character', row, 'a field holds a control character'),
     );

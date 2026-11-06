@@ -1,5 +1,6 @@
 import {
   canonicalTimeZone,
+  hasControlCharacter,
   ipMatcher,
   MAIL_ADDRESS_PATTERN,
 } from '@libs/common';
@@ -123,9 +124,6 @@ export const optionalDatetimeType: SettingType<string> = {
         );
   },
 };
-
-const hasControlCharacter = (text: string): boolean =>
-  [...text].some((char) => char.charCodeAt(0) < 0x20 || char === '\u007f');
 
 /** Short single-line text such as an API key; `''` means unset. No control characters, so the value cannot break a header or a log line. Surrounding spaces (a sloppy paste) are dropped. */
 export const optionalTextType = (maxLength: number): SettingType<string> => ({

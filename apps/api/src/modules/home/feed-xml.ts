@@ -1,5 +1,4 @@
-import { excerpt } from '@libs/community';
-import { escapeXml } from '@libs/common';
+import { escapeXml, excerpt } from '@libs/common';
 
 export interface FeedChannel {
   title: string;

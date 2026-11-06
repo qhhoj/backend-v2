@@ -4,6 +4,7 @@ import { crc32 } from 'node:zlib';
 import { pipeline, Readable as ReadableStream, Transform } from 'node:stream';
 import type { Readable } from 'node:stream';
 import { finished } from 'node:stream/promises';
+import { hasControlCharacter } from '@libs/common';
 import yauzl from 'yauzl';
 import type { Entry, ZipFile } from 'yauzl';
 import { hasDotSegment } from './file-names';
@@ -51,19 +52,13 @@ export class ZipError extends Error {
   }
 }
 
-const isControlCharacter = (character: string) => {
-  const code = character.charCodeAt(0);
-  return code < FIRST_PRINTABLE || code === DELETE_CHARACTER;
-};
-const hasControlCharacter = (name: string) =>
-  [...name].some(isControlCharacter);
 /** yauzl shows CP437 control bytes as symbols (☺, ⌂), the judge keeps them raw, so the decoded name cannot tell. */
 const hasControlByte = (raw: Buffer) =>
   raw.some((byte) => byte < FIRST_PRINTABLE || byte === DELETE_CHARACTER);
 /** A name that is safe to echo in a message. */
 const shown = (name: string) =>
   [...name]
-    .filter((character) => !isControlCharacter(character))
+    .filter((character) => !hasControlCharacter(character))
     .join('')
     .slice(0, MAX_SHOWN_NAME);
 const isDirectory = (entry: Entry) => entry.fileName.endsWith('/');

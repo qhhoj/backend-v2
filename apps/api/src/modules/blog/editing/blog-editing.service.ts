@@ -1,10 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Permission, Principal, UserDocument } from '@libs/auth';
-import { AppError, RateLimitService, unique } from '@libs/common';
+import { AppError, excerpt, RateLimitService, unique } from '@libs/common';
 import {
   canWritePersonalPost,
-  excerpt,
   officialModeLocks,
   pagePath,
   postSlug,
