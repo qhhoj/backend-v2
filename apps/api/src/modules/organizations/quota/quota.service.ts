@@ -1,9 +1,8 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
-import { AppError, isDuplicateKey, REDIS } from '@libs/common';
+import { AppError, isDuplicateKey } from '@libs/common';
 import { OrganizationUsage } from '@libs/database';
 import { QuotaLedger, quotaExceeded } from '@libs/problems';
 import type {
@@ -15,10 +14,7 @@ import type {
 import { SettingsService } from '@libs/settings';
 import { meterOf } from './quota-meter';
 import { QuotaWarningNotifier } from './quota-warning.notifier';
-import {
-  BYTES_PER_COST_UNIT,
-  QUOTA_BACKFILL_DONE_KEY,
-} from './quota.constants';
+import { BYTES_PER_COST_UNIT } from './quota.constants';
 import type { QuotaSnapshot } from './quota.types';
 
 /** Monthly credits (atomic, refundable) of an organization, its 80% warnings and its usage snapshot; limits, enforce mode and the storage meter live in `QuotaLedger`. `warn` mode lets everything through but logs and counts, so a site can measure before it blocks. */
@@ -31,16 +27,15 @@ export class QuotaService implements OnApplicationBootstrap {
     private readonly ledger: QuotaLedger,
     @InjectModel(OrganizationUsage.name)
     private readonly usage: Model<OrganizationUsage>,
-    @Inject(REDIS) private readonly redis: Redis,
     private readonly warnings: QuotaWarningNotifier,
   ) {}
 
-  /** The backfill flag lives in Redis only, so a Redis flush or restart silently turns `enforce` back into `warn`: say so at boot (re-run the backfill by removing the job `PROBLEM_DATABYTES_JOB_ID` (`problem-databytes-backfill-v2`) from the `problem-databytes` queue and restarting the worker). */
+  /** Enforcing waits for the size backfill, which only `worker migrate` runs (the deploy runs it before each restart). */
   async onApplicationBootstrap(): Promise<void> {
     if (this.settings.get('quota.enforce') !== 'enforce') return;
-    if ((await this.redis.get(QUOTA_BACKFILL_DONE_KEY)) !== '1')
+    if (!(await this.ledger.isStorageBackfilled()))
       this.logger.warn(
-        'quota.enforce is "enforce" but the dataBytes backfill flag is missing: quotas stay in warn mode until the backfill job has run again',
+        'quota.enforce is "enforce" but the size backfill has not run: quotas stay in warn mode until `worker migrate` has run',
       );
   }
 

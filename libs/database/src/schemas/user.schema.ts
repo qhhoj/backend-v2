@@ -33,7 +33,7 @@ export class User {
   @Prop({ type: Date, default: null }) renamedAt!: Date | null;
   @Prop({ default: '' }) email!: string;
   @Prop({ required: true }) password!: string;
-  /** True when the password was chosen before anyone proved the mailbox (signup, staff creation); only a reset confirm or a staff password set clears it. A social auto-link makes such a password unusable. Missing reads as false (rows from before the field were backfilled at boot, `PasswordVerificationBackfillService`). */
+  /** True when the password was chosen before anyone proved the mailbox (signup, staff creation); only a reset confirm or a staff password set clears it. A social auto-link makes such a password unusable. Missing reads as false (rows from before the field were backfilled by a migration, `PasswordVerificationBackfillMigration`). */
   @Prop({ type: Boolean }) passwordSetBeforeVerification?: boolean;
   @Prop({ default: '' }) firstName!: string;
   @Prop({ default: '' }) lastName!: string;

@@ -96,10 +96,11 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'F',
     'only live problems are synced automatically',
   ],
-  'apps/worker/src/jobs/problem-databytes/problem-databytes.repository.ts': [
-    'S',
-    "recomputes every problem's dataBytes from disk, deleted and purged ones included",
-  ],
+  'apps/worker/src/migrations/problem-databytes/problem-databytes.repository.ts':
+    [
+      'S',
+      "recomputes every problem's dataBytes from disk, deleted and purged ones included",
+    ],
   'apps/worker/src/jobs/problem-purge/problem-purge.repository.ts': [
     'S',
     'the purge reads the deleted problems it is removing',

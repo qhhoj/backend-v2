@@ -22,14 +22,10 @@ import { OrganizationPointsModule } from './jobs/organization-points/organizatio
 import { ProblemPackageModule } from './jobs/problem-package/problem-package.module';
 import { ProblemPurgeModule } from './jobs/problem-purge/problem-purge.module';
 import { PdfRenderModule } from './jobs/pdf-render/pdf-render.module';
-import { ProblemDataBytesModule } from './jobs/problem-databytes/problem-databytes.module';
 import { OrganizationUsageAuditModule } from './jobs/organization-usage-audit/organization-usage-audit.module';
 import { SourceCheckModule } from './jobs/source-check/source-check.module';
 import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module';
 import { PolygonAutoSyncModule } from './jobs/polygon-autosync/polygon-autosync.module';
-import { PermissionRenameModule } from './jobs/permission-rename/permission-rename.module';
-import { IeOverrideCleanupModule } from './jobs/ie-override-cleanup/ie-override-cleanup.module';
-import { ContestSummaryCleanupModule } from './jobs/contest-summary-cleanup/contest-summary-cleanup.module';
 import { ProblemRescoreModule } from './jobs/problem-rescore/problem-rescore.module';
 import { ProblemSolversModule } from './jobs/problem-solvers/problem-solvers.module';
 import { SubmissionEffectsModule } from './jobs/submission-effects/submission-effects.module';
@@ -57,10 +53,6 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
     PolygonImportModule,
     SourceCheckModule,
     PolygonAutoSyncModule,
-    PermissionRenameModule,
-    IeOverrideCleanupModule,
-    ContestSummaryCleanupModule,
-    ProblemDataBytesModule,
     SubmissionEffectsModule,
     EffectsSweepModule,
     ProblemRescoreModule,

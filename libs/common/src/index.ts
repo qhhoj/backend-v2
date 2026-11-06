@@ -11,7 +11,6 @@ export * from './pipes/validation.pipe';
 export * from './bootstrap';
 export * from './env/env';
 export * from './env/ip-allowlist';
-export * from './env/removed-env';
 export * from './env/env.module';
 export * from './querier/base-catalog.querier';
 export * from './querier/base-mongo-stream.querier';

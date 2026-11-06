@@ -3,9 +3,11 @@ import type Redis from 'ioredis';
 import { REDIS, StorageService } from '@libs/common';
 import { PROBLEM_CODE_PATTERN } from '@libs/database';
 import {
+  LEGACY_STORAGE_BACKFILL_KEY,
   ProblemDataFilesService,
-  QUOTA_BACKFILL_DONE_KEY,
+  STORAGE_BACKFILL_MIGRATION,
 } from '@libs/problems';
+import type { Migration } from '../migration';
 import { ProblemDataBytesRepository } from './problem-databytes.repository';
 import type {
   MeasuredSize,
@@ -15,10 +17,11 @@ import type {
 
 const BATCH = 200;
 
-/** Recompute-and-set of `problems.dataBytes` (the data directory) and of `pdfStatementBytes` / `materialBytes` (the uploaded files) from disk. Runs once before `quota.enforce` is ever switched on, so organizations are not judged on zeros. It takes no data lock (a read must not stall the judge): it tolerates concurrent writes by compare-and-set, see `setSizes`. */
+/** Recompute-and-set of `problems.dataBytes` (the data directory) and of `pdfStatementBytes` / `materialBytes` (the uploaded files) from disk; its record lets `quota.enforce` take effect, so organizations are not judged on zeros. It takes no data lock (a read must not stall the judge): it tolerates concurrent writes by compare-and-set, see `setSizes`. */
 @Injectable()
-export class ProblemDataBytesService {
-  private readonly logger = new Logger(ProblemDataBytesService.name);
+export class ProblemDataBytesMigration implements Migration {
+  readonly id = STORAGE_BACKFILL_MIGRATION;
+  private readonly logger = new Logger(ProblemDataBytesMigration.name);
 
   constructor(
     private readonly repository: ProblemDataBytesRepository,
@@ -27,12 +30,13 @@ export class ProblemDataBytesService {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  async backfill(): Promise<{ problems: number; bytes: number }> {
+  async run(): Promise<number> {
     let problems = 0;
     let bytes = 0;
+    let changed = 0;
     for await (const batch of this.repository.batches(BATCH)) {
       const sizes = await Promise.all(batch.map((ref) => this.measure(ref)));
-      await this.repository.setSizes(sizes);
+      changed += await this.repository.setSizes(sizes);
       problems += sizes.length;
       bytes += sizes.reduce(
         (sum, size) =>
@@ -40,12 +44,12 @@ export class ProblemDataBytesService {
         0,
       );
     }
-    await this.redis.set(QUOTA_BACKFILL_DONE_KEY, '1');
+    await this.redis.set(LEGACY_STORAGE_BACKFILL_KEY, '1');
     this.logger.log(`dataBytes backfill: ${problems} problems, ${bytes} bytes`);
-    return { problems, bytes };
+    return changed;
   }
 
-  /** A disk error propagates, so the job retries instead of recording a wrong 0. */
+  /** A disk error propagates and fails the migration (and the deploy) instead of recording a wrong 0. */
   private async measure(ref: ProblemRef): Promise<MeasuredSize> {
     return {
       ref,

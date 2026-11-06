@@ -1,24 +1,27 @@
-import type { Contest } from '@libs/database';
-import { ContestSummaryCleanupService } from '../src/jobs/contest-summary-cleanup/contest-summary-cleanup.service';
-import { setupWorkerTest } from './setup';
-import type { WorkerTest } from './setup';
+import type { Model } from 'mongoose';
+import { Contest } from '@libs/database';
+import { setupMigrationsTest } from '../../../test/migrations-setup';
+import type { MigrationsTest } from '../../../test/migrations-setup';
+import { ContestSummaryCleanupMigration } from './contest-summary-cleanup.migration';
 
 /** The text the old site's organiser typed into the summary box (CRLF, as the legacy admin saved it). */
 const LEGACY_SUMMARY = '{\r\n    "cumtime": true\r\n}';
 
-describe('Contest summary cleanup', () => {
-  let worker: WorkerTest;
-  let cleanup: ContestSummaryCleanupService;
+describe('contest summary cleanup migration', () => {
+  let test: MigrationsTest;
+  let contests: Model<Contest>;
+  let cleanup: ContestSummaryCleanupMigration;
   let contestCount = 0;
 
   beforeAll(async () => {
-    worker = await setupWorkerTest();
-    cleanup = worker.module.get(ContestSummaryCleanupService);
+    test = await setupMigrationsTest();
+    contests = test.model(Contest.name);
+    cleanup = test.module.get(ContestSummaryCleanupMigration);
   });
-  afterAll(() => worker.teardown());
+  afterAll(() => test.teardown());
 
   const contest = async (fields: Partial<Contest>): Promise<string> => {
-    const created = await worker.contests.create({
+    const created = await contests.create({
       key: `summary_${(contestCount += 1)}`,
       name: 'SQRT Cup',
       startTime: new Date('2025-07-05T13:00:00Z'),
@@ -28,7 +31,7 @@ describe('Contest summary cleanup', () => {
     return created.key;
   };
   const stored = async (key: string) =>
-    (await worker.contests.findOne({ key }).lean())!;
+    (await contests.findOne({ key }).lean())!;
 
   it('empties format-config summaries, fills only missing config keys, leaves prose alone, and is idempotent', async () => {
     const configSet = await contest({
@@ -50,12 +53,7 @@ describe('Contest summary cleanup', () => {
     const braceProse = await contest({ summary: '{Div. 2} Vòng loại' });
     const otherJson = await contest({ summary: '{"note": "xem đề"}' });
 
-    expect(await cleanup.run()).toEqual({
-      found: 5,
-      cleared: 3,
-      configFilled: 1,
-      clearedKeys: [configSet, configMissing, formatWithoutOptions],
-    });
+    expect(await cleanup.run()).toBe(3);
 
     expect(await stored(configSet)).toMatchObject({
       summary: '',
@@ -75,14 +73,9 @@ describe('Contest summary cleanup', () => {
     expect((await stored(braceProse)).summary).toBe('{Div. 2} Vòng loại');
     expect((await stored(otherJson)).summary).toBe('{"note": "xem đề"}');
 
-    const contestsBefore = await worker.contests.find().sort({ _id: 1 }).lean();
-    expect(await cleanup.run()).toEqual({
-      found: 2,
-      cleared: 0,
-      configFilled: 0,
-      clearedKeys: [],
-    });
-    expect(await worker.contests.find().sort({ _id: 1 }).lean()).toEqual(
+    const contestsBefore = await contests.find().sort({ _id: 1 }).lean();
+    expect(await cleanup.run()).toBe(0);
+    expect(await contests.find().sort({ _id: 1 }).lean()).toEqual(
       contestsBefore,
     );
   });

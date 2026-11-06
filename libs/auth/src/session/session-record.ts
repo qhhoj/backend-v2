@@ -1,7 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { constantTimeEqual, sha256 } from '../crypto';
 
-export const SESSION_KEY_PREFIX = 'session:';
 /** The session keys of one user, so a password change or a ban can end them all. */
 export const userSessionsKey = (userId: string) => `user-sessions:${userId}`;
 
@@ -19,12 +18,7 @@ export class SessionRecords {
   }
 
   keyFor(cookieId: string): string {
-    return this.keyForDigest(sha256(cookieId));
-  }
-
-  /** `digest` is the sha256 hex of the cookie, the form keys had before they were bound to the secret. */
-  keyForDigest(digest: string): string {
-    return `${SESSION_KEY_PREFIX}${this.hmac(digest)}`;
+    return `session:${this.hmac(sha256(cookieId))}`;
   }
 
   seal(key: string, json: string): string {

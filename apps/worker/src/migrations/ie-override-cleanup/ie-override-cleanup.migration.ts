@@ -1,24 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
-import type { OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Revision, Submission, uuidStr } from '@libs/database';
 import type { Model } from 'mongoose';
+import type { Migration } from '../migration';
 
-/** Score overrides of internal-error rows: the revisions whose submission may still carry the IE message. */
-export const IE_OVERRIDE_FILTER = {
+/** Score overrides as the api's override wrote them before 2.29.2 (a migration matches what was written then, so this stays even if the writer changes); the revisions of internal-error rows: whose submission may still carry the IE message. */
+const IE_OVERRIDE_FILTER = {
   entity: 'submission',
   action: 'override_score',
   'changes.result.before': 'IE',
 } as const;
-
-export interface IeOverrideCleanupCounts {
-  /** Revisions overriding an internal error. */
-  found: number;
-  /** Submissions whose message moved into the revision this run. */
-  cleared: number;
-  /** Found but left alone: already clean, still IE, a compile error, or graded again since the override. */
-  skipped: number;
-}
 
 type OverrideRevision = Pick<
   Revision,
@@ -47,13 +38,13 @@ const revisionAccepts = (revision: OverrideRevision, text: string): boolean => {
 };
 
 /**
- * One-off data cleanup, idempotent, so every worker boot may run it. Before 2.29.2 a score override of an IE row kept the
- * internal-error message (it can quote jury data) on the row, which then read as graded and showed it to everyone; since
- * 2.29.2 the override moves it into its revision. This moves the message of older overrides the same way.
+ * Before 2.29.2 a score override of an IE row kept the internal-error message (it can quote jury data) on the row, which
+ * then read as graded and showed it to everyone; since 2.29.2 the override moves it into its revision. This moves the
+ * message of older overrides the same way (decisions.md: IE override cleanup).
  */
 @Injectable()
-export class IeOverrideCleanupService implements OnApplicationBootstrap {
-  private readonly logger = new Logger(IeOverrideCleanupService.name);
+export class IeOverrideCleanupMigration implements Migration {
+  readonly id = '2026-10-15-ie-override-cleanup';
 
   constructor(
     @InjectModel(Revision.name) private readonly revisions: Model<Revision>,
@@ -61,15 +52,8 @@ export class IeOverrideCleanupService implements OnApplicationBootstrap {
     private readonly submissions: Model<Submission>,
   ) {}
 
-  async onApplicationBootstrap(): Promise<void> {
-    const { found, cleared, skipped } = await this.run();
-    this.logger.log(
-      `IE override messages: found ${found}, cleared ${cleared}, skipped ${skipped}`,
-    );
-  }
-
-  /** Moves each still-shown message into its override revision; counts only, the text is never logged. */
-  async run(): Promise<IeOverrideCleanupCounts> {
+  /** Moves each still-shown message into its override revision; returns the rows cleared (the text is never logged). */
+  async run(): Promise<number> {
     const revisions = await this.revisions
       .find(IE_OVERRIDE_FILTER, { entityId: 1, changes: 1, createdAt: 1 })
       .lean<OverrideRevision[]>()
@@ -82,11 +66,7 @@ export class IeOverrideCleanupService implements OnApplicationBootstrap {
       const row = rows.get(uuidStr(revision.entityId));
       if (row && (await this.moveMessage(revision, row))) cleared++;
     }
-    return {
-      found: revisions.length,
-      cleared,
-      skipped: revisions.length - cleared,
-    };
+    return cleared;
   }
 
   private async rowsById(ids: string[]): Promise<Map<string, OverriddenRow>> {

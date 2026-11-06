@@ -1,5 +1,4 @@
 import { getQueueToken } from '@nestjs/bullmq';
-import { PasswordVerificationBackfillService } from '@libs/auth';
 import { REDIS } from '@libs/common';
 import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
 import type { Queue } from 'bullmq';
@@ -171,34 +170,6 @@ describe('social login', () => {
       apiTokenHash: 'earlier',
     });
     await authed(api.http().get('/api/internal/auth/me'), earlier).expect(200);
-  });
-
-  it('the boot backfill flags never-activated migrated accounts and keeps updatedAt', async () => {
-    const migrated = await createUser(api.users, {
-      username: 'veteran',
-      email: 'veteran@example.com',
-      dateJoined: new Date('2020-01-01T00:00:00Z'),
-    });
-    const unactivated = await createUser(api.users, {
-      username: 'dormant',
-      email: 'dormant@example.com',
-      dateJoined: new Date('2020-01-01T00:00:00Z'),
-      isActive: false,
-    });
-    const stored = async (id: string) =>
-      (await api.users.findById(id).lean<{
-        passwordSetBeforeVerification?: boolean;
-        updatedAt: Date;
-      }>())!;
-    const editedAt = (await stored(migrated._id)).updatedAt;
-    await api.app.get(PasswordVerificationBackfillService).backfill();
-    expect(await stored(migrated._id)).toMatchObject({
-      passwordSetBeforeVerification: false,
-      updatedAt: editedAt,
-    });
-    expect((await stored(unactivated._id)).passwordSetBeforeVerification).toBe(
-      true,
-    );
   });
 
   it('does not link by an unverified email', async () => {

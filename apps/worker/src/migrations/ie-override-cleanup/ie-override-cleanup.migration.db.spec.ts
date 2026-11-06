@@ -1,25 +1,25 @@
-import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { newId, Revision } from '@libs/database';
-import type { Submission } from '@libs/database';
-import { IeOverrideCleanupService } from '../src/jobs/ie-override-cleanup/ie-override-cleanup.service';
-import { setupWorkerTest } from './setup';
-import type { WorkerTest } from './setup';
+import { newId, Revision, Submission } from '@libs/database';
+import { setupMigrationsTest } from '../../../test/migrations-setup';
+import type { MigrationsTest } from '../../../test/migrations-setup';
+import { IeOverrideCleanupMigration } from './ie-override-cleanup.migration';
 
 const JURY_TEXT = "wrong answer: expected jury's 8 days";
 const OVERRIDE_AT = new Date('2026-10-01T00:00:00Z');
 
-describe('IE override cleanup', () => {
-  let worker: WorkerTest;
+describe('IE override cleanup migration', () => {
+  let test: MigrationsTest;
   let revisions: Model<Revision>;
-  let cleanup: IeOverrideCleanupService;
+  let submissions: Model<Submission>;
+  let cleanup: IeOverrideCleanupMigration;
 
   beforeAll(async () => {
-    worker = await setupWorkerTest();
-    revisions = worker.module.get(getModelToken(Revision.name));
-    cleanup = worker.module.get(IeOverrideCleanupService);
+    test = await setupMigrationsTest();
+    revisions = test.model(Revision.name);
+    submissions = test.model(Submission.name);
+    cleanup = test.module.get(IeOverrideCleanupMigration);
   });
-  afterAll(() => worker.teardown());
+  afterAll(() => test.teardown());
 
   /** A submission and its score-override revision from `before` to AC. */
   const overridden = async (
@@ -27,7 +27,7 @@ describe('IE override cleanup', () => {
     before: string,
   ): Promise<{ submissionId: string; revisionId: string }> => {
     const submissionId = newId();
-    await worker.submissions.create({
+    await submissions.create({
       _id: submissionId,
       user: newId(),
       problem: newId(),
@@ -53,7 +53,7 @@ describe('IE override cleanup', () => {
   };
 
   const errorOf = async (id: string) =>
-    (await worker.submissions.findById(id).lean())!.error;
+    (await submissions.findById(id).lean())!.error;
   const changesOf = async (id: string) =>
     (await revisions.findById(id).lean())!.changes;
 
@@ -76,7 +76,7 @@ describe('IE override cleanup', () => {
       'IE',
     );
 
-    expect(await cleanup.run()).toEqual({ found: 4, cleared: 1, skipped: 3 });
+    expect(await cleanup.run()).toBe(1);
 
     expect(await errorOf(ie.submissionId)).toBeNull();
     expect((await changesOf(ie.revisionId)).error).toEqual({
@@ -91,9 +91,13 @@ describe('IE override cleanup', () => {
     expect(await errorOf(stillIe.submissionId)).toBe(JURY_TEXT);
 
     const revisionsBefore = await revisions.find().sort({ _id: 1 }).lean();
-    expect(await cleanup.run()).toEqual({ found: 4, cleared: 0, skipped: 4 });
+    const rowsBefore = await submissions.find().sort({ _id: 1 }).lean();
+    expect(await cleanup.run()).toBe(0);
     expect(await revisions.find().sort({ _id: 1 }).lean()).toEqual(
       revisionsBefore,
+    );
+    expect(await submissions.find().sort({ _id: 1 }).lean()).toEqual(
+      rowsBefore,
     );
   });
 
@@ -104,7 +108,7 @@ describe('IE override cleanup', () => {
       { $set: { 'changes.error': { before: JURY_TEXT, after: null } } },
     );
 
-    expect((await cleanup.run()).cleared).toBe(1);
+    expect(await cleanup.run()).toBe(1);
 
     expect(await errorOf(ie.submissionId)).toBeNull();
     expect((await changesOf(ie.revisionId)).error).toEqual({

@@ -1,35 +1,41 @@
-import { Injectable, Logger } from '@nestjs/common';
-import type { OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import type { Permission } from '@libs/auth';
 import { Group, User } from '@libs/database';
 import type { Model } from 'mongoose';
+import type { Migration } from '../migration';
 
 /** Codenames that were renamed: a role or user holding the old one gets the new one instead. */
-export const PERMISSION_RENAMES: readonly { from: string; to: string }[] = [
+export const PERMISSION_RENAMES: readonly { from: string; to: Permission }[] = [
   // 2026-10-13: Polygon import uses the normal creation and edit rights; only syncing keeps a permission.
   { from: 'judge.import_polygon_package', to: 'judge.sync_polygon_problem' },
 ];
 
-/** One-off data migration, idempotent, so every worker boot may run it: after the first it matches nothing. The api's role cache follows through its change stream. */
+/** The api's role cache follows through its change stream. */
 @Injectable()
-export class PermissionRenameService implements OnApplicationBootstrap {
-  private readonly logger = new Logger(PermissionRenameService.name);
+export class PermissionRenameMigration implements Migration {
+  readonly id = '2026-10-13-permission-rename';
 
   constructor(
     @InjectModel(Group.name) private readonly groups: Model<Group>,
     @InjectModel(User.name) private readonly users: Model<User>,
   ) {}
 
-  async onApplicationBootstrap(): Promise<void> {
-    for (const rename of PERMISSION_RENAMES) {
-      const renamed = await this.rename(rename);
-      if (renamed)
-        this.logger.log(`${rename.from} → ${rename.to}: ${renamed} holders`);
-    }
+  async run(): Promise<number> {
+    let renamed = 0;
+    for (const rename of PERMISSION_RENAMES)
+      renamed += await this.rename(rename);
+    return renamed;
   }
 
-  /** Swaps the codename in place on roles and users holding it; returns how many documents changed. */
-  async rename({ from, to }: { from: string; to: string }): Promise<number> {
+  /** Swaps the codename in place on roles and users holding it. */
+  private async rename({
+    from,
+    to,
+  }: {
+    from: string;
+    to: string;
+  }): Promise<number> {
     const swap = [
       {
         $set: {

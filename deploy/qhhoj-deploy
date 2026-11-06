@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # qhhoj-deploy: the one root command the CD `deploy` user may run (sudoers). Installed to /usr/local/sbin.
 #   backend <tag> [--force] [--token-stdin]
-#                             build <tag>'s indexes, move the local :current image tag to <tag>, restart qhhoj.target,
+#                             build <tag>'s indexes, run its migrations, move the local :current image tag to <tag>, restart qhhoj.target,
 #                             health-check, roll back on failure;
 #                             --token-stdin logs in to ghcr.io with one line of stdin (per-deploy authfile, removed on exit)
 #   frontend <version>        unpack incoming/frontend-dist-<version>.tar.gz, carry kept releases' recent assets/ over, flip /var/www/qhhoj/current, check, roll back on failure
@@ -73,6 +73,12 @@ build_indexes() { # <tag>: the new image builds every schema index while the liv
     "$IMAGE:$1" indexes
 }
 
+run_migrations() { # <tag>: the new image runs its pending one-off data migrations (`worker migrate`) while the live version still serves
+  # The worker's own env and volume: a migration may read the data directories. A failure is reduced to no row data.
+  podman run --rm --network=host --user 987:987 --env-file "$ENV_FILE" -e APP=worker -e NODE_ENV=production \
+    -v /srv/qhhoj:/srv/qhhoj "$IMAGE:$1" migrate
+}
+
 switch_backend() {
   podman tag "$IMAGE:$1" "$IMAGE:current" || return 1
   systemctl reset-failed qhhoj-api qhhoj-bridge qhhoj-worker || true # a crash-looping image exhausts the start limit
@@ -119,6 +125,7 @@ deploy_backend() { # <tag> [--force] [--token-stdin]
   podman pull --authfile "$authfile" "$IMAGE:$tag"
   previous="$(live backend)"
   build_indexes "$tag" || die "index build of $tag failed; ${previous:-nothing} stays live"
+  run_migrations "$tag" || die "migrations of $tag failed; ${previous:-nothing} stays live"
   if switch_backend "$tag" && backend_healthy; then
     record backend "$tag"; prune_images; echo "deployed backend $tag"; return
   fi

@@ -145,7 +145,7 @@ export class Problem {
   sourceChecks?: SourceChecks;
   /** Compare-and-set counter for `data`: bumped by every data write so concurrent editors cannot overwrite each other. */
   @Prop({ default: 0 }) dataVersion!: number;
-  /** Bytes in the problem's data directory. Recompute-and-set after every data write and by the `problem-databytes` job; the storage meter sums it. */
+  /** Bytes in the problem's data directory. Recompute-and-set after every data write (and once by the size backfill migration); the storage meter sums it. */
   @Prop({ default: 0, min: 0 }) dataBytes!: number;
   /** Bytes of the uploaded PDF statement (0 when none); set with `pdfStatementUrl`, the storage meter adds it. */
   @Prop({ default: 0, min: 0 }) pdfStatementBytes!: number;

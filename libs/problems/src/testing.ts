@@ -1,4 +1,26 @@
 import { crc32, deflateRawSync } from 'node:zlib';
+import type { INestApplicationContext } from '@nestjs/common';
+import { getModelToken } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { MigrationRecord } from '@libs/database';
+import { STORAGE_BACKFILL_MIGRATION } from './quota/storage-backfill';
+
+/** Records the size backfill as `worker migrate` does (`done`), or removes the record; `quota.enforce = enforce` waits for it. */
+export async function setStorageBackfilled(
+  app: Pick<INestApplicationContext, 'get'>,
+  done: boolean,
+): Promise<void> {
+  const records = app.get<Model<MigrationRecord>>(
+    getModelToken(MigrationRecord.name),
+  );
+  if (done)
+    await records.updateOne(
+      { _id: STORAGE_BACKFILL_MIGRATION },
+      { $setOnInsert: { at: new Date() } },
+      { upsert: true },
+    );
+  else await records.deleteOne({ _id: STORAGE_BACKFILL_MIGRATION });
+}
 
 export const PNG = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48,

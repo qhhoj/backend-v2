@@ -76,10 +76,10 @@ export class ProblemDataBytesRepository {
     }
   }
 
-  /** Compare-and-set per meter against the values read: a data write or an upload that set its own size meanwhile is fresher than this measurement and wins, without blocking the other meters. */
-  async setSizes(sizes: readonly MeasuredSize[]): Promise<void> {
-    if (!sizes.length) return;
-    await this.problems.bulkWrite(
+  /** Compare-and-set per meter against the values read: a data write or an upload that set its own size meanwhile is fresher than this measurement and wins, without blocking the other meters. A measurement is not an edit, so `updatedAt` stays. */
+  async setSizes(sizes: readonly MeasuredSize[]): Promise<number> {
+    if (!sizes.length) return 0;
+    const { modifiedCount } = await this.problems.bulkWrite(
       sizes.flatMap(({ ref, bytes, pdfStatementBytes, materialBytes }) => [
         {
           updateOne: {
@@ -90,7 +90,9 @@ export class ProblemDataBytesRepository {
         fileUpdate(ref.id, 'pdfStatement', ref.pdfStatement, pdfStatementBytes),
         fileUpdate(ref.id, 'material', ref.material, materialBytes),
       ]),
+      { timestamps: false },
     );
+    return modifiedCount;
   }
 }
 
