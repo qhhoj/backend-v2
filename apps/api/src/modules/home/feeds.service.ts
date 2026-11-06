@@ -76,7 +76,7 @@ export class FeedsService {
       ).items.map((comment) => ({
         id: comment.id,
         title: `${comment.author?.username ?? 'unknown'} -> ${comment.page.title}`,
-        link: `${site}${commentLink(comment.page.type, comment.page.key, comment.id)}`,
+        link: `${site}${commentLink(comment.page.type, comment.page.key, comment.id) ?? '/'}`,
         published: comment.createdAt,
         html: comment.bodyHtml,
       }));

@@ -3,6 +3,7 @@ import {
   childPath,
   COMMENT_REPLY_WINDOW_MS,
   depthOf,
+  commentLink,
   pagePath,
   rootOf,
   subtreeFilter,
@@ -49,5 +50,12 @@ describe('comment rules', () => {
 
   it('encodes page keys so they cannot break out of the route', () => {
     expect(pagePath('problem', 'a/b?c')).toBe('/problem/a%2Fb%3Fc');
+  });
+
+  it('links a comment to its page, and to nothing for a tag problem, which has no screen', () => {
+    expect(commentLink('problem', 'aplusb', 'c1')).toBe(
+      '/problem/aplusb#comment-c1',
+    );
+    expect(commentLink('tagProblem', 'cf_1A', 'c1')).toBeNull();
   });
 });

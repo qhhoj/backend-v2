@@ -1711,6 +1711,32 @@ afterAll(() => api.teardown());
       });
     });
 
+    it('names a tag problem by its code', async () => {
+      const tagProblem = await api.tagProblems.create({
+        _id: newId(),
+        code: 'cf_1A',
+        name: 'Theatre Square',
+        link: 'https://codeforces.com/problemset/problem/1/A',
+        judge: null,
+        tags: [],
+      });
+      await api.revisions.create({
+        _id: newId(),
+        entity: 'tagProblem',
+        entityId: tagProblem._id,
+        action: 'edit',
+        userId: editorId,
+        changes: { name: { before: 'a', after: 'b' } },
+        comment: '',
+      });
+      const { body } = await feed({ type: 'tagProblem' });
+      expect(body.items[0].object).toEqual({
+        id: tagProblem._id,
+        label: 'cf_1A',
+        deleted: false,
+      });
+    });
+
     it('leaves out notes and superuser-only setting rows for a viewer without the matching permission', async () => {
       const [note, secret] = [newId(), newId()];
       const settings = api.app.get<Model<SettingRevision>>(

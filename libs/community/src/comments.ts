@@ -36,21 +36,25 @@ export const pageOf = (comment: {
 /** Map key of a page. */
 export const pageRef = (page: CommentPage): string => `${page.type}:${page.id}`;
 
-/** SPA routes (contract with the frontend, listed in CONTRIBUTING). */
-const PAGE_PATHS: Record<CommentPageType, (key: string) => string> = {
+/** Page types that have a screen in the SPA (contract with the frontend, listed in CONTRIBUTING). A tag problem has none. */
+export type LinkedPageType = Exclude<CommentPageType, 'tagProblem'>;
+
+const PAGE_PATHS: Record<LinkedPageType, (key: string) => string> = {
   problem: (key) => `/problem/${key}`,
   editorial: (key) => `/problem/${key}/editorial`,
   contest: (key) => `/contest/${key}`,
   blog: (key) => `/post/${key}`,
-  tagProblem: (key) => `/tagproblem/${key}`,
 };
-export const pagePath = (type: CommentPageType, key: string): string =>
+export const pagePath = (type: LinkedPageType, key: string): string =>
   PAGE_PATHS[type](encodeURIComponent(key));
+
+/** Link to a comment on its page, or `null` when the page type has no screen. */
 export const commentLink = (
   type: CommentPageType,
   key: string,
   commentId: string,
-): string => `${pagePath(type, key)}#comment-${commentId}`;
+): string | null =>
+  type === 'tagProblem' ? null : `${pagePath(type, key)}#comment-${commentId}`;
 
 export const childPath = (parentPath: string | null, commentId: string) =>
   parentPath === null ? commentId : `${parentPath}/${commentId}`;
