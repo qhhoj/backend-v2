@@ -1,9 +1,10 @@
 import { LowercaseUuid } from '@libs/common';
-import { IsString, IsUUID, Matches } from 'class-validator';
+import { SETTING_KEYS } from '@libs/settings';
+import { IsIn, IsUUID } from 'class-validator';
 
 export class SettingKeyParamDto {
   /** Setting key, for example `auth.google`. */
-  @IsString() @Matches(/^[A-Za-z][A-Za-z.]{0,63}$/) key!: string;
+  @IsIn(SETTING_KEYS) key!: string;
 }
 
 export class SettingRevisionParamDto extends SettingKeyParamDto {
