@@ -31,8 +31,6 @@ const SOLUTION_WALL_FACTOR = 3;
 const SOLUTION_WALL_EXTRA_S = 1;
 const MAX_FILE_BYTES = 256 * MIB;
 const MAX_TOTAL_BYTES = GIB;
-/** The result zip becomes `tests.zip`, so it is bound like an uploaded archive (`ARCHIVE_MAX_BYTES`). */
-const MAX_UPLOAD_BYTES = ARCHIVE_MAX_BYTES;
 const DEADLINE_BASE_S = 120;
 const DEADLINE_PER_TEST_EXTRA_S = 2;
 const DEADLINE_MAX_S = 30 * MINUTE_S;
@@ -205,7 +203,8 @@ const limitsOf = (plan: TestPlan): GenerationLimits => ({
   solution: solutionLimitsOf(plan.timeLimit, plan.memoryLimit),
   maxFileBytes: MAX_FILE_BYTES,
   maxTotalBytes: MAX_TOTAL_BYTES,
-  maxUploadBytes: MAX_UPLOAD_BYTES,
+  // The result zip becomes `tests.zip`, so it is bound like an uploaded archive.
+  maxUploadBytes: ARCHIVE_MAX_BYTES,
 });
 
 /**

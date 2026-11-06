@@ -88,7 +88,9 @@ export function keepLockAlive(
           token,
           ttlSeconds,
         )
-        .catch(logRedisFailure(`Lock ${key} extension`));
+        .catch((error: unknown) =>
+          logRedisFailure(`Lock ${key} extension`, error),
+        );
     },
     (ttlSeconds * 1000) / 3,
   );
@@ -105,9 +107,9 @@ export async function releaseLock(
   try {
     await redis.eval(RELEASE_LOCK_SCRIPT, 1, key, token);
   } catch (error) {
-    logRedisFailure(`Lock ${key} release`)(error as Error);
+    logRedisFailure(`Lock ${key} release`, error);
   }
 }
 
-export const logRedisFailure = (what: string) => (error: Error) =>
-  logger.error(`${what} failed: ${error.message}`);
+export const logRedisFailure = (what: string, error: unknown) =>
+  logger.error(`${what} failed: ${(error as Error).message}`);

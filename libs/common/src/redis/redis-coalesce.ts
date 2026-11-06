@@ -39,7 +39,9 @@ export async function runCoalesced(
     try {
       while ((await redis.getdel(dirtyKey)) !== null) await work();
     } catch (error) {
-      await markDirty().catch(logRedisFailure(`Mark ${dirtyKey} restore`));
+      await markDirty().catch((failure: unknown) =>
+        logRedisFailure(`Mark ${dirtyKey} restore`, failure),
+      );
       throw error;
     } finally {
       stopHeartbeat();
