@@ -158,18 +158,12 @@ describe('organization quota', () => {
     const organization = await limited(10);
     const lastSecondOfSeptember = new Date('2026-09-30T16:59:59Z');
     const firstSecondOfOctober = new Date('2026-09-30T17:00:00Z');
-    await quota.charged(
-      organization._id,
-      request(),
-      () => Promise.resolve(1),
-      lastSecondOfSeptember,
-    );
-    await quota.charged(
-      organization._id,
-      request(),
-      () => Promise.resolve(1),
-      firstSecondOfOctober,
-    );
+    await quota.charged(organization._id, request(), () => Promise.resolve(1), {
+      now: lastSecondOfSeptember,
+    });
+    await quota.charged(organization._id, request(), () => Promise.resolve(1), {
+      now: firstSecondOfOctober,
+    });
     const rows = await usage
       .find({ organization: organization._id })
       .sort({ month: 1 })
@@ -1026,7 +1020,7 @@ describe('quota 80 percent warning', () => {
     ref: 'r',
   };
   const spend = (organizationId: string, now?: Date) =>
-    quota.charged(organizationId, request, () => Promise.resolve(1), now);
+    quota.charged(organizationId, request, () => Promise.resolve(1), { now });
   let catalog: Catalog;
   let counter = 0;
   /** A private problem of the organization holding `dataBytes`; returns a setter for its size. */

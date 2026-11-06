@@ -109,7 +109,9 @@ export class ProblemDataController {
    *
    * @remarks
    * Needs edit rights; mirror problems are refused. Send one multipart `file`, a
-   * .zip of up to 512 MiB (400 `zip_required` or a zip error code otherwise). It
+   * .zip of up to 512 MiB (400 `zip_required` or a zip error code otherwise);
+   * behind Cloudflare one request carries at most 100 MB, so a larger archive
+   * goes through the chunked upload (`/data/uploads`). It
    * replaces the previous archive, regenerates `init.yml` and is counted against
    * the organization's storage and credits (403 `quota_exceeded`). Limited to 30
    * uploads per hour per user. Returns the new data configuration.

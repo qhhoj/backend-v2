@@ -2,9 +2,14 @@ import { Injectable } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { rm, stat } from 'node:fs/promises';
 import type { AuthContext } from '@libs/auth';
-import { RateLimitService, atomicWrite } from '@libs/common';
+import {
+  RateLimitService,
+  ValidationFailedError,
+  atomicWrite,
+} from '@libs/common';
 import { dataFileNamesOf } from '@libs/database';
 import type { DataFileKind, ProblemData } from '@libs/database';
+import type { ChargeRequest, SpentCharge } from '@libs/problems';
 import {
   ARCHIVE_MAX_BYTES,
   extensionOf,
@@ -24,7 +29,7 @@ import {
 import { QuotaService } from '../../organizations/quota/quota.service';
 import type { ProblemDocument } from '../core/problems.repository';
 import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';
-import { ProblemDataStore } from './problem-data.store';
+import { ProblemDataStore, testDataChanged } from './problem-data.store';
 import { SourceChecksService } from './source-checks.service';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from '../core/rate-limits';
 
@@ -35,6 +40,48 @@ export const SOURCE_EXTENSIONS: Record<SourceFileKind, readonly string[]> = {
   customGrader: ['cpp'],
   customHeader: ['h'],
 };
+
+/** The stored name of an archive from the client's; anything but a .zip is 400 `zip_required`. */
+export function archiveNameOf(clientName: string): string {
+  const name = safeFileName(clientName);
+  if (extensionOf(name) !== 'zip')
+    throw rejectFile('The archive must be a .zip file.', 'zip_required');
+  return name;
+}
+
+/** `assertZip`'s refusal: the archive itself is not an acceptable zip (a `zip_*` issue), so the same bytes can never pass. */
+export class ZipRefusedError extends ValidationFailedError {}
+
+/** Where a caller keeps the charge of a write while it runs, so it can be given back when the process died inside the write (`QuotaLedger.refundOnce`, like a Polygon import's job). */
+export interface ChargeJournal {
+  /** Every refund of this charge goes through this claim, `charged`'s own included, so it is given back at most once. */
+  readonly claim: string;
+  /** Right after the spend, before anything is written. */
+  opened(spent: SpentCharge): Promise<void>;
+  /** The write finished: the charge stands (its claim is closed). Not called on a failure, which `charged` refunds through the claim. Must not throw. */
+  settled(): Promise<void>;
+}
+
+/** A staged archive on its way to storage; `expectedVersion` pins the data version the caller checked (a write meanwhile is 409 `conflict`), `journal` records the charge while the write runs. */
+export interface StagedArchive {
+  staged: string;
+  name: string;
+  expectedVersion?: number;
+  journal?: ChargeJournal;
+}
+
+/** `write` with its charge kept in `journal` while it runs (nothing to keep when the write is free). */
+async function journaled<Result>(
+  spent: SpentCharge | null,
+  journal: ChargeJournal | undefined,
+  write: () => Promise<Result>,
+): Promise<Result> {
+  if (spent === null || journal === undefined) return write();
+  await journal.opened(spent);
+  const result = await write();
+  await journal.settled();
+  return result;
+}
 
 @Injectable()
 export class ProblemDataUploadService {
@@ -48,7 +95,7 @@ export class ProblemDataUploadService {
   ) {}
 
   /**
-   * Streams the zip to a staged file, validates it (bounds, names), compiles against the staged path, and only after a matched update gives it its final name and drops the previous archive.
+   * Streams the zip to a staged file, then hands it to `commitStagedArchive`.
    * Any failure removes the staged file and nothing else, so a lost race never touches the winner's archive.
    */
   async uploadArchive(
@@ -59,38 +106,78 @@ export class ProblemDataUploadService {
     const problem = await this.store.writableProblem(auth.principal, code);
     await this.reserveUpload(auth);
     const staged = await this.dataFiles.stageUpload(problem.code);
+    let name: string;
     try {
       const { filename } = await saveMultipartFile(
         request,
         ARCHIVE_MAX_BYTES,
         staged,
-        (clientName) => {
-          if (extensionOf(safeFileName(clientName)) !== 'zip')
-            throw rejectFile(
-              'The archive must be a .zip file.',
-              'zip_required',
-            );
-        },
+        archiveNameOf,
       );
-      await this.assertZip(staged);
-      return await this.storeArchive(auth, problem, {
-        staged,
-        name: safeFileName(filename),
-      });
+      name = archiveNameOf(filename);
     } catch (error) {
       await rm(staged, { force: true });
       throw error;
     }
+    return this.commitStagedArchive(auth, problem, { staged, name });
+  }
+
+  /** The tail of every archive upload once its bytes are in a `stageUpload` file: zip check (bounds, names), compile against the staged path, and only after a matched update its final name and the previous archive dropped. Any failure removes the staged file. */
+  async commitStagedArchive(
+    auth: AuthContext,
+    problem: ProblemDocument,
+    upload: StagedArchive,
+  ): Promise<ProblemDataResponse> {
+    try {
+      await this.assertZip(upload.staged);
+      return await this.storeArchive(auth, problem, upload);
+    } catch (error) {
+      await rm(upload.staged, { force: true });
+      throw error;
+    }
+  }
+
+  /** An archive of `bytes` must fit the organization's storage and credits before its bytes move (the chunked upload's create); spends nothing. `storeArchive` checks again as the authority. */
+  async assertArchiveFits(
+    auth: AuthContext,
+    problem: ProblemDocument,
+    bytes: number,
+  ): Promise<void> {
+    const { data } = await this.store.loadData(problem);
+    const organizationId = this.storage.organizationOf(auth.principal, problem);
+    await this.assertStorageFits(organizationId, problem, {
+      bytes,
+      replaced: data.archive,
+    });
+    await this.quota.assertAffordable(
+      organizationId,
+      this.archiveCharge(auth, problem, bytes),
+    );
+  }
+
+  private archiveCharge(
+    auth: AuthContext,
+    problem: ProblemDocument,
+    bytes: number,
+  ): ChargeRequest {
+    return {
+      kind: 'upload',
+      userId: auth.principal.userId,
+      ref: problem.code,
+      bytes,
+    };
   }
 
   /** Storage check, then the credits are spent around the whole locked write (compile, commit of the staged file, stamp) and given back if any of it throws. */
   private async storeArchive(
     auth: AuthContext,
     problem: ProblemDocument,
-    upload: { staged: string; name: string },
+    upload: StagedArchive,
   ): Promise<ProblemDataResponse> {
-    const { staged, name } = upload;
+    const { staged, name, expectedVersion, journal } = upload;
     const { data: previous, version } = await this.store.loadData(problem);
+    if (expectedVersion !== undefined && version !== expectedVersion)
+      throw testDataChanged();
     this.assertNameFree(previous, 'archive', name);
     const data = { ...previous, archive: name };
     this.store.assertJudgeAccepts(data);
@@ -103,29 +190,27 @@ export class ProblemDataUploadService {
     });
     const { stored, archiveFiles } = await this.quota.charged(
       organizationId,
-      {
-        kind: 'upload',
-        userId: auth.principal.userId,
-        ref: problem.code,
-        bytes,
-      },
-      () =>
-        this.store.withDataWrite(problem, async () => {
-          const written = await this.store.compileAndStore(
-            problem,
-            data,
-            version,
-            staged,
-          );
-          await this.dataFiles.commitUpload(problem.code, staged, name);
-          await this.store.removeUnreferenced(
-            problem,
-            previous.archive,
-            written.stored,
-          );
-          await this.store.finishDataWrite(problem, version);
-          return written;
-        }),
+      this.archiveCharge(auth, problem, bytes),
+      (spent) =>
+        journaled(spent, journal, () =>
+          this.store.withDataWrite(problem, async () => {
+            const written = await this.store.compileAndStore(
+              problem,
+              data,
+              version,
+              staged,
+            );
+            await this.dataFiles.commitUpload(problem.code, staged, name);
+            await this.store.removeUnreferenced(
+              problem,
+              previous.archive,
+              written.stored,
+            );
+            await this.store.finishDataWrite(problem, version);
+            return written;
+          }),
+        ),
+      { refundClaim: journal?.claim },
     );
     await this.store.recordChange(auth, problem, {
       before: previous,
@@ -232,7 +317,8 @@ export class ProblemDataUploadService {
     });
   }
 
-  private reserveUpload(auth: AuthContext): Promise<() => Promise<void>> {
+  /** One upload attempt against the user's budget (30 per hour); a chunked upload spends it once, at create. */
+  reserveUpload(auth: AuthContext): Promise<() => Promise<void>> {
     return this.rateLimit.reserve(
       [`upload:user:${auth.principal.userId}`],
       UPLOAD_LIMIT,
@@ -257,9 +343,10 @@ export class ProblemDataUploadService {
     try {
       await checkUploadedZip(path);
     } catch (error) {
-      throw error instanceof ZipError
-        ? rejectFile(error.message, error.code)
-        : error;
+      if (!(error instanceof ZipError)) throw error;
+      throw new ZipRefusedError(error.message, [
+        { field: 'file', code: error.code, message: error.message },
+      ]);
     }
   }
 }

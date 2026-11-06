@@ -2,6 +2,9 @@ export const RENDER_PREVIEW_LIMIT = 60;
 export const RENDER_PREVIEW_WINDOW_SECONDS = 60;
 export const UPLOAD_LIMIT = 30;
 export const UPLOAD_WINDOW_SECONDS = 60 * 60;
+/** Per user, every chunk of a chunked data upload (a 2 GiB archive is 43 chunks), resends included. */
+export const UPLOAD_CHUNK_LIMIT = 300;
+export const UPLOAD_CHUNK_WINDOW_SECONDS = 60 * 60;
 /** Per user; a Polygon import holds the single import worker for minutes. */
 export const IMPORT_LIMIT = 10;
 export const IMPORT_WINDOW_SECONDS = 60 * 60;
