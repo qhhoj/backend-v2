@@ -15,7 +15,15 @@ fresh() {
   # shellcheck disable=SC2016 # stub bodies are expanded when the stub runs
   stub podman '[ "${1:-}" = login ] && { cat > "$QHHOJ_DEPLOY_ROOT/login.stdin"; touch "$3"; }; [ "${1:-}" = image ] && [ "${2:-}" = exists ] && [ -n "${STUB_IMAGE_MISSING:-}" ] && exit 1; [ "${1:-}" = image ] && [ "${2:-}" = ls ] && printf "%s\n" ${STUB_IMAGES:-}; [ "${1:-}" = run ] && [ -n "${STUB_INDEX_FAIL:-}" ] && exit 1; [ "${1:-}" = image ] && [ "${2:-}" = inspect ] && { if [ -n "${STUB_NO_STEPS_LABEL:-}" ]; then echo; else echo "indexes migrate"; fi; }; [ "${1:-}" = run ] && [ "${*: -1}" = migrate ] && [ -n "${STUB_MIGRATE_FAIL:-}" ] && exit 1; [ "${1:-}" = run ] && [ "${*: -1}" = migrate ] && [ -n "${STUB_MIGRATE_HANG:-}" ] && exec tail -f /dev/null; true'
   # shellcheck disable=SC2016
-  stub systemctl '[ "$1" = restart ] && [ -e "$QHHOJ_DEPLOY_ROOT/restart_fail" ] && { rm -f "$QHHOJ_DEPLOY_ROOT/restart_fail"; exit 1; }; true'
+  # is-active as systemd answers it: 0 when any listed unit is active. STUB_DEAD_UNIT is never active; each
+  # NRestarts read of STUB_RESTARTING_UNIT counts one more restart (a crash loop).
+  # shellcheck disable=SC2016
+  stub systemctl '[ "$1" = restart ] && [ -e "$QHHOJ_DEPLOY_ROOT/restart_fail" ] && { rm -f "$QHHOJ_DEPLOY_ROOT/restart_fail"; exit 1; }
+if [ "$1" = is-active ]; then shift 2; for u in "$@"; do [ "$u" = "${STUB_DEAD_UNIT:-}" ] || exit 0; done; exit 1; fi
+if [ "$1" = show ]; then n=0; f="$QHHOJ_DEPLOY_ROOT/restarts"
+  if [ "${*: -1}" = "${STUB_RESTARTING_UNIT:-}" ]; then n=$(( $(cat "$f" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$f"; fi
+  echo "$n"; fi
+true'
   stub sleep
   # shellcheck disable=SC2016 # stub bodies are written to files, expanded when the stub runs
   stub mongosh '[ -n "${STUB_CONTEST:-}" ] && echo "$STUB_CONTEST"; true'
@@ -171,6 +179,19 @@ set +e; deploy backend v2.2.0 >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 1 ] || fail "failed restart must exit 1, got $code"
 grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.1.0 ghcr.io/qhhoj/backend-v2:current" "$calls" || fail "failed restart did not restore v2.1.0"
 [ "$(hist)" = v2.1.0 ] || fail "failed restart must not be recorded"
+
+# a backend unit that is down, or crash-looping, after the restart rolls the deploy back
+unit_rolls_back() { # <label>: deploying v2.2.0 over v2.1.0 must exit 1, re-point to v2.1.0 and record nothing
+  local code
+  set +e; deploy backend v2.2.0 >/dev/null 2>&1; code=$?; set -e
+  [ "$code" = 1 ] || fail "$1 must exit 1, got $code"
+  grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.1.0 ghcr.io/qhhoj/backend-v2:current" "$calls" || fail "$1 did not restore v2.1.0"
+  [ "$(hist)" = v2.1.0 ] || fail "$1 must not be recorded"
+}
+fresh; deploy backend v2.1.0 >/dev/null; : > "$calls"
+STUB_DEAD_UNIT=qhhoj-worker unit_rolls_back "a dead worker with the api up"
+fresh; deploy backend v2.1.0 >/dev/null; : > "$calls"
+STUB_RESTARTING_UNIT=qhhoj-bridge unit_rolls_back "a crash-looping bridge"
 
 # rollback to a pruned backend image is refused with history unchanged
 fresh; deploy backend v2.1.0 >/dev/null; deploy backend v2.2.0 >/dev/null; : > "$calls"

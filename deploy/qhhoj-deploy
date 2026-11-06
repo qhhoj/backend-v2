@@ -22,6 +22,8 @@ ENV_FILE="$ROOT/etc/qhhoj/env"
 AUTHFILE="$ROOT/etc/qhhoj/ghcr-auth.json"
 HEALTH_TRIES="${QHHOJ_DEPLOY_HEALTH_TRIES:-30}"
 LOCK_WAIT="${QHHOJ_DEPLOY_LOCK_WAIT:-900}" # seconds; sudo env_reset keeps the override out of production
+# Seconds every backend unit must stay up after the restart: longer than one restart cycle (RestartSec=3 plus a boot).
+SETTLE=30
 STEP_TIMEOUT="${QHHOJ_DEPLOY_STEP_TIMEOUT:-1800}" # seconds per one-shot step (index build, migrations)
 # Backend images and frontend releases kept after a good deploy: the live one and the one `rollback` returns to (an
 # image is about 2.3 GB on a disk shared with other projects; only ghcr.io/qhhoj/backend-v2 tags are ever removed).
@@ -56,16 +58,25 @@ running_contest() { # a running contest that ends within 24 h; long practice con
     if (c) print(c.key + " ends " + c.endTime.toISOString());'
 }
 
-backend_healthy() {
-  local port; port="$(env_value PORT)"
+BACKEND_UNITS="qhhoj-api qhhoj-bridge qhhoj-worker"
+units_active() { # each unit on its own: `systemctl is-active a b c` succeeds when any one of them is active
+  local unit
+  for unit in $BACKEND_UNITS; do systemctl is-active --quiet "$unit" || return 1; done
+}
+unit_restarts() { local unit; for unit in $BACKEND_UNITS; do systemctl show -p NRestarts --value "$unit"; done; }
+api_up() { local port; port="$(env_value PORT)"; curl -fsS -o /dev/null "http://127.0.0.1:${port:-3000}/api/internal/site"; }
+
+backend_healthy() { # the api answers and every unit is active, then stays active with no automatic restart for SETTLE seconds
+  local up=0 restarts
   for _ in $(seq "$HEALTH_TRIES"); do
-    if curl -fsS -o /dev/null "http://127.0.0.1:${port:-3000}/api/internal/site" \
-      && systemctl is-active --quiet qhhoj-api qhhoj-bridge qhhoj-worker; then
-      return 0
-    fi
+    if api_up && units_active; then up=1; break; fi
     sleep 2
   done
-  return 1
+  [ "$up" = 1 ] || return 1
+  # A crash-looping unit (a worker refusing to boot) is active for the seconds between its container's start and exit.
+  restarts="$(unit_restarts)"
+  sleep "$SETTLE"
+  units_active && [ "$(unit_restarts)" = "$restarts" ] && api_up
 }
 
 # The one-shot steps (`worker indexes`, `worker migrate`) run as confined as qhhoj-worker.container and under a hard
@@ -79,7 +90,10 @@ run_step() { # <tag> <step> [podman run options]: runs one step of <tag>'s image
     --cap-drop=all --security-opt=no-new-privileges --memory=5g "$@" "$IMAGE:$tag" "$step" || code=$?
   [ "$code" = 0 ] && return 0
   podman rm -f "$name" >/dev/null 2>&1 || true # a client killed by the timeout leaves its container running
-  [ "$code" = 124 ] || [ "$code" = 137 ] && echo "qhhoj-deploy: $step of $tag timed out after ${STEP_TIMEOUT}s" >&2
+  case "$code" in
+    124) echo "qhhoj-deploy: $step of $tag timed out after ${STEP_TIMEOUT}s" >&2 ;;
+    137) echo "qhhoj-deploy: $step of $tag was killed (timeout or out of memory)" >&2 ;;
+  esac
   return "$code"
 }
 

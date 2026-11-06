@@ -23,7 +23,7 @@ async function withMigrationRunner<T>(
   }
 }
 
-/** The worker refuses to start while a migration is pending, so a deploy that skipped `migrate` fails its health check. */
+/** The worker refuses to start while a migration is pending: it never serves data `worker migrate` has not brought up to date. */
 async function bootstrap() {
   await withMigrationRunner((runner) => runner.assertNonePending());
   const { logLevel } = loadEnv();
