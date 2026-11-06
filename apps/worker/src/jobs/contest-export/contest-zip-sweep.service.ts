@@ -10,10 +10,14 @@ import { isUuid } from '@libs/database';
 const TEMP_FILE_AGE_MS = DAY_MS;
 /** `<contestId>.zip` and `<contestId>.export.zip`, as `contestDataPath` and `contestExportPath` name them; temp files too. */
 const CONTEST_ZIP_NAME = /^([^.]+)(?:\.export)?\.zip$/;
+/** Temp names before `atomicWrite` (`<id>.zip.<run>.tmp`); L24 removes this. */
+const LEGACY_TEMP_NAME = /^([^.]+)(?:\.export)?\.zip\.[^/]+\.tmp$/;
 
 /** How long a file of the root may stay, by its name; null for a file the sweep never touches. */
 const maxAgeOf = (name: string): number | null => {
   if (isTempName(name)) return TEMP_FILE_AGE_MS;
+  const legacy = LEGACY_TEMP_NAME.exec(name);
+  if (legacy && isUuid(legacy[1])) return TEMP_FILE_AGE_MS;
   const match = CONTEST_ZIP_NAME.exec(name);
   return match && isUuid(match[1]) ? CONTEST_ZIP_TTL_MS : null;
 };

@@ -74,7 +74,13 @@ describe('PackageCacheService', () => {
       stale,
       stale,
     );
+    // the shape written before atomicWrite
+    writeFileSync(join(packages, 'old.0123456789ab.zip.run.tmp'), 'partial');
+    utimesSync(join(packages, 'old.0123456789ab.zip.run.tmp'), stale, stale);
     expect(await cache.deleteOlderThan(3_600_000)).toBe(1);
+    expect(existsSync(join(packages, 'old.0123456789ab.zip.run.tmp'))).toBe(
+      false,
+    );
     expect(existsSync(cache.pathOf('old', KEY_A))).toBe(false);
     expect(
       existsSync(join(packages, '.0199a000-0000-7000-8000-000000000001.tmp')),

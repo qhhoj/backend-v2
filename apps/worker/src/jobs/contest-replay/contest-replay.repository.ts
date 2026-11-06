@@ -16,8 +16,6 @@ import type {
 } from '@libs/database';
 import { isDuplicateKey } from '@libs/common';
 
-/** MongoDB's duplicate key error: the guarded upsert found a newer head. */
-
 export type ReplayParticipation = Pick<
   ContestParticipation,
   '_id' | 'user' | 'realStart' | 'virtual' | 'isRegistered'

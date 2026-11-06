@@ -29,6 +29,10 @@ const json = (value: unknown) => JSON.stringify(value, null, 4);
 const TEMP_FILE_AGE_MS = DAY_MS;
 /** The sweep touches only the names `userDataPath` produces, and temp files. */
 const ZIP_FILE = /^([^.]+)\.zip$/;
+/** Temp names before `atomicWrite` (`<uuid>.zip.<run>.tmp`); L24 removes this. */
+const LEGACY_TEMP_NAME = /^([^.]+)\.zip\.[^/]+\.tmp$/;
+const isLegacyTemp = (name: string) =>
+  isUuid(LEGACY_TEMP_NAME.exec(name)?.[1] ?? '');
 const isUserZip = (name: string) => isUuid(ZIP_FILE.exec(name)?.[1] ?? '');
 
 const submissionInfo = (submissions: UserDataSubmission[]) =>
@@ -174,9 +178,10 @@ export class UserDataService {
       const path = join(root, name);
       const file = await stat(path).catch(() => null);
       if (!file) continue;
-      const expired = isTempName(name)
-        ? file.mtime.getTime() + TEMP_FILE_AGE_MS <= now.getTime()
-        : isUserZip(name) && isUserDataExpired(file.mtime, now);
+      const expired =
+        isTempName(name) || isLegacyTemp(name)
+          ? file.mtime.getTime() + TEMP_FILE_AGE_MS <= now.getTime()
+          : isUserZip(name) && isUserDataExpired(file.mtime, now);
       if (expired) {
         await rm(path, { force: true });
         removed += 1;

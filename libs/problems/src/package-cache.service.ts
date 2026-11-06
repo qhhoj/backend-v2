@@ -6,7 +6,6 @@ import {
   assertRealPathInside,
   atomicWrite,
   ENV,
-  isTempName,
   resolveInside,
 } from '@libs/common';
 import type { Env } from '@libs/common';
@@ -108,7 +107,8 @@ export class PackageCacheService {
     let removed = 0;
     for (const name of await this.names()) {
       const isZip = name.endsWith('.zip');
-      if (!isZip && !isTempName(name)) continue;
+      // `.tmp` also covers the names written before `atomicWrite` (`<code>.<key>.zip.<run>.tmp`); L24 narrows it to `isTempName`.
+      if (!isZip && !name.endsWith('.tmp')) continue;
       const path = this.resolveInside(name);
       const found = await stat(path).catch(ignoreMissing(null));
       if (!found) continue;
