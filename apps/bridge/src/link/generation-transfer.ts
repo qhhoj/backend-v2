@@ -17,8 +17,7 @@ import type {
 import { generationBucket } from '@libs/judging';
 import type { DispatchTarget } from '../dispatch/slots';
 import { GenerationsRepository } from '../generations/generations.repository';
-import { SOURCE_CHUNK_BYTES } from './link-limits';
-import { drained } from './source-fetch';
+import { streamToCall } from './stream-to-call';
 
 export type BundleCall = ServerWritableStream<GenerationRequest, Chunk>;
 export type UploadCall = ServerReadableStream<UploadChunk, UploadReceipt>;
@@ -50,12 +49,6 @@ const NOT_HELD = () =>
     status.PERMISSION_DENIED,
     'not a generation of this session',
   );
-
-/** Splits a buffer into pieces of at most `SOURCE_CHUNK_BYTES`. */
-function* pieces(data: Buffer): Generator<Buffer> {
-  for (let at = 0; at < data.length; at += SOURCE_CHUNK_BYTES)
-    yield data.subarray(at, at + SOURCE_CHUNK_BYTES);
-}
 
 /** The result file being written to GridFS: counts bytes against the plan's cap and never holds more than one chunk in memory. */
 class ResultUpload {
@@ -197,18 +190,12 @@ export class GenerationTransfer {
     return upload.bytes;
   }
 
-  /** Chunks of at most 1 MiB, waiting for the judge to drain each; a cancelled call stops reading. */
   private async streamBundle(call: BundleCall, fileId: unknown): Promise<void> {
     const file = generationBucket(this.connection).openDownloadStream(
       fileId as never,
     );
     try {
-      for await (const data of file as AsyncIterable<Buffer>)
-        for (const part of pieces(data)) {
-          if (call.cancelled) return;
-          if (!call.write({ data: part }) && !(await drained(call))) return;
-        }
-      call.end();
+      await streamToCall(call, file as AsyncIterable<Buffer>);
     } finally {
       file.destroy();
     }

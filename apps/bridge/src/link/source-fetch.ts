@@ -1,8 +1,6 @@
 import { status } from '@grpc/grpc-js';
 import type { ServerWritableStream } from '@grpc/grpc-js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { once } from 'node:events';
-import type { EventEmitter } from 'node:events';
 import { constants } from 'node:fs';
 import type { ReadStream } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
@@ -20,6 +18,7 @@ import type { DispatchTarget } from '../dispatch/slots';
 import { submissionFilePath } from '../submissions/submission-file-path';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
 import { SOURCE_CHUNK_BYTES } from './link-limits';
+import { streamToCall } from './stream-to-call';
 
 export type SourceCall = ServerWritableStream<FetchSourceRequest, Chunk>;
 /** The calling judge's live session, as far as FetchSource needs it. */
@@ -35,22 +34,6 @@ function heldRef(
   // Generation 0 is a claim still in flight, not yet a run of this session.
   if (ref.generation === 0) return null;
   return holder.inFlight.get(ref.submissionId) === ref.generation ? ref : null;
-}
-
-/** Waits for the judge to drain the call; false when the call ends first (grpc-js emits only `close` on a cancel, which `once(call, 'drain')` would wait on forever). */
-export async function drained(call: EventEmitter): Promise<boolean> {
-  const stop = new AbortController();
-  const ended = ['cancelled', 'close', 'error'].map((event) =>
-    once(call, event, { signal: stop.signal }).then(() => false),
-  );
-  try {
-    return await Promise.race([
-      once(call, 'drain', { signal: stop.signal }).then(() => true),
-      ...ended,
-    ]);
-  } finally {
-    stop.abort();
-  }
 }
 
 /** Destroys the stream and waits for its `close`: a read still in flight holds the handle, and `FileHandle.close()` then resolves before the descriptor is really closed. */
@@ -128,7 +111,7 @@ export class SourceFetch {
     return null;
   }
 
-  /** Chunks of at most 1 MiB, waiting for the judge to drain each (HTTP/2 flow control); a cancelled call stops reading. The caller closes `handle`. */
+  /** The caller closes `handle`. */
   private async stream(
     call: SourceCall,
     handle: FileHandle,
@@ -139,11 +122,7 @@ export class SourceFetch {
       autoClose: false,
     });
     try {
-      for await (const data of file as AsyncIterable<Buffer>) {
-        if (call.cancelled) return;
-        if (!call.write({ data }) && !(await drained(call))) return;
-      }
-      call.end();
+      await streamToCall(call, file as AsyncIterable<Buffer>);
     } catch (error) {
       this.logger.error(
         `FetchSource of ${path} failed: ${(error as Error).message}`,

@@ -2,8 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { FilterQuery } from 'mongoose';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, Paginated, unique } from '@libs/common';
-import { competitionRanks } from '@libs/community';
+import { AppError, competitionRanks, Paginated, unique } from '@libs/common';
 import { narrowTo, uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
@@ -224,7 +223,11 @@ export class OrganizationsService {
     const firstRank = items.length
       ? (await this.members.countAbove(organization._id, query, values[0])) + 1
       : 1;
-    const ranks = competitionRanks(values, firstRank);
+    const ranks = competitionRanks(
+      values,
+      (left, right) => left === right,
+      firstRank,
+    );
     return new Paginated(
       items.map((row, index) => MemberResponse.from(row, ranks[index])),
       { page, pageSize, total },

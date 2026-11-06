@@ -1,9 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import { Inject, Injectable } from '@nestjs/common';
 import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
-import { contestExportPath, contestExportTempPath } from '@libs/contests';
+import { contestExportPath } from '@libs/contests';
 import type { ContestExportJob } from '@libs/contests';
 import { chunkedSources, writeZipInPlace } from '../lazy-zip';
 import {
@@ -31,24 +30,17 @@ export class ContestExportService {
     const root = this.env.contestDataRoot;
     if (!root)
       throw new ContestExportError('Contest data download is not configured');
-    const [path, temporaryPath] = [
-      contestExportPath(root, contestId),
-      contestExportTempPath(root, contestId, randomUUID()),
-    ];
+    const path = contestExportPath(root, contestId);
     await mkdir(root, { recursive: true });
     await rm(path, { force: true });
     const contest = await this.repository.findContest(contestId);
     if (!contest) return 0;
     await this.assertWithinEntryCap(contest._id);
     const rows = await this.repository.rows(contest);
-    return this.writeZip(rows, path, temporaryPath);
+    return this.writeZip(rows, path);
   }
 
-  private async writeZip(
-    rows: ExportRow[],
-    path: string,
-    temporaryPath: string,
-  ): Promise<number> {
+  private async writeZip(rows: ExportRow[], path: string): Promise<number> {
     const withSource = rows.filter((row) => row.hasSource);
     const names = [
       'submissions.csv',
@@ -68,7 +60,6 @@ export class ContestExportService {
       (index) => (index === 0 ? Promise.resolve(csv) : source(index - 1)),
       {
         path,
-        temporaryPath,
         maxBytes: this.limits.maxBytes,
         tooLarge: () =>
           new ContestExportError(

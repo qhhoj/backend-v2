@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
-import { AppError, Paginated } from '@libs/common';
-import { competitionRanks } from '@libs/community';
+import { AppError, competitionRanks, Paginated } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { LeaderboardField } from '@libs/database';
 import { OrganizationsService } from '../../organizations/core/organizations.service';
@@ -34,7 +33,11 @@ export class LeaderboardsService {
     const firstRank = rows.length
       ? (await this.leaderboards.countAbove(field, values[0])) + 1
       : 1;
-    const ranks = competitionRanks(values, firstRank);
+    const ranks = competitionRanks(
+      values,
+      (left, right) => left === right,
+      firstRank,
+    );
     const firstOf = await this.organizations.firstListedByUser(rows);
     return new Paginated(
       rows.map((row, index) =>

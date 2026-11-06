@@ -1,7 +1,6 @@
 import {
   activitySessionKey,
   classifyUserAgent,
-  csvCell,
   isTrackedPath,
   redactCredentials,
   stripQuery,
@@ -116,27 +115,6 @@ describe('user activity rules', () => {
         browser: '',
         os: '',
       });
-    });
-  });
-
-  describe('csv', () => {
-    it('quotes cells with separators and doubles quotes', () => {
-      expect(csvCell('a,b')).toBe('"a,b"');
-      expect(csvCell('say "hi"')).toBe('"say ""hi"""');
-      expect(csvCell('line\nbreak')).toBe('"line\nbreak"');
-      expect(csvCell(null)).toBe('');
-      expect(csvCell(404)).toBe('404');
-    });
-    it('neutralises spreadsheet formulas', () => {
-      for (const cell of ['=1+1', '+SUM(A1)', '-2+3', '@cmd', '\tx'])
-        expect(csvCell(cell).replace(/^"/, '').startsWith("'")).toBe(true);
-    });
-    it('neutralises formulas behind leading whitespace', () => {
-      expect(csvCell(' =1')).toBe("' =1");
-      expect(csvCell(' =1')).toBe("' =1");
-      expect(csvCell('\n=1')).toBe(`"'\n=1"`);
-      expect(csvCell('\r=1')).toBe(`"'\r=1"`);
-      expect(csvCell('\t=1')).toBe("'\t=1");
     });
   });
 });

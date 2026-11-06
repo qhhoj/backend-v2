@@ -5,6 +5,7 @@ import { sha256, UsersRepository } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
 import {
   assertMailAvailable,
+  DAY_MS,
   ENV,
   limiterAddress,
   MAILER,
@@ -41,7 +42,7 @@ export class ActivationService {
     await this.activationKeys.create({
       userId,
       keyHash: sha256(key),
-      expiresAt: new Date(Date.now() + ACTIVATION_DAYS * 86_400_000),
+      expiresAt: new Date(Date.now() + ACTIVATION_DAYS * DAY_MS),
     });
     return key;
   }
@@ -70,7 +71,7 @@ export class ActivationService {
     );
     for (const user of await this.users.findPendingByEmail(
       email,
-      new Date(Date.now() - ACTIVATION_DAYS * 86_400_000),
+      new Date(Date.now() - ACTIVATION_DAYS * DAY_MS),
     ))
       void this.reissue(user).catch((error: unknown) =>
         this.logger.error(

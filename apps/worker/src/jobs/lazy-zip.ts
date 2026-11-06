@@ -1,8 +1,8 @@
 import { createWriteStream } from 'node:fs';
-import { rename, rm } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { ZipFile } from 'yazl';
+import { atomicWrite } from '@libs/common';
 
 /** Where a zip goes, how much content it may hold, and the error raised past that cap. */
 export interface ZipTarget {
@@ -45,21 +45,15 @@ export async function writeLazyZip(
   await pipeline(output, createWriteStream(path, { flags: 'wx' }));
 }
 
-/** Writes the zip beside `path` and renames it into place; the temporary file never outlives a failure. */
-export async function writeZipInPlace(
+/** `writeLazyZip` through `atomicWrite`: the zip appears at `path` whole or not at all. */
+export const writeZipInPlace = (
   names: readonly string[],
   contentAt: (index: number) => Promise<string>,
-  target: ZipTarget & { temporaryPath: string },
-): Promise<void> {
-  const { path, temporaryPath, ...limits } = target;
-  try {
-    await writeLazyZip(names, contentAt, { ...limits, path: temporaryPath });
-    await rename(temporaryPath, path);
-  } catch (error) {
-    await rm(temporaryPath, { force: true });
-    throw error;
-  }
-}
+  target: ZipTarget,
+): Promise<void> =>
+  atomicWrite(target.path, (temporaryPath) =>
+    writeLazyZip(names, contentAt, { ...target, path: temporaryPath }),
+  );
 
 /** Content by position for a sequence of ids, fetched `chunkSize` at a time and only the current chunk kept; a missing id reads as empty. Positions are read in increasing order. */
 export function chunkedSources(

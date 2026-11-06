@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { FilterQuery, Model } from 'mongoose';
-import { BlogPost, CI, Contest, Problem, User } from '@libs/database';
+import { BlogPost, CI, Contest, isUuid, Problem, User } from '@libs/database';
 import { ProblemAccess } from '@libs/problems';
 import { BlogAccess } from '../blog/core/blog-access';
 import { ContestAccess } from '../contests/core/contest-access';
@@ -50,9 +50,6 @@ const lister = <T>(
 
 const encoded = (prefix: string) => (value: string) =>
   `${prefix}/${encodeURIComponent(value)}`;
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class SeoRepository {
@@ -131,7 +128,7 @@ export class SeoRepository {
   }
 
   async post(id: string): Promise<PreviewSource | null> {
-    if (!UUID_PATTERN.test(id)) return null;
+    if (!isUuid(id)) return null;
     const doc = await this.postModel
       .findOne(
         { ...BlogAccess.publishedPersonalFilter(new Date()), _id: id },

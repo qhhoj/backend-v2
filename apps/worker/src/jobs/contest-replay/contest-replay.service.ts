@@ -24,9 +24,9 @@ import type {
   ReplayHeadInput,
   ReplayParticipation,
 } from './contest-replay.repository';
+import { PARTICIPATION_PARALLELISM } from '../parallelism';
 
 /** Participations scored at once. */
-const PARTICIPATION_PARALLELISM = 8;
 
 export interface BuildOptions {
   /** The clock; tests move it. */

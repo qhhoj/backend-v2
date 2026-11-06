@@ -1,21 +1,21 @@
 import { readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
-import { ENV } from '@libs/common';
+import { DAY_MS, ENV, isTempName } from '@libs/common';
 import type { Env } from '@libs/common';
 import { CONTEST_ZIP_TTL_MS } from '@libs/contests';
 import { isUuid } from '@libs/database';
 
 /** A crashed run's temp file is surely abandoned after a day (a build is capped far below that). */
-const TEMP_FILE_AGE_MS = 86_400_000;
-/** `<contestId>.zip`, `<contestId>.export.zip` and their `.<runId>.tmp` files, as `contestDataPath`, `contestExportPath` and their temp paths name them. */
-const CONTEST_ZIP_NAME = /^([^.]+)(?:\.export)?\.zip(\.[^/]+\.tmp)?$/;
+const TEMP_FILE_AGE_MS = DAY_MS;
+/** `<contestId>.zip` and `<contestId>.export.zip`, as `contestDataPath` and `contestExportPath` name them; temp files too. */
+const CONTEST_ZIP_NAME = /^([^.]+)(?:\.export)?\.zip$/;
 
 /** How long a file of the root may stay, by its name; null for a file the sweep never touches. */
 const maxAgeOf = (name: string): number | null => {
+  if (isTempName(name)) return TEMP_FILE_AGE_MS;
   const match = CONTEST_ZIP_NAME.exec(name);
-  if (!match || !isUuid(match[1])) return null;
-  return match[2] ? TEMP_FILE_AGE_MS : CONTEST_ZIP_TTL_MS;
+  return match && isUuid(match[1]) ? CONTEST_ZIP_TTL_MS : null;
 };
 
 @Injectable()

@@ -13,6 +13,7 @@ import {
   uuidStr,
 } from '@libs/database';
 import type { SubmissionResult, SubmissionStatus } from '@libs/database';
+import { chunked } from '@libs/common';
 
 export interface FeedTeamRow {
   id: string;
@@ -33,12 +34,6 @@ export interface FeedSubmissionRow {
   status: SubmissionStatus;
   judgedDate: Date | null;
 }
-const ID_CHUNK = 1000;
-const idChunks = <Item>(items: Item[]): Item[][] =>
-  Array.from({ length: Math.ceil(items.length / ID_CHUNK) }, (_unused, chunk) =>
-    items.slice(chunk * ID_CHUNK, (chunk + 1) * ID_CHUNK),
-  );
-
 @Injectable()
 export class FeedDataRepository {
   constructor(
@@ -156,7 +151,7 @@ export class FeedDataRepository {
   ): Promise<FeedSubmissionRow[]> {
     const linkOf = new Map(links.map((link) => [uuidStr(link._id), link]));
     const found: FeedSubmissionRow[] = [];
-    for (const chunk of idChunks(links.map((link) => link._id)))
+    for (const chunk of chunked(links.map((link) => link._id)))
       for (const detail of await this.submissions
         .find(
           { _id: { $in: chunk } },

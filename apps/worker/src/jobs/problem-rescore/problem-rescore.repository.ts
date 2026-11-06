@@ -3,9 +3,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { Contest, Submission, uuidStr } from '@libs/database';
 
-/** Writes per `bulkWrite`. */
-export const RESCORE_CHUNK = 1000;
-
 export interface RescoredRow {
   id: string;
   /** The case totals the new points were computed from. */

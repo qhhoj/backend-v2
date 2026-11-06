@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { escapeRegExp } from '@libs/common';
+import { escapeHtml, escapeRegExp } from '@libs/common';
 
 /** Apps run from the repo root (`node dist/apps/<app>/main`), so KaTeX's CSS and fonts are addressed from there; webpack rewrites `require.resolve`, hence no resolve. */
 export const KATEX_DIST_DIR = join(
@@ -42,15 +42,6 @@ export function formatKilobytes(kilobytes: number): string {
   return `${Math.round(value)}${UNITS[unit]}`;
 }
 
-const HTML_ESCAPES: Record<string, string> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-};
-const escapeHtml = (text: string) =>
-  text.replace(/[&<>"']/g, (character) => HTML_ESCAPES[character]);
 /** Legacy `clean_markdown_table`: the scrollable wrapper is for screens. */
 const unwrapTables = (html: string) =>
   html

@@ -8,8 +8,7 @@ import { uuidStr } from '@libs/database';
 import type { Contest, Submission } from '@libs/database';
 import type { SubmissionContestResponse } from './dto/submission-list.response';
 import type { ContestRowFields } from './submissions.repository';
-
-const MINUTE_MS = 60_000;
+import { MINUTE_MS } from '@libs/common';
 
 /** What the contest block reads once loaded; the viewer's right to see the contest is decided before. */
 export interface ContestBlockFacts {

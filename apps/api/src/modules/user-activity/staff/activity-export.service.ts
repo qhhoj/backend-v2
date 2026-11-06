@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { ACTIVITY_EXPORT_MAX_ROWS, csvLine } from '@libs/community';
+import { ACTIVITY_EXPORT_MAX_ROWS } from '@libs/community';
 import { activityFilter } from './activity-filter';
 import { ActivityLogsRepository } from './activity-logs.repository';
 import type { ActivityLogRow } from './activity-logs.repository';
 import { ActivityLogsService } from './activity-logs.service';
 import type { ActivityFilterDto } from './dto/activity-query.dto';
+import { csvLine } from '@libs/common';
 
 const HEADER = [
   'Timestamp',

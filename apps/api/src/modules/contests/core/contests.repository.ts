@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { FilterQuery, HydratedDocument, Model, SortOrder } from 'mongoose';
-import { conflictIssue, isDuplicateKey } from '@libs/common';
+import { conflictIssue, ID_CHUNK, isDuplicateKey } from '@libs/common';
 import { FREEZE_FORMATS, LIVE } from '@libs/contests';
 import {
   Contest,
@@ -16,8 +16,6 @@ import { JUDGEABLE_PENDING } from '@libs/judging';
 
 export type ContestDocument = HydratedDocument<Contest>;
 
-/** Submissions updated per write when a lock moves. */
-const LOCK_CHUNK = 1000;
 const LIST_PROJECTION = { description: 0, descriptionHtml: 0 } as const;
 
 @Injectable()
@@ -268,7 +266,7 @@ export class ContestsRepository {
       .cursor();
     for await (const row of cursor) {
       chunk.push(uuidStr(row._id));
-      if (chunk.length === LOCK_CHUNK) await flush();
+      if (chunk.length === ID_CHUNK) await flush();
     }
     await flush();
   }

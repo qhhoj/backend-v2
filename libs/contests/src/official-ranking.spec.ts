@@ -1,4 +1,5 @@
-import { CsvRankingError, parseOfficialRanking } from './official-ranking';
+import { CsvError } from '@libs/common';
+import { parseOfficialRanking } from './official-ranking';
 
 const csv = (lines: string[]) => lines.join('\r\n');
 
@@ -72,7 +73,7 @@ describe('parseOfficialRanking', () => {
       'Username,Full Name,X,Points,P\u0007\na,A,x,1,1',
     ],
   ])('rejects %s', (_case, text) => {
-    expect(() => parseOfficialRanking(text)).toThrow(CsvRankingError);
+    expect(() => parseOfficialRanking(text)).toThrow(CsvError);
   });
 
   it('bounds rows, columns and size', () => {
@@ -96,8 +97,6 @@ describe('parseOfficialRanking', () => {
         csv(['Username,Full Name,X,Points', ...rows.slice(1)]),
       ).rows,
     ).toHaveLength(10_000);
-    expect(() => parseOfficialRanking('x'.repeat(1_048_577))).toThrow(
-      CsvRankingError,
-    );
+    expect(() => parseOfficialRanking('x'.repeat(1_048_577))).toThrow(CsvError);
   });
 });

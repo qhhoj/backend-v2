@@ -2,12 +2,13 @@ import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { JOB_RETENTION, JOB_RETRY } from '@libs/judging';
 import { attempt } from './queues';
+import { MINUTE_MS } from '@libs/common';
 
 export const CONTEST_PUBLISH_QUEUE = 'contest-publish';
 export const CONTEST_PUBLISH_JOB = 'publish';
 export const CONTEST_PUBLISH_SWEEP_JOB = 'sweep';
 export const CONTEST_PUBLISH_SCHEDULER = 'contest-publish-every-minute';
-export const PUBLISH_SWEEP_MS = 60_000;
+export const PUBLISH_SWEEP_MS = MINUTE_MS;
 
 /** Publish the problems and editorials of a contest that switched `publishAfterEnd` on. */
 export interface ContestPublishJob {

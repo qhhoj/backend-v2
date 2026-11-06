@@ -1,5 +1,4 @@
-const DAY_MS = 86_400_000;
-
+import { DAY_MS } from '@libs/common';
 /** Whole days (rounded up) before the purge job may take a problem deleted at `deletedAt`; 0 once the grace period is over. */
 export function daysLeft(
   deletedAt: Date,

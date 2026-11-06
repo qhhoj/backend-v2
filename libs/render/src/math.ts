@@ -1,5 +1,6 @@
 import katex from 'katex';
 import type MarkdownIt from 'markdown-it';
+import { escapeHtml } from '@libs/common';
 
 const DOLLAR = 0x24;
 const TILDE = 0x7e;
@@ -9,14 +10,6 @@ const isSpace = (code: number) =>
 const isDigit = (code: number) => code >= 0x30 && code <= 0x39;
 const MAX_SHOWN_LENGTH = 200;
 const MAX_SIZE = 500;
-const HTML_ESCAPES: Record<string, string> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-};
-const escapeHtml = (text: string) =>
-  text.replace(/[&<>"]/g, (char) => HTML_ESCAPES[char]);
 const truncate = (text: string) =>
   text.length > MAX_SHOWN_LENGTH ? `${text.slice(0, MAX_SHOWN_LENGTH)}…` : text;
 

@@ -1,9 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
-import { mkdir, open, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, open, rm, stat } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
-import { resolve, sep } from 'node:path';
-import { assertRealPathInside, ENV, SAFE_SEGMENT } from '@libs/common';
+import { resolve } from 'node:path';
+import {
+  assertRealPathInside,
+  atomicWrite,
+  ENV,
+  resolveInside,
+  SAFE_SEGMENT,
+} from '@libs/common';
 import type { Env } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, STATEMENT_LANGUAGES } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
@@ -79,16 +84,7 @@ export class PdfCacheService {
     produce: (temporaryPath: string) => Promise<void>,
   ): Promise<void> {
     const target = this.pathOf(code, lang);
-    await mkdir(this.root, { recursive: true });
-    await assertRealPathInside(this.root, target);
-    const temporary = `${target}.${randomUUID()}.tmp`;
-    try {
-      await produce(temporary);
-      await rename(temporary, target);
-    } catch (error) {
-      await rm(temporary, { force: true });
-      throw error;
-    }
+    await atomicWrite(target, produce, this.root);
   }
 
   async scratchPath(name: string): Promise<string> {
@@ -101,9 +97,6 @@ export class PdfCacheService {
   }
 
   private resolveInside(relativePath: string): string {
-    const target = resolve(this.root, relativePath);
-    if (!target.startsWith(this.root + sep))
-      throw new Error(`Path escapes PDF_CACHE_ROOT: ${relativePath}`);
-    return target;
+    return resolveInside(this.root, relativePath, 'PDF_CACHE_ROOT');
   }
 }

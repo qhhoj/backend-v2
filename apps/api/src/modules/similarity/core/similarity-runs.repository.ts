@@ -14,6 +14,7 @@ import type {
   SimilarityLimits,
   SimilarityScope,
 } from '@libs/database';
+import { isDuplicateKey } from '@libs/common';
 
 export interface NewSimilarityRun {
   scope: SimilarityScope;
@@ -24,7 +25,6 @@ export interface NewSimilarityRun {
   limits: SimilarityLimits;
 }
 
-const DUPLICATE_KEY = 11000;
 const ABANDONED: SimilarityError = 'abandoned';
 /** A run still queued this long is abandoned: its job was most likely lost. A run merely waiting behind a very long backlog is released too (accepted: rare under the start limit). */
 const QUEUED_STALE_AFTER_MS = 3 * 60 * 60 * 1000;
@@ -74,7 +74,7 @@ export class SimilarityRunsRepository {
     try {
       return await this.runs.create(fields);
     } catch (error) {
-      if ((error as { code?: number }).code === DUPLICATE_KEY) return null;
+      if (isDuplicateKey(error)) return null;
       throw error;
     }
   }

@@ -2,6 +2,7 @@ import {
   CONTEST_KEY_PATTERN,
   ORGANIZATION_SLUG_PATTERN,
   PROBLEM_CODE_PATTERN,
+  UUID_PATTERN,
 } from '@libs/database';
 
 export const MAX_SHORT_PATH_LENGTH = 200;
@@ -9,7 +10,6 @@ export const MAX_SHORT_PATH_LENGTH = 200;
 /** A pattern's body without its anchors, to build the allow-list from the schema patterns. */
 const bodyOf = (pattern: RegExp): string =>
   pattern.source.replace(/^\^|\$$/g, '');
-const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
 /** The SPA's canonical routes (`frontend-v2/src/router/routes.ts`): the only places a short link may lead. No query, no fragment, no scheme, no host: whatever is stored is exactly what the redirect sends. */
 const SHAPES: readonly RegExp[] = [
@@ -17,7 +17,7 @@ const SHAPES: readonly RegExp[] = [
   new RegExp(
     `^/contests/${bodyOf(CONTEST_KEY_PATTERN)}(?:/(?:announcements|submissions|stats|ranking))?$`,
   ),
-  new RegExp(`^/blog/${UUID}$`),
+  new RegExp(`^/blog/${bodyOf(UUID_PATTERN)}$`),
   /^\/users\/(?!\.{1,2}$)[A-Za-z0-9_.@+-]{1,150}$/,
   new RegExp(`^/organizations/${bodyOf(ORGANIZATION_SLUG_PATTERN)}$`),
 ];

@@ -1,9 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongooseSchema } from 'mongoose';
 import { baseSchemaOptions, IdProp } from '../schema';
+import { HEX_SHA256 } from '../uuid';
 
 const UUID = MongooseSchema.Types.UUID;
-const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 /** `frozen-until-release`: the feed stops at the freeze until an editor releases it; `live`: no cut, an explicit opt-in. */
 export const FEED_KEY_MODES = ['frozen-until-release', 'live'] as const;
@@ -14,7 +14,7 @@ export type FeedKeyMode = (typeof FEED_KEY_MODES)[number];
 export class ContestFeedKey {
   @IdProp() _id!: string;
   @Prop({ type: UUID, required: true }) contest!: string;
-  @Prop({ required: true, match: SHA256_HEX }) keyHash!: string;
+  @Prop({ required: true, match: HEX_SHA256 }) keyHash!: string;
   @Prop({ type: String, default: 'frozen-until-release', enum: FEED_KEY_MODES })
   mode!: FeedKeyMode;
   /** The editor who minted it; the key stops working when this user can no longer edit the contest. */

@@ -7,23 +7,22 @@ import {
   ContestSubmission,
   uuidStr,
 } from '@libs/database';
+import { ID_CHUNK } from '@libs/common';
 
-/** Rows read and written per round trip. */
-export const RESCORE_CHUNK = 1000;
 export interface ContestSubmissionRow {
   _id: unknown;
   problem: unknown;
   points: number;
 }
 
-/** A cursor's rows `RESCORE_CHUNK` at a time: a contest's history is never held in memory. */
+/** A cursor's rows `ID_CHUNK` at a time: a contest's history is never held in memory. */
 async function* inChunks<Row>(
   cursor: AsyncIterable<Row>,
 ): AsyncGenerator<Row[]> {
   let chunk: Row[] = [];
   for await (const row of cursor) {
     chunk.push(row);
-    if (chunk.length === RESCORE_CHUNK) {
+    if (chunk.length === ID_CHUNK) {
       yield chunk;
       chunk = [];
     }

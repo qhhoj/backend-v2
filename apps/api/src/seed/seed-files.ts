@@ -1,6 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { ZipFile } from 'yazl';
+import { atomicWrite } from '@libs/common';
 
 /** Fixed entry mtime so two seed runs build byte-identical zips. */
 const ZIP_MTIME = new Date('2026-01-01T00:00:00Z');
@@ -18,10 +18,7 @@ export async function zipBytes(files: Record<string, string>): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-/**
- * Writes `content` unless the file already holds it. A write goes to a temp
- * file and is renamed over, so a reader of a live stack never sees a torn file.
- */
+/** Writes `content` unless the file already holds it; a reader of a live stack never sees a torn file. */
 export async function writeIfChanged(
   path: string,
   content: string | Buffer,
@@ -29,8 +26,5 @@ export async function writeIfChanged(
   const bytes = Buffer.from(content);
   const current = await readFile(path).catch(() => null);
   if (current?.equals(bytes)) return;
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.tmp`;
-  await writeFile(temporary, bytes);
-  await rename(temporary, path);
+  await atomicWrite(path, bytes);
 }

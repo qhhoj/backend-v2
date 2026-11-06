@@ -1,7 +1,7 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import { StorageService } from '@libs/common';
+import { DAY_MS, StorageService } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import {
   enqueuePurge,
@@ -14,8 +14,6 @@ import type { ProblemPurgeJob } from '@libs/problems';
 import { SettingsService } from '@libs/settings';
 import { ProblemPurgeRepository } from './problem-purge.repository';
 import type { PurgeTarget } from './problem-purge.repository';
-
-const DAY_MS = 86_400_000;
 
 export interface PurgeCounts {
   comments: number;

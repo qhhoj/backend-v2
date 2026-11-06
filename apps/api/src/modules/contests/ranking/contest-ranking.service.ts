@@ -2,10 +2,16 @@ import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import type { Principal } from '@libs/auth';
 import { constantTimeEqual, sha256 } from '@libs/auth';
-import { AppError, RateLimitService, REDIS, unique } from '@libs/common';
+import {
+  AppError,
+  competitionRanks,
+  RateLimitService,
+  REDIS,
+  unique,
+} from '@libs/common';
 import {
   compareStandings,
-  competitionRanks,
+  sameStanding,
   isFrozenFor,
   problemLabel,
   problemSummaries,
@@ -70,7 +76,10 @@ const rankedStandings = (
         compareStandings(left.standing, right.standing) ||
         left.id.localeCompare(right.id),
     );
-  const ranks = competitionRanks(standings.map(({ standing }) => standing));
+  const ranks = competitionRanks(
+    standings.map(({ standing }) => standing),
+    sameStanding,
+  );
   return { standings, ranks };
 };
 

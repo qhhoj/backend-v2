@@ -1,13 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import { Inject, Injectable } from '@nestjs/common';
 import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
-import {
-  contestDataPath,
-  contestDataTempPath,
-  matchesGlob,
-} from '@libs/contests';
+import { contestDataPath, matchesGlob } from '@libs/contests';
 import type { ContestDataJob } from '@libs/contests';
 import { ContestDataRepository } from './contest-data.repository';
 import { CONTEST_DATA_LIMITS, ContestDataError, planEntries } from './data-zip';
@@ -31,10 +26,7 @@ export class ContestDataService {
     const root = this.env.contestDataRoot;
     if (!root)
       throw new ContestDataError('Contest data download is not configured');
-    const [path, temporaryPath] = [
-      contestDataPath(root, contestId),
-      contestDataTempPath(root, contestId, randomUUID()),
-    ];
+    const path = contestDataPath(root, contestId);
     await mkdir(root, { recursive: true });
     await rm(path, { force: true });
     const contest = await this.repository.findContest(contestId);
@@ -61,7 +53,6 @@ export class ContestDataService {
       ),
       {
         path,
-        temporaryPath,
         maxBytes: this.limits.maxBytes,
         tooLarge: () =>
           new ContestDataError(

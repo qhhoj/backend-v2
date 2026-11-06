@@ -1,4 +1,4 @@
-import { escapeRegExp } from '@libs/common';
+import { DAY_MS, escapeRegExp } from '@libs/common';
 import type { UserActivity } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
 
@@ -16,7 +16,7 @@ export function activityFilter(
   now = new Date(),
 ): FilterQuery<UserActivity> {
   const filter: FilterQuery<UserActivity> = {
-    at: { $gte: new Date(now.getTime() - days * 86_400_000) },
+    at: { $gte: new Date(now.getTime() - days * DAY_MS) },
   };
   if (scope.kind === 'anonymous') filter.userId = null;
   if (scope.kind === 'users') filter.userId = { $in: scope.ids };

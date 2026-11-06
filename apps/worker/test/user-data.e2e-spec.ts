@@ -196,7 +196,7 @@ describe('user data export', () => {
       userDataPath(worker.userDataRoot, newId()),
       userDataPath(worker.userDataRoot, newId()),
     ];
-    const temporary = join(worker.userDataRoot, `${newId()}.zip.run.tmp`);
+    const temporary = join(worker.userDataRoot, `.${newId()}.tmp`);
     const foreign = [
       join(worker.userDataRoot, 'contest.zip'),
       join(worker.userDataRoot, 'notes.tmp'),

@@ -4,6 +4,7 @@ import type { SubmissionResult } from '@libs/database';
 import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
 import { finalSubmissionFormat } from './formats/final-submission';
 import type { FormatName } from './formats/format';
+import { MINUTE_MS } from '@libs/common';
 
 export const CONTEST_RESCORE_QUEUE = 'contest-rescore';
 export const CONTEST_RESCORE_JOB = 'rescore';
@@ -57,7 +58,7 @@ export const CONTEST_FINAL_JUDGE_QUEUE = 'contest-final-judge';
 export const CONTEST_FINAL_JUDGE_JOB = 'judge-final';
 export const CONTEST_FINAL_JUDGE_SWEEP_JOB = 'sweep';
 export const CONTEST_FINAL_JUDGE_SCHEDULER = 'contest-final-judge-every-minute';
-export const FINAL_JUDGE_SWEEP_MS = 60_000;
+export const FINAL_JUDGE_SWEEP_MS = MINUTE_MS;
 
 /** Judge an FSO contest's pending submissions; `manual`: an editor's request, which ignores `autoJudge`. */
 export interface ContestFinalJudgeJob {
@@ -165,7 +166,7 @@ export const enqueueContestRating = async (
 };
 
 /** How long a re-rate after a verdict change waits for the next one: each request in that time moves the not-yet-started run back, so a bulk rejudge of an ended contest ends in one re-rate. */
-export const RERATE_DEBOUNCE_MS = 60_000;
+export const RERATE_DEBOUNCE_MS = MINUTE_MS;
 
 /** The re-rate a verdict change after the end requests (rejudge, reject, score override). Debounced per contest (BullMQ deduplication): a delayed run is replaced by a later request, and a request while one runs keeps one more run for after it, which reads the newer standings. */
 export const requestContestRerate = async (

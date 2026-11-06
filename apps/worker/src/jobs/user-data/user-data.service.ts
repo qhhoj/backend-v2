@@ -1,14 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
-import { ENV } from '@libs/common';
+import { DAY_MS, ENV, isTempName } from '@libs/common';
 import type { Env } from '@libs/common';
-import {
-  isUserDataExpired,
-  userDataPath,
-  userDataTempPath,
-} from '@libs/community';
+import { isUserDataExpired, userDataPath } from '@libs/community';
+import { isUuid } from '@libs/database';
 import { chunkedSources, writeZipInPlace } from '../lazy-zip';
 import type { ZipLimits } from '../lazy-zip';
 import { UserDataCommunityRepository } from './user-data-community.repository';
@@ -30,11 +26,10 @@ export const DEFAULT_USER_DATA_LIMITS: UserDataLimits = {
 export class UserDataError extends Error {}
 
 const json = (value: unknown) => JSON.stringify(value, null, 4);
-const TEMP_FILE_AGE_MS = 86_400_000;
-const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-/** The sweep touches only the names `userDataPath` and `userDataTempPath` produce. */
-const ZIP_FILE = new RegExp(`^${UUID}\\.zip$`);
-const TEMP_FILE = new RegExp(`^${UUID}\\.zip\\.[^/]+\\.tmp$`);
+const TEMP_FILE_AGE_MS = DAY_MS;
+/** The sweep touches only the names `userDataPath` produces, and temp files. */
+const ZIP_FILE = /^([^.]+)\.zip$/;
+const isUserZip = (name: string) => isUuid(ZIP_FILE.exec(name)?.[1] ?? '');
 
 const submissionInfo = (submissions: UserDataSubmission[]) =>
   Object.fromEntries(
@@ -93,10 +88,7 @@ export class UserDataService {
   /** Legacy `prepare_user_data` plus the profile, own comments (hidden included) and blog posts. The previous zip goes first; the new one is written beside it and renamed into place. Returns the entry count. */
   async prepare(userId: string): Promise<number> {
     const root = this.root();
-    const [path, temporaryPath] = [
-      userDataPath(root, userId),
-      userDataTempPath(root, userId, randomUUID()),
-    ];
+    const path = userDataPath(root, userId);
     await mkdir(root, { recursive: true });
     await rm(path, { force: true });
     const profile = await this.repository.profile(userId);
@@ -154,7 +146,6 @@ export class UserDataService {
       },
       {
         path,
-        temporaryPath,
         maxBytes: this.limits.maxBytes,
         tooLarge: () =>
           new UserDataError(`Your data passes ${this.limits.maxBytes} bytes`),
@@ -183,9 +174,9 @@ export class UserDataService {
       const path = join(root, name);
       const file = await stat(path).catch(() => null);
       if (!file) continue;
-      const expired = TEMP_FILE.test(name)
+      const expired = isTempName(name)
         ? file.mtime.getTime() + TEMP_FILE_AGE_MS <= now.getTime()
-        : ZIP_FILE.test(name) && isUserDataExpired(file.mtime, now);
+        : isUserZip(name) && isUserDataExpired(file.mtime, now);
       if (expired) {
         await rm(path, { force: true });
         removed += 1;

@@ -65,11 +65,20 @@ describe('PackageCacheService', () => {
     await put('fresh', KEY_A);
     const stale = new Date(Date.now() - 3 * 3_600_000);
     utimesSync(cache.pathOf('old', KEY_A), stale, stale);
-    writeFileSync(join(packages, 'old.x.tmp'), 'partial');
-    utimesSync(join(packages, 'old.x.tmp'), stale, stale);
+    writeFileSync(
+      join(packages, '.0199a000-0000-7000-8000-000000000001.tmp'),
+      'partial',
+    );
+    utimesSync(
+      join(packages, '.0199a000-0000-7000-8000-000000000001.tmp'),
+      stale,
+      stale,
+    );
     expect(await cache.deleteOlderThan(3_600_000)).toBe(1);
     expect(existsSync(cache.pathOf('old', KEY_A))).toBe(false);
-    expect(existsSync(join(packages, 'old.x.tmp'))).toBe(false);
+    expect(
+      existsSync(join(packages, '.0199a000-0000-7000-8000-000000000001.tmp')),
+    ).toBe(false);
     expect(existsSync(cache.pathOf('fresh', KEY_A))).toBe(true);
   });
 

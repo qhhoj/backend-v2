@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
-import { AppError, escapeRegExp, isDuplicateKey } from '@libs/common';
+import {
+  AppError,
+  escapeRegExp,
+  isDuplicateKey,
+  retryOnDuplicateKey,
+} from '@libs/common';
 import { LIVE } from '@libs/contests';
 import type { ParticipationTimes } from '@libs/contests';
 import {
@@ -250,25 +255,25 @@ export class ParticipationsRepository {
     now: Date,
     acceptance: RulesAcceptance | null,
   ): Promise<ParticipationDocument> {
-    for (let attempt = 0; attempt < VIRTUAL_JOIN_ATTEMPTS; attempt += 1) {
-      const [highest] = await this.participations
-        .find({ contest: contestId, user: userId }, { virtual: 1 })
-        .sort({ virtual: -1 })
-        .limit(1)
-        .lean();
-      try {
-        return await this.participations.create({
+    try {
+      return await retryOnDuplicateKey(async () => {
+        const [highest] = await this.participations
+          .find({ contest: contestId, user: userId }, { virtual: 1 })
+          .sort({ virtual: -1 })
+          .limit(1)
+          .lean();
+        return this.participations.create({
           contest: contestId,
           user: userId,
           virtual: Math.max((highest?.virtual ?? 0) + 1, 1),
           realStart: now,
           ...acceptance,
         });
-      } catch (error) {
-        if (!isDuplicateKey(error)) throw error;
-      }
+      }, VIRTUAL_JOIN_ATTEMPTS);
+    } catch (error) {
+      if (!isDuplicateKey(error)) throw error;
+      throw new AppError('conflict', 409, 'Too many joins at once; try again');
     }
-    throw new AppError('conflict', 409, 'Too many joins at once; try again');
   }
 
   /** Null when a live participation already exists. `placeholder` fills `realStart` until the first join. */

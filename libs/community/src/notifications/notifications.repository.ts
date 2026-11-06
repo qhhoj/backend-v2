@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { isDuplicateKey } from '@libs/common';
+import { retryOnDuplicateKey } from '@libs/common';
 import { Notification, uuidStr } from '@libs/database';
 import type { Model } from 'mongoose';
 import { notificationExpiry } from './notification-draft';
@@ -38,15 +38,10 @@ export class NotificationsRepository {
     draft: NotificationDraft,
     now: Date,
   ): Promise<string> {
-    for (let attempt = 1; ; attempt++) {
+    return retryOnDuplicateKey(async () => {
       const merged = await this.mergeIntoUnread(userId, draft, now);
-      if (merged) return merged;
-      try {
-        return await this.insert(userId, draft, now);
-      } catch (error) {
-        if (!isDuplicateKey(error) || attempt >= MERGE_ATTEMPTS) throw error;
-      }
-    }
+      return merged ?? this.insert(userId, draft, now);
+    }, MERGE_ATTEMPTS);
   }
 
   /** Marks the users' unread rows of one group read (an assignee removed from a ticket). */

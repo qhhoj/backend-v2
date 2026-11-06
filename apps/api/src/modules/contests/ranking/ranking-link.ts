@@ -1,11 +1,10 @@
 import { randomInt } from 'node:crypto';
 import type { ContestPublicRankingLink } from '@libs/database';
+import { DAY_MS, MINUTE_MS } from '@libs/common';
 
 const TOKEN_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const TOKEN_LENGTH = 18;
-const MINUTE_MS = 60_000;
-const DAY_MS = 86_400_000;
 
 /** Legacy `generate_token`: 18 × [A-Za-z0-9] (≈ 107 bits), from the CSPRNG. */
 export const generateRankingToken = (): string =>
