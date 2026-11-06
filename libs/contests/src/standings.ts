@@ -61,20 +61,14 @@ export const compareStandings = (
   left.cumtime - right.cumtime ||
   left.tiebreaker - right.tiebreaker;
 
-/** Legacy `ranker` over sorted rows: equal (score, cumtime, tiebreaker) share a rank, the next rank skips (1, 1, 3). */
-export function competitionRanks(sorted: readonly RankedFields[]): number[] {
-  const ranks: number[] = [];
-  sorted.forEach((row, index) => {
-    const previous = sorted[index - 1];
-    const tied =
-      previous !== undefined &&
-      previous.score === row.score &&
-      previous.cumtime === row.cumtime &&
-      previous.tiebreaker === row.tiebreaker;
-    ranks.push(tied ? ranks[index - 1] : index + 1);
-  });
-  return ranks;
-}
+/** Equal (score, cumtime, tiebreaker): rows that share a rank. */
+export const sameStanding = (
+  left: RankedFields,
+  right: RankedFields,
+): boolean =>
+  left.score === right.score &&
+  left.cumtime === right.cumtime &&
+  left.tiebreaker === right.tiebreaker;
 
 /** Legacy `recompute_results` for a disqualified row, applied to the frozen fields too so a frozen board never shows its score. */
 export const disqualify = (score: ParticipationScore): ParticipationScore => ({

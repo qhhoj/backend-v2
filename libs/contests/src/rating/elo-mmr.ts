@@ -1,3 +1,5 @@
+import { pythonRound } from '@libs/judging';
+
 /** Legacy `judge/ratings.py` (Elo-MMR), ported line for line; goldens from the Python pin it. */
 const BETA2 = 328.33 ** 2;
 export const RATING_INIT = 1200;
@@ -50,14 +52,6 @@ export function tieRanks<Row>(
     start = end;
   }
   return ranks;
-}
-
-/** Python 3 `round(x)`: halves go to the even neighbour. */
-export function roundHalfEven(value: number): number {
-  const floor = Math.floor(value);
-  const fraction = value - floor;
-  if (fraction !== 0.5) return fraction > 0.5 ? floor + 1 : floor;
-  return floor % 2 === 0 ? floor : floor + 1;
 }
 
 const evalTanhs = (terms: readonly TanhTerm[], point: number): number =>
@@ -177,9 +171,10 @@ export function recalculateRatings(
   return inputs.map((_input, index) => ({
     rating: Math.max(
       1,
-      roundHalfEven(
+      pythonRound(
         mean[index] -
           (Math.sqrt(varianceAfter(timesRanked[index] + 1)) - SD_LIM),
+        0,
       ),
     ),
     mean: mean[index],

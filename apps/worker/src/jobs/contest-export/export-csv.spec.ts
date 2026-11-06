@@ -1,4 +1,4 @@
-import { csvCell, exportCsv } from './export-csv';
+import { exportCsv } from './export-csv';
 import type { ExportRow } from './export-csv';
 
 const row = (extra: Partial<ExportRow> = {}): ExportRow => ({
@@ -16,25 +16,6 @@ const row = (extra: Partial<ExportRow> = {}): ExportRow => ({
   extension: 'cpp',
   hasSource: true,
   ...extra,
-});
-
-describe('csvCell', () => {
-  it.each([
-    ['plain', 'plain'],
-    [12, '12'],
-    [true, 'true'],
-    ['a,b', '"a,b"'],
-    ['say "hi"', '"say ""hi"""'],
-    ['two\nlines', '"two\nlines"'],
-    ['=SUM(A1)', "'=SUM(A1)"],
-    ['+1', "'+1"],
-    ['-1+2', "'-1+2"],
-    ['@cmd', "'@cmd"],
-    ['\tx', "'\tx"],
-    ['a=b', 'a=b'],
-  ])('writes %j as %j', (value, text) => expect(csvCell(value)).toBe(text));
-
-  it('keeps a negative number a number', () => expect(csvCell(-3)).toBe('-3'));
 });
 
 describe('exportCsv', () => {

@@ -6,7 +6,7 @@ import {
 } from '@libs/judge-proto';
 import type { GenerateTests, GenerationFailure } from '@libs/judge-proto';
 import type { GenerationRole } from '@libs/judging';
-import { clipBytes } from '../link/messages';
+import { clipBytes } from '@libs/common';
 import { MAX_LOG_BYTES } from '../link/link-limits';
 import type { ClaimedGeneration } from './generations.repository';
 

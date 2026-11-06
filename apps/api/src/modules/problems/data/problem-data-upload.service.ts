@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { rm, stat } from 'node:fs/promises';
 import type { AuthContext } from '@libs/auth';
-import { RateLimitService, writeFileAtomically } from '@libs/common';
+import { RateLimitService, atomicWrite } from '@libs/common';
 import { dataFileNamesOf } from '@libs/database';
 import type { DataFileKind, ProblemData } from '@libs/database';
 import {
@@ -156,7 +156,7 @@ export class ProblemDataUploadService {
       );
     const staged = await this.dataFiles.stageUpload(problem.code);
     try {
-      await writeFileAtomically(staged, content);
+      await atomicWrite(staged, content);
       return await this.storeSource(auth, problem, {
         kind,
         name,

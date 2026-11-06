@@ -1,11 +1,5 @@
 import goldens from './elo-mmr.goldens.json';
-import {
-  MEAN_INIT,
-  recalculateRatings,
-  roundHalfEven,
-  solve,
-  tieRanks,
-} from './elo-mmr';
+import { MEAN_INIT, recalculateRatings, solve, tieRanks } from './elo-mmr';
 import type { TanhTerm } from './elo-mmr';
 
 /** `Math.tanh` and libm may differ in the last bit; the bisection absorbs it. */
@@ -51,12 +45,6 @@ describe('Elo-MMR', () => {
     expect(tieRanks(golden.keys, (left, right) => left === right)).toEqual(
       golden.ranks,
     );
-  });
-
-  it('rounds halves to even like Python', () => {
-    expect(
-      [0.5, 1.5, 2.5, -0.5, -1.5, 2.4999, 2.5001].map(roundHalfEven),
-    ).toEqual([0, 2, 2, 0, -2, 2, 3]);
   });
 
   it('never lets a better rank perform worse, and gives tied participants equal results', () => {

@@ -3,7 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { createReadStream } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
-import { AppError, StorageService, writeFileAtomically } from '@libs/common';
+import { AppError, atomicWrite, DAY_MS, StorageService } from '@libs/common';
 import {
   dataFileNamesOf,
   emptyProblemData,
@@ -151,7 +151,7 @@ interface WrittenImport {
 }
 
 /** How long an automatic sync may wait for running contests (from when it was queued) before it fails with `problem_in_running_contest`. */
-export const MAX_SYNC_DEFERRAL_MS = 7 * 86_400_000;
+export const MAX_SYNC_DEFERRAL_MS = 7 * DAY_MS;
 
 /** How long an import waits for an API data write that holds the problem's data lock; a test may shorten it. */
 export const IMPORT_DATA_LOCK = { waitSeconds: 60 };
@@ -802,7 +802,7 @@ export class PolygonImportService {
       if (content === null) return;
       const stagedPath = await this.dataFiles.stageUpload(code);
       staged.push({ name, stagedPath });
-      await writeFileAtomically(stagedPath, content);
+      await atomicWrite(stagedPath, content);
     };
     try {
       await stage(TESTS_ARCHIVE, testsArchive);

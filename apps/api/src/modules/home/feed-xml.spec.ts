@@ -1,4 +1,4 @@
-import { escapeXml, rssFeed, textExcerpt } from './feed-xml';
+import { rssFeed, textExcerpt } from './feed-xml';
 
 describe('feed XML', () => {
   const channel = {
@@ -24,18 +24,6 @@ describe('feed XML', () => {
       html: '<p>Old</p>',
     },
   ];
-
-  it('escapes markup and drops characters XML cannot carry', () => {
-    expect(escapeXml(`<a href="x">'&'</a>\u0000\u0008ok`)).toBe(
-      '&lt;a href=&quot;x&quot;&gt;&apos;&amp;&apos;&lt;/a&gt;ok',
-    );
-  });
-
-  it('keeps astral characters and drops lone surrogates and U+FFFE', () => {
-    expect(escapeXml('a\u{1F600}b\uD800c￾d\u0009e')).toBe(
-      'a\u{1F600}bcd\u0009e',
-    );
-  });
 
   it('writes RSS 2.0 with escaped HTML descriptions, guids and RFC 822 dates', () => {
     const xml = rssFeed(channel, items);

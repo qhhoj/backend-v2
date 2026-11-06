@@ -1,4 +1,4 @@
-import { unique } from '@libs/common';
+import { canonicalJson, unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Contest, ContestProblem } from '@libs/database';
 import type { UpdateContestDto } from '../../contests/editing/dto/contest-edit.dto';
@@ -65,18 +65,6 @@ type SyncedFields = Pick<
   | 'formatConfig'
   | 'problems'
 >;
-
-/** JSON with object keys sorted at every depth, so two configs that differ only in key order compare equal. */
-const canonicalJson = (value: unknown): string =>
-  JSON.stringify(value, (_key, inner: unknown) =>
-    inner !== null && typeof inner === 'object' && !Array.isArray(inner)
-      ? Object.fromEntries(
-          Object.entries(inner).sort(([left], [right]) =>
-            left < right ? -1 : left > right ? 1 : 0,
-          ),
-        )
-      : inner,
-  );
 
 /** The fields sync controls, in a shape where equal contests compare equal however dates, ids and config keys are spelled. */
 export const comparableOf = (contest: SyncedFields) => ({

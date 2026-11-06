@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { isDuplicateKey } from '@libs/common';
+import { retryOnDuplicateKey } from '@libs/common';
 import { MiscConfig } from '@libs/database';
 import type { Model } from 'mongoose';
 
@@ -12,16 +12,14 @@ export class MiscConfigRepository {
 
   /** Creates or replaces by key; two first writes of one key race to the unique index, so the loser retries as an update. */
   async upsert(key: string, value: string): Promise<void> {
-    const write = () =>
-      this.config
-        .updateOne({ key }, { $set: { value } }, { upsert: true })
-        .exec();
-    try {
-      await write();
-    } catch (error) {
-      if (!isDuplicateKey(error, 'key')) throw error;
-      await write();
-    }
+    await retryOnDuplicateKey(
+      () =>
+        this.config
+          .updateOne({ key }, { $set: { value } }, { upsert: true })
+          .exec(),
+      2,
+      'key',
+    );
   }
 
   /** The stored value; null when the key is absent. */

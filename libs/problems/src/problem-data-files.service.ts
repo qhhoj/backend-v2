@@ -11,7 +11,7 @@ import {
   rm,
   rmdir,
 } from 'node:fs/promises';
-import { basename, dirname, resolve, sep } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
 import type Redis from 'ioredis';
 import {
@@ -19,8 +19,9 @@ import {
   ENV,
   REDIS,
   SAFE_SEGMENT,
+  resolveInside,
   withRedisLock,
-  writeFileAtomically,
+  atomicWrite,
 } from '@libs/common';
 import type { Env } from '@libs/common';
 import { PROBLEM_CODE_PATTERN } from '@libs/database';
@@ -82,7 +83,7 @@ export class ProblemDataFilesService {
     name: string,
     content: Buffer | Readable,
   ): Promise<void> {
-    return writeFileAtomically(this.pathOf(code, name), content, this.root);
+    return atomicWrite(this.pathOf(code, name), content, this.root);
   }
 
   async removeFile(code: string, name: string): Promise<void> {
@@ -116,7 +117,7 @@ export class ProblemDataFilesService {
         waitSeconds,
       },
       async () => {
-        await writeFileAtomically(marker, Buffer.alloc(0), this.root);
+        await atomicWrite(marker, Buffer.alloc(0), this.root);
         try {
           return await work();
         } finally {
@@ -147,7 +148,7 @@ export class ProblemDataFilesService {
   async writeDataVersion(code: string, version: number): Promise<void> {
     const current = await this.readDataVersion(code);
     if (current !== null && current >= version) return;
-    await writeFileAtomically(
+    await atomicWrite(
       this.dataVersionPath(code),
       Buffer.from(`${version}\n`, 'utf8'),
       this.root,
@@ -338,9 +339,6 @@ export class ProblemDataFilesService {
   }
 
   private resolveInside(relativePath: string): string {
-    const target = resolve(this.root, relativePath);
-    if (!target.startsWith(this.root + sep))
-      throw new Error(`Path escapes PROBLEM_DATA_ROOT: ${relativePath}`);
-    return target;
+    return resolveInside(this.root, relativePath, 'PROBLEM_DATA_ROOT');
   }
 }

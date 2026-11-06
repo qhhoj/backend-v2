@@ -1,6 +1,7 @@
 import { status } from '@grpc/grpc-js';
 import type { ServerDuplexStream } from '@grpc/grpc-js';
 import { Logger } from '@nestjs/common';
+import { clipBytes, sleep } from '@libs/common';
 import { newId } from '@libs/database';
 import {
   BridgeMessage,
@@ -31,7 +32,6 @@ import { MAX_LOG_BYTES, MAX_MESSAGES_PER_SECOND } from './link-limits';
 import { MessageRate } from './message-rate';
 import {
   caseRowsOf,
-  clipBytes,
   finalReportOf,
   helloOf,
   isRequeuedByJudge,
@@ -491,7 +491,7 @@ export class JudgeSession implements DispatchTarget {
         this.logger.warn(
           `Judge ${this.name}: storing the Final of submission ${key.ref.submissionId} gen ${key.ref.generation} failed (try ${attempt}), retrying in ${waitMs} ms: ${(error as Error).message}`,
         );
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        await sleep(waitMs);
         waitMs *= 2;
       }
     }

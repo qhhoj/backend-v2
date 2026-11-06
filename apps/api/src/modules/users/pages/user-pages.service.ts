@@ -4,6 +4,7 @@ import type { Principal } from '@libs/auth';
 import {
   AppError,
   canonicalTimeZone,
+  DAY_MS,
   isTimeZone,
   Paginated,
   REDIS,
@@ -241,7 +242,7 @@ export class UserPagesService {
     const cached = await this.redis.get(key);
     if (cached)
       return { ...(JSON.parse(cached) as ActivityResponse), timezone };
-    const since = new Date(now.getTime() - ACTIVITY_DAYS * 86_400_000);
+    const since = new Date(now.getTime() - ACTIVITY_DAYS * DAY_MS);
     const rows = await this.pages.activity(
       userId,
       since,

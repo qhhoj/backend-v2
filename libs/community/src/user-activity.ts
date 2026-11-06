@@ -115,15 +115,3 @@ export function classifyUserAgent(userAgent: string): {
     os: firstMatch(SYSTEMS, userAgent),
   };
 }
-
-/** Leading whitespace (some importers trim cells first) then `= + - @`, or a leading tab or CR. */
-const FORMULA_START = /^\s*[=+\-@]|^[\t\r]/;
-/** One CSV cell: a text cell starting with a formula character gets a `'` (spreadsheets would run it as a formula), then RFC 4180 quoting. Numbers are written as they are. */
-export const csvCell = (value: string | number | null): string => {
-  const text = value === null ? '' : String(value);
-  const guarded = typeof value === 'string' && FORMULA_START.test(text);
-  const safe = guarded ? `'${text}` : text;
-  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-};
-export const csvLine = (cells: Array<string | number | null>): string =>
-  `${cells.map(csvCell).join(',')}\r\n`;

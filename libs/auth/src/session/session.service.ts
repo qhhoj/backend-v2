@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ENV, Env, REDIS, execOrThrow } from '@libs/common';
+import { DAY_MS, ENV, Env, execOrThrow, REDIS } from '@libs/common';
 import { SettingsService } from '@libs/settings';
 import Redis from 'ioredis';
 import { randomToken } from '../crypto';
@@ -30,7 +30,6 @@ type StoredSession = Omit<
 
 export const SESSION_TTL_SECONDS = 14 * 24 * 60 * 60;
 export const COOKIE_REFRESH_MS = 24 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
 /** Concurrent changes of one session each retry their compare-and-set; this bounds a pathological loop. */
 const MAX_CHANGE_ATTEMPTS = 50;
 

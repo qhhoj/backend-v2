@@ -1,11 +1,10 @@
 import { hasPermission } from '@libs/auth';
 import type { Permission, Principal } from '@libs/auth';
-import { AppError, invalidField, sameJson } from '@libs/common';
+import { AppError, DAY_MS, invalidField, sameJson } from '@libs/common';
 import type { Contest } from '@libs/database';
 
 /** Legacy `VNOJ_CONTEST_DURATION_LIMIT`, in whole days (`timedelta.days`). */
 const CONTEST_DURATION_LIMIT_DAYS = 14;
-const DAY_MS = 86_400_000;
 
 /** Legacy admin `get_readonly_fields`: a request may change these only with the permission. */
 const GATED_FIELDS: ReadonlyArray<[keyof Contest, Permission]> = [

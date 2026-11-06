@@ -1,10 +1,4 @@
-const escapeXml = (text: string): string =>
-  text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-
+import { escapeXml } from '@libs/common';
 const NAMESPACE = 'http://www.sitemaps.org/schemas/sitemap/0.9';
 const HEADER = '<?xml version="1.0" encoding="UTF-8"?>';
 

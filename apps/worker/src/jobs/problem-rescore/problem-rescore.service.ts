@@ -7,11 +7,9 @@ import { uuidStr } from '@libs/database';
 import { submissionPoints } from '@libs/judging';
 import { SubmissionEffectsRepository } from '../submission-effects/submission-effects.repository';
 import { SubmissionEffectsService } from '../submission-effects/submission-effects.service';
-import {
-  ProblemRescoreRepository,
-  RESCORE_CHUNK,
-} from './problem-rescore.repository';
+import { ProblemRescoreRepository } from './problem-rescore.repository';
 import type { RescoredRow } from './problem-rescore.repository';
+import { ID_CHUNK } from '@libs/common';
 
 /** Users recomputed at once after a rescore. */
 const USER_RECOMPUTE_PARALLELISM = 8;
@@ -51,7 +49,7 @@ export class ProblemRescoreService {
           caseTotal: row.caseTotal,
           points,
         });
-      if (pending.length === RESCORE_CHUNK) {
+      if (pending.length === ID_CHUNK) {
         rescored += await this.repository.setPoints(pending);
         pending = [];
       }

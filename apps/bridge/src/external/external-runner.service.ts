@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { clipBytes } from '@libs/common';
+import { clipBytes, sleep } from '@libs/common';
 import { MAX_CASE_FEEDBACK_LENGTH } from '@libs/database';
 import type { ExternalRun, SubmissionCase } from '@libs/database';
 import {
@@ -51,9 +51,6 @@ const caseRowOf = (testCase: ExternalCase): SubmissionCase => ({
   extendedFeedback: '',
   output: '',
 });
-
-const sleep = (milliseconds: number) =>
-  new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 /**
  * The external judge as a pseudo-judge (`@external`): claims queued submissions of external problems, submits them to the PCD VJudge,

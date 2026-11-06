@@ -14,9 +14,7 @@ import type {
   ReplayParticipant,
   ReplayProblem,
 } from '@libs/database';
-
-/** MongoDB's duplicate key error: the guarded upsert found a newer head. */
-const DUPLICATE_KEY = 11000;
+import { isDuplicateKey } from '@libs/common';
 
 export type ReplayParticipation = Pick<
   ContestParticipation,
@@ -100,7 +98,7 @@ export class ContestReplayRepository {
         .exec();
       return true;
     } catch (error) {
-      if ((error as { code?: number }).code === DUPLICATE_KEY) return false;
+      if (isDuplicateKey(error)) return false;
       throw error;
     }
   }

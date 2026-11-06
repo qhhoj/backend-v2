@@ -1,5 +1,6 @@
 import { COMMENT_PAGE_TYPES, uuidStr } from '@libs/database';
 import type { CommentPageType } from '@libs/database';
+import { DAY_MS } from '@libs/common';
 
 export { COMMENT_PAGE_TYPES };
 export type { CommentPageType };
@@ -9,7 +10,7 @@ export const COMMENT_MAX_LENGTH = 8192;
 /** New: `path` grows by 37 characters a level; legacy MPTT had no cap. */
 export const COMMENT_MAX_DEPTH = 100;
 /** Legacy `DMOJ_COMMENT_REPLY_TIMEFRAME`: older comments take replies only from `judge.change_comment`. */
-export const COMMENT_REPLY_WINDOW_MS = 365 * 86_400_000;
+export const COMMENT_REPLY_WINDOW_MS = 365 * DAY_MS;
 /** Legacy `DMOJ_COMMENT_VOTE_HIDE_THRESHOLD`: collapsed, still returned. */
 export const COMMENT_COLLAPSE_SCORE = -5;
 export const COMMENT_THREADS_PAGE_SIZE = 20;

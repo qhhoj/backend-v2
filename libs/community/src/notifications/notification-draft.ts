@@ -8,6 +8,7 @@ import {
 } from '@libs/database';
 import type { NotificationKind, NotificationPriority } from '@libs/database';
 import { excerpt } from '../discord';
+import { DAY_MS } from '@libs/common';
 
 /** An inbox row lives this long after its last activity. */
 export const NOTIFICATION_RETENTION_DAYS = 90;
@@ -16,7 +17,6 @@ export const NOTIFICATION_CAP_PER_USER = 500;
 export const NOTIFICATIONS_PAGE_SIZE = 20;
 /** Recipients one `notify` call writes; a longer list is cut and logged. */
 export const NOTIFY_RECIPIENT_LIMIT = 200;
-const DAY_MS = 86_400_000;
 
 /** `encodeURIComponent` leaves `! ' ( ) * ~` bare, which the path pattern refuses: escape them too. */
 const pathSegment = (value: string): string =>

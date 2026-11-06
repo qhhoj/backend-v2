@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import type { Connection, Model } from 'mongoose';
-import { AppError, isDuplicateKey } from '@libs/common';
+import { AppError, retryOnDuplicateKey } from '@libs/common';
 import type { VoteScore } from '@libs/community';
 import {
   BlogPost,
@@ -29,7 +29,7 @@ interface Ledger {
 }
 
 /** Concurrent first votes by one voter can race the unique index past the transaction's retry. */
-const DUPLICATE_RETRIES = 2;
+const CAST_ATTEMPTS = 3;
 
 /** The one writer of vote rows and of `score` on posts and comments. */
 @Injectable()
@@ -66,38 +66,34 @@ export class VotesRepository {
   ): Promise<number> {
     const { votes, field, scored } = this.ledger(target);
     const key = { [field]: targetId, voter: voterId };
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        let total = 0;
-        await this.connection.transaction(async (session) => {
-          const previous =
-            score === 0
-              ? await votes.findOneAndDelete(key, { session }).lean().exec()
-              : await votes
-                  .findOneAndUpdate(
-                    key,
-                    { $set: { score }, $setOnInsert: { _id: newId() } },
-                    { upsert: true, new: false, session },
-                  )
-                  .lean()
-                  .exec();
-          const updated = await scored
-            .findOneAndUpdate(
-              { _id: targetId },
-              { $inc: { score: score - (previous?.score ?? 0) } },
-              { new: true, session, projection: { score: 1 } },
-            )
-            .lean()
-            .exec();
-          if (!updated)
-            throw new AppError('not_found', 404, 'No such post or comment');
-          total = updated.score;
-        });
-        return total;
-      } catch (error) {
-        if (!isDuplicateKey(error) || attempt >= DUPLICATE_RETRIES) throw error;
-      }
-    }
+    return retryOnDuplicateKey(async () => {
+      let total = 0;
+      await this.connection.transaction(async (session) => {
+        const previous =
+          score === 0
+            ? await votes.findOneAndDelete(key, { session }).lean().exec()
+            : await votes
+                .findOneAndUpdate(
+                  key,
+                  { $set: { score }, $setOnInsert: { _id: newId() } },
+                  { upsert: true, new: false, session },
+                )
+                .lean()
+                .exec();
+        const updated = await scored
+          .findOneAndUpdate(
+            { _id: targetId },
+            { $inc: { score: score - (previous?.score ?? 0) } },
+            { new: true, session, projection: { score: 1 } },
+          )
+          .lean()
+          .exec();
+        if (!updated)
+          throw new AppError('not_found', 404, 'No such post or comment');
+        total = updated.score;
+      });
+      return total;
+    }, CAST_ATTEMPTS);
   }
 
   /** The viewer's votes on `targetIds`, through the unique `{target, voter}` index. */

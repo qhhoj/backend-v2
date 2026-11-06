@@ -1,10 +1,11 @@
 import {
-  competitionRanks,
+  sameStanding,
   compareStandings,
   disqualify,
   standingOf,
 } from './standings';
 import type { ParticipationResults } from './standings';
+import { competitionRanks } from '@libs/common';
 
 const results = (
   extra: Partial<ParticipationResults> = {},
@@ -70,7 +71,7 @@ describe('compareStandings and competitionRanks (legacy order and ranker)', () =
     const sorted = [...rows].sort(compareStandings);
     expect(sorted.map((row) => row.name).slice(0, 2)).toEqual(['top', 'early']);
     expect(sorted.map((row) => row.name).slice(4)).toEqual(['slow', 'dq']);
-    expect(competitionRanks(sorted)).toEqual([1, 2, 3, 3, 5, 6]);
+    expect(competitionRanks(sorted, sameStanding)).toEqual([1, 2, 3, 3, 5, 6]);
   });
 
   it('ties only rows equal in score, cumtime and tiebreaker', () => {
@@ -81,13 +82,16 @@ describe('compareStandings and competitionRanks (legacy order and ranker)', () =
       tiebreaker,
     });
     expect(
-      competitionRanks([
-        board(9, 1, 1),
-        board(9, 1, 2),
-        board(9, 2, 2),
-        board(8, 2, 2),
-        board(8, 2, 2),
-      ]),
+      competitionRanks(
+        [
+          board(9, 1, 1),
+          board(9, 1, 2),
+          board(9, 2, 2),
+          board(8, 2, 2),
+          board(8, 2, 2),
+        ],
+        sameStanding,
+      ),
     ).toEqual([1, 2, 3, 4, 4]);
   });
 });

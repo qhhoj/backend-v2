@@ -13,13 +13,7 @@ import {
   Status,
 } from '@libs/judge-proto';
 import { gradeCases } from '@libs/judging';
-import {
-  caseRowsOf,
-  clipBytes,
-  finalReportOf,
-  helloOf,
-  refOf,
-} from './messages';
+import { caseRowsOf, finalReportOf, helloOf, refOf } from './messages';
 import { ProtocolError } from './protocol-error';
 
 const ID = '01920000-0000-7000-8000-000000000001';
@@ -235,10 +229,5 @@ describe('judge link messages', () => {
     });
     expect(retryWith(RetryReason.RETRY_REASON_UNSPECIFIED).kind).toBe('retry');
     expect(() => finalReportOf(Final.fromPartial({}))).toThrow(ProtocolError);
-  });
-
-  it('clips at a code point boundary', () => {
-    expect(clipBytes('aé', 2)).toBe('a');
-    expect(clipBytes('aé', 3)).toBe('aé');
   });
 });

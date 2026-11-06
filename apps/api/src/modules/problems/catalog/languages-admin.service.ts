@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { AppError, isDuplicateKey } from '@libs/common';
+import { AppError, DAY_MS, isDuplicateKey } from '@libs/common';
 import { compareLanguages, Language } from '@libs/database';
 import type { Model } from 'mongoose';
 import { LanguageUsageRepository } from './language-usage.repository';
@@ -16,7 +16,6 @@ import {
 
 const notFound = () => new AppError('not_found', 404, 'No such language');
 const RECENT_DAYS = 30;
-const DAY_MS = 86_400_000;
 
 /** Staff list, create and update for the languages catalog. Every write resyncs this process's querier at once; other processes follow the change stream. */
 @Injectable()

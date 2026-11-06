@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongooseSchema } from 'mongoose';
 import { baseSchemaOptions, IdProp, PLAIN_OBJECT } from '../schema';
+import { HEX_SHA256 } from '../uuid';
 import { uuidStr } from '../uuid';
 
 const UUID = MongooseSchema.Types.UUID;
@@ -26,7 +27,6 @@ export const SCOREBOARD_VISIBILITIES = ['V', 'H', 'C', 'P'] as const;
 export type ScoreboardVisibility = (typeof SCOREBOARD_VISIBILITIES)[number];
 export const MAX_POINTS_PRECISION = 10;
 export const MAX_CONTEST_PROBLEMS = 100;
-const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 @Schema({ _id: false })
 export class ContestProblem {
@@ -103,13 +103,13 @@ export class Contest {
   @Prop({ default: false }) isOrganizationPrivate!: boolean;
   @Prop({ type: [UUID], default: [] }) organizations!: string[];
   /** sha256 hex of the access code; null: no code. */
-  @Prop({ type: String, default: null, match: SHA256_HEX }) accessCodeHash!:
+  @Prop({ type: String, default: null, match: HEX_SHA256 }) accessCodeHash!:
     string | null;
   @Prop({ type: [UUID], default: [] }) bannedUsers!: string[];
   /** Judge names (judges are never renamed; commands and dispatch use names). */
   @Prop({ type: [String], default: [] }) bannedJudges!: string[];
   /** sha256 hex; checked by the public ranking links. */
-  @Prop({ type: String, default: null, match: SHA256_HEX })
+  @Prop({ type: String, default: null, match: HEX_SHA256 })
   rankingAccessCodeHash!: string | null;
   @Prop({ type: String, default: 'V', enum: SCOREBOARD_VISIBILITIES })
   scoreboardVisibility!: ScoreboardVisibility;

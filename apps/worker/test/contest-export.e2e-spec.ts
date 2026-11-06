@@ -6,12 +6,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import {
-  contestDataPath,
-  contestDataTempPath,
-  contestExportPath,
-  contestExportTempPath,
-} from '@libs/contests';
+import { contestDataPath, contestExportPath } from '@libs/contests';
 import { newId } from '@libs/database';
 import type {
   Contest,
@@ -297,15 +292,16 @@ describe('contest export', () => {
     const removed = [
       fileAged(contestExportPath(root, newId()), weekOld),
       fileAged(contestDataPath(root, newId()), weekOld),
-      fileAged(contestExportTempPath(root, newId(), 'run'), dayOld),
+      fileAged(join(root, `.${newId()}.tmp`), dayOld),
+      fileAged(join(root, `${newId()}.export.zip.run.tmp`), dayOld),
     ];
     const kept = [
       fileAged(contestExportPath(root, newId()), hours(6 * 24)),
-      fileAged(contestDataTempPath(root, newId(), 'run'), hours(23)),
+      fileAged(join(root, `.${newId()}.tmp`), hours(23)),
       fileAged(join(root, 'notes.zip'), weekOld),
       fileAged(join(root, 'readme.txt'), weekOld),
     ];
-    expect(await worker.module.get(ContestZipSweepService).sweep()).toBe(3);
+    expect(await worker.module.get(ContestZipSweepService).sweep()).toBe(4);
     expect(removed.filter((path) => existsSync(path))).toEqual([]);
     expect(kept.filter((path) => !existsSync(path))).toEqual([]);
   });

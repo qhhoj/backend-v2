@@ -15,13 +15,7 @@ import {
   uuidStr,
 } from '@libs/database';
 import type { ExportRow } from './export-csv';
-
-/** Ids per `$in` query. */
-const ID_CHUNK = 1000;
-const idChunks = <Item>(items: Item[]): Item[][] =>
-  Array.from({ length: Math.ceil(items.length / ID_CHUNK) }, (_unused, chunk) =>
-    items.slice(chunk * ID_CHUNK, (chunk + 1) * ID_CHUNK),
-  );
+import { chunked } from '@libs/common';
 
 export interface ExportContest {
   _id: string;
@@ -208,7 +202,7 @@ export class ContestExportRepository {
 
   private async submissionDetails(ids: string[]) {
     const found = new Map<string, SubmissionDetail>();
-    for (const chunk of idChunks(ids))
+    for (const chunk of chunked(ids))
       for (const row of await this.submissions
         .find(
           { _id: { $in: chunk } },
@@ -241,7 +235,7 @@ export class ContestExportRepository {
 
   private async usernames(ids: string[]): Promise<Map<string, string>> {
     const found = new Map<string, string>();
-    for (const chunk of idChunks(ids))
+    for (const chunk of chunked(ids))
       for (const user of await this.users
         .find({ _id: { $in: chunk } }, { username: 1 })
         .lean()

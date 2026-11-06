@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { AppError, CsvError } from '@libs/common';
 import { ContestAccess } from '../core/contest-access';
 import { ContestViewerService } from '../core/contest-viewer.service';
 import { ContestsService } from '../core/contests.service';
@@ -8,7 +8,7 @@ import type {
   OfficialRankingResponse,
   SetOfficialRankingDto,
 } from './dto/official-ranking.dto';
-import { CsvRankingError, parseOfficialRanking } from './official-ranking';
+import { parseOfficialRanking } from './official-ranking';
 import { OfficialRankingsRepository } from './official-rankings.repository';
 
 const csvError = (message: string) =>
@@ -79,7 +79,7 @@ export class OfficialRankingService {
     try {
       return parseOfficialRanking(csv);
     } catch (error) {
-      if (error instanceof CsvRankingError) throw csvError(error.message);
+      if (error instanceof CsvError) throw csvError(error.message);
       throw error;
     }
   }

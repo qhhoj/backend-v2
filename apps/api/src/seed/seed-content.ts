@@ -1,8 +1,7 @@
 import { Contest, ContestSchema } from '@libs/database';
 import type { Connection } from 'mongoose';
 import { ensure } from './seed-ensure';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { DAY_MS } from '@libs/common';
 
 /** Test files of `e2e_max`: case i is `<i>.in` / `<i>.out`. */
 export const MAX_FILES = {
