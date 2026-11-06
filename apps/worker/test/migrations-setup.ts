@@ -8,6 +8,7 @@ import { REDIS } from '@libs/common';
 import { TEST_ENV } from '@libs/common/testing';
 import { startMongo } from '@libs/database/testing';
 import type Redis from 'ioredis';
+import type { Document } from 'mongodb';
 import type { Model } from 'mongoose';
 import { MigrationsModule } from '../src/migrations/migrations.module';
 
@@ -40,6 +41,22 @@ export async function setupMigrationsTest(override?: {
     redis,
     ...roots,
     model: <T>(name: string) => module.get<Model<T>>(getModelToken(name)),
+    /** Every document of the model's collection as stored, by `_id`. */
+    stored: (name: string) =>
+      module
+        .get<Model<unknown>>(getModelToken(name))
+        .collection.find()
+        .sort({ _id: 1 })
+        .toArray(),
+    /** Every document as a hydrated read sees it (schema defaults applied), by `_id`. */
+    hydrated: async (name: string) =>
+      (
+        await module
+          .get<Model<unknown>>(getModelToken(name))
+          .find()
+          .sort({ _id: 1 })
+          .exec()
+      ).map((document) => document.toObject<Document>()),
     teardown: async () => {
       await module.close();
       await mongo.stop();
