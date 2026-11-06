@@ -11,6 +11,7 @@ import {
 import type { UserDocument } from '@libs/auth';
 import {
   AppError,
+  DAY_MS,
   isDuplicateKey,
   limiterAddress,
   MAILER,
@@ -233,7 +234,7 @@ export class RegistrationService {
     );
     return this.users.isUsernameFree(
       username,
-      new Date(Date.now() - ACTIVATION_DAYS * 86_400_000),
+      new Date(Date.now() - ACTIVATION_DAYS * DAY_MS),
     );
   }
 
@@ -241,7 +242,7 @@ export class RegistrationService {
   private async isTaken(
     find: () => Promise<UserDocument | null>,
   ): Promise<boolean> {
-    const cutoff = new Date(Date.now() - ACTIVATION_DAYS * 86_400_000);
+    const cutoff = new Date(Date.now() - ACTIVATION_DAYS * DAY_MS);
     for (let existing = await find(); existing; existing = await find()) {
       const organizationIds = await this.users.deleteStalePendingUser(
         existing._id,

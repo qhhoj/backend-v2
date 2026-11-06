@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ActivityLogsService } from './activity-logs.service';
 import { ActivitySummaryRepository } from './activity-summary.repository';
 import type { ActivitySummaryResponse } from './dto/activity.response';
+import { DAY_MS } from '@libs/common';
 
 const TOP_IPS = 20;
 const TOP_PATHS = 30;
@@ -20,7 +21,7 @@ export class ActivitySummaryService {
     now = new Date(),
   ): Promise<ActivitySummaryResponse> {
     const userId = await this.logs.userId(username);
-    const since = new Date(now.getTime() - days * 86_400_000);
+    const since = new Date(now.getTime() - days * DAY_MS);
     const [total, daily, topIps, topPaths, sessions] = await Promise.all([
       this.summaries.total(userId, since),
       this.summaries.daily(userId, since),

@@ -15,19 +15,12 @@ import {
 } from '@libs/database';
 import type { SubmissionResult } from '@libs/database';
 import type { DataRow } from './data-zip';
-
-/** Ids per `$in` query. */
-const ID_CHUNK = 1000;
+import { chunked } from '@libs/common';
 
 export interface DataContest {
   _id: string;
   problems: Array<{ id: string; code: string }>;
 }
-
-const chunksOf = <Item>(items: Item[]): Item[][] =>
-  Array.from({ length: Math.ceil(items.length / ID_CHUNK) }, (_unused, chunk) =>
-    items.slice(chunk * ID_CHUNK, (chunk + 1) * ID_CHUNK),
-  );
 
 @Injectable()
 export class ContestDataRepository {
@@ -102,7 +95,7 @@ export class ContestDataRepository {
         .exec()
     ).filter((row) => live.has(uuidStr(row.participation)));
     const submissions = new Map<string, { user: string; language: string }>();
-    for (const chunk of chunksOf(contestRows))
+    for (const chunk of chunked(contestRows))
       for (const row of await this.submissions
         .find(
           {
@@ -158,7 +151,7 @@ export class ContestDataRepository {
 
   private async usernames(ids: string[]): Promise<Map<string, string>> {
     const found = new Map<string, string>();
-    for (const chunk of chunksOf(ids))
+    for (const chunk of chunked(ids))
       for (const user of await this.users
         .find({ _id: { $in: chunk } }, { username: 1 })
         .lean()

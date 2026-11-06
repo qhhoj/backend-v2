@@ -13,6 +13,7 @@ import type { ContestFormatName } from '@libs/database';
 import { notificationExpiry } from '@libs/community';
 import type { NotificationDraft } from '@libs/community';
 import type { Model } from 'mongoose';
+import { MONGO_DUPLICATE_KEY, writeErrorsOf } from '@libs/common';
 
 export interface AnnouncedContest {
   _id: string;
@@ -32,7 +33,6 @@ export interface ParticipantRow {
   isRegistered: boolean;
 }
 
-const MONGO_DUPLICATE_KEY = 11000;
 /** Announcements remembered per row: a retry older than this many announcements on one unread row would count again. */
 const REFS_KEPT = 20;
 
@@ -43,20 +43,6 @@ const textFields = (draft: NotificationDraft) => ({
   path: draft.path,
   priority: draft.priority,
 });
-
-interface WriteFailure {
-  index: number;
-  code?: number;
-}
-
-/** The failed writes of a bulk error, or none when it is another kind of error. */
-function writeFailures(error: unknown): WriteFailure[] {
-  const { writeErrors } = error as { writeErrors?: unknown };
-  if (!writeErrors) return [];
-  return (
-    Array.isArray(writeErrors) ? writeErrors : [writeErrors]
-  ) as WriteFailure[];
-}
 
 /** One announcement as written to inboxes: `at` orders rows and text (the announcement's creation), `now` is the processing time that rows expire from. */
 export interface AnnouncementStamp {
@@ -199,7 +185,7 @@ export class NotificationFanoutRepository {
       );
       return [];
     } catch (error) {
-      const failures = writeFailures(error);
+      const failures = writeErrorsOf(error);
       if (
         !failures.length ||
         failures.some((failure) => failure.code !== MONGO_DUPLICATE_KEY)

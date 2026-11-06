@@ -187,6 +187,19 @@ afterAll(() => api.teardown());
         bodyHtml: '<p>hidden words</p>',
         hidden: true,
       });
+      const tagProblem = await api.tagProblems.create({
+        _id: newId(),
+        code: 'cf_1A',
+        name: 'Theatre Square',
+        link: 'https://codeforces.com/problemset/problem/1/A',
+        judge: null,
+        tags: [],
+      });
+      await createComment(api, {
+        page: { type: 'tagProblem', id: tagProblem._id },
+        author: author._id,
+        bodyHtml: '<p>screenless words</p>',
+      });
       await createProblem(api, catalog, {
         code: 'feed_public',
         name: 'Feed Public',
@@ -210,6 +223,7 @@ afterAll(() => api.teardown());
       expect(comments).toContain('public words');
       expect(comments).not.toContain('private words');
       expect(comments).not.toContain('hidden words');
+      expect(comments).not.toContain('screenless words');
       const problems = (await feed('problems', 'atom')).text;
       expect(problems).toContain('Feed Public');
       expect(problems).not.toContain('Feed Private');

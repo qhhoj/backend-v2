@@ -1,4 +1,4 @@
-import { PROBLEM_LIMITS } from '@libs/database';
+import { PROBLEM_LIMITS, UUID_V7_PATTERN } from '@libs/database';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -99,7 +99,7 @@ export class PolygonImportQueryDto {
 
 /** A UUIDv7, or the `polygon-sync-<problem id>-<package id>` id of a Polygon sync. */
 const IMPORT_JOB_ID = new RegExp(
-  `^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|${SYNC_JOB_ID.source}`,
+  `${UUID_V7_PATTERN.source}|${SYNC_JOB_ID.source}`,
 );
 
 export class ImportJobParamDto {

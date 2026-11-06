@@ -2,13 +2,12 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
-import { REDIS } from '@libs/common';
+import { MINUTE_MS, REDIS } from '@libs/common';
 import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { SubmissionEffectsRepository } from '../submission-effects/submission-effects.repository';
 import { SubmissionEffectsService } from '../submission-effects/submission-effects.service';
 
-const MINUTE_MS = 60 * 1000;
 export const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 /** `judgedDate` is grading-begin: a grading that began up to this long before the last sweep and finished after it is still covered. */
 const SWEEP_OVERLAP_MS = 10 * 60 * 1000;

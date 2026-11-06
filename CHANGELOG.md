@@ -1,5 +1,20 @@
 # qhhoj-backend
 
+## 2.36.12
+
+### Patch Changes
+
+- 867fd75: A problem code rename moves the test data directory before it saves the code, so the problem stays judgeable. A failed move saves nothing, and a failed save moves the directory back unless the new code was stored. A taken target returns 400 `data_directory_taken`. Data that cannot be put back fails the edit with 500 `rename_data_stranded`.
+- bf79a6b: One shared primitive each for atomic file writes, path containment, duplicate-key retries, CSV, HTML and XML escaping, time units and id chunks.
+- 92a12bc: Audit rows of tag problems show the tag problem's code instead of "deleted", and comments on a tag problem no longer get a link to a page that does not exist.
+
+## 2.36.11
+
+### Patch Changes
+
+- c3f20db: A problem's package key now covers its cached PDF statements, so a package built before a PDF was rendered is rebuilt with the PDF instead of being served as current.
+- 0709e55: Every setting in the registry can be read, changed and restored through the settings API; `quota.cost.dataPer10MiB` was refused because its key contains digits.
+
 ## 2.36.10
 
 ### Patch Changes

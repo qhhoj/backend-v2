@@ -20,7 +20,7 @@ import {
 } from './problem-fixtures';
 import type { TestSession, Catalog } from './problem-fixtures';
 import { RevisionsRepository } from '../src/modules/problems/core/revisions.repository';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
@@ -856,6 +856,8 @@ describe('problem data quota', () => {
     const { organization, problem } = await orgProblem();
     const redis = api.app.get<Redis>(REDIS);
     const lock = `problem-data-lock:${problem.code}`;
+    // An existing directory stages without the lock, so the upload reaches the charge and its refund.
+    mkdirSync(join(api.problemDataRoot, problem.code), { recursive: true });
     await redis.set(lock, 'other-writer', 'EX', 30);
     try {
       await uploadArchive(problem.code, buildZip(tests(1))).expect(409);

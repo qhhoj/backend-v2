@@ -19,9 +19,9 @@ import type { ScoringContest } from '../submission-effects/contest-results.repos
 import { ContestResultsRepository } from '../submission-effects/contest-results.repository';
 import { SubmissionEffectsService } from '../submission-effects/submission-effects.service';
 import { ContestRescoreRepository } from './contest-rescore.repository';
+import { PARTICIPATION_PARALLELISM } from '../parallelism';
 
 /** Participations recomputed at once. */
-const PARTICIPATION_PARALLELISM = 8;
 
 @Injectable()
 export class ContestRescoreService {

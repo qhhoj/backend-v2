@@ -3,6 +3,7 @@ import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
 import type { DiscordEvent, DiscordMessage } from './discord';
+import { HOUR_MS } from '@libs/common';
 
 export const COMMUNITY_ENQUEUE_TIMEOUT_MS = 1000;
 
@@ -127,7 +128,7 @@ export const USER_DATA_QUEUE = 'user-data';
 export const USER_DATA_JOB = 'prepare';
 export const USER_DATA_SWEEP_JOB = 'sweep';
 export const USER_DATA_SWEEP_SCHEDULER = 'user-data-sweep-hourly';
-export const USER_DATA_SWEEP_MS = 3_600_000;
+export const USER_DATA_SWEEP_MS = HOUR_MS;
 /** Zip the user's own data into `USER_DATA_ROOT/<userId>.zip`. */
 export interface UserDataJob {
   userId: string;

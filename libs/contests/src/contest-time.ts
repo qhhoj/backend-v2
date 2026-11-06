@@ -1,4 +1,5 @@
 import type { ContestFormatName } from '@libs/database';
+import { MINUTE_MS, SECOND_MS } from '@libs/common';
 
 export const LIVE = 0;
 export const SPECTATE = -1;
@@ -25,8 +26,6 @@ export interface ParticipationTimes {
 export const CONTEST_PHASES = ['upcoming', 'running', 'ended'] as const;
 export type ContestPhase = (typeof CONTEST_PHASES)[number];
 
-const SECOND_MS = 1000;
-const MINUTE_MS = 60 * SECOND_MS;
 const plus = (date: Date, milliseconds: number) =>
   new Date(date.getTime() + milliseconds);
 

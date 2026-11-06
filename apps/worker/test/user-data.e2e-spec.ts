@@ -196,23 +196,25 @@ describe('user data export', () => {
       userDataPath(worker.userDataRoot, newId()),
       userDataPath(worker.userDataRoot, newId()),
     ];
-    const temporary = join(worker.userDataRoot, `${newId()}.zip.run.tmp`);
+    const temporary = join(worker.userDataRoot, `.${newId()}.tmp`);
+    const legacy = join(worker.userDataRoot, `${newId()}.zip.run.tmp`);
     const foreign = [
       join(worker.userDataRoot, 'contest.zip'),
       join(worker.userDataRoot, 'notes.tmp'),
     ];
-    for (const path of [fresh, stale, temporary, ...foreign])
+    for (const path of [fresh, stale, temporary, legacy, ...foreign])
       writeFileSync(path, 'zip');
     const eightDaysAgo = new Date(Date.now() - 8 * 86_400_000);
     utimesSync(stale, eightDaysAgo, eightDaysAgo);
-    for (const path of [temporary, ...foreign])
+    for (const path of [temporary, legacy, ...foreign])
       utimesSync(path, eightDaysAgo, eightDaysAgo);
-    expect(await service.sweep()).toBe(2);
+    expect(await service.sweep()).toBe(3);
     expect([
       existsSync(fresh),
       existsSync(stale),
       existsSync(temporary),
+      existsSync(legacy),
       ...foreign.map((path) => existsSync(path)),
-    ]).toEqual([true, false, false, true, true]);
+    ]).toEqual([true, false, false, false, true, true]);
   });
 });

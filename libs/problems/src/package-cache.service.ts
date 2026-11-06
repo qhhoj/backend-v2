@@ -1,18 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
-import {
-  access,
-  mkdir,
-  open,
-  readdir,
-  rename,
-  rm,
-  stat,
-  utimes,
-} from 'node:fs/promises';
+import { access, open, readdir, rm, stat, utimes } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
-import { resolve, sep } from 'node:path';
-import { assertRealPathInside, ENV } from '@libs/common';
+import { resolve } from 'node:path';
+import {
+  assertRealPathInside,
+  atomicWrite,
+  ENV,
+  resolveInside,
+} from '@libs/common';
 import type { Env } from '@libs/common';
 import { PROBLEM_CODE_PATTERN } from '@libs/database';
 import { PACKAGE_CACHE_MAX_BYTES } from './lifecycle-queues';
@@ -71,16 +66,7 @@ export class PackageCacheService {
     produce: (temporaryPath: string) => Promise<void>,
   ): Promise<void> {
     const target = this.pathOf(code, key);
-    await mkdir(this.root, { recursive: true });
-    await assertRealPathInside(this.root, target);
-    const temporary = `${target}.${randomUUID()}.tmp`;
-    try {
-      await produce(temporary);
-      await rename(temporary, target);
-    } catch (error) {
-      await rm(temporary, { force: true });
-      throw error;
-    }
+    await atomicWrite(target, produce, this.root);
     await this.deleteAll(code, key);
     await this.evictToLimit(PACKAGE_CACHE_MAX_BYTES);
   }
@@ -121,6 +107,7 @@ export class PackageCacheService {
     let removed = 0;
     for (const name of await this.names()) {
       const isZip = name.endsWith('.zip');
+      // `.tmp` also covers the names written before `atomicWrite` (`<code>.<key>.zip.<run>.tmp`); L24 narrows it to `isTempName`.
       if (!isZip && !name.endsWith('.tmp')) continue;
       const path = this.resolveInside(name);
       const found = await stat(path).catch(ignoreMissing(null));
@@ -150,9 +137,6 @@ export class PackageCacheService {
   }
 
   private resolveInside(relativePath: string): string {
-    const target = resolve(this.root, relativePath);
-    if (!target.startsWith(this.root + sep))
-      throw new Error(`Path escapes the package cache: ${relativePath}`);
-    return target;
+    return resolveInside(this.root, relativePath, 'the package cache');
   }
 }

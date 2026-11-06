@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { readFile, rm, stat } from 'node:fs/promises';
-import { dirname, resolve, sep } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { ENV, type Env } from '../env/env';
-import { assertRealPathInside, writeFileAtomically } from './atomic-write';
+import { assertRealPathInside, atomicWrite } from './atomic-write';
+import { resolveInside } from './paths';
 
 export const SAFE_SEGMENT = /^[\w-][\w.-]*$/;
 
@@ -18,11 +19,7 @@ export class StorageService {
   }
 
   async save(relativePath: string, content: Buffer): Promise<string> {
-    await writeFileAtomically(
-      this.resolveInside(relativePath),
-      content,
-      this.root,
-    );
+    await atomicWrite(this.resolveInside(relativePath), content, this.root);
     return this.publicUrl(relativePath);
   }
 
@@ -74,9 +71,6 @@ export class StorageService {
   }
 
   private resolveInside(relativePath: string): string {
-    const target = resolve(this.root, relativePath);
-    if (!target.startsWith(this.root + sep))
-      throw new Error(`Path escapes MEDIA_ROOT: ${relativePath}`);
-    return target;
+    return resolveInside(this.root, relativePath, 'MEDIA_ROOT');
   }
 }

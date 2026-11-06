@@ -1,10 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { monthKeyIn } from '@libs/common';
+import { DAY_MS, monthKeyIn } from '@libs/common';
 import { SettingsService } from '@libs/settings';
 import { OrganizationUsageAuditRepository } from './organization-usage-audit.repository';
 import type { MonthTotal } from './organization-usage-audit.repository';
 
-const DAY_MS = 86_400_000;
 const keyOf = ({ organization, month }: MonthTotal) =>
   `${organization}|${month}`;
 const byKey = (rows: MonthTotal[]) =>

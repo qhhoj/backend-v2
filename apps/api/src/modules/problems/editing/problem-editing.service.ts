@@ -20,6 +20,7 @@ import { OrganizationProblemRules } from './organization-problem-rules.service';
 import { ProblemEditPolicyService } from './problem-edit-policy.service';
 import {
   assertCodeAvailable,
+  assertNoDataDirectory,
   toFields,
   withCodeTaken,
   withoutRenderedHtml,
@@ -127,6 +128,24 @@ function renderStatementsInto(
   if (isMarkupFlipped)
     fields.translations = rerenderedTranslations(translations, mode);
   return true;
+}
+
+/** Stable code (and log prefix) of a rename whose save failed and whose data could not be put back: the problem cannot be judged until an operator moves the directory to the stored code. */
+export const RENAME_DATA_STRANDED = 'rename_data_stranded';
+
+/** The 500 the editor sees, naming the stored code (null: the problem could not be read or is gone) and where the data is. */
+function strandedDataError(
+  oldCode: string,
+  movedCode: string,
+  storedCode: string | null,
+): AppError {
+  return new AppError(
+    RENAME_DATA_STRANDED,
+    500,
+    `${RENAME_DATA_STRANDED}: renaming problem ${oldCode} to ${movedCode} failed and its test data could not be moved back. ` +
+      `Stored code: ${storedCode ?? 'unknown (the problem could not be read or is gone)'}; test data directory: <problem data root>/${movedCode}/. ` +
+      'The problem cannot be judged until that directory is renamed to the stored code.',
+  );
 }
 
 @Injectable()
@@ -279,46 +298,51 @@ export class ProblemEditingService {
     return { updated, isChanged };
   }
 
-  /** Saves and reads the problem back. A code change does both and moves the data directory under the data locks of both codes (see `withRenameLocks`), so the directory judges read always follows the stored code. */
+  /** Saves and reads the problem back. A code change moves the data directory first, under the data locks of both codes (see `withRenameLocks`), then saves: a taken or failed move saves nothing and a failed save puts the directory back where the stored code says, so judges always find the data at the stored code. */
   private async save(
     principal: Principal,
     original: ProblemDocument,
     fields: ProblemFields,
   ): Promise<ProblemDocument> {
     const newCode = fields.code;
-    if (newCode === undefined || newCode === original.code)
-      return this.saveAndReload(principal, original, fields);
-    return this.dataFiles.withRenameLocks(original.code, newCode, async () => {
-      const updated = await this.saveAndReload(principal, original, fields);
-      if (updated.code !== original.code)
-        await this.moveDataDirectory(original.code, updated.code);
-      return updated;
-    });
-  }
-
-  private async saveAndReload(
-    principal: Principal,
-    original: ProblemDocument,
-    fields: ProblemFields,
-  ): Promise<ProblemDocument> {
-    await this.saveCharged(principal, original, fields);
+    if (newCode !== undefined && newCode !== original.code)
+      await this.dataFiles.withRenameLocks(original.code, newCode, async () => {
+        await assertNoDataDirectory(this.dataFiles, newCode);
+        await this.dataFiles.rename(original.code, newCode);
+        try {
+          await this.saveCharged(principal, original, fields);
+        } catch (error) {
+          await this.restoreDataDirectory(original, newCode, error);
+          throw error;
+        }
+      });
+    else await this.saveCharged(principal, original, fields);
     const updated = await this.repository.findById(original._id);
     if (!updated) throw new AppError('not_found', 404, 'No such problem');
     return updated;
   }
 
-  /** The new code is stored by now: a failed move is logged for the operator instead of failing a saved edit. */
-  private async moveDataDirectory(
-    oldCode: string,
-    newCode: string,
+  /** A save that threw may still have landed (a lost reply): the directory goes back only while the stored code is still the old one, a soft-deleted problem included (a delete takes no data lock and a restore must find its data). When it cannot be made to match the stored code, the edit fails loudly (`strandedDataError`). */
+  private async restoreDataDirectory(
+    original: ProblemDocument,
+    movedCode: string,
+    saveError: unknown,
   ): Promise<void> {
+    let storedCode: string | null = null;
     try {
-      await this.dataFiles.rename(oldCode, newCode);
-    } catch (error) {
+      storedCode =
+        (await this.repository.findIncludingDeleted(original._id))?.code ??
+        null;
+      if (storedCode === movedCode) return;
+      if (storedCode !== original.code)
+        throw new Error(`the stored code is ${storedCode ?? 'missing'}`);
+      await this.dataFiles.rename(movedCode, original.code);
+    } catch (restoreError) {
+      const error = strandedDataError(original.code, movedCode, storedCode);
       this.logger.error(
-        `Moving problem data ${oldCode} -> ${newCode} failed`,
-        error,
+        `${error.message} Save: ${(saveError as Error).message}; move back: ${(restoreError as Error).message}`,
       );
+      throw error;
     }
   }
 
@@ -346,7 +370,8 @@ export class ProblemEditingService {
    * Without `judge.change_public_visibility`, an edit of a visibility flag saves only while both are as its gates
    * read them, so two concurrent edits cannot combine into a site publish neither may make alone (a members-only
    * `isPublic` and a privacy flip); the loser gets a 409 and its charge is refunded. A holder may publish anyway, so
-   * their edits (contest publish, bulk visibility) never conflict.
+   * their edits (contest publish, bulk visibility) never conflict. A rename saves only while the code is still the
+   * one it moved the data directory from, else 409 (and `save` moves the directory back).
    */
   private async guardedUpdate(
     principal: Principal,
@@ -365,8 +390,14 @@ export class ProblemEditingService {
           isOrganizationPrivate: flagIs(original.isOrganizationPrivate),
         }
       : {};
-    const isSaved = await this.repository.update(original._id, fields, guard);
-    if (!isSaved && isGuarded)
+    // A rename writes only over the code its directory move started from (another rename may have won the lock first).
+    const isRenamed =
+      fields.code !== undefined && fields.code !== original.code;
+    const isSaved = await this.repository.update(original._id, fields, {
+      ...guard,
+      ...(isRenamed ? { code: original.code } : {}),
+    });
+    if (!isSaved && (isGuarded || isRenamed))
       throw new AppError(
         'conflict',
         409,

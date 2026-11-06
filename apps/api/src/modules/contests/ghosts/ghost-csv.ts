@@ -1,12 +1,11 @@
 import type { GhostCell, GhostInput } from '@libs/contests';
 import {
   CONTROL_CHARACTER,
-  CsvRankingError,
   GHOST_CAPTION_MAX,
   GHOST_LABEL_MAX,
   GHOST_LIMIT,
-  readCsvRecords,
 } from '@libs/contests';
+import { CsvError, readCsv, writeCsv } from '@libs/common';
 
 /** Machine codes of a refused ghost CSV; the SPA words each one itself. `label_invalid` and `caption_invalid` mean "too long"; a leading = + - @ has its own `label_formula` and `caption_formula`. */
 export const GHOST_CSV_ISSUE_CODES = [
@@ -41,8 +40,9 @@ export interface GhostCsvResult {
 
 /** `[points@]minute[+rejected]`: at most 99 rejected tries (each becomes a synthetic row to score); points with at most 5 integer and 6 decimal digits, so exporting them never yields an exponent. */
 const CELL = /^(?:(\d{1,5}(?:\.\d{1,6})?)@)?(\d{1,5})(?:\+(\d{1,2}))?$/;
-/** A spreadsheet would run these as formulas. */
+/** A label or caption starting with one of these would run as a formula in a spreadsheet, so the import refuses it. */
 const FORMULA_START = /^[=+\-@]/;
+const CSV_LIMITS = { rows: 10_000, columns: 105, fieldLength: 200 };
 const MAX_REPORTED_ISSUES = 50;
 const FIXED_COLUMNS = 2;
 const HEADER_ROW = 1;
@@ -216,9 +216,9 @@ function readRecords(csv: string): {
   issues: GhostCsvIssue[];
 } {
   try {
-    return { records: readCsvRecords(csv), issues: [] };
+    return { records: readCsv(csv, CSV_LIMITS), issues: [] };
   } catch (error) {
-    if (!(error instanceof CsvRankingError)) throw error;
+    if (!(error instanceof CsvError)) throw error;
     return {
       records: [],
       issues: [rowIssue('csv_invalid', undefined, error.message)],
@@ -262,14 +262,8 @@ export const anonymizeLabels = (ghosts: readonly GhostInput[]): GhostInput[] =>
     label: `Ghost ${String(index + 1).padStart(3, '0')}`,
   }));
 
-const quote = (value: string): string =>
-  /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
-
 const cellText = (cell: GhostCell): string =>
   `${cell.points === null ? '' : `${cell.points}@`}${cell.minute}${cell.rejectedBefore === null ? '' : `+${cell.rejectedBefore}`}`;
-
-/** Excel reads a CSV as UTF-8 only after this mark; the import strips it. */
-const UTF8_BOM = '\uFEFF';
 
 /** The current set in the import grammar, so it can be downloaded, edited and uploaded again (in Excel too: BOM first). */
 export function ghostsToCsv(
@@ -278,7 +272,7 @@ export function ghostsToCsv(
 ): string {
   const header = ['label', 'caption', ...columns.map((column) => column.code)];
   const rows = ghosts.map((ghost) => ghostRowOf(ghost, columns));
-  return `${UTF8_BOM}${[header, ...rows].map((fields) => fields.map(quote).join(',')).join('\r\n')}\r\n`;
+  return writeCsv([header, ...rows], { bom: true });
 }
 
 function ghostRowOf(

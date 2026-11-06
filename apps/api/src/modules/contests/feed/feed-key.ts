@@ -1,10 +1,10 @@
 import { randomBytes } from 'node:crypto';
+import { DAY_MS } from '@libs/common';
 
 export const FEED_USERNAME = 'feed';
 export const FEED_KEY_PREFIX = 'qhf_';
 export const DEFAULT_FEED_KEY_DAYS = 14;
 export const MAX_FEED_KEY_DAYS = 30;
-const DAY_MS = 86_400_000;
 
 /** 192 random bits, url-safe: the Basic password a resolver tool is configured with. */
 export const generateFeedKey = (): string =>

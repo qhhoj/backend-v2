@@ -14,6 +14,7 @@ import {
   ProblemGroup,
   ProblemType,
   Submission,
+  TagProblem,
   User,
   uuidStr,
 } from '@libs/database';
@@ -29,7 +30,7 @@ interface ObjectLabel {
  */
 const LABEL_FIELDS: Record<string, { model: string; field: string | null }> = {
   problem: { model: Problem.name, field: 'code' },
-  tagProblem: { model: Problem.name, field: 'code' },
+  tagProblem: { model: TagProblem.name, field: 'code' },
   contest: { model: Contest.name, field: 'key' },
   user: { model: User.name, field: 'username' },
   organization: { model: Organization.name, field: 'slug' },

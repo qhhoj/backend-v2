@@ -1,8 +1,9 @@
 import { join } from 'node:path';
 import { isUuid } from '@libs/database';
+import { DAY_MS } from '@libs/common';
 
 /** Legacy `DMOJ_CONTEST_DATA_DOWNLOAD_RATELIMIT`: one prepare per day unless the zip is missing. */
-export const CONTEST_DATA_PREPARE_INTERVAL_MS = 86_400_000;
+export const CONTEST_DATA_PREPARE_INTERVAL_MS = DAY_MS;
 
 const fileName = (contestId: string) => {
   if (!isUuid(contestId)) throw new Error('Not a contest id');
@@ -11,12 +12,6 @@ const fileName = (contestId: string) => {
 /** The id is the only variable part, so the path never leaves the root. */
 export const contestDataPath = (root: string, contestId: string) =>
   join(root, fileName(contestId));
-/** One name per run, so a run that lost its lock never renames or removes another run's file. */
-export const contestDataTempPath = (
-  root: string,
-  contestId: string,
-  runId: string,
-) => `${contestDataPath(root, contestId)}.${runId}.tmp`;
 
 export const canPrepareData = (
   preparedAt: Date | null,

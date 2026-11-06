@@ -5,6 +5,7 @@ import type { GhostGap } from './ghost-gap';
 import type { GhostCell, GhostInput } from './ghost-types';
 import { replayEvents } from './replay-events';
 import type { ReplayEvent } from './replay-events';
+import { MINUTE_MS } from '@libs/common';
 
 export interface GhostSetup {
   format: FormatSetting;
@@ -23,7 +24,6 @@ export interface GhostReplay {
   events: ReplayEvent[];
 }
 
-const MINUTE_MS = 60_000;
 /** Penalty formats score a solve as full points, whatever a source says. */
 const IGNORES_POINTS: readonly string[] = ['icpc', 'vnoj'];
 const pad = (value: number): string => String(value).padStart(5, '0');

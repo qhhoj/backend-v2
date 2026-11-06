@@ -4,8 +4,7 @@ import { classifyUserAgent } from '@libs/community';
 import { newId, User, UserActivity, UserSession } from '@libs/database';
 import type { AnyBulkWriteOperation, Model } from 'mongoose';
 import type { ActivityRow } from './activity-row';
-
-const DUPLICATE_KEY = 11000;
+import { retryOnDuplicateKey } from '@libs/common';
 
 /** Every Mongo write of the capture: one `insertMany` and one `bulkWrite` per flush. */
 @Injectable()
@@ -46,12 +45,10 @@ export class ActivityWriterRepository {
   private async bulkUpsertSessions(
     upserts: AnyBulkWriteOperation<UserSession>[],
   ): Promise<void> {
-    try {
-      await this.sessions.bulkWrite(upserts, { ordered: false });
-    } catch (error) {
-      if (!hasDuplicateKey(error)) throw error;
-      await this.sessions.bulkWrite(upserts, { ordered: false });
-    }
+    await retryOnDuplicateKey(
+      () => this.sessions.bulkWrite(upserts, { ordered: false }),
+      2,
+    );
   }
 
   /** The existing `users.lastAccess` and `users.ip`; `updatedAt` stays the time of the last real edit. */
@@ -70,15 +67,3 @@ export class ActivityWriterRepository {
     );
   }
 }
-
-const hasDuplicateKey = (error: unknown): boolean => {
-  const { code, writeErrors } = error as {
-    code?: number;
-    writeErrors?: Array<{ code?: number }>;
-  };
-  return (
-    code === DUPLICATE_KEY ||
-    (writeErrors?.some((writeError) => writeError.code === DUPLICATE_KEY) ??
-      false)
-  );
-};

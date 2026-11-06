@@ -1,4 +1,5 @@
 import type MarkdownIt from 'markdown-it';
+import { escapeHtml } from '@libs/common';
 
 /** `#` then a label (`#C`, `#12`) that is not glued to a word on either side. */
 const PROBLEM_REFERENCE = /^#([A-Za-z0-9]{1,8})(?![\w])/;
@@ -55,15 +56,6 @@ export function problemReferenceRule(
   return true;
 }
 
-const ATTRIBUTE_ESCAPES: Record<string, string> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-};
-const escapeAttribute = (value: string): string =>
-  value.replace(/[&<>"]/g, (char) => ATTRIBUTE_ESCAPES[char]);
-
 /** The text is `#` and a label (letters and digits only); the href comes from the caller and is escaped. */
 export const renderProblemReference = (
   tokens: MarkdownIt.Token[],
@@ -72,6 +64,6 @@ export const renderProblemReference = (
   const token = tokens[index];
   const href = token.attrGet('href');
   const hrefAttribute =
-    href === null ? '' : ` href="${escapeAttribute(String(href))}"`;
+    href === null ? '' : ` href="${escapeHtml(String(href))}"`;
   return `<a class="${PROBLEM_REFERENCE_CLASS}"${hrefAttribute}>${token.content}</a>`;
 };

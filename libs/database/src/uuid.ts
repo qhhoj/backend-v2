@@ -10,7 +10,15 @@ const isUuidBinary = (value: unknown): value is Binary =>
 export const uuidStr = (value: unknown): string =>
   isUuidBinary(value) ? value.toUUID().toHexString() : String(value);
 
-const UUID_PATTERN =
+export const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 /** Mirrors Mongoose's UUID cast format (version nibble 0-9, variant 8-b). Guards casts: a malformed id is "not found", never a Mongoose CastError. */
 export const isUuid = (value: string): boolean => UUID_PATTERN.test(value);
+
+export const UUID_V7_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+/** An id `newId` can produce (lowercase, version 7), as the token readers require. */
+export const isUuidV7 = (value: string): boolean => UUID_V7_PATTERN.test(value);
+
+/** A SHA-256 digest as lowercase hex. */
+export const HEX_SHA256 = /^[0-9a-f]{64}$/;

@@ -1,4 +1,5 @@
 import { excerpt } from '@libs/community';
+import { escapeXml } from '@libs/common';
 
 export interface FeedChannel {
   title: string;
@@ -17,23 +18,6 @@ export interface FeedItem {
   /** Sanitized HTML, sent escaped (`description`, Atom `summary type="html"`). */
   html: string;
 }
-
-const ENTITIES: Record<string, string> = {
-  '<': '&lt;',
-  '>': '&gt;',
-  '&': '&amp;',
-  "'": '&apos;',
-  '"': '&quot;',
-};
-/** Characters XML 1.0 cannot carry at all (the `Char` production). */
-const NOT_XML =
-  // eslint-disable-next-line no-control-regex -- the control characters are the point
-  /[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu;
-
-export const escapeXml = (text: string): string =>
-  text
-    .replace(NOT_XML, '')
-    .replace(/[<>&'"]/g, (character) => ENTITIES[character]);
 
 const element = (name: string, text: string) =>
   `<${name}>${escapeXml(text)}</${name}>`;

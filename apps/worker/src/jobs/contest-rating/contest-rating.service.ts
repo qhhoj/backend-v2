@@ -9,6 +9,7 @@ import {
   purgeRankingCache,
   RATING_INIT,
   recalculateRatings,
+  sameStanding,
   tieRanks,
 } from '@libs/contests';
 import type { Rating } from '@libs/database';
@@ -148,13 +149,7 @@ export class ContestRatingService {
           compareStandings(left, right) ||
           left.participationId.localeCompare(right.participationId),
       );
-    const ranks = tieRanks(
-      rated,
-      (left, right) =>
-        left.score === right.score &&
-        left.cumtime === right.cumtime &&
-        left.tiebreaker === right.tiebreaker,
-    );
+    const ranks = tieRanks(rated, sameStanding);
     const outputs = recalculateRatings(
       rated.map((candidate, index) => ({
         rank: ranks[index],
