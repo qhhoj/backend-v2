@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { JudgingModule, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import { JobsModule } from '@libs/common';
+import { JudgingModule, judgingJobs } from '@libs/judging';
 import { DiscordWebhooksModule } from '@libs/community';
 import {
   PDF_QUEUE,
@@ -30,9 +31,9 @@ import { TestGenerationService } from './test-generation.service';
     BullModule.registerQueue(
       { name: POLYGON_QUEUE },
       { name: PDF_QUEUE },
-      { name: PROBLEM_RESCORE_QUEUE },
       { name: SOURCE_CHECK_QUEUE },
     ),
+    JobsModule.register(judgingJobs.problemRescore),
   ],
   providers: [
     PolygonImportProcessor,

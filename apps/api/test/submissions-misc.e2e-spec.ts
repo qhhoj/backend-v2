@@ -1,6 +1,6 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { PROBLEM_RESCORE_QUEUE, SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { ProblemRescoreJob, SubmissionGradedJob } from '@libs/judging';
 import type { Submission } from '@libs/database';
 import {
@@ -85,7 +85,7 @@ afterAll(() => api.teardown());
 
     beforeAll(async () => {
       catalog = await seedCatalog(api);
-      graded = api.app.get(getQueueToken(SUBMISSION_GRADED_QUEUE));
+      graded = api.app.get(getQueueToken(judgingJobs.graded.queue));
       const roles: Array<[string, object]> = [
         ['owner', {}],
         ['outsider', {}],
@@ -608,7 +608,7 @@ afterAll(() => api.teardown());
 
     beforeAll(async () => {
       catalog = await seedCatalog(api);
-      graded = api.app.get(getQueueToken(SUBMISSION_GRADED_QUEUE));
+      graded = api.app.get(getQueueToken(judgingJobs.graded.queue));
       owner = (await createUserWith(api, 'owner', {}))._id;
       const roles: Array<[string, object]> = [
         ['outsider', {}],
@@ -836,7 +836,7 @@ afterAll(() => api.teardown());
 
     beforeAll(async () => {
       catalog = await seedCatalog(api);
-      rescores = api.app.get(getQueueToken(PROBLEM_RESCORE_QUEUE));
+      rescores = api.app.get(getQueueToken(judgingJobs.problemRescore.queue));
       const managerId = (
         await createUserWith(api, 'manager', {
           permissions: ['judge.edit_own_problem', 'judge.rejudge_submission'],

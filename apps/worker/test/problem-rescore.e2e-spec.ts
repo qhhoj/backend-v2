@@ -1,7 +1,8 @@
+import { JobProducer } from '@libs/common';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
-import { enqueueRescore, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { ProblemRescoreJob } from '@libs/judging';
 import { ProblemRescoreRepository } from '../src/jobs/problem-rescore/problem-rescore.repository';
 import type { RescoredRow } from '../src/jobs/problem-rescore/problem-rescore.repository';
@@ -220,7 +221,7 @@ describe('problem rescore', () => {
 
   const queueOf = () =>
     worker.module.get<Queue<ProblemRescoreJob>>(
-      getQueueToken(PROBLEM_RESCORE_QUEUE),
+      getQueueToken(judgingJobs.problemRescore.queue),
     );
   const drained = async () => {
     const counts = await queueOf().getJobCounts('waiting', 'active', 'delayed');
@@ -246,12 +247,16 @@ describe('problem rescore', () => {
       .mockImplementationOnce(async (problemId) => {
         const result = await rescore(problemId);
         await worker.problems.updateOne({ _id: problemId }, { points: 3000 });
-        await enqueueRescore(queue, problemId);
+        await new JobProducer(judgingJobs.problemRescore, queue).add({
+          problemId,
+        });
         return result;
       });
     try {
       await worker.problems.updateOne({ _id: problem._id }, { points: 1600 });
-      await enqueueRescore(queue, problem._id);
+      await new JobProducer(judgingJobs.problemRescore, queue).add({
+        problemId: problem._id,
+      });
       await waitUntil(() => spy.mock.calls.length === 2, 20_000);
       await waitUntil(drained, 20_000);
     } finally {
@@ -280,7 +285,9 @@ describe('problem rescore', () => {
       .spyOn(rescores, 'rescore')
       .mockRejectedValueOnce(new Error('mongo blip'));
     try {
-      await enqueueRescore(queue, problem._id);
+      await new JobProducer(judgingJobs.problemRescore, queue).add({
+        problemId: problem._id,
+      });
       await waitUntil(async () => (await queue.getDelayedCount()) === 1);
       const [retry] = await queue.getJobs(['delayed']);
       expect(retry.attemptsMade).toBe(1);

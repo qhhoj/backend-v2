@@ -2,7 +2,12 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
-import { AppError, RateLimitService, unique } from '@libs/common';
+import {
+  AppError,
+  RateLimitService,
+  unique,
+  withinTimeout,
+} from '@libs/common';
 import {
   CONTEST_ENQUEUE_TIMEOUT_MS,
   CONTEST_REPLAY_QUEUE,
@@ -18,7 +23,6 @@ import type {
   ReplayEvent,
   ReplayRequestOutcome,
 } from '@libs/contests';
-import { withinTimeout } from '@libs/judging';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ContestViewerService } from '../core/contest-viewer.service';
 import type { ContestDocument } from '../core/contests.repository';

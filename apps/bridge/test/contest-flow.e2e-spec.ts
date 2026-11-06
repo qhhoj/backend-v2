@@ -10,7 +10,7 @@ import {
 } from '@libs/contests';
 import { Status } from '@libs/judge-proto';
 import type { ContestReplayJob } from '@libs/contests';
-import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { AssignmentRef } from '@libs/judge-proto';
 import {
   contestProblem,
@@ -278,7 +278,7 @@ describe('a contest across the api, the bridge and the worker', () => {
       problems: [contestProblem(problem._id, 0)],
     });
     await post('erin', contestUrl(contest.key, '/join')).expect(201);
-    const graded = bridge.get<Queue>(getQueueToken(SUBMISSION_GRADED_QUEUE));
+    const graded = bridge.get<Queue>(getQueueToken(judgingJobs.graded.queue));
     // the process is gone before the enqueue reaches Redis; the judge's resend after the restart is dropped (the row is no longer P/G)
     const crash = jest
       .spyOn(graded, 'add')

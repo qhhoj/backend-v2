@@ -10,7 +10,7 @@ import {
 import { setupApiTest } from './setup';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { ProblemRescoreJob } from '@libs/judging';
 import type { Catalog, TestSession } from './problem-fixtures';
 import type { ApiTest } from './setup';
@@ -114,7 +114,7 @@ afterAll(() => api.teardown());
         (await createUserWith(api, 'admin', { isSuperuser: true }))._id,
       );
       queue = api.app.get<Queue<ProblemRescoreJob>>(
-        getQueueToken(PROBLEM_RESCORE_QUEUE),
+        getQueueToken(judgingJobs.problemRescore.queue),
       );
     });
     beforeEach(() => queue.obliterate({ force: true }));

@@ -21,7 +21,7 @@ import {
   User,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
-import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { BridgeModule } from '../src/bridge.module';
 import { BRIDGE_TIMINGS } from '../src/bridge-timings';
@@ -137,7 +137,7 @@ export async function setupBridgeTest({
     current.get<Model<Entity>>(getModelToken(name));
   const graded = () =>
     current.get<Queue<SubmissionGradedJob>>(
-      getQueueToken(SUBMISSION_GRADED_QUEUE),
+      getQueueToken(judgingJobs.graded.queue),
     );
   return {
     get module() {

@@ -41,7 +41,7 @@ import { waitUntil } from '@libs/common/testing';
 
 import type { Problem } from '@libs/database';
 
-import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 
 import type { ProblemRescoreJob } from '@libs/judging';
 
@@ -274,7 +274,7 @@ afterAll(() => api.teardown());
 
     beforeAll(async () => {
       catalog = await seedCatalog(api);
-      rescores = api.app.get(getQueueToken(PROBLEM_RESCORE_QUEUE));
+      rescores = api.app.get(getQueueToken(judgingJobs.problemRescore.queue));
       await newUser('owner', [
         'judge.edit_own_contest',
         'judge.edit_own_problem',

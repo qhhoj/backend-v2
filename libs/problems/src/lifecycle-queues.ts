@@ -1,7 +1,12 @@
 import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
-import { DAY_MS, GIB } from '@libs/common';
+import {
+  DAY_MS,
+  GIB,
+  JOB_RETENTION,
+  JOB_RETRY,
+  withinTimeout,
+} from '@libs/common';
 
 /** Longest a delete or restore waits for its follow-up job to reach Redis. */
 const LIFECYCLE_ENQUEUE_TIMEOUT_MS = 1000;

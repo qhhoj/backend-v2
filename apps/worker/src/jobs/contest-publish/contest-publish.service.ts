@@ -4,7 +4,7 @@ import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { hasPermission } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { REDIS, runCoalesced } from '@libs/common';
+import { InjectJob, JobProducer, REDIS, runCoalesced } from '@libs/common';
 import {
   CONTRIBUTION_POINTS_QUEUE,
   notifyContributionPoints,
@@ -13,7 +13,7 @@ import type { ContributionPointsJob } from '@libs/community';
 import { contestPhase } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
-import { notifyRescore, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { ProblemRescoreJob } from '@libs/judging';
 import {
   isEditorialReleased,
@@ -53,8 +53,8 @@ export class ContestPublishService {
 
   constructor(
     private readonly repository: ContestPublishRepository,
-    @InjectQueue(PROBLEM_RESCORE_QUEUE)
-    private readonly rescores: Queue<ProblemRescoreJob>,
+    @InjectJob(judgingJobs.problemRescore)
+    private readonly rescores: JobProducer<ProblemRescoreJob>,
     @InjectQueue(CONTRIBUTION_POINTS_QUEUE)
     private readonly contributions: Queue<ContributionPointsJob>,
     @Inject(REDIS) private readonly redis: Redis,
@@ -162,7 +162,7 @@ export class ContestPublishService {
   }
 
   private async queueFollowUps(problem: Problem): Promise<void> {
-    await notifyRescore(this.rescores, uuidStr(problem._id), this.logger);
+    await this.rescores.enqueue({ problemId: uuidStr(problem._id) });
     if (problem.suggester)
       await notifyContributionPoints(
         this.contributions,

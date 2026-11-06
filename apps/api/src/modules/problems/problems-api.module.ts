@@ -1,8 +1,8 @@
 import { BullModule } from '@nestjs/bullmq';
 import { forwardRef, Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
-import { RateLimitService } from '@libs/common';
-import { ExternalJudgeApiModule, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import { JobsModule, RateLimitService } from '@libs/common';
+import { ExternalJudgeApiModule, judgingJobs } from '@libs/judging';
 import {
   PACKAGE_QUEUE,
   PolygonApiModule,
@@ -113,12 +113,12 @@ const repositories = [
     BullModule.registerQueue(
       { name: PDF_QUEUE },
       { name: POLYGON_QUEUE },
-      { name: PROBLEM_RESCORE_QUEUE },
       { name: PACKAGE_QUEUE },
       { name: PROBLEM_PURGE_QUEUE },
       { name: PROBLEM_SOLVERS_QUEUE },
       { name: SOURCE_CHECK_QUEUE },
     ),
+    JobsModule.register(judgingJobs.problemRescore),
   ],
   controllers: [
     ProblemImportsController,

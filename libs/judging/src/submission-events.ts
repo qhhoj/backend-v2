@@ -1,6 +1,6 @@
 import { isUuid, SUBMISSION_STATUSES } from '@libs/database';
 import type { SubmissionStatus } from '@libs/database';
-import type { SubmissionGradedJob } from './queues';
+import type { SubmissionGradedJob } from './jobs';
 
 /** Redis pub/sub, best effort and unordered across processes (a page treats the stored state as truth on reconnect): every writer of a submission status publishes here (the bridge for judge packets and requeues, the api for submit/rejudge/abort/reject); the api fans it out over SSE. */
 export const SUBMISSION_EVENTS_CHANNEL = 'submission-events';

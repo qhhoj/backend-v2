@@ -1,6 +1,6 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
@@ -58,7 +58,7 @@ describe('submission actions', () => {
   beforeAll(async () => {
     api = await setupApiTest();
     catalog = await seedCatalog(api);
-    graded = api.app.get(getQueueToken(SUBMISSION_GRADED_QUEUE));
+    graded = api.app.get(getQueueToken(judgingJobs.graded.queue));
     const roles: Array<[string, object]> = [
       ['owner', {}],
       ['other', {}],

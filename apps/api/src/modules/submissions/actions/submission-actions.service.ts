@@ -1,8 +1,6 @@
-import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
-import { AppError, issueError } from '@libs/common';
+import { AppError, InjectJob, issueError, JobProducer } from '@libs/common';
 import {
   SUBMISSION_PRIORITY,
   UNFINISHED_STATUSES,
@@ -12,8 +10,7 @@ import type { Problem, Submission } from '@libs/database';
 import {
   BridgeCommandsService,
   gradedJobOf,
-  notifyGraded,
-  SUBMISSION_GRADED_QUEUE,
+  judgingJobs,
   submissionEvent,
   SubmissionEventsService,
 } from '@libs/judging';
@@ -87,8 +84,6 @@ function assertProblemLive(problem: { deletedAt?: Date | null }): void {
 
 @Injectable()
 export class SubmissionActionsService {
-  private readonly logger = new Logger(SubmissionActionsService.name);
-
   constructor(
     private readonly submissions: SubmissionsRepository,
     private readonly problems: ProblemsService,
@@ -96,8 +91,8 @@ export class SubmissionActionsService {
     private readonly commands: BridgeCommandsService,
     private readonly events: SubmissionEventsService,
     private readonly revisions: RevisionsRepository,
-    @InjectQueue(SUBMISSION_GRADED_QUEUE)
-    private readonly graded: Queue<SubmissionGradedJob>,
+    @InjectJob(judgingJobs.graded)
+    private readonly graded: JobProducer<SubmissionGradedJob>,
   ) {}
 
   /** Legacy `abort_submission`: the owner (unless an admin rejudged it) or `judge.abort_any_submission`. Queued → AB here; running → the bridge terminates it; finished → nothing. */
@@ -266,7 +261,7 @@ export class SubmissionActionsService {
     });
   }
 
-  private notifyGraded(submission: Submission): Promise<void> {
-    return notifyGraded(this.graded, gradedJobOf(submission), this.logger);
+  private notifyGraded(submission: Submission): Promise<boolean> {
+    return this.graded.enqueue(gradedJobOf(submission));
   }
 }

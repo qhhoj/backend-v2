@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import type { Queue } from 'bullmq';
 import { sha256 } from '@libs/auth';
-import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { Outcome, Status } from '@libs/judge-proto';
 import type { AssignmentRef, Case } from '@libs/judge-proto';
@@ -144,7 +144,7 @@ describe('judging across the api and the bridge', () => {
       .useValue({ ...FAST_TIMINGS, resyncMs: 300 })
       .compile();
     await bridge.init();
-    graded = api.app.get(getQueueToken(SUBMISSION_GRADED_QUEUE));
+    graded = api.app.get(getQueueToken(judgingJobs.graded.queue));
     judge = await FakeJudge.online(bridge.get(JudgeLinkServer).port(), {
       name: 'judge-x',
       key: KEY,

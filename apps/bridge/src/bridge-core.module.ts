@@ -1,11 +1,7 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { EnvModule, QueueModule, RedisModule } from '@libs/common';
+import { EnvModule, JobsModule, QueueModule, RedisModule } from '@libs/common';
 import { DatabaseModule } from '@libs/database';
-import {
-  SUBMISSION_GRADED_QUEUE,
-  SubmissionEventsService,
-} from '@libs/judging';
+import { judgingJobs, SubmissionEventsService } from '@libs/judging';
 import { BRIDGE_TIMINGS, DEFAULT_BRIDGE_TIMINGS } from './bridge-timings';
 import { DispatcherService } from './dispatch/dispatcher.service';
 import { GRACE_CLOCK, TIMER_GRACE_CLOCK } from './dispatch/grace-clock';
@@ -29,7 +25,7 @@ import { SubmissionsRepository } from './submissions/submissions.repository';
     DatabaseModule,
     QueueModule,
     RedisModule,
-    BullModule.registerQueue({ name: SUBMISSION_GRADED_QUEUE }),
+    JobsModule.register(judgingJobs.graded),
   ],
   providers: [
     { provide: BRIDGE_TIMINGS, useValue: DEFAULT_BRIDGE_TIMINGS },

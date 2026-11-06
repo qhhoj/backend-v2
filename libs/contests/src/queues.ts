@@ -1,10 +1,14 @@
 import type { Logger } from '@nestjs/common';
 import type { JobType, Queue } from 'bullmq';
 import type { SubmissionResult } from '@libs/database';
-import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
+import {
+  JOB_RETENTION,
+  JOB_RETRY,
+  MINUTE_MS,
+  withinTimeout,
+} from '@libs/common';
 import { finalSubmissionFormat } from './formats/final-submission';
 import type { FormatName } from './formats/format';
-import { MINUTE_MS } from '@libs/common';
 
 export const CONTEST_RESCORE_QUEUE = 'contest-rescore';
 export const CONTEST_RESCORE_JOB = 'rescore';

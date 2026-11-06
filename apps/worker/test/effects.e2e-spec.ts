@@ -1,5 +1,5 @@
 import type Redis from 'ioredis';
-import { REDIS } from '@libs/common';
+import { JobProducer, REDIS } from '@libs/common';
 import { CONTEST_RATING_QUEUE, rankingCacheKeys } from '@libs/contests';
 import type { ContestRatingJob } from '@libs/contests';
 import { newId, OrganizationJudgingCharge, toUuid } from '@libs/database';
@@ -28,14 +28,7 @@ import { Logger } from '@nestjs/common';
 import { Worker } from 'bullmq';
 import type { Queue } from 'bullmq';
 import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
-import {
-  EFFECTS_SWEEP_JOB,
-  EFFECTS_SWEEP_QUEUE,
-  gradedJobOf,
-  SUBMISSION_GRADED_JOB,
-  SUBMISSION_GRADED_QUEUE,
-  enqueueGraded,
-} from '@libs/judging';
+import { gradedJobOf, judgingJobs } from '@libs/judging';
 import { EffectsSweepProcessor } from '../src/jobs/effects-sweep/effects-sweep.processor';
 import {
   EffectsSweepService,
@@ -622,7 +615,9 @@ afterAll(() => worker.teardown());
     beforeAll(() => {
       sweeps = worker.module.get(EffectsSweepService);
       redis = worker.module.get<Redis>(REDIS);
-      queue = worker.module.get<Queue>(getQueueToken(EFFECTS_SWEEP_QUEUE));
+      queue = worker.module.get<Queue>(
+        getQueueToken(judgingJobs.effectsSweep.queue),
+      );
     });
 
     it('keeps one 10-minute schedule however many worker processes boot', async () => {
@@ -817,7 +812,7 @@ afterAll(() => worker.teardown());
         (await worker.submissions.findById(id, { effectsDueAt: 1 }).lean())!
           .effectsDueAt;
       const graded = worker.module.get<Queue>(
-        getQueueToken(SUBMISSION_GRADED_QUEUE),
+        getQueueToken(judgingJobs.graded.queue),
       );
       const failing = await dueRow(40);
       const queuedBehind = await dueRow(20);
@@ -825,7 +820,7 @@ afterAll(() => worker.teardown());
       try {
         // a job queued 30 minutes ago still waits: rows stamped after it may be behind it
         await graded.add(
-          SUBMISSION_GRADED_JOB,
+          judgingJobs.graded.name,
           gradedJobOf(failing.submission),
           {
             timestamp: now - 30 * MINUTE,
@@ -948,13 +943,20 @@ afterAll(() => worker.teardown());
         return { users: 0, problems: 0, repaired: 0 };
       };
       const spy = jest.spyOn(sweeps, 'sweep').mockImplementation(slowSweep);
-      const secondProcess = new Worker(EFFECTS_SWEEP_QUEUE, slowSweep, {
-        connection: { url: TEST_REDIS_URL },
-        concurrency: 1,
-      });
+      const secondProcess = new Worker(
+        judgingJobs.effectsSweep.queue,
+        slowSweep,
+        {
+          connection: { url: TEST_REDIS_URL },
+          concurrency: 1,
+        },
+      );
       try {
         await queue.addBulk(
-          [1, 2, 3, 4].map(() => ({ name: EFFECTS_SWEEP_JOB, data: {} })),
+          [1, 2, 3, 4].map(() => ({
+            name: judgingJobs.effectsSweep.name,
+            data: {},
+          })),
         );
         await waitUntil(() => finished >= 4, 10_000);
         expect(finished).toBe(4);
@@ -1111,14 +1113,16 @@ afterAll(() => worker.teardown());
 
     it('applies a queued graded job: the user of a public problem and the problem', async () => {
       const queue = worker.module.get<Queue<SubmissionGradedJob>>(
-        getQueueToken(SUBMISSION_GRADED_QUEUE),
+        getQueueToken(judgingJobs.graded.queue),
       );
       const user = await seedUser(worker);
       const problem = await seedProblem(worker, { points: 1200 });
       const submission = await seedGraded(worker, user._id, problem._id, {
         points: 1200,
       });
-      await enqueueGraded(queue, gradedJobOf(submission));
+      await new JobProducer(judgingJobs.graded, queue).add(
+        gradedJobOf(submission),
+      );
       await waitUntil(async () => (await statsOf(problem._id)).userCount === 1);
       expect(await statsOf(problem._id)).toMatchObject({ acRate: 100 });
       await waitUntil(async () => (await pointsOf(user._id)).points === 1200);
@@ -1127,7 +1131,7 @@ afterAll(() => worker.teardown());
 
     it('retries a failed job after a partial run and lands the same state, with nothing left failed', async () => {
       const queue = worker.module.get<Queue<SubmissionGradedJob>>(
-        getQueueToken(SUBMISSION_GRADED_QUEUE),
+        getQueueToken(judgingJobs.graded.queue),
       );
       const user = await seedUser(worker);
       const problem = await seedProblem(worker, { points: 900 });
@@ -1142,7 +1146,9 @@ afterAll(() => worker.teardown());
           await recomputeUser(userId);
           throw new Error('mongo hiccup');
         });
-      await enqueueGraded(queue, gradedJobOf(submission));
+      await new JobProducer(judgingJobs.graded, queue).add(
+        gradedJobOf(submission),
+      );
       await waitUntil(async () => (await queue.getDelayed()).length === 1);
       failing.mockRestore();
       const [delayed] = await queue.getDelayed();
@@ -1377,10 +1383,12 @@ afterAll(() => worker.teardown());
 
     it('charges a queued graded job once, even when the job is applied again', async () => {
       const queue = worker.module.get<Queue<SubmissionGradedJob>>(
-        getQueueToken(SUBMISSION_GRADED_QUEUE),
+        getQueueToken(judgingJobs.graded.queue),
       );
       const submission = await seedOrganizationRun();
-      await enqueueGraded(queue, gradedJobOf(submission));
+      await new JobProducer(judgingJobs.graded, queue).add(
+        gradedJobOf(submission),
+      );
       await waitUntil(
         async () => (await msChargedFor(submission._id)).length > 0,
       );

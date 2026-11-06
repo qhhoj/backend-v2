@@ -7,7 +7,7 @@ import {
 import { Logger } from '@nestjs/common';
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
-import { JOB_RETRY } from '@libs/judging';
+import { JOB_RETRY } from '@libs/common';
 import {
   POLYGON_AUTOSYNC_JOB,
   POLYGON_AUTOSYNC_PATTERN,

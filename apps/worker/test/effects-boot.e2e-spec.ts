@@ -1,9 +1,10 @@
+import { JobProducer } from '@libs/common';
 import { Queue } from 'bullmq';
 import { MongoClient } from 'mongodb';
 import type { UUID } from 'mongodb';
 import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import { newId, toUuid } from '@libs/database';
-import { enqueueGraded, SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
@@ -42,10 +43,14 @@ describe('submission effects at boot', () => {
         caseTotal: 1,
       });
     await client.close();
-    const queue = new Queue<SubmissionGradedJob>(SUBMISSION_GRADED_QUEUE, {
+    const queue = new Queue<SubmissionGradedJob>(judgingJobs.graded.queue, {
       connection: { url: TEST_REDIS_URL },
     });
-    await enqueueGraded(queue, { submissionId, userId, problemId });
+    await new JobProducer(judgingJobs.graded, queue).add({
+      submissionId,
+      userId,
+      problemId,
+    });
     await queue.close();
   };
 
@@ -60,7 +65,7 @@ describe('submission effects at boot', () => {
         (await worker.problems.findById(problemId, { userCount: 1 }).lean())
           ?.userCount === 1,
     );
-    const queue = new Queue(SUBMISSION_GRADED_QUEUE, {
+    const queue = new Queue(judgingJobs.graded.queue, {
       connection: { url: TEST_REDIS_URL },
     });
     // waitUntil's 5 s is shorter than the 10 s first backoff: a failed first attempt would still sit in `delayed`.

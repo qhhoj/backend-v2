@@ -1,6 +1,6 @@
 import type { Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
-import { withinTimeout } from './within-timeout';
+import { withinTimeout } from '@libs/common';
 
 /** Longest a packet or request waits for an event to reach Redis. */
 export const EVENT_PUBLISH_TIMEOUT_MS = 1000;

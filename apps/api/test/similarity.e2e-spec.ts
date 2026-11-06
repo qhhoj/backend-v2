@@ -19,7 +19,7 @@ import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { SIMILARITY_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { SimilarityJob } from '@libs/judging';
 import type { SimilarityRunResponse } from '../src/modules/similarity/core/dto/similarity-run.response';
 
@@ -230,7 +230,7 @@ afterAll(() => api.teardown());
 
     beforeAll(async () => {
       catalog = await seedCatalog(api);
-      queue = api.app.get(getQueueToken(SIMILARITY_QUEUE));
+      queue = api.app.get(getQueueToken(judgingJobs.similarity.queue));
       for (const [name, permissions] of Object.entries(roles)) {
         users[name] = await createUserWith(api, name, { permissions });
         sessions[name] = await loginAs(api, users[name]._id);

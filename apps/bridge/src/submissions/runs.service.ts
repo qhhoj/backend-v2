@@ -1,6 +1,5 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { InjectJob, JobProducer } from '@libs/common';
 import type {
   DeferralReason,
   SubmissionCase,
@@ -8,8 +7,7 @@ import type {
 } from '@libs/database';
 import {
   gradedJobId,
-  notifyGraded,
-  SUBMISSION_GRADED_QUEUE,
+  judgingJobs,
   submissionEvent,
   SubmissionEventsService,
 } from '@libs/judging';
@@ -65,8 +63,8 @@ export class RunsService {
   constructor(
     private readonly submissions: SubmissionsRepository,
     private readonly writes: RunWritesRepository,
-    @InjectQueue(SUBMISSION_GRADED_QUEUE)
-    private readonly graded: Queue<SubmissionGradedJob>,
+    @InjectJob(judgingJobs.graded)
+    private readonly graded: JobProducer<SubmissionGradedJob>,
     private readonly events: SubmissionEventsService,
     private readonly dataWrites: ProblemDataWrites,
   ) {}
@@ -289,12 +287,10 @@ export class RunsService {
     const subject = await this.submissions.gradedSubjectOf(
       key.ref.submissionId,
     );
-    await notifyGraded(
-      this.graded,
-      subject,
-      this.logger,
-      gradedJobId(key.ref.submissionId, key.ref.generation),
-    );
+    if (subject)
+      await this.graded.enqueue(subject, {
+        jobId: gradedJobId(key.ref.submissionId, key.ref.generation),
+      });
   }
 
   private requeued(submissionId: string): void {
@@ -315,7 +311,7 @@ export class RunsService {
       generation === null
         ? undefined
         : gradedJobId(job.submissionId, generation);
-    await notifyGraded(this.graded, job, this.logger, jobId);
+    await this.graded.enqueue(job, { jobId });
     this.publish(job, 'done', status);
   }
 

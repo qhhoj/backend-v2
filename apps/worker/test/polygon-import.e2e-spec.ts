@@ -14,7 +14,7 @@ import type { Model } from 'mongoose';
 import { parse } from 'yaml';
 import { waitUntil } from '@libs/common/testing';
 import { Group, newId, Problem, Revision, uuidStr } from '@libs/database';
-import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import { judgingJobs } from '@libs/judging';
 import type { ProblemRescoreJob } from '@libs/judging';
 import {
   listZipEntries,
@@ -1097,7 +1097,7 @@ describe('PolygonImportProcessor', () => {
 
   it('rescores the problem after an update only, so new points reach its submissions', async () => {
     const queue = worker.module.get<Queue<ProblemRescoreJob>>(
-      getQueueToken(PROBLEM_RESCORE_QUEUE),
+      getQueueToken(judgingJobs.problemRescore.queue),
     );
     const queued = async () => {
       const counts = await queue.getJobCounts('paused', 'waiting', 'delayed');
