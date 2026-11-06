@@ -20,6 +20,7 @@ import { OrganizationProblemRules } from './organization-problem-rules.service';
 import { ProblemEditPolicyService } from './problem-edit-policy.service';
 import {
   assertCodeAvailable,
+  assertNoDataDirectory,
   toFields,
   withCodeTaken,
   withoutRenderedHtml,
@@ -127,6 +128,24 @@ function renderStatementsInto(
   if (isMarkupFlipped)
     fields.translations = rerenderedTranslations(translations, mode);
   return true;
+}
+
+/** Stable code (and log prefix) of a rename whose save failed and whose data could not be put back: the problem cannot be judged until an operator moves the directory to the stored code. */
+export const RENAME_DATA_STRANDED = 'rename_data_stranded';
+
+/** The 500 the editor sees, naming the stored code (null: it could not be read) and where the data is. */
+function strandedDataError(
+  oldCode: string,
+  movedCode: string,
+  storedCode: string | null,
+): AppError {
+  return new AppError(
+    RENAME_DATA_STRANDED,
+    500,
+    `${RENAME_DATA_STRANDED}: renaming problem ${oldCode} to ${movedCode} failed and its test data could not be moved back. ` +
+      `Stored code: ${storedCode ?? 'unknown (the read failed)'}; test data directory: <problem data root>/${movedCode}/. ` +
+      'The problem cannot be judged until that directory is renamed to the stored code.',
+  );
 }
 
 @Injectable()
@@ -279,49 +298,47 @@ export class ProblemEditingService {
     return { updated, isChanged };
   }
 
-  /** Saves and reads the problem back. A code change moves the data directory first, under the data locks of both codes (see `withRenameLocks`), then saves: a failed move saves nothing and a failed save moves the directory back, so the directory judges read always follows the stored code. */
+  /** Saves and reads the problem back. A code change moves the data directory first, under the data locks of both codes (see `withRenameLocks`), then saves: a taken or failed move saves nothing and a failed save puts the directory back where the stored code says, so judges always find the data at the stored code. */
   private async save(
     principal: Principal,
     original: ProblemDocument,
     fields: ProblemFields,
   ): Promise<ProblemDocument> {
     const newCode = fields.code;
-    if (newCode === undefined || newCode === original.code)
-      return this.saveAndReload(principal, original, fields);
-    return this.dataFiles.withRenameLocks(original.code, newCode, async () => {
-      await this.dataFiles.rename(original.code, newCode);
-      try {
-        return await this.saveAndReload(principal, original, fields);
-      } catch (error) {
-        await this.moveDataDirectoryBack(newCode, original.code);
-        throw error;
-      }
-    });
-  }
-
-  private async saveAndReload(
-    principal: Principal,
-    original: ProblemDocument,
-    fields: ProblemFields,
-  ): Promise<ProblemDocument> {
-    await this.saveCharged(principal, original, fields);
+    if (newCode !== undefined && newCode !== original.code)
+      await this.dataFiles.withRenameLocks(original.code, newCode, async () => {
+        await assertNoDataDirectory(this.dataFiles, newCode);
+        await this.dataFiles.rename(original.code, newCode);
+        try {
+          await this.saveCharged(principal, original, fields);
+        } catch (error) {
+          await this.restoreDataDirectory(original, newCode, error);
+          throw error;
+        }
+      });
+    else await this.saveCharged(principal, original, fields);
     const updated = await this.repository.findById(original._id);
     if (!updated) throw new AppError('not_found', 404, 'No such problem');
     return updated;
   }
 
-  /** Both the save and this move failed: the stored code no longer names the directory, which the operator must move by hand. */
-  private async moveDataDirectoryBack(
+  /** A save that threw may still have landed (a lost reply): the directory goes back only while the stored code is still the old one. When it cannot be made to match the stored code, the edit fails loudly (`strandedDataError`). */
+  private async restoreDataDirectory(
+    original: ProblemDocument,
     movedCode: string,
-    storedCode: string,
+    saveError: unknown,
   ): Promise<void> {
+    let storedCode: string | null = null;
     try {
-      await this.dataFiles.rename(movedCode, storedCode);
-    } catch (error) {
+      storedCode = (await this.repository.findById(original._id))?.code ?? null;
+      if (storedCode !== original.code) return;
+      await this.dataFiles.rename(movedCode, original.code);
+    } catch (restoreError) {
+      const error = strandedDataError(original.code, movedCode, storedCode);
       this.logger.error(
-        `ATTENTION: problem ${storedCode} cannot be judged: its rename to ${movedCode} was not saved and moving its data back failed; move ${movedCode}/ to ${storedCode}/ by hand`,
-        error,
+        `${error.message} Save: ${(saveError as Error).message}; move back: ${(restoreError as Error).message}`,
       );
+      throw error;
     }
   }
 
