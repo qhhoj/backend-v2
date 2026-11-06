@@ -113,6 +113,19 @@ describe('problem package build', () => {
     limits.maxBytes = DEFAULT_PACKAGE_LIMITS.maxBytes;
   });
 
+  it('rebuilds under a new key once a PDF is cached after a build', async () => {
+    const problem = await seedPackageProblem('pkg_late_pdf');
+    const before = await service.build({ code: problem.code, key: 'ignored' });
+    writeFileSync(
+      join(worker.pdfCacheRoot, `${problem.code}.vi.pdf`),
+      '%PDF-2',
+    );
+    const after = await service.build({ code: problem.code, key: 'ignored' });
+    expect(after).not.toBe(before);
+    const files = await readZip(cache.pathOf(problem.code, after));
+    expect(Object.keys(files)).toContain('statement.vi.pdf');
+  });
+
   it('puts everything the problem consists of into one zip', async () => {
     const problem = await seedPackageProblem('pkg_sum');
     const key = await service.build({ code: problem.code, key: 'ignored' });

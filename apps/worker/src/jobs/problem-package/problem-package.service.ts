@@ -2,7 +2,7 @@ import { stat } from 'node:fs/promises';
 import { Inject, Injectable } from '@nestjs/common';
 import { assertRealPathInside, ENV, StorageService } from '@libs/common';
 import type { Env } from '@libs/common';
-import { DATA_FILE_KINDS, STATEMENT_LANGUAGES } from '@libs/database';
+import { DATA_FILE_KINDS } from '@libs/database';
 import type { DataFileKind, Problem } from '@libs/database';
 import {
   buildManifest,
@@ -14,7 +14,7 @@ import {
   PdfCacheService,
   ProblemDataFilesService,
 } from '@libs/problems';
-import type { ProblemPackageJob } from '@libs/problems';
+import type { CachedPdf, ProblemPackageJob } from '@libs/problems';
 import { PACKAGE_LIMITS, writePackageZip } from './package-zip';
 import type { PackageEntry, PackageLimits } from './package-zip';
 import { ProblemPackageRepository } from './problem-package.repository';
@@ -49,9 +49,10 @@ export class ProblemPackageService {
   async build(job: ProblemPackageJob): Promise<string> {
     const problem = await this.repository.findByCode(job.code);
     if (!problem) throw new Error('problem not found');
-    const key = packageKey(problem);
+    const pdfs = await this.pdfCache.listing(problem.code);
+    const key = packageKey(problem, pdfs);
     if (await this.packages.has(problem.code, key)) return key;
-    const entries = await this.entriesOf(problem);
+    const entries = await this.entriesOf(problem, pdfs);
     await this.packages.write(problem.code, key, (temporaryPath) =>
       writePackageZip(entries, {
         path: temporaryPath,
@@ -66,7 +67,10 @@ export class ProblemPackageService {
     return this.packages.deleteOlderThan(PACKAGE_MAX_AGE_MS);
   }
 
-  private async entriesOf(problem: Problem): Promise<PackageEntry[]> {
+  private async entriesOf(
+    problem: Problem,
+    pdfs: readonly CachedPdf[],
+  ): Promise<PackageEntry[]> {
     return [
       {
         name: 'package.json',
@@ -77,7 +81,11 @@ export class ProblemPackageService {
         text,
       })),
       ...(await this.dataEntries(problem)),
-      ...(await this.pdfEntries(problem.code)),
+      ...pdfs.map(({ language, path, bytes }) => ({
+        name: `statement.${language}.pdf`,
+        path,
+        bytes,
+      })),
       ...(await this.uploadEntries(problem)),
     ];
   }
@@ -97,18 +105,6 @@ export class ProblemPackageService {
       const path = this.dataFiles.pathOf(problem.code, file);
       const bytes = await sizeInside(this.env.problemDataRoot, path);
       if (bytes !== null) entries.push({ name, path, bytes });
-    }
-    return entries;
-  }
-
-  /** The rendered PDF statements already in the cache; the build never renders. */
-  private async pdfEntries(code: string): Promise<PackageEntry[]> {
-    const entries: PackageEntry[] = [];
-    for (const language of STATEMENT_LANGUAGES) {
-      const path = this.pdfCache.pathOf(code, language);
-      const bytes = await sizeInside(this.env.pdfCacheRoot, path);
-      if (bytes !== null)
-        entries.push({ name: `statement.${language}.pdf`, path, bytes });
     }
     return entries;
   }

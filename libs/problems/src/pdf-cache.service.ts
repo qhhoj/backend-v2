@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { mkdir, open, rename, rm } from 'node:fs/promises';
+import { mkdir, open, rename, rm, stat } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { assertRealPathInside, ENV, SAFE_SEGMENT } from '@libs/common';
@@ -9,6 +9,14 @@ import { PROBLEM_CODE_PATTERN, STATEMENT_LANGUAGES } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
 
 const SCRATCH_DIRECTORY = '.tmp';
+
+/** A cached PDF as one read of the cache saw it. */
+export interface CachedPdf {
+  language: StatementLanguage;
+  path: string;
+  bytes: number;
+  mtimeMs: number;
+}
 
 /** `<PDF_CACHE_ROOT>/<code>.<lang>.pdf`, written by the worker and served by the api; a statement change or code rename deletes every language of the problem. */
 @Injectable()
@@ -38,6 +46,22 @@ export class PdfCacheService {
       if (error.code === 'ENOENT') return null;
       throw error;
     });
+  }
+
+  /** The PDFs the cache holds for the problem right now, in language order: the one read the package build and the package key both use. */
+  async listing(code: string): Promise<CachedPdf[]> {
+    const found: CachedPdf[] = [];
+    for (const language of STATEMENT_LANGUAGES) {
+      const path = this.pathOf(code, language);
+      await assertRealPathInside(this.root, path);
+      const info = await stat(path).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      });
+      if (info)
+        found.push({ language, path, bytes: info.size, mtimeMs: info.mtimeMs });
+    }
+    return found;
   }
 
   async delete(code: string): Promise<void> {

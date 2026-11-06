@@ -9,6 +9,7 @@ import {
   PACKAGE_QUEUE,
   PACKAGE_TOO_LARGE_REASON,
   PackageCacheService,
+  PdfCacheService,
   packageJobId,
   packageKey,
 } from '@libs/problems';
@@ -36,6 +37,7 @@ export class ProblemPackageService {
     private readonly policy: ProblemEditPolicyService,
     private readonly problems: ProblemsRepository,
     private readonly packages: PackageCacheService,
+    private readonly pdfCache: PdfCacheService,
     private readonly rateLimit: RateLimitService,
     @InjectQueue(PACKAGE_QUEUE)
     private readonly queue: Queue<ProblemPackageJob>,
@@ -100,7 +102,10 @@ export class ProblemPackageService {
     const visible = await this.policy.editableProblem(principal, code);
     const full =
       (await this.problems.findByCodeWithData(visible.code)) ?? visible;
-    return { code: full.code, key: packageKey(full) };
+    return {
+      code: full.code,
+      key: packageKey(full, await this.pdfCache.listing(full.code)),
+    };
   }
 
   /** A pending or active build is shared; a failed one is removed so this request tries again (an over-cap one stays a 409). */
