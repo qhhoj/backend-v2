@@ -7,6 +7,8 @@ import {
   FastifyAdapter,
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
+import { AppError } from './errors/app.error';
+import { errorEnvelope } from './errors/envelope';
 import { AppExceptionFilter } from './filters/exception.filter';
 import { ResponseInterceptor } from './interceptors/response.interceptor';
 import { validationPipe } from './pipes/validation.pipe';
@@ -74,22 +76,20 @@ export async function configureApp(app: NestFastifyApplication): Promise<void> {
   app
     .getHttpAdapter()
     .getInstance()
-    // A hook runs outside Nest's exception filter, so the error envelope is built by hand.
+    // A hook runs outside Nest's exception filter, so it renders the envelope itself.
     .addHook('preValidation', async (request, reply) => {
       if (isTooDeep(request.body))
-        await reply.status(400).send({
-          error: {
-            code: 'validation_failed',
-            message: 'Request body is nested too deeply',
-            issues: [
-              {
-                field: '',
-                code: 'validation_failed',
-                message: 'Request body is nested too deeply',
-              },
-            ],
-          },
-        });
+        await reply
+          .status(400)
+          .send(
+            errorEnvelope(
+              new AppError(
+                'validation_failed',
+                400,
+                'Request body is nested too deeply',
+              ),
+            ),
+          );
     });
   app
     .getHttpAdapter()

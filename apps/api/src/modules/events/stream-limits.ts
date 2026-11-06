@@ -1,3 +1,4 @@
+import { MINUTE_MS } from '@libs/common';
 /** Live event streams, counted per api process. */
 export interface StreamLimits {
   /** Open streams per signed-in user: one `user` stream per tab plus a submission, ticket or contest stream on some pages. */
@@ -40,5 +41,5 @@ export const DEFAULT_STREAM_LIMITS: StreamLimits = {
   ticketBacklog: 1000,
   feedBacklog: 1000,
   heartbeatMs: 15_000,
-  recheckMs: 60_000,
+  recheckMs: MINUTE_MS,
 };

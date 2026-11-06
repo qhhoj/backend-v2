@@ -1,6 +1,7 @@
 import { realpath } from 'node:fs/promises';
-import { join, sep } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isInside } from '@libs/common';
 
 const realpathOrNull = (path: string) => realpath(path).catch(() => null);
 
@@ -20,11 +21,7 @@ export async function isAllowedRequest(
   if (requested === null) return false;
   for (const allowedPath of allowedPaths) {
     const real = await realpathOrNull(allowedPath);
-    if (
-      real !== null &&
-      (requested === real || requested.startsWith(real + sep))
-    )
-      return true;
+    if (real !== null && isInside(real, requested)) return true;
   }
   return false;
 }

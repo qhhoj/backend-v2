@@ -1,4 +1,4 @@
-import { AppError } from '@libs/common';
+import { AppError, issueError } from '@libs/common';
 
 /** A refusal whose `error.issues[0].code` repeats the error code, so clients branch on one field. */
 export function refusal(
@@ -6,9 +6,7 @@ export function refusal(
   status: number,
   message: string,
 ): AppError {
-  return new AppError(code, status, message, undefined, undefined, {
-    issues: [{ field: 'problem', code, message }],
-  });
+  return issueError(code, status, { field: 'problem', code, message });
 }
 
 /** Runs `action`; an `AppError` raised without issues (policy 403/404, rate limit 429) leaves with one, keeping status and headers. */

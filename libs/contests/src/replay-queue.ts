@@ -1,6 +1,7 @@
 import type { Logger } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
 import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
+import { MINUTE_MS } from '@libs/common';
 import {
   CONTEST_ENQUEUE_TIMEOUT_MS,
   contestActionState,
@@ -10,7 +11,7 @@ import {
 export const CONTEST_REPLAY_QUEUE = 'contest-replay';
 export const CONTEST_REPLAY_JOB = 'build';
 /** The judge keeps working after the end; a replay built earlier would miss submissions. No replay is built or served before the end plus this. */
-export const REPLAY_SETTLE_MS = 10 * 60_000;
+export const REPLAY_SETTLE_MS = 10 * MINUTE_MS;
 /** Rebuild a contest's replay from its live participations' submissions. No `jobId`, like the rescore. */
 export interface ContestReplayJob {
   contestId: string;

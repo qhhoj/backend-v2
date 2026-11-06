@@ -9,7 +9,7 @@ import { newId } from '@libs/database';
 import {
   listZipEntries,
   POLYGON_JOB_RETRY,
-  POLYGON_PACKAGE_MAX_BYTES,
+  ARCHIVE_MAX_BYTES,
   POLYGON_SYNC_PERMISSION,
   POLYGON_QUEUE,
   ProblemDataFilesService,
@@ -75,7 +75,7 @@ export class ProblemImportsService {
     const jobId = newId();
     const packagePath = await this.dataFiles.importPackagePath(jobId);
     try {
-      await saveMultipartFile(request, POLYGON_PACKAGE_MAX_BYTES, packagePath);
+      await saveMultipartFile(request, ARCHIVE_MAX_BYTES, packagePath);
       await this.assertPackage(packagePath);
       await this.assertStorage(auth, job, packagePath);
       await this.enqueue(auth, jobId, job);

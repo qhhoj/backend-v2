@@ -8,7 +8,12 @@ import {
   notifyAnnouncementFanout,
 } from '@libs/community';
 import type { NotificationFanoutJob } from '@libs/community';
-import { contestPhase, isLabelShaped, problemLabel } from '@libs/contests';
+import {
+  contestPhase,
+  isLabelShaped,
+  orderedProblems,
+  problemLabel,
+} from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
 import type { ProblemLinks } from '@libs/render';
@@ -181,9 +186,7 @@ export class ContestAnnouncementsService {
   private async problemHrefs(
     contest: ContestDocument,
   ): Promise<Record<string, string>> {
-    const ordered = [...contest.problems].sort(
-      (left, right) => left.order - right.order,
-    );
+    const ordered = orderedProblems(contest);
     const summaries = await this.problems.findSummaries(
       ordered.map((entry) => uuidStr(entry.problem)),
     );

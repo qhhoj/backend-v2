@@ -3,7 +3,6 @@ import {
   generateServiceKey,
   hasPermission,
   IntegrationClientsRepository,
-  parseCidr,
   PrincipalService,
   UsersRepository,
 } from '@libs/auth';
@@ -12,6 +11,7 @@ import {
   AppError,
   invalidField,
   Paginated,
+  parseRange,
   RateLimitService,
   unique,
 } from '@libs/common';
@@ -139,7 +139,7 @@ export class IntegrationClientsService {
 
 function assertCidrs(cidrs: readonly string[]): void {
   for (const cidr of cidrs)
-    if (!parseCidr(cidr))
+    if (!parseRange(cidr, { prefix: 'required' }))
       throw invalidField('allowedCidrs', `Not a CIDR block: ${cidr}`);
 }
 

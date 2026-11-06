@@ -10,7 +10,6 @@ export * from './totp/totp';
 export * from './token/api-token';
 export * from './token/password-reset-token';
 export * from './token/service-key';
-export * from './token/cidr';
 export * from './integration/integration-clients.repository';
 export * from './guards/service-client';
 export * from './session/session.service';

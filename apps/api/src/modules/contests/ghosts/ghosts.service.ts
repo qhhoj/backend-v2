@@ -8,6 +8,7 @@ import {
   contestPhase,
   currentGhostGap,
   notifyReplayBuild,
+  orderedProblems,
   replayDelayMs,
 } from '@libs/contests';
 import type { ContestReplayJob, GhostInput } from '@libs/contests';
@@ -141,9 +142,9 @@ export class GhostsService {
 
   /** The contest's problems in order, with their codes (the CSV's columns). A problem with no summary falls back to its id. */
   private async columnsOf(contest: ContestDocument): Promise<ProblemColumn[]> {
-    const ordered = [...contest.problems]
-      .sort((left, right) => left.order - right.order)
-      .map((entry) => uuidStr(entry.problem));
+    const ordered = orderedProblems(contest).map((entry) =>
+      uuidStr(entry.problem),
+    );
     const codes = new Map(
       (await this.problems.findSummaries(ordered)).map((problem) => [
         uuidStr(problem._id),

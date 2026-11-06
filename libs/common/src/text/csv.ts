@@ -12,7 +12,7 @@ export interface CsvLimits {
 const FORMULA_START = /^\s*[=+\-@]|^[\t\r]/;
 
 /** RFC 4180 quoting. */
-export const csvQuote = (text: string): string =>
+const csvQuote = (text: string): string =>
   /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 
 /** One CSV cell: a text cell starting with a formula character gets a `'` before the quoting; numbers and booleans are written as they are, null as empty. */
@@ -31,7 +31,7 @@ export const writeCsv = (
   { bom = false }: { bom?: boolean } = {},
 ): string => `${bom ? BYTE_ORDER_MARK : ''}${rows.map(csvLine).join('')}`;
 
-/** Fields of every record; quoted fields may hold commas and quotes (""); a newline is lexed but later refused as a control character. */
+/** Fields of every record; quoted fields may hold commas and quotes (""). */
 class CsvRecordReader {
   private readonly finishedRecords: string[][] = [];
   private record: string[] = [];

@@ -4,6 +4,7 @@ import {
   chunkEvents,
   ghostReplays,
   mergeEvents,
+  orderedProblems,
   REPLAY_FORMAT_VERSION,
   REPLAY_MAX_EVENTS,
   replayEvents,
@@ -142,12 +143,6 @@ export class ContestReplayService {
     );
   }
 
-  private orderedProblems(contest: ScoringContest) {
-    return [...contest.problems].sort(
-      (left, right) => left.order - right.order,
-    );
-  }
-
   private headOf(contest: ScoringContest, build: ReplayBuild): ReplayHeadInput {
     return {
       _id: build.contestId,
@@ -160,7 +155,7 @@ export class ContestReplayService {
         participationId: uuidStr(row._id),
         userId: uuidStr(row.user),
       })),
-      problems: this.orderedProblems(contest).map((entry) => ({
+      problems: orderedProblems(contest).map((entry) => ({
         problemId: uuidStr(entry.problem),
         points: entry.points,
       })),
@@ -178,7 +173,7 @@ export class ContestReplayService {
       format: { name: contest.formatName, config: contest.formatConfig },
       startTime: contest.startTime,
       pointsPrecision: contest.pointsPrecision,
-      problems: this.orderedProblems(contest).map((entry) => ({
+      problems: orderedProblems(contest).map((entry) => ({
         problemId: uuidStr(entry.problem),
         points: entry.points,
       })),
@@ -186,7 +181,7 @@ export class ContestReplayService {
   }
 
   private async planOf(contest: ScoringContest): Promise<BuildPlan> {
-    const ordered = this.orderedProblems(contest).map((entry) =>
+    const ordered = orderedProblems(contest).map((entry) =>
       uuidStr(entry.problem),
     );
     const withBatches = contest.formatName === 'ioi16';

@@ -1,5 +1,5 @@
 import type { Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { issueError } from '@libs/common';
 import { isSuperuserOnly } from '@libs/settings';
 import type { SettingKey } from '@libs/settings';
 
@@ -10,7 +10,9 @@ export const isSettingVisibleTo = (key: SettingKey, actor: Principal) =>
 export function assertSettingAccess(key: SettingKey, actor: Principal): void {
   if (isSettingVisibleTo(key, actor)) return;
   const message = 'Only a superuser may read or change this setting';
-  throw new AppError('forbidden', 403, message, undefined, undefined, {
-    issues: [{ field: 'key', code: 'superuser_only', message }],
+  throw issueError('forbidden', 403, {
+    field: 'key',
+    code: 'superuser_only',
+    message,
   });
 }

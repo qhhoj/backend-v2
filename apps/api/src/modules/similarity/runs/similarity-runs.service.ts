@@ -4,11 +4,9 @@ import { uuidStr } from '@libs/database';
 import type { SimilarityRun } from '@libs/database';
 import type { ScopeQueryDto } from '../core/dto/scope-query.dto';
 import { SimilarityRunResponse } from '../core/dto/similarity-run.response';
+import { RECENT_RUNS_LIMIT } from '../core/rate-limits';
 import { SimilarityAccessService } from '../core/similarity-access.service';
 import { SimilarityRunsRepository } from '../core/similarity-runs.repository';
-
-/** Runs listed per scope, newest first. */
-const RECENT_RUNS_LIMIT = 10;
 
 /** Reads runs of scopes the caller edits. */
 @Injectable()

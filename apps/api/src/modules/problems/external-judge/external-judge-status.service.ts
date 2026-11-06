@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ExternalJudgeClient } from '@libs/judging';
+import { MINUTE_MS } from '@libs/common';
 import { ExternalJudgeStatusResponse } from './dto/external-judge.response';
 
 /** A remote check at most this often per process. */
-export const STATUS_CACHE_MS = 60_000;
+export const STATUS_CACHE_MS = MINUTE_MS;
 
 /** The last answer of the external judge's OJ list, shared by every request of this process. */
 @Injectable()

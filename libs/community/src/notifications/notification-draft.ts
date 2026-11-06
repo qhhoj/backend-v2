@@ -7,8 +7,7 @@ import {
   NOTIFICATION_TITLE_MAX,
 } from '@libs/database';
 import type { NotificationKind, NotificationPriority } from '@libs/database';
-import { excerpt } from '../discord';
-import { DAY_MS } from '@libs/common';
+import { DAY_MS, excerpt } from '@libs/common';
 
 /** An inbox row lives this long after its last activity. */
 export const NOTIFICATION_RETENTION_DAYS = 90;

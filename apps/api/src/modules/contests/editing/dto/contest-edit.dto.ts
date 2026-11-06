@@ -57,7 +57,7 @@ export class ContestProblemDto {
   @IsOptional() @IsInt() @Min(1) maxSubmissions?: number | null;
 }
 
-/** Empty, an http(s) URL or a site path (the blog's rule, minus protocol-relative `//host`); never `javascript:` or `data:`. */
+/** Empty, an http(s) URL or a site path that is not protocol-relative (`//host`); never `javascript:` or `data:`. */
 const IMAGE_URL_PATTERN = /^(|https?:\/\/[^\s"'<>]+|\/(?!\/)[^\s"'<>]*)$/;
 
 /** Tags one contest may carry. */

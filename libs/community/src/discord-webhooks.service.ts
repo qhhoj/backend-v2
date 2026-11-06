@@ -1,11 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { ENV } from '@libs/common';
+import { ENV, excerpt } from '@libs/common';
 import type { Env } from '@libs/common';
 import type { Problem } from '@libs/database';
 import { SettingsService } from '@libs/settings';
-import { discordWebhookUrl, excerpt } from './discord';
+import { discordWebhookUrl } from './discord';
 import type { DiscordEvent, DiscordMessage } from './discord';
 import { DISCORD_WEBHOOK_QUEUE, notifyDiscord } from './queues';
 import type { DiscordWebhookJob } from './queues';

@@ -14,7 +14,7 @@ import type {
   SimilarityLimits,
   SimilarityScope,
 } from '@libs/database';
-import { isDuplicateKey } from '@libs/common';
+import { HOUR_MS, isDuplicateKey, MINUTE_MS } from '@libs/common';
 
 export interface NewSimilarityRun {
   scope: SimilarityScope;
@@ -27,9 +27,9 @@ export interface NewSimilarityRun {
 
 const ABANDONED: SimilarityError = 'abandoned';
 /** A run still queued this long is abandoned: its job was most likely lost. A run merely waiting behind a very long backlog is released too (accepted: rare under the start limit). */
-const QUEUED_STALE_AFTER_MS = 3 * 60 * 60 * 1000;
+const QUEUED_STALE_AFTER_MS = 3 * HOUR_MS;
 /** A running run past the worker's deadline plus this margin is abandoned: the worker would have failed it by now. */
-const RUNNING_STALE_MARGIN_MS = 10 * 60 * 1000;
+const RUNNING_STALE_MARGIN_MS = 10 * MINUTE_MS;
 const RUNNING_STALE_AFTER_MS = SIMILARITY_DEADLINE_MS + RUNNING_STALE_MARGIN_MS;
 
 @Injectable()

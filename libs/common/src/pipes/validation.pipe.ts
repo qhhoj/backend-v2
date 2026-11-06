@@ -1,5 +1,5 @@
 import { ValidationPipe } from '@nestjs/common';
-import type { ValidationError, ValidationPipeOptions } from '@nestjs/common';
+import type { ValidationError } from '@nestjs/common';
 import type { FieldIssue } from '../errors/app.error';
 import { ValidationFailedError } from '../errors/validation-failed.error';
 
@@ -23,14 +23,10 @@ function flattenIssues(errors: ValidationError[], prefix = ''): FieldIssue[] {
   });
 }
 
-export const createValidationPipe = (overrides: ValidationPipeOptions = {}) =>
-  new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-    exceptionFactory: (errors) =>
-      new ValidationFailedError('Validation failed', flattenIssues(errors)),
-    ...overrides,
-  });
-
-export const validationPipe = createValidationPipe();
+export const validationPipe = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+  exceptionFactory: (errors) =>
+    new ValidationFailedError('Validation failed', flattenIssues(errors)),
+});

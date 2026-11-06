@@ -2,11 +2,11 @@ import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import {
   AppError,
+  excerpt,
   isDuplicateKey,
   Paginated,
   RateLimitService,
 } from '@libs/common';
-import { excerpt } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Comment, CommentReport } from '@libs/database';
 import type { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';

@@ -5,9 +5,10 @@ import { TestGeneration, uuidStr } from '@libs/database';
 import type { TestGenerationFailure } from '@libs/database';
 import { generationBucket } from '@libs/judging';
 import type { GenerationFeature, GenerationPlan } from '@libs/judging';
+import { DAY_MS } from '@libs/common';
 
 /** Rows and their files older than this are removed by the resync, whatever state they ended in (the worker normally cleans up). */
-export const GENERATION_RETENTION_MS = 24 * 60 * 60 * 1000;
+export const GENERATION_RETENTION_MS = DAY_MS;
 
 /** What a judge needs to run a claimed generation. */
 export interface ClaimedGeneration {

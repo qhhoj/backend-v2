@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
-import { problemLabel } from '@libs/contests';
+import { orderedProblems, problemLabel } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { SubmissionResult } from '@libs/database';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
@@ -72,9 +72,7 @@ export class ContestStatsService {
       this.stats.countsBy(contest._id, contest.startTime, 'problem'),
       this.stats.countsBy(contest._id, contest.startTime, 'language'),
     ]);
-    const ordered = [...contest.problems].sort(
-      (left, right) => left.order - right.order,
-    );
+    const ordered = orderedProblems(contest);
     const summaries = new Map(
       (
         await this.problems.findSummaries(

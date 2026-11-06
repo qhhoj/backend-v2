@@ -16,12 +16,14 @@ import type { Readable } from 'node:stream';
 import type Redis from 'ioredis';
 import {
   assertRealPathInside,
-  ENV,
-  REDIS,
-  SAFE_SEGMENT,
-  resolveInside,
-  withRedisLock,
   atomicWrite,
+  DAY_MS,
+  ENV,
+  HOUR_MS,
+  REDIS,
+  resolveInside,
+  SAFE_SEGMENT,
+  withRedisLock,
 } from '@libs/common';
 import type { Env } from '@libs/common';
 import { PROBLEM_CODE_PATTERN } from '@libs/database';
@@ -36,11 +38,11 @@ const IMPORTS_DIRECTORY = '.imports';
 const UPLOAD_PREFIX = '.upload-';
 /** Covers the largest upload plus its recompile; the lock is not renewed, so a write must finish within it. */
 const DATA_WRITE_LOCK_SECONDS = 15 * 60;
-const STALE_UPLOAD_MS = 60 * 60 * 1000;
+const STALE_UPLOAD_MS = HOUR_MS;
 /** Creating a missing problem directory: a rename holds the lock for a move and one Mongo write. */
 const STAGE_DIRECTORY_LOCK_SECONDS = 10;
 /** The worker removes a package when its job ends; one left past a failed job's retention (a day) belongs to a lost job. */
-const STALE_IMPORT_MS = 2 * 24 * 60 * 60 * 1000;
+const STALE_IMPORT_MS = 2 * DAY_MS;
 
 /** Redis lock held for the whole of one data change of `code` (the judge's marker is up meanwhile); the bridge reads it to hold a submission waiting for that problem's data. */
 export const problemDataLockKey = (code: string): string =>

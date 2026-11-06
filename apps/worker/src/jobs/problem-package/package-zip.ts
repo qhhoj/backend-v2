@@ -3,7 +3,7 @@ import { rm } from 'node:fs/promises';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { ZipFile } from 'yazl';
-import { PACKAGE_MAX_BYTES } from '@libs/problems';
+import { ARCHIVE_MAX_BYTES } from '@libs/problems';
 
 export interface PackageLimits {
   /** Total uncompressed bytes of all entries. */
@@ -11,7 +11,7 @@ export interface PackageLimits {
 }
 export const PACKAGE_LIMITS = Symbol('PACKAGE_LIMITS');
 export const DEFAULT_PACKAGE_LIMITS: PackageLimits = {
-  maxBytes: PACKAGE_MAX_BYTES,
+  maxBytes: ARCHIVE_MAX_BYTES,
 };
 
 /** The package would pass the size cap; raised before any file is written. */

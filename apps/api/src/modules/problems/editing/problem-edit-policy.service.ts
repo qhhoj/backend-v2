@@ -6,6 +6,7 @@ import {
   sameJson,
   unique,
   ValidationFailedError,
+  issueError,
 } from '@libs/common';
 import type { Problem } from '@libs/database';
 import type {
@@ -93,14 +94,10 @@ function assertSitePublishGate(
   ) {
     const message =
       'Making a problem visible to everyone requires judge.change_public_visibility';
-    throw new AppError('forbidden', 403, message, undefined, undefined, {
-      issues: [
-        {
-          field: 'isOrganizationPrivate',
-          code: SITE_PUBLISH_RIGHTS_ISSUE,
-          message,
-        },
-      ],
+    throw issueError('forbidden', 403, {
+      field: 'isOrganizationPrivate',
+      code: SITE_PUBLISH_RIGHTS_ISSUE,
+      message,
     });
   }
 }

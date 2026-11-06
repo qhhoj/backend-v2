@@ -9,36 +9,31 @@ import {
   childOf,
   childrenOf,
   descendant,
-  POLYGON_PACKAGE_MAX_BYTES,
+  ARCHIVE_MAX_BYTES,
 } from '@libs/problems';
 import type { XmlElement } from '@libs/problems';
+import { GIB, KIB, MIB, MINUTE_S } from '@libs/common';
 import { PolygonImportError } from './polygon-import.error';
 import { languageKeyOf } from './polygon-languages';
 import { resolveMemberPath, shown } from './polygon-package';
 import { fileIoNamesOf, testNodesOf } from './polygon-tests';
 import type { PlannedTest, TestPlan } from './polygon-tests';
 
-const BYTES_PER_MIB = 1024 * 1024;
-const KIB_PER_GIB = 1024 * 1024;
-const SECONDS_PER_MINUTE = 60;
-
 /** Generators and the validator: 10 s CPU, 20 s wall, 1 GiB. */
 const AUXILIARY_LIMITS: ProgramLimits = {
   timeS: 10,
   wallS: 20,
-  memoryKib: KIB_PER_GIB,
+  memoryKib: GIB / KIB,
 };
 const MIN_SOLUTION_CPU_S = 1;
 const SOLUTION_CPU_FACTOR = 2;
 const SOLUTION_WALL_FACTOR = 3;
 const SOLUTION_WALL_EXTRA_S = 1;
-const MAX_FILE_BYTES = 256 * BYTES_PER_MIB;
-const MAX_TOTAL_BYTES = 1024 * BYTES_PER_MIB;
-/** The result zip becomes `tests.zip`, so it is bound like an uploaded archive (the api's `ARCHIVE_MAX_BYTES`, 512 MiB). */
-const MAX_UPLOAD_BYTES = POLYGON_PACKAGE_MAX_BYTES;
+const MAX_FILE_BYTES = 256 * MIB;
+const MAX_TOTAL_BYTES = GIB;
 const DEADLINE_BASE_S = 120;
 const DEADLINE_PER_TEST_EXTRA_S = 2;
-const DEADLINE_MAX_S = 30 * SECONDS_PER_MINUTE;
+const DEADLINE_MAX_S = 30 * MINUTE_S;
 
 type HasMember = (path: string) => boolean;
 
@@ -208,7 +203,8 @@ const limitsOf = (plan: TestPlan): GenerationLimits => ({
   solution: solutionLimitsOf(plan.timeLimit, plan.memoryLimit),
   maxFileBytes: MAX_FILE_BYTES,
   maxTotalBytes: MAX_TOTAL_BYTES,
-  maxUploadBytes: MAX_UPLOAD_BYTES,
+  // The result zip becomes `tests.zip`, so it is bound like an uploaded archive.
+  maxUploadBytes: ARCHIVE_MAX_BYTES,
 });
 
 /**

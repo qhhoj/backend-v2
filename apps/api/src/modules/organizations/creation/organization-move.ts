@@ -1,4 +1,4 @@
-import { AppError, unique } from '@libs/common';
+import { issueError, unique } from '@libs/common';
 
 /** The organization rules of moving a problem or a contest between organizations, shared by both editors. */
 
@@ -17,9 +17,7 @@ export const SITE_CONTEST_RIGHTS_ISSUE = 'site_contest_rights';
 
 /** A 403 on `organizations` with one of the issue codes above. */
 export const organizationRightsRefusal = (code: string, message: string) =>
-  new AppError('forbidden', 403, message, undefined, undefined, {
-    issues: [{ field: 'organizations', code, message }],
-  });
+  issueError('forbidden', 403, { field: 'organizations', code, message });
 
 const without = (ids: readonly string[], removed: readonly string[]) =>
   ids.filter((id) => !removed.includes(id));

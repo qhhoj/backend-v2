@@ -1,3 +1,4 @@
+import { MIB } from '@libs/common';
 import { createWriteStream } from 'node:fs';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -7,7 +8,6 @@ import { PolygonApiError } from './polygon-api.error';
 /** Bytes written so far and the size Polygon announced (null without a Content-Length). */
 export type DownloadProgress = (done: number, total: number | null) => void;
 
-const MIB = 1024 * 1024;
 /** Progress is reported about twenty times per download, and at least every MiB apart. */
 const REPORTS_PER_DOWNLOAD = 20;
 

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { FilterQuery, Model } from 'mongoose';
-import { Revision, SettingRevision, uuidStr } from '@libs/database';
+import { firstIdAt, Revision, SettingRevision, uuidStr } from '@libs/database';
 import { SETTING_TYPE } from './audit-types';
 import type { AuditType } from './audit-types';
 
@@ -32,12 +32,6 @@ export interface AuditFilter {
 const NEWEST_FIRST = { _id: -1 } as const;
 const byNewest = (left: AuditRecord, right: AuditRecord) =>
   left.id < right.id ? 1 : left.id > right.id ? -1 : 0;
-
-/** The smallest UUIDv7 of a millisecond: ids at or after `date` compare `>=` to it. */
-export function firstIdAt(date: Date): string {
-  const hex = date.getTime().toString(16).padStart(12, '0');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7000-8000-000000000000`;
-}
 
 /** The time range and the page cursor as one `_id` range, so every read is an index range scan. */
 export function idRange({ from, to, before }: AuditFilter) {

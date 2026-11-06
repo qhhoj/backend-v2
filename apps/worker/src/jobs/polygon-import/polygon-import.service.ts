@@ -24,7 +24,7 @@ import {
   PdfCacheService,
   importOptionsOf,
   pdfJobId,
-  POLYGON_PACKAGE_MAX_BYTES,
+  ARCHIVE_MAX_BYTES,
   PolygonApiError,
   PolygonClient,
   ProblemDataError,
@@ -396,7 +396,7 @@ export class PolygonImportService {
     await tracker.progress({ step: 'downloading', done: 0, total: null });
     try {
       await this.polygon.downloadPackage(source, destination, {
-        maxBytes: POLYGON_PACKAGE_MAX_BYTES,
+        maxBytes: ARCHIVE_MAX_BYTES,
         type: variantOf(source.packageType ?? 'full'),
         onProgress: (done, total) =>
           void tracker.progress({ step: 'downloading', done, total }),

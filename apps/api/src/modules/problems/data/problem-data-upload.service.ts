@@ -6,6 +6,7 @@ import { RateLimitService, atomicWrite } from '@libs/common';
 import { dataFileNamesOf } from '@libs/database';
 import type { DataFileKind, ProblemData } from '@libs/database';
 import {
+  ARCHIVE_MAX_BYTES,
   extensionOf,
   checkUploadedZip,
   ProblemDataFilesService,
@@ -27,7 +28,6 @@ import { ProblemDataStore } from './problem-data.store';
 import { SourceChecksService } from './source-checks.service';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from '../core/rate-limits';
 
-export const ARCHIVE_MAX_BYTES = 512 * 1024 * 1024;
 /** What the compiler can use per kind (the legacy upload validators, minus `.py` checkers the compiler always rejected). */
 export const SOURCE_EXTENSIONS: Record<SourceFileKind, readonly string[]> = {
   generator: ['cpp', 'cc', 'c', 'pas', 'java', 'py'],

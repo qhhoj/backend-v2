@@ -1,4 +1,4 @@
-import { excerpt } from './discord';
+import { excerpt } from '@libs/common';
 
 export const TICKET_TITLE_MAX_LENGTH = 100;
 /** A message body (new; legacy had no cap). */

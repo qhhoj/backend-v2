@@ -2,6 +2,12 @@ import { Binary, UUID } from 'mongodb';
 import { v7 } from 'uuid';
 
 export const newId = (): string => v7();
+
+/** The smallest UUIDv7 of a millisecond: ids made at or after `date` compare `>=` to it (as strings, and in `_id` order). */
+export function firstIdAt(date: Date): string {
+  const hex = date.getTime().toString(16).padStart(12, '0');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7000-8000-000000000000`;
+}
 export const toUuid = (id: string): UUID => new UUID(id);
 const isUuidBinary = (value: unknown): value is Binary =>
   value instanceof Binary ||
