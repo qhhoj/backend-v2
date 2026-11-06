@@ -1,6 +1,7 @@
 import { isDuplicateKey, retryOnDuplicateKey } from './duplicate-key';
 
-const duplicate = (extra: object = {}) => ({ code: 11000, ...extra });
+const duplicate = (extra: object = {}) =>
+  Object.assign(new Error('E11000'), { code: 11000, ...extra });
 
 describe('isDuplicateKey', () => {
   it('reads a single write, optionally by field', () => {
@@ -25,14 +26,12 @@ describe('isDuplicateKey', () => {
 });
 
 describe('retryOnDuplicateKey', () => {
-  const failing = (times: number, error: unknown = duplicate()) => {
+  const failing = (times: number, error: Error = duplicate()) => {
     let calls = 0;
     return {
       write: () => {
         calls += 1;
-        return calls <= times
-          ? Promise.reject(error as Error)
-          : Promise.resolve(calls);
+        return calls <= times ? Promise.reject(error) : Promise.resolve(calls);
       },
       calls: () => calls,
     };
@@ -45,9 +44,9 @@ describe('retryOnDuplicateKey', () => {
 
   it('throws the last duplicate error after the attempts are spent', async () => {
     const run = failing(5);
-    await expect(retryOnDuplicateKey(run.write, 3)).rejects.toEqual(
-      duplicate(),
-    );
+    await expect(retryOnDuplicateKey(run.write, 3)).rejects.toMatchObject({
+      code: 11000,
+    });
     expect(run.calls()).toBe(3);
   });
 
@@ -56,9 +55,9 @@ describe('retryOnDuplicateKey', () => {
     await expect(retryOnDuplicateKey(other.write, 3)).rejects.toThrow('boom');
     expect(other.calls()).toBe(1);
     const wrongField = failing(1, duplicate({ keyPattern: { a: 1 } }));
-    await expect(retryOnDuplicateKey(wrongField.write, 3, 'b')).rejects.toEqual(
-      duplicate({ keyPattern: { a: 1 } }),
-    );
+    await expect(
+      retryOnDuplicateKey(wrongField.write, 3, 'b'),
+    ).rejects.toMatchObject({ keyPattern: { a: 1 } });
     expect(wrongField.calls()).toBe(1);
   });
 });
