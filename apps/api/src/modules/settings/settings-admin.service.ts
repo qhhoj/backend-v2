@@ -89,16 +89,10 @@ export class SettingsAdminService {
     );
   }
 
-  private known(key: string): SettingKey {
-    if (!definitionOf(key))
-      throw new AppError('not_found', 404, 'No such setting');
-    return key as SettingKey;
-  }
-
+  /** The routes validate `key` against the registry, so it is a known key here. */
   private accessible(key: string, actor: Principal): SettingKey {
-    const known = this.known(key);
-    assertSettingAccess(known, actor);
-    return known;
+    assertSettingAccess(key as SettingKey, actor);
+    return key as SettingKey;
   }
 
   private view(key: SettingKey, row: Parameters<typeof SettingResponse.of>[3]) {
