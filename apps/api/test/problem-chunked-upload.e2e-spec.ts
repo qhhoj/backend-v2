@@ -6,6 +6,7 @@ import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
 import { REDIS } from '@libs/common';
 import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
+import { ProblemDataFilesService, QuotaLedger } from '@libs/problems';
 import { buildZip } from '@libs/problems/testing';
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
 import { CHUNK_BYTES } from '../src/modules/problems/data/chunked/chunked-upload.limits';
@@ -231,6 +232,54 @@ describe('chunked data upload', () => {
       expect(await creditsOf(organizationId!)).toBe(0);
     });
 
+    /** A one-chunk session of `smallZip` on a new organization problem, ready to complete. */
+    async function readySession() {
+      const { code, organizationId } = await newProblem(true);
+      const session = sessionOf(await create(code, smallZip).expect(201));
+      await putChunk(code, { id: session.id, index: 0 }, smallZip).expect(200);
+      return { code, organizationId: organizationId!, id: session.id };
+    }
+    const failStampOnce = () =>
+      jest
+        .spyOn(ProblemDataFilesService.prototype, 'writeDataVersion')
+        .mockRejectedValueOnce(new Error('disk full'));
+
+    it("stores again a complete that failed before the judges' data stamp, charging once", async () => {
+      const { code, organizationId, id } = await readySession();
+      const stamp = failStampOnce();
+      await complete(code, id).expect(500);
+      stamp.mockRestore();
+      expect(await creditsOf(organizationId)).toBe(0);
+      await complete(code, id).expect(201);
+      expect(await creditsOf(organizationId)).toBe(1);
+      expect(
+        await api.app.get(ProblemDataFilesService).readDataVersion(code),
+      ).not.toBeNull();
+    });
+
+    it('gives back the charge of a complete that died inside its write before charging again', async () => {
+      const { code, organizationId, id } = await readySession();
+      const mocks = [
+        failStampOnce(),
+        jest
+          .spyOn(QuotaLedger.prototype, 'refund')
+          .mockResolvedValueOnce(undefined),
+        jest
+          .spyOn(UploadSessionsStore.prototype, 'closeCharge')
+          .mockResolvedValueOnce(undefined),
+      ];
+      await complete(code, id).expect(500);
+      mocks.forEach((mock) => mock.mockRestore());
+      expect(await creditsOf(organizationId)).toBe(1);
+      await complete(code, id).expect(201);
+      expect(await creditsOf(organizationId)).toBe(1);
+      expect(await ledgerOf(organizationId)).toEqual([
+        ['upload', 1],
+        ['refund', -1],
+        ['upload', 1],
+      ]);
+    });
+
     it('sweeps the chunks of an expired session with nothing charged, and charges a completed one once, even with its marker lost', async () => {
       const { code, organizationId } = await newProblem(true);
       const expired = sessionOf(await create(code, smallZip).expect(201));
@@ -253,6 +302,7 @@ describe('chunked data upload', () => {
         .hdel(`chunked-upload:${next.id}`, 'completed');
       const afterLostMarker = await complete(code, next.id).expect(201);
       expect(afterLostMarker.body).toEqual(stored.body);
+      await cancel(code, next.id).expect(404);
       expect(await creditsOf(organizationId!)).toBe(1);
       expect(await ledgerOf(organizationId!)).toEqual([['upload', 1]]);
     });

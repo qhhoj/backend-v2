@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type Redis from 'ioredis';
 import { conflictIssue, execOrThrow, REDIS, withRedisLock } from '@libs/common';
+import type { SpentCharge } from '@libs/problems';
 import {
   chunkCountOf,
   MAX_OPEN_UPLOAD_SESSIONS,
@@ -28,6 +29,12 @@ const sessionKey = (id: string) => `chunked-upload:${id}`;
 const receivedKey = (id: string) => `chunked-upload:${id}:received`;
 const lockKey = (id: string) => `chunked-upload:${id}:lock`;
 const userKey = (userId: string) => `chunked-upload:user:${userId}`;
+
+/** A charge a complete spent for its write: `claim` makes giving it back happen once. */
+export interface OpenCharge {
+  claim: string;
+  spent: SpentCharge;
+}
 
 const toSession = (fields: Record<string, string>): UploadSession => ({
   id: fields.id,
@@ -150,6 +157,29 @@ export class UploadSessionsStore {
         .pexpireat(sessionKey(session.id), session.expiresAt)
         .zrem(userKey(session.userId), session.id),
     );
+  }
+
+  /** Kept while complete's write runs; left behind only when the process died inside it. */
+  async openCharge(
+    session: Pick<UploadSession, 'id' | 'expiresAt'>,
+    spent: SpentCharge,
+  ): Promise<void> {
+    const charge: OpenCharge = { claim: randomUUID(), spent };
+    await execOrThrow(
+      this.redis
+        .multi()
+        .hset(sessionKey(session.id), 'charge', JSON.stringify(charge))
+        .pexpireat(sessionKey(session.id), session.expiresAt),
+    );
+  }
+
+  async openChargeOf(id: string): Promise<OpenCharge | null> {
+    const charge = await this.redis.hget(sessionKey(id), 'charge');
+    return charge === null ? null : (JSON.parse(charge) as OpenCharge);
+  }
+
+  async closeCharge(id: string): Promise<void> {
+    await this.redis.hdel(sessionKey(id), 'charge');
   }
 
   async remove(session: Pick<UploadSession, 'id' | 'userId'>): Promise<void> {

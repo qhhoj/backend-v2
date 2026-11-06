@@ -9,7 +9,7 @@ import {
 } from '@libs/common';
 import { dataFileNamesOf } from '@libs/database';
 import type { DataFileKind, ProblemData } from '@libs/database';
-import type { ChargeRequest } from '@libs/problems';
+import type { ChargeRequest, SpentCharge } from '@libs/problems';
 import {
   ARCHIVE_MAX_BYTES,
   extensionOf,
@@ -52,11 +52,36 @@ export function archiveNameOf(clientName: string): string {
 /** `assertZip`'s refusal: the archive itself is not an acceptable zip (a `zip_*` issue), so the same bytes can never pass. */
 export class ZipRefusedError extends ValidationFailedError {}
 
-/** A staged archive on its way to storage; `expectedVersion` pins the data version the caller checked (a write meanwhile is 409 `conflict`). */
+/** Where a caller keeps the charge of a write while it runs, so a retry after the process died inside it can give that charge back first (`QuotaLedger.refundOnce`, like a Polygon import's job). */
+export interface ChargeJournal {
+  /** Right after the spend, before anything is written. */
+  opened(spent: SpentCharge): Promise<void>;
+  /** The write threw and `charged` refunds it now; must not throw. */
+  closed(): Promise<void>;
+}
+
+/** A staged archive on its way to storage; `expectedVersion` pins the data version the caller checked (a write meanwhile is 409 `conflict`), `journal` records the charge while the write runs. */
 export interface StagedArchive {
   staged: string;
   name: string;
   expectedVersion?: number;
+  journal?: ChargeJournal;
+}
+
+/** `write` with its charge kept in `journal` while it runs (nothing to keep when the write is free). */
+async function journaled<Result>(
+  spent: SpentCharge | null,
+  journal: ChargeJournal | undefined,
+  write: () => Promise<Result>,
+): Promise<Result> {
+  if (spent === null || journal === undefined) return write();
+  await journal.opened(spent);
+  try {
+    return await write();
+  } catch (error) {
+    await journal.closed();
+    throw error;
+  }
 }
 
 @Injectable()
@@ -150,7 +175,7 @@ export class ProblemDataUploadService {
     problem: ProblemDocument,
     upload: StagedArchive,
   ): Promise<ProblemDataResponse> {
-    const { staged, name, expectedVersion } = upload;
+    const { staged, name, expectedVersion, journal } = upload;
     const { data: previous, version } = await this.store.loadData(problem);
     if (expectedVersion !== undefined && version !== expectedVersion)
       throw testDataChanged();
@@ -167,23 +192,25 @@ export class ProblemDataUploadService {
     const { stored, archiveFiles } = await this.quota.charged(
       organizationId,
       this.archiveCharge(auth, problem, bytes),
-      () =>
-        this.store.withDataWrite(problem, async () => {
-          const written = await this.store.compileAndStore(
-            problem,
-            data,
-            version,
-            staged,
-          );
-          await this.dataFiles.commitUpload(problem.code, staged, name);
-          await this.store.removeUnreferenced(
-            problem,
-            previous.archive,
-            written.stored,
-          );
-          await this.store.finishDataWrite(problem, version);
-          return written;
-        }),
+      (spent) =>
+        journaled(spent, journal, () =>
+          this.store.withDataWrite(problem, async () => {
+            const written = await this.store.compileAndStore(
+              problem,
+              data,
+              version,
+              staged,
+            );
+            await this.dataFiles.commitUpload(problem.code, staged, name);
+            await this.store.removeUnreferenced(
+              problem,
+              previous.archive,
+              written.stored,
+            );
+            await this.store.finishDataWrite(problem, version);
+            return written;
+          }),
+        ),
     );
     await this.store.recordChange(auth, problem, {
       before: previous,

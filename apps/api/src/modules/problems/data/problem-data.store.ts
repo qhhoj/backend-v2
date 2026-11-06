@@ -21,11 +21,11 @@ import type { ProblemDocument } from '../core/problems.repository';
 import { RevisionsRepository } from '../core/revisions.repository';
 import { SourceChecksService } from './source-checks.service';
 
-/** Access checks, compile-and-persist and the response shape shared by the data and upload services. */
 /** A data write lost to another one that landed first (409 `conflict`). */
 export const testDataChanged = () =>
   new AppError('conflict', 409, 'Test data changed meanwhile, reload');
 
+/** Access checks, compile-and-persist and the response shape shared by the data and upload services. */
 @Injectable()
 export class ProblemDataStore {
   private readonly logger = new Logger(ProblemDataStore.name);
