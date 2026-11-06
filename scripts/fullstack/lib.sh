@@ -28,8 +28,8 @@ assert_port_free() {
   fi
 }
 
-# RAM cap wrapper of the batch host; when absent, commands run uncapped.
-CAP=/home/lamter/QHHOJ/.batch/cap
+# RAM cap wrapper, set by the host that has one (QHHOJ_CAP=/path/to/cap); empty or not executable means uncapped.
+CAP="${QHHOJ_CAP:-}"
 
 # capped <mem> <command...>: runs the command under the cap wrapper when it exists.
 capped() {
