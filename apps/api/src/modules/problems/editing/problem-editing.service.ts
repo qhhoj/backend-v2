@@ -133,7 +133,7 @@ function renderStatementsInto(
 /** Stable code (and log prefix) of a rename whose save failed and whose data could not be put back: the problem cannot be judged until an operator moves the directory to the stored code. */
 export const RENAME_DATA_STRANDED = 'rename_data_stranded';
 
-/** The 500 the editor sees, naming the stored code (null: it could not be read) and where the data is. */
+/** The 500 the editor sees, naming the stored code (null: the problem could not be read or is gone) and where the data is. */
 function strandedDataError(
   oldCode: string,
   movedCode: string,
@@ -143,7 +143,7 @@ function strandedDataError(
     RENAME_DATA_STRANDED,
     500,
     `${RENAME_DATA_STRANDED}: renaming problem ${oldCode} to ${movedCode} failed and its test data could not be moved back. ` +
-      `Stored code: ${storedCode ?? 'unknown (the read failed)'}; test data directory: <problem data root>/${movedCode}/. ` +
+      `Stored code: ${storedCode ?? 'unknown (the problem could not be read or is gone)'}; test data directory: <problem data root>/${movedCode}/. ` +
       'The problem cannot be judged until that directory is renamed to the stored code.',
   );
 }
@@ -322,7 +322,7 @@ export class ProblemEditingService {
     return updated;
   }
 
-  /** A save that threw may still have landed (a lost reply): the directory goes back only while the stored code is still the old one. When it cannot be made to match the stored code, the edit fails loudly (`strandedDataError`). */
+  /** A save that threw may still have landed (a lost reply): the directory goes back only while the stored code is still the old one, a soft-deleted problem included (a delete takes no data lock and a restore must find its data). When it cannot be made to match the stored code, the edit fails loudly (`strandedDataError`). */
   private async restoreDataDirectory(
     original: ProblemDocument,
     movedCode: string,
@@ -330,8 +330,12 @@ export class ProblemEditingService {
   ): Promise<void> {
     let storedCode: string | null = null;
     try {
-      storedCode = (await this.repository.findById(original._id))?.code ?? null;
-      if (storedCode !== original.code) return;
+      storedCode =
+        (await this.repository.findIncludingDeleted(original._id))?.code ??
+        null;
+      if (storedCode === movedCode) return;
+      if (storedCode !== original.code)
+        throw new Error(`the stored code is ${storedCode ?? 'missing'}`);
       await this.dataFiles.rename(movedCode, original.code);
     } catch (restoreError) {
       const error = strandedDataError(original.code, movedCode, storedCode);
