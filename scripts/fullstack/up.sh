@@ -77,6 +77,7 @@ capped 3G npx nest build api && capped 3G npx nest build worker && capped 3G npx
 capped 2G npm run seed:e2e
 
 start api "$RUN/api.log" node dist/apps/api/main
+capped 2G node dist/apps/worker/main migrate # the worker refuses to boot while a migration is pending
 start worker "$RUN/worker.log" node dist/apps/worker/main
 start bridge "$RUN/bridge.log" node dist/apps/bridge/main
 wait_for api curl -sf "http://127.0.0.1:$PORT_API/api/internal/problems/meta"

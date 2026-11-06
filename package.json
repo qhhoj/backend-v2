@@ -17,6 +17,7 @@
     "start:prod": "node dist/apps/api/main",
     "start:worker": "nest start worker",
     "start:prod:worker": "node dist/apps/worker/main",
+    "migrate": "nest build worker && node dist/apps/worker/main migrate",
     "start:bridge": "nest start bridge",
     "start:prod:bridge": "node dist/apps/bridge/main",
     "lint": "eslint \"{apps,libs}/**/*.ts\"",

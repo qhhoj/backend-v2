@@ -1,9 +1,7 @@
 import { getModelToken } from '@nestjs/mongoose';
-import { REDIS } from '@libs/common';
 import { OrganizationUsage, uuidStr } from '@libs/database';
-import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
-import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
+import { setStorageBackfilled } from '@libs/problems/testing';
 import { OrganizationProblemRules } from '../src/modules/problems/editing/organization-problem-rules.service';
 import { SITE_PUBLISH_RIGHTS_ISSUE } from '../src/modules/problems/editing/problem-edit-policy.service';
 import { createOrganization } from './organization-fixtures';
@@ -111,7 +109,7 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
   });
   beforeEach(async () => {
     await api.setSetting('quota.enforce', 'enforce');
-    await api.app.get<Redis>(REDIS).set(QUOTA_BACKFILL_DONE_KEY, '1');
+    await setStorageBackfilled(api.app, true);
   });
 
   it('moves a problem from one organization to another for an administrator of both, with the code renamed in the same save', async () => {

@@ -4,9 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import type { Job } from 'bullmq';
-import type Redis from 'ioredis';
 import type { Connection, Model } from 'mongoose';
-import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import { newId, PolygonSyncRun, TestGeneration } from '@libs/database';
 import { generationBucket } from '@libs/judging';
@@ -15,10 +13,13 @@ import {
   listZipEntries,
   POLYGON_ERROR_PREFIX,
   POLYGON_FETCH,
-  QUOTA_BACKFILL_DONE_KEY,
 } from '@libs/problems';
 import type { ImportProgress, PolygonImportJob } from '@libs/problems';
-import { buildZip, FakePolygon } from '@libs/problems/testing';
+import {
+  buildZip,
+  FakePolygon,
+  setStorageBackfilled,
+} from '@libs/problems/testing';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import { PolygonImportProcessor } from '../src/jobs/polygon-import/polygon-import.processor';
 import { buildPolygonPackage, properties } from './polygon-fixtures';
@@ -372,7 +373,7 @@ describe('Polygon standard package import', () => {
       },
     );
     await worker.setSetting('quota.enforce', 'enforce');
-    await worker.module.get<Redis>(REDIS).set(QUOTA_BACKFILL_DONE_KEY, '1');
+    await setStorageBackfilled(worker.module, true);
     const stored = await worker.problems.findOne({ code: 'stdquota' });
     const sync = job('stdquota');
     sync.data.mode = 'update';

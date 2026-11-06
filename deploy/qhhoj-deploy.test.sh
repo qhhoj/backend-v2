@@ -13,9 +13,17 @@ fresh() {
   mkdir -p "$root/etc/nginx/conf.d"; echo "root /var/www/qhhoj/current;" > "$root/etc/nginx/conf.d/qhhoj.conf"
   : > "$calls"
   # shellcheck disable=SC2016 # stub bodies are expanded when the stub runs
-  stub podman '[ "${1:-}" = login ] && { cat > "$QHHOJ_DEPLOY_ROOT/login.stdin"; touch "$3"; }; [ "${1:-}" = image ] && [ "${2:-}" = exists ] && [ -n "${STUB_IMAGE_MISSING:-}" ] && exit 1; [ "${1:-}" = image ] && [ "${2:-}" = ls ] && printf "%s\n" ${STUB_IMAGES:-}; [ "${1:-}" = run ] && [ -n "${STUB_INDEX_FAIL:-}" ] && exit 1; true'
+  stub podman '[ "${1:-}" = login ] && { cat > "$QHHOJ_DEPLOY_ROOT/login.stdin"; touch "$3"; }; [ "${1:-}" = image ] && [ "${2:-}" = exists ] && [ -n "${STUB_IMAGE_MISSING:-}" ] && exit 1; [ "${1:-}" = image ] && [ "${2:-}" = ls ] && printf "%s\n" ${STUB_IMAGES:-}; [ "${1:-}" = run ] && [ -n "${STUB_INDEX_FAIL:-}" ] && exit 1; [ "${1:-}" = image ] && [ "${2:-}" = inspect ] && { if [ -n "${STUB_NO_STEPS_LABEL:-}" ]; then echo; else echo "indexes migrate"; fi; }; [ "${1:-}" = run ] && [ "${*: -1}" = migrate ] && [ -n "${STUB_MIGRATE_FAIL:-}" ] && exit 1; [ "${1:-}" = run ] && [ "${*: -1}" = migrate ] && [ -n "${STUB_MIGRATE_HANG:-}" ] && exec tail -f /dev/null; true'
   # shellcheck disable=SC2016
-  stub systemctl '[ "$1" = restart ] && [ -e "$QHHOJ_DEPLOY_ROOT/restart_fail" ] && { rm -f "$QHHOJ_DEPLOY_ROOT/restart_fail"; exit 1; }; true'
+  # is-active as systemd answers it: 0 when any listed unit is active. STUB_DEAD_UNIT is never active; each
+  # NRestarts read of STUB_RESTARTING_UNIT counts one more restart (a crash loop).
+  # shellcheck disable=SC2016
+  stub systemctl '[ "$1" = restart ] && [ -e "$QHHOJ_DEPLOY_ROOT/restart_fail" ] && { rm -f "$QHHOJ_DEPLOY_ROOT/restart_fail"; exit 1; }
+if [ "$1" = is-active ]; then shift 2; for u in "$@"; do [ "$u" = "${STUB_DEAD_UNIT:-}" ] || exit 0; done; exit 1; fi
+if [ "$1" = show ]; then n=0; f="$QHHOJ_DEPLOY_ROOT/restarts"
+  if [ "${*: -1}" = "${STUB_RESTARTING_UNIT:-}" ]; then n=$(( $(cat "$f" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$f"; fi
+  echo "$n"; fi
+true'
   stub sleep
   # shellcheck disable=SC2016 # stub bodies are written to files, expanded when the stub runs
   stub mongosh '[ -n "${STUB_CONTEST:-}" ] && echo "$STUB_CONTEST"; true'
@@ -31,14 +39,38 @@ grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.1.0 ghcr.io/qhhoj/backend-v2:cur
 grep -q "systemctl restart qhhoj.target" "$calls" || fail "restart"
 [ "$(hist)" = v2.1.0 ] || fail "history after first deploy"
 grep -q "podman run .* ghcr.io/qhhoj/backend-v2:v2.1.0 indexes" "$calls" || fail "index step"
-[ "$(grep -n "indexes" "$calls" | cut -d: -f1)" -lt "$(grep -n "systemctl restart" "$calls" | cut -d: -f1)" ] \
-  || fail "indexes are built before the restart"
+line_of() { grep -n "$1" "$calls" | head -1 | cut -d: -f1; }
+[ "$(line_of "podman run .* indexes$")" -lt "$(line_of "systemctl restart")" ] || fail "indexes are built before the restart"
+grep -q "podman run .*--env-file $root/etc/qhhoj/env .* ghcr.io/qhhoj/backend-v2:v2.1.0 migrate" "$calls" || fail "migrate step"
+[ "$(line_of "podman run .* indexes$")" -lt "$(line_of "podman run .* migrate$")" ] \
+  && [ "$(line_of "podman run .* migrate$")" -lt "$(line_of "systemctl restart")" ] \
+  || fail "migrations run after the indexes and before the restart"
 grep -q 'mongodb://x' "$calls" && fail "MONGO_URL (password) must not be a podman argument"
+for flag in --read-only --cap-drop=all --security-opt=no-new-privileges --memory=5g; do
+  [ "$(grep -c "podman run .*$flag" "$calls")" = 2 ] || fail "both one-shot steps run with $flag"
+done
 
 : > "$calls"; set +e; STUB_INDEX_FAIL=1 deploy backend v2.1.1 >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 1 ] || fail "failed index build must exit 1, got $code"
 grep -q "podman tag\|systemctl restart" "$calls" && fail "failed index build switched the backend"
 [ "$(hist)" = v2.1.0 ] || fail "failed index build must not be recorded"
+
+: > "$calls"; set +e; STUB_MIGRATE_FAIL=1 deploy backend v2.1.1 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] || fail "failed migration must exit 1, got $code"
+grep -q "podman tag\|systemctl restart" "$calls" && fail "failed migration switched the backend"
+[ "$(hist)" = v2.1.0 ] || fail "failed migration must not be recorded"
+
+: > "$calls"; set +e; STUB_MIGRATE_HANG=1 timeout 20 env PATH="$bin:$PATH" QHHOJ_DEPLOY_ROOT="$root" QHHOJ_DEPLOY_STEP_TIMEOUT=1 \
+  bash "$here/qhhoj-deploy" backend v2.1.1 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] || fail "hung migration must time out and exit 1, got $code"
+[ "$(grep -c "podman rm -f qhhoj-step-migrate" "$calls")" = 2 ] || fail "timed-out migration container must be removed"
+grep -q "podman tag\|systemctl restart" "$calls" && fail "hung migration switched the backend"
+[ "$(hist)" = v2.1.0 ] || fail "hung migration must not be recorded"
+
+: > "$calls"; STUB_NO_STEPS_LABEL=1 deploy backend v2.1.2 >/dev/null || fail "an image without the migrate step deploys"
+grep -q "podman run .* migrate" "$calls" && fail "an image without the migrate step must not run it"
+grep -q "podman run .* ghcr.io/qhhoj/backend-v2:v2.1.2 indexes" "$calls" || fail "an image without the label still builds indexes"
+[ "$(hist | tail -1)" = v2.1.2 ] || fail "an image without the migrate step is recorded"
 
 set +e; deploy backend latest >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 64 ] || fail "bad tag must exit 64, got $code"
@@ -147,6 +179,19 @@ set +e; deploy backend v2.2.0 >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 1 ] || fail "failed restart must exit 1, got $code"
 grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.1.0 ghcr.io/qhhoj/backend-v2:current" "$calls" || fail "failed restart did not restore v2.1.0"
 [ "$(hist)" = v2.1.0 ] || fail "failed restart must not be recorded"
+
+# a backend unit that is down, or crash-looping, after the restart rolls the deploy back
+unit_rolls_back() { # <label>: deploying v2.2.0 over v2.1.0 must exit 1, re-point to v2.1.0 and record nothing
+  local code
+  set +e; deploy backend v2.2.0 >/dev/null 2>&1; code=$?; set -e
+  [ "$code" = 1 ] || fail "$1 must exit 1, got $code"
+  grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.1.0 ghcr.io/qhhoj/backend-v2:current" "$calls" || fail "$1 did not restore v2.1.0"
+  [ "$(hist)" = v2.1.0 ] || fail "$1 must not be recorded"
+}
+fresh; deploy backend v2.1.0 >/dev/null; : > "$calls"
+STUB_DEAD_UNIT=qhhoj-worker unit_rolls_back "a dead worker with the api up"
+fresh; deploy backend v2.1.0 >/dev/null; : > "$calls"
+STUB_RESTARTING_UNIT=qhhoj-bridge unit_rolls_back "a crash-looping bridge"
 
 # rollback to a pruned backend image is refused with history unchanged
 fresh; deploy backend v2.1.0 >/dev/null; deploy backend v2.2.0 >/dev/null; : > "$calls"

@@ -26,7 +26,7 @@ Env holds only infrastructure and key material (database, Redis, secrets, paths,
 
 ### After upgrading
 
-The settings default to off or to the site defaults, so after deploying set in the admin API what you use (the old variables are not read; boot logs one warning, "Ignoring X, Y: these are admin settings now", naming any still set, and ignores them):
+The settings default to off or to the site defaults, so after deploying set in the admin API what you use (the old variables are not read):
 
 - `mail.smtpUrl` (e.g. `smtps://user:pass@host:465`, credentials percent-encoded) and `mail.from`: without an SMTP URL registration answers 503 `mail_unavailable`, while password reset and activation resend answer 204 and the mail is lost (logged)
 - `auth.google`, `auth.github`, `auth.facebook`: `{ "enabled": true, "clientId": "...", "clientSecret": "..." }` per provider you offer
@@ -51,6 +51,8 @@ Run each from the repo root (the worker needs `node_modules` for KaTeX's CSS).
 | api (`:3000`)                          | `npm run start:dev`    | `npm run build && npm run start:prod`                |
 | worker                                 | `npm run start:worker` | `npx nest build worker && npm run start:prod:worker` |
 | bridge (`:9999`, exactly one instance) | `npm run start:bridge` | `npx nest build bridge && npm run start:prod:bridge` |
+
+The worker refuses to start while a migration is pending: run `npm run migrate` first (after a fresh database or a pull that adds one).
 
 API reference: `GET /api/docs` ([Scalar](https://scalar.com), https://qhhoj.com/api/docs) renders the live OpenAPI document, so it cannot drift from the code; the bundle is served by the api itself (no third-party script or font).
 
@@ -97,7 +99,7 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 
 ### Jobs (`apps/worker/src/jobs`)
 
-One folder per job. Schedule: a repeating job registers its own scheduler when the worker starts; the rest run when something enqueues them. Boot routines are not jobs: they run once at every worker start and are idempotent.
+One folder per job. Schedule: a repeating job registers its own scheduler when the worker starts; the rest run when something enqueues them. One-off data fixes are not jobs: they are migrations (`apps/worker/src/migrations`), run by the deploy, never at worker start.
 
 | Job                              | Schedule                 | Purpose                                                                 |
 | -------------------------------- | ------------------------ | ----------------------------------------------------------------------- |
@@ -125,7 +127,6 @@ One folder per job. Schedule: a repeating job registers its own scheduler when t
 | `polygon-autosync`               | every 10 min             | enqueue the automatic Syncs that are due                                |
 | `problem-package`                | on request, daily 04:15  | problem package zip; the sweep trims the package cache                  |
 | `problem-purge`                  | daily 03:30              | purge the heavy data of deleted problems, leave the tombstone           |
-| `problem-databytes`              | once                     | measure data, statement and material sizes for the storage quota        |
 | `source-check`                   | on upload                | compile an uploaded checker or interactor on a judge                    |
 | `permission-rename` (boot)       | every worker start       | carry renamed permission codenames over to roles and users              |
 | `ie-override-cleanup` (boot)     | every worker start       | move an overridden internal error's message into its revision           |

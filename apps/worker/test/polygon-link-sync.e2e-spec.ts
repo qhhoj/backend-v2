@@ -5,8 +5,6 @@ import type { Job, Queue } from 'bullmq';
 import { readFile, writeFile } from 'node:fs/promises';
 import { parse } from 'yaml';
 import type { Model } from 'mongoose';
-import type Redis from 'ioredis';
-import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import { DiscordWebhooksService } from '@libs/community';
 import {
@@ -21,12 +19,11 @@ import {
   POLYGON_ERROR_PREFIX,
   POLYGON_FETCH,
   POLYGON_QUEUE,
-  QUOTA_BACKFILL_DONE_KEY,
   ProblemDataFilesService,
   QuotaLedger,
 } from '@libs/problems';
 import type { ImportProgress, PolygonImportJob } from '@libs/problems';
-import { FakePolygon } from '@libs/problems/testing';
+import { FakePolygon, setStorageBackfilled } from '@libs/problems/testing';
 import { ImportQuota } from '../src/jobs/polygon-import/import-quota.service';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import { PolygonImportError } from '../src/jobs/polygon-import/polygon-import.error';
@@ -1285,7 +1282,7 @@ describe('Polygon link, sync and auto-sync', () => {
         })
       )._id;
       await worker.setSetting('quota.enforce', 'enforce');
-      await worker.module.get<Redis>(REDIS).set(QUOTA_BACKFILL_DONE_KEY, '1');
+      await setStorageBackfilled(worker.module, true);
     });
     beforeEach(async () => {
       announce.mockClear();

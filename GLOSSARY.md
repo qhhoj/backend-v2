@@ -204,6 +204,10 @@ _Avoid_: Revision (that is a change-log row), Stamp (in prose)
 One row of the change log (`revisions`): which entity changed, who, and each field's before and after. Written by problem, contest, organization, flatpage and setting edits.
 _Avoid_: Version, history entry
 
+**Migration**:
+A one-off fix of stored data (a backfill, a rename, a repair of rows an old release or Legacy wrote) that the deploy runs once, before the new release starts. Production records each one, so it never runs again.
+_Avoid_: Boot routine, schema migration (the schemas are not versioned), migrator (the Legacy import tool)
+
 **Legacy**:
 The old Django/MariaDB site that v2 replaced. Comments that say "legacy" name behaviour kept for parity with it, usually by the old function's name.
 _Avoid_: DMOJ (the old site was a fork of it), v1

@@ -72,6 +72,10 @@ import {
 } from './organization-usage.schema';
 import { Flatpage, FlatpageSchema } from './flatpage.schema';
 import { GeneralIssue, GeneralIssueSchema } from './general-issue.schema';
+import {
+  MigrationRecord,
+  MigrationRecordSchema,
+} from './migration-record.schema';
 import { MiscConfig, MiscConfigSchema } from './misc-config.schema';
 import { Notification, NotificationSchema } from './notification.schema';
 import { Organization, OrganizationSchema } from './organization.schema';
@@ -146,6 +150,7 @@ export * from './integration-client.schema';
 export * from './judge.schema';
 export * from './language.schema';
 export * from './license.schema';
+export * from './migration-record.schema';
 export * from './misc-config.schema';
 export * from './notification.schema';
 export * from './organization-credit-entry.schema';
@@ -186,6 +191,7 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: ActivationKey.name, schema: ActivationKeySchema },
   { name: Flatpage.name, schema: FlatpageSchema },
   { name: GeneralIssue.name, schema: GeneralIssueSchema },
+  { name: MigrationRecord.name, schema: MigrationRecordSchema },
   { name: MiscConfig.name, schema: MiscConfigSchema },
   { name: Notification.name, schema: NotificationSchema },
   { name: Ticket.name, schema: TicketSchema },
