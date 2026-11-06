@@ -1,7 +1,7 @@
 import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
-import { DAY_MS } from '@libs/common';
+import { DAY_MS, GIB } from '@libs/common';
 
 /** Longest a delete or restore waits for its follow-up job to reach Redis. */
 const LIFECYCLE_ENQUEUE_TIMEOUT_MS = 1000;
@@ -65,9 +65,8 @@ export const PACKAGE_JOB = 'build';
 export const PACKAGE_SWEEP_JOB = 'sweep';
 export const PACKAGE_SWEEP_SCHEDULER = 'problem-package-sweep-daily';
 export const PACKAGE_SWEEP_PATTERN = '15 4 * * *';
-export const PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 /** Total size of the package cache; past it the oldest zips are evicted (a package build is bounded per problem, not in sum). */
-export const PACKAGE_CACHE_MAX_BYTES = 8 * 1024 * 1024 * 1024;
+export const PACKAGE_CACHE_MAX_BYTES = 8 * GIB;
 /** A cached package older than this is deleted by the daily sweep. */
 export const PACKAGE_MAX_AGE_MS = DAY_MS;
 /** The failure reason of a build over the size cap; the api turns it into `409 package_too_large`. */

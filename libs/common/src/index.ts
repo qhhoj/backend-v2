@@ -46,6 +46,7 @@ export * from './collections/same-json';
 export * from './crypto/aes-gcm';
 export * from './time/time-zone';
 export * from './time/time-units';
+export * from './size/size-units';
 export * from './openapi/api-has-more-response';
 export * from './openapi/api-paginated-response';
 export * from './openapi/has-more-page-meta.response';

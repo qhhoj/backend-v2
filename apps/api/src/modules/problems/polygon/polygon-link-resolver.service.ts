@@ -10,7 +10,7 @@ import {
   linkTokenOfPackage,
   newestReadyPackageId,
   parsePolygonLink,
-  POLYGON_PACKAGE_MAX_BYTES,
+  ARCHIVE_MAX_BYTES,
   PolygonClient,
   ProblemDataFilesService,
   statementLanguagesOf,
@@ -169,7 +169,7 @@ export class PolygonLinkResolver {
     try {
       await askPolygon(() =>
         this.polygon.downloadPackage({ problemId, packageId }, path, {
-          maxBytes: POLYGON_PACKAGE_MAX_BYTES,
+          maxBytes: ARCHIVE_MAX_BYTES,
           type: 'standard',
         }),
       );

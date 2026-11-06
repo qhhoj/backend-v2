@@ -4,12 +4,9 @@ import type {
   GenerationProgram,
   ProgramLimits,
 } from '@libs/judging';
+import { GIB, KIB, MIB, MINUTE_S } from '@libs/common';
 import { shown } from './polygon-package';
 
-const SECONDS_PER_MINUTE = 60;
-const KIB_PER_MIB = 1024;
-const BYTES_PER_MIB = 1024 * 1024;
-const MIB_PER_GIB = 1024;
 /** The first lines of a compile log or stderr are enough to find the mistake. */
 const SHOWN_LOG_LINES = 5;
 const SHOWN_LOG_CHARS = 500;
@@ -47,11 +44,9 @@ const limitsOfStage = (
   return null;
 };
 
-const mib = (kib: number): string => `${kib / KIB_PER_MIB} MiB`;
+const mib = (kib: number): string => `${kib / (MIB / KIB)} MiB`;
 const bytesText = (bytes: number): string =>
-  bytes % (BYTES_PER_MIB * MIB_PER_GIB) === 0
-    ? `${bytes / (BYTES_PER_MIB * MIB_PER_GIB)} GiB`
-    : `${bytes / BYTES_PER_MIB} MiB`;
+  bytes % GIB === 0 ? `${bytes / GIB} GiB` : `${bytes / MIB} MiB`;
 
 /** "test 17: generator gen-random", or just the program when the failure is not about one test. */
 const subjectOf = (
@@ -129,7 +124,7 @@ function rejectedText(
 }
 
 const minutesOf = (plan: GenerationPlan): number =>
-  Math.ceil(plan.deadlineS / SECONDS_PER_MINUTE);
+  Math.ceil(plan.deadlineS / MINUTE_S);
 
 /** The message when the generation outlives its overall cap; also the worker's own wait cap. */
 export const generationTimeoutText = (minutes: number): string =>

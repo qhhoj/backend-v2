@@ -35,8 +35,6 @@ export const SOURCE_CHECK_JOB_OPTIONS = {
   removeOnComplete: true,
   removeOnFail: 100,
 } as const;
-/** Largest Polygon package accepted, uploaded or downloaded from Polygon. */
-export const POLYGON_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 /** Marks a job failure reason as written for the requester; any other reason (I/O errors with absolute paths, driver messages) stays in the logs and is never shown. */
 export const POLYGON_ERROR_PREFIX = 'polygon-import: ';
 

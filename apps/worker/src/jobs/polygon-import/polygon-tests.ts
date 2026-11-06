@@ -5,6 +5,7 @@ import { PolygonImportError } from './polygon-import.error';
 import { shown } from './polygon-package';
 import { childOf, childrenOf, childText, descendant } from '@libs/problems';
 import type { XmlElement } from '@libs/problems';
+import { KIB, SECOND_MS } from '@libs/common';
 
 export interface PlannedTest {
   index: number;
@@ -88,9 +89,6 @@ const pointsOf = (element: XmlElement, what: string): number =>
   element.attributes.points === undefined
     ? 0
     : finiteNumber(element.attributes.points, what, MAX_POINTS);
-
-const MS_PER_SECOND = 1000;
-const BYTES_PER_KIB = 1024;
 
 interface PathPatterns {
   input: string;
@@ -426,8 +424,8 @@ function readLimitsAndGraderArgs(
     Number.MAX_SAFE_INTEGER,
   );
   const given = {
-    timeLimit: timeLimitMs / MS_PER_SECOND,
-    memoryLimit: Math.floor(memoryLimitBytes / BYTES_PER_KIB),
+    timeLimit: timeLimitMs / SECOND_MS,
+    memoryLimit: Math.floor(memoryLimitBytes / KIB),
   };
   return {
     timeLimit: clamp(given.timeLimit, PROBLEM_LIMITS.timeLimit),

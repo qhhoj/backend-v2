@@ -4,16 +4,19 @@ import { crc32 } from 'node:zlib';
 import { pipeline, Readable as ReadableStream, Transform } from 'node:stream';
 import type { Readable } from 'node:stream';
 import { finished } from 'node:stream/promises';
-import { hasControlCharacter } from '@libs/common';
+import { GIB, hasControlCharacter, MIB } from '@libs/common';
 import yauzl from 'yauzl';
 import type { Entry, ZipFile } from 'yauzl';
 import { hasDotSegment } from './file-names';
 import { extraFieldProblem } from './zip-extra-fields';
 
+/** Largest archive taken in: a data zip or Polygon package uploaded, a package downloaded from Polygon or built for a problem, and the biggest single entry of one. */
+export const ARCHIVE_MAX_BYTES = 512 * MIB;
+
 export const ZIP_LIMITS = {
   maxEntries: 25_000,
-  maxTotalBytes: 2 * 1024 ** 3,
-  maxEntryBytes: 512 * 1024 ** 2,
+  maxTotalBytes: 2 * GIB,
+  maxEntryBytes: ARCHIVE_MAX_BYTES,
   /** Deflate tops out near 1032:1; a header claiming more is lying. */
   maxRatio: 1100,
 } as const;

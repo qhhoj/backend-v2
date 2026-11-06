@@ -5,6 +5,7 @@ import type { TestGenerationFailure } from '@libs/database';
 import { BridgeCommandsService, featureOf } from '@libs/judging';
 import type { GenerationPlan } from '@libs/judging';
 import type { PolygonImportErrorCode } from '@libs/problems';
+import { MINUTE_MS, MINUTE_S, SECOND_MS } from '@libs/common';
 import { PolygonImportError } from './polygon-import.error';
 import { TestGenerationRepository } from './test-generation.repository';
 import {
@@ -13,10 +14,8 @@ import {
 } from './test-generation-failure';
 
 const POLL_MS = 1000;
-const MS_PER_SECOND = 1000;
-const SECONDS_PER_MINUTE = 60;
 /** A row nobody takes for this long, with no capable judge online, will not run. */
-const NO_JUDGE_AFTER_MS = 2 * SECONDS_PER_MINUTE * MS_PER_SECOND;
+const NO_JUDGE_AFTER_MS = 2 * MINUTE_MS;
 /** The worker waits the plan's deadline plus the bridge's own grace. */
 const WAIT_GRACE_S = 120;
 
@@ -81,7 +80,7 @@ export class TestGenerationService {
     plan: GenerationPlan,
   ): Promise<GenerationEnd> {
     const startedAt = Date.now();
-    const capMs = (plan.deadlineS + WAIT_GRACE_S) * MS_PER_SECOND;
+    const capMs = (plan.deadlineS + WAIT_GRACE_S) * SECOND_MS;
     for (;;) {
       const state = await this.repository.stateOf(id);
       if (!state) return { kind: 'cancelled' };
@@ -130,7 +129,7 @@ function endText(
       return describeGenerationFailure(end.failure, plan);
     case 'timeout':
       return generationTimeoutText(
-        Math.ceil((plan.deadlineS + WAIT_GRACE_S) / SECONDS_PER_MINUTE),
+        Math.ceil((plan.deadlineS + WAIT_GRACE_S) / MINUTE_S),
       );
     case 'no-judge':
       return NO_JUDGE_TEXT;
