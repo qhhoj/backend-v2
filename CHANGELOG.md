@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.37.1
+
+### Patch Changes
+
+- 7a3e708: Judging jobs (graded, problem rescore, effects sweep, similarity) are declared once as job contracts that the api, bridge and worker share; queue names, job ids, schedules and options are unchanged, so jobs queued before the deploy still run. Every worker of these queues now logs worker errors.
+
 ## 2.37.0
 
 ### Minor Changes
