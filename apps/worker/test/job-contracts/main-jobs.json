@@ -4,7 +4,20 @@
     "user": "0190f0c0-0000-7000-8000-000000000002",
     "problem": "0190f0c0-0000-7000-8000-000000000003",
     "otherProblem": "0190f0c0-0000-7000-8000-000000000004",
-    "run": "0190f0c0-0000-7000-8000-000000000005"
+    "run": "0190f0c0-0000-7000-8000-000000000005",
+    "editor": "0190f0c0-0000-7000-8000-000000000101",
+    "contest": "0190f0c0-0000-7000-8000-000000000103",
+    "fsoContest": "0190f0c0-0000-7000-8000-000000000104",
+    "ratedContest": "0190f0c0-0000-7000-8000-000000000105",
+    "rerateContest": "0190f0c0-0000-7000-8000-000000000106",
+    "replayContest": "0190f0c0-0000-7000-8000-000000000107",
+    "delayedReplayContest": "0190f0c0-0000-7000-8000-000000000108",
+    "publishContest": "0190f0c0-0000-7000-8000-000000000109",
+    "organization": "0190f0c0-0000-7000-8000-000000000110",
+    "announcement": "0190f0c0-0000-7000-8000-000000000111",
+    "participation": "0190f0c0-0000-7000-8000-000000000113",
+    "contestUser": "0190f0c0-0000-7000-8000-000000000102",
+    "contestProblem": "0190f0c0-0000-7000-8000-000000000112"
   },
   "jobs": [
     {
@@ -128,6 +141,371 @@
           "age": 604800
         }
       }
+    },
+    {
+      "producer": "api enqueueContestRescore with a scope",
+      "queue": "contest-rescore",
+      "name": "rescore",
+      "id": null,
+      "state": "waiting",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000103",
+        "participationId": "0190f0c0-0000-7000-8000-000000000113"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api enqueueContestRescore with a scope",
+      "queue": "contest-rescore",
+      "name": "rescore",
+      "id": null,
+      "state": "waiting",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000103",
+        "problemId": "0190f0c0-0000-7000-8000-000000000112"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api notifyContestRescore (edit, join) and enqueueContestRescore (editor, worker)",
+      "queue": "contest-rescore",
+      "name": "rescore",
+      "id": null,
+      "state": "waiting",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000103"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api requestFinalJudge (editor)",
+      "queue": "contest-final-judge",
+      "name": "judge-final",
+      "id": null,
+      "state": "waiting",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000104",
+        "manual": true
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api rescheduleFinalJudge (end of an FSO contest)",
+      "queue": "contest-final-judge",
+      "name": "judge-final",
+      "id": "final-judge-0190f0c0-0000-7000-8000-000000000104-1793354400000",
+      "state": "delayed",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000104",
+        "manual": false
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        },
+        "jobId": "final-judge-0190f0c0-0000-7000-8000-000000000104-1793354400000",
+        "removeOnComplete": true,
+        "delay": 2000
+      }
+    },
+    {
+      "producer": "api and worker enqueueContestRating",
+      "queue": "contest-rating",
+      "name": "rate",
+      "id": null,
+      "state": "waiting",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000105"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "worker requestContestRerate (verdict change after the end)",
+      "queue": "contest-rating",
+      "name": "rate",
+      "id": null,
+      "state": "delayed",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000106"
+      },
+      "opts": {
+        "attempts": 3,
+        "deduplication": {
+          "replace": true,
+          "keepLastIfActive": true,
+          "id": "rerate-0190f0c0-0000-7000-8000-000000000106"
+        },
+        "removeOnFail": {
+          "age": 604800
+        },
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        },
+        "removeOnComplete": true,
+        "delay": 60000
+      }
+    },
+    {
+      "producer": "api reschedulePublish (end of a publishAfterEnd contest)",
+      "queue": "contest-publish",
+      "name": "publish",
+      "id": "publish-0190f0c0-0000-7000-8000-000000000109-1793354400000",
+      "state": "delayed",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000109"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        },
+        "jobId": "publish-0190f0c0-0000-7000-8000-000000000109-1793354400000",
+        "removeOnComplete": true,
+        "delay": 2000
+      }
+    },
+    {
+      "producer": "api/worker requestReplayBuild",
+      "queue": "contest-replay",
+      "name": "build",
+      "id": null,
+      "state": "waiting",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000107"
+      },
+      "opts": {
+        "attempts": 3,
+        "delay": 0,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api/worker requestReplayBuild, delayed until the settle time",
+      "queue": "contest-replay",
+      "name": "build",
+      "id": null,
+      "state": "delayed",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000108"
+      },
+      "opts": {
+        "attempts": 3,
+        "delay": 2000,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api POST /contests/:key/data",
+      "queue": "contest-data",
+      "name": "prepare",
+      "id": "data-0190f0c0-0000-7000-8000-000000000103",
+      "state": "waiting",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000103",
+        "problemGlob": "a*",
+        "results": ["AC"]
+      },
+      "opts": {
+        "attempts": 1,
+        "jobId": "data-0190f0c0-0000-7000-8000-000000000103",
+        "removeOnComplete": true,
+        "removeOnFail": true
+      }
+    },
+    {
+      "producer": "api POST /contests/:key/export",
+      "queue": "contest-export",
+      "name": "export",
+      "id": "export-0190f0c0-0000-7000-8000-000000000103",
+      "state": "waiting",
+      "data": {
+        "contestId": "0190f0c0-0000-7000-8000-000000000103"
+      },
+      "opts": {
+        "attempts": 1,
+        "jobId": "export-0190f0c0-0000-7000-8000-000000000103",
+        "removeOnComplete": true,
+        "removeOnFail": true
+      }
+    },
+    {
+      "producer": "api/worker notifyOrganizationPoints (with its pending flag)",
+      "queue": "organization-points",
+      "name": "recompute",
+      "id": null,
+      "state": "waiting",
+      "data": {
+        "organizationId": "0190f0c0-0000-7000-8000-000000000110"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api/worker notifyContributionPoints (with its pending flag)",
+      "queue": "contribution-points",
+      "name": "recompute",
+      "id": null,
+      "state": "waiting",
+      "data": {
+        "userId": "0190f0c0-0000-7000-8000-000000000102"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api POST /profile/data",
+      "queue": "user-data",
+      "name": "prepare",
+      "id": "user-data-0190f0c0-0000-7000-8000-000000000102",
+      "state": "waiting",
+      "data": {
+        "userId": "0190f0c0-0000-7000-8000-000000000102"
+      },
+      "opts": {
+        "attempts": 1,
+        "jobId": "user-data-0190f0c0-0000-7000-8000-000000000102",
+        "removeOnComplete": true,
+        "removeOnFail": true
+      }
+    },
+    {
+      "producer": "api/worker notifyDiscord",
+      "queue": "discord-webhook",
+      "name": "send",
+      "id": null,
+      "state": "waiting",
+      "data": {
+        "event": "on_new_ticket",
+        "message": {
+          "title": "T",
+          "description": "D",
+          "author": null
+        }
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
+    },
+    {
+      "producer": "api notifyAnnouncementFanout",
+      "queue": "notification-fanout",
+      "name": "announcement",
+      "id": null,
+      "state": "waiting",
+      "data": {
+        "announcementId": "0190f0c0-0000-7000-8000-000000000111"
+      },
+      "opts": {
+        "attempts": 3,
+        "removeOnFail": {
+          "age": 604800
+        },
+        "removeOnComplete": true,
+        "backoff": {
+          "delay": 10000,
+          "type": "exponential"
+        }
+      }
     }
   ],
   "schedulers": [
@@ -139,6 +517,83 @@
       "template": {
         "opts": {
           "removeOnFail": 100,
+          "removeOnComplete": true
+        }
+      }
+    },
+    {
+      "queue": "contest-final-judge",
+      "key": "contest-final-judge-every-minute",
+      "name": "sweep",
+      "every": 60000,
+      "template": {
+        "opts": {
+          "removeOnFail": 100,
+          "removeOnComplete": true
+        }
+      }
+    },
+    {
+      "queue": "contest-publish",
+      "key": "contest-publish-every-minute",
+      "name": "sweep",
+      "every": 60000,
+      "template": {
+        "opts": {
+          "removeOnFail": 100,
+          "removeOnComplete": true
+        }
+      }
+    },
+    {
+      "queue": "contest-export",
+      "key": "contest-zip-sweep-hourly",
+      "name": "sweep",
+      "every": 3600000,
+      "template": {
+        "opts": {
+          "removeOnFail": 100,
+          "removeOnComplete": true
+        }
+      }
+    },
+    {
+      "queue": "user-data",
+      "key": "user-data-sweep-hourly",
+      "name": "sweep",
+      "every": 3600000,
+      "template": {
+        "opts": {
+          "removeOnFail": 100,
+          "removeOnComplete": true
+        }
+      }
+    },
+    {
+      "queue": "notification-trim",
+      "key": "notification-trim-nightly",
+      "name": "trim",
+      "pattern": "30 3 * * *",
+      "template": {
+        "opts": {
+          "removeOnFail": 100,
+          "removeOnComplete": true,
+          "backoff": {
+            "delay": 10000,
+            "type": "exponential"
+          },
+          "attempts": 3
+        }
+      }
+    },
+    {
+      "queue": "organization-usage-audit",
+      "key": "organization-usage-audit-nightly",
+      "name": "audit",
+      "pattern": "0 3 * * *",
+      "template": {
+        "opts": {
+          "removeOnFail": 20,
           "removeOnComplete": true
         }
       }
@@ -156,6 +611,53 @@
     },
     "effects-sweep": {
       "globalConcurrency": 1
+    },
+    "contest-rescore": {
+      "globalConcurrency": 1
+    },
+    "contest-final-judge": {
+      "globalConcurrency": null
+    },
+    "contest-rating": {
+      "globalConcurrency": 1
+    },
+    "contest-publish": {
+      "globalConcurrency": null
+    },
+    "contest-replay": {
+      "globalConcurrency": 1
+    },
+    "contest-data": {
+      "globalConcurrency": null
+    },
+    "contest-export": {
+      "globalConcurrency": null
+    },
+    "organization-points": {
+      "globalConcurrency": null
+    },
+    "contribution-points": {
+      "globalConcurrency": null
+    },
+    "user-data": {
+      "globalConcurrency": null
+    },
+    "discord-webhook": {
+      "globalConcurrency": null
+    },
+    "notification-fanout": {
+      "globalConcurrency": null
+    },
+    "notification-trim": {
+      "globalConcurrency": null
+    },
+    "organization-usage-audit": {
+      "globalConcurrency": null
     }
-  }
+  },
+  "end": "2026-10-30T10:00:00.000Z",
+  "flags": [
+    "organization-points:pending:0190f0c0-0000-7000-8000-000000000110",
+    "contribution-points:pending:0190f0c0-0000-7000-8000-000000000102"
+  ]
 }
