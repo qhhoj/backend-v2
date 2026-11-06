@@ -13,7 +13,7 @@ import {
   generationTimeoutText,
 } from './test-generation-failure';
 
-const POLL_MS = 1000;
+const POLL_MS = SECOND_MS;
 /** A row nobody takes for this long, with no capable judge online, will not run. */
 const NO_JUDGE_AFTER_MS = 2 * MINUTE_MS;
 /** The worker waits the plan's deadline plus the bridge's own grace. */
