@@ -6,7 +6,7 @@ import { fillMissing } from '../fill-missing';
 import type { Migration } from '../migration';
 
 /** Contest fields a row written before they existed lacks, at the schema default every hydrated read already sees. */
-export const CONTEST_FIELD_DEFAULTS = {
+const CONTEST_FIELD_DEFAULTS = {
   publishAfterEnd: false,
   publishAfterEndBy: null,
   autoPublishOutcome: null,

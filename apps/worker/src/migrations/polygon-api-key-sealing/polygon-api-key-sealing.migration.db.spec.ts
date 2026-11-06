@@ -14,7 +14,8 @@ import { PolygonApiKeySealingMigration } from './polygon-api-key-sealing.migrati
 
 const KEY = 'polygon.apiKey';
 const definition = SETTINGS[KEY];
-const PLAIN = 'plain-polygon-key-1234';
+/** The shape of a Polygon API key: 40 lowercase hex characters, which is also valid base64 of 30 bytes. */
+const PLAIN = '0123456789abcdef0123456789abcdef01234567';
 const STORED_AT = new Date('2026-10-01T00:00:00Z');
 
 describe('polygon api key sealing migration', () => {
@@ -110,5 +111,19 @@ describe('polygon api key sealing migration', () => {
       settings: await test.stored(Setting.name),
       revisions: await test.stored(SettingRevision.name),
     }).toEqual(after);
+  });
+
+  it('never seals a value that is already sealed, even under another ENCRYPTION_KEY', async () => {
+    const otherKey = encryptionKey('ab'.repeat(32));
+    const sealedElsewhere = sealSetting(definition, PLAIN, otherKey);
+    await settings().updateOne(
+      { _id: KEY as never },
+      { $set: { value: sealedElsewhere } },
+    );
+
+    expect(await test.module.get(PolygonApiKeySealingMigration).run()).toBe(0);
+
+    expect(await storedValue(KEY)).toBe(sealedElsewhere);
+    expect(readSetting(KEY, definition, sealedElsewhere, otherKey)).toBe(PLAIN);
   });
 });

@@ -3,11 +3,21 @@ import type { Document } from 'mongodb';
 import { Contest } from '@libs/database';
 import { setupMigrationsTest } from '../../../test/migrations-setup';
 import type { MigrationsTest } from '../../../test/migrations-setup';
-import {
-  CONTEST_FIELD_DEFAULTS,
-  ContestFieldsMigration,
-} from './contest-fields.migration';
+import { ContestFieldsMigration } from './contest-fields.migration';
 
+/** The schema defaults of the fields the migration fills (`contest.schema.ts`). */
+const DEFAULTS = {
+  publishAfterEnd: false,
+  publishAfterEndBy: null,
+  autoPublishOutcome: null,
+  organizations: [],
+  isVisible: false,
+  isPrivate: false,
+  isOrganizationPrivate: false,
+  rules: '',
+  rulesHtml: '',
+  rulesRevision: 0,
+};
 const ENDED = new Date('2026-10-01T00:00:00Z');
 const NOW = new Date('2026-11-06T00:00:00Z');
 const STORED_AT = new Date('2020-01-01T00:00:00Z');
@@ -73,9 +83,9 @@ describe('contest fields migration', () => {
       contest('half', { isVisible: true, rules: 'Be nice', rulesRevision: 2 }),
     ];
     const current = [
-      contest('defaults', CONTEST_FIELD_DEFAULTS),
+      contest('defaults', DEFAULTS),
       contest('published', {
-        ...CONTEST_FIELD_DEFAULTS,
+        ...DEFAULTS,
         publishAfterEnd: true,
         publishAfterEndBy: new UUID(),
         autoPublishOutcome: { at: NOW, status: 'published', reason: '' },
@@ -98,9 +108,7 @@ describe('contest fields migration', () => {
     const legacyIds = new Set(legacy.map((row) => String(row._id)));
     expect(await test.stored(Contest.name)).toEqual(
       stored.map((row) =>
-        legacyIds.has(String(row._id))
-          ? { ...CONTEST_FIELD_DEFAULTS, ...row }
-          : row,
+        legacyIds.has(String(row._id)) ? { ...DEFAULTS, ...row } : row,
       ),
     );
     expect(await test.hydrated(Contest.name)).toEqual(hydrated);
