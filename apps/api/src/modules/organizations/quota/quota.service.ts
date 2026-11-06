@@ -50,13 +50,14 @@ export class QuotaService implements OnApplicationBootstrap {
     );
   }
 
-  /** Spends first, runs `work` (given what was spent, null when free), refunds when `work` throws. Call it AFTER the request is validated so a bad request costs nothing. A null organization (superuser, nothing to charge) and a zero price run `work` free. */
+  /** Spends first, runs `work` (given what was spent, null when free), refunds when `work` throws. Call it AFTER the request is validated so a bad request costs nothing. A null organization (superuser, nothing to charge) and a zero price run `work` free. With `refundClaim` the refund goes through `refundOnce`, so whoever else may give the same charge back (a chunked upload's held charge) gives it back once in all. */
   async charged<Result>(
     organizationId: string | null,
     request: ChargeRequest,
     work: (spent: SpentCharge | null) => Promise<Result>,
-    now = new Date(),
+    options: { now?: Date; refundClaim?: string } = {},
   ): Promise<Result> {
+    const { now = new Date(), refundClaim } = options;
     const amount = organizationId === null ? 0 : this.priceOf(request);
     if (organizationId === null || amount === 0) return work(null);
     const key = { organizationId, month: this.ledger.monthKeyOf(now) };
@@ -66,11 +67,26 @@ export class QuotaService implements OnApplicationBootstrap {
     try {
       result = await work({ ...key, ...charge });
     } catch (error) {
-      await this.ledger.refund(key, charge);
+      await this.refundFailed({ ...key, ...charge }, refundClaim);
       throw error;
     }
     await this.warnIfCreditsNear(key);
     return result;
+  }
+
+  /** Never masks the work's own error: a failed claimed refund is logged like `QuotaLedger.refund` logs its own. */
+  private async refundFailed(
+    spent: SpentCharge,
+    refundClaim: string | undefined,
+  ): Promise<void> {
+    if (refundClaim === undefined) return this.ledger.refund(spent, spent);
+    try {
+      await this.ledger.refundOnce(refundClaim, spent);
+    } catch (error) {
+      this.logger.error(
+        `Refund of ${spent.amount} credits to ${spent.organizationId} failed: ${(error as Error).message}`,
+      );
+    }
   }
 
   /** Refuses (403 `quota_exceeded`) a charge this month's credits can no longer cover, spending nothing: a check before slow work (a chunked upload's create). `charged` stays the authority. */

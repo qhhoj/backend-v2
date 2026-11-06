@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { rm, stat } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import type { AuthContext } from '@libs/auth';
 import {
   AppError,
@@ -8,7 +8,6 @@ import {
   invalidField,
   RateLimitService,
 } from '@libs/common';
-import type { ProblemData } from '@libs/database';
 import { ProblemDataFilesService } from '@libs/problems';
 import { rejectFile, saveMultipartFile } from '../../core/multipart';
 import type { ProblemDocument } from '../../core/problems.repository';
@@ -27,12 +26,9 @@ import { ProblemDataStore } from '../problem-data.store';
 import { CHUNK_BYTES, chunkLengthOf } from './chunked-upload.limits';
 import type { CreateChunkedUploadDto } from './dto/chunked-upload.dto';
 import { ChunkedUploadResponse } from './dto/chunked-upload.response';
-import {
-  MissingPartError,
-  sha256OfFile,
-  UploadPartsStore,
-} from './upload-parts.store';
+import { MissingPartError, UploadPartsStore } from './upload-parts.store';
 import { HeldCharges } from './held-charges.service';
+import { StoredUploads } from './stored-uploads';
 import { UploadPartsSweeper } from './upload-parts.sweeper';
 import { UploadSessionsStore } from './upload-sessions.store';
 import type { UploadSession } from './upload-sessions.store';
@@ -59,6 +55,7 @@ export class ChunkedUploadsService {
     private readonly sweeper: UploadPartsSweeper,
     private readonly rateLimit: RateLimitService,
     private readonly charges: HeldCharges,
+    private readonly stored: StoredUploads,
   ) {}
 
   /** Spends one upload of the user's budget and checks storage and credits up front; credits are only charged at complete. Sweeps the parts of sessions that are gone. */
@@ -143,7 +140,7 @@ export class ChunkedUploadsService {
     const answer = await this.sessions.withSessionLock(session.id, async () => {
       const { stored, version } = await this.storedState(problem, session);
       if (stored) {
-        await this.sessions.releaseCharge(session.id);
+        await this.charges.settleStored(session.id);
         await this.sessions.markCompleted(session);
         return this.data.get(auth, problem.code);
       }
@@ -171,8 +168,10 @@ export class ChunkedUploadsService {
   ): Promise<void> {
     const { problem, session } = await this.ownSession(auth, target);
     await this.sessions.withSessionLock(session.id, async () => {
-      if ((await this.storedState(problem, session)).stored)
+      if ((await this.storedState(problem, session)).stored) {
+        await this.charges.settleStored(session.id);
         throw noSuchUpload();
+      }
       await this.drop(session);
     });
   }
@@ -186,28 +185,10 @@ export class ChunkedUploadsService {
     const { data, version } = await this.store.loadData(problem);
     return {
       stored:
-        completed || (await this.isStored(problem, { data, version }, session)),
+        completed ||
+        (await this.stored.isStored(problem, { data, version }, session)),
       version,
     };
-  }
-
-  /** The durable "already stored": the problem's archive is this session's file (name, then size, then sha256, so a different archive is rarely read), and the judges' `.data-version` stamp is the loaded version, so the write that put it there finished. A write that failed before its stamp is stored again. */
-  private async isStored(
-    problem: ProblemDocument,
-    loaded: { data: ProblemData; version: number },
-    session: UploadSession,
-  ): Promise<boolean> {
-    if (loaded.data.archive !== session.name) return false;
-    if ((await this.dataFiles.readDataVersion(problem.code)) !== loaded.version)
-      return false;
-    const path = this.dataFiles.pathOf(problem.code, session.name);
-    const size = await stat(path).then(
-      (stats) => stats.size,
-      () => null,
-    );
-    return (
-      size === session.size && (await sha256OfFile(path)) === session.sha256
-    );
   }
 
   /** Narrows a lapsed lock: a session cancelled while the chunks were joined is not stored. */

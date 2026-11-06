@@ -30,6 +30,7 @@ import type {
 
 /** A refund claim outlives the import job it is for (kept a day). */
 const REFUND_CLAIM_SECONDS = 7 * 24 * 60 * 60;
+const refundClaimKey = (claim: string) => `quota:refund:${claim}`;
 
 /** The organization quota primitives the api (`QuotaService`) and the worker share: limits, enforce mode, the ledger's give-back and the storage meter. */
 @Injectable()
@@ -149,15 +150,8 @@ export class QuotaLedger {
 
   /** `refund` at most once per `claim` (a job id), however often the failure is handled; a refund that fails releases the claim so a retry can redo it. False when it was already claimed. */
   async refundOnce(claim: string, spent: SpentCharge): Promise<boolean> {
-    const claimKey = `quota:refund:${claim}`;
-    const claimed = await this.redis.set(
-      claimKey,
-      '1',
-      'EX',
-      REFUND_CLAIM_SECONDS,
-      'NX',
-    );
-    if (claimed !== 'OK') return false;
+    const claimKey = refundClaimKey(claim);
+    if (!(await this.takeClaim(claim, '1'))) return false;
     try {
       await this.giveBackAndRecord(spent, spent);
     } catch (error) {
@@ -165,6 +159,22 @@ export class QuotaLedger {
       throw error;
     }
     return true;
+  }
+
+  /** Closes `claim` without a refund: the work it guarded finished, so a later `refundOnce` with it gives nothing back. False when it was already refunded. */
+  settle(claim: string): Promise<boolean> {
+    return this.takeClaim(claim, 'settled');
+  }
+
+  private async takeClaim(claim: string, value: string): Promise<boolean> {
+    const taken = await this.redis.set(
+      refundClaimKey(claim),
+      value,
+      'EX',
+      REFUND_CLAIM_SECONDS,
+      'NX',
+    );
+    return taken === 'OK';
   }
 
   /** The one reader of stored bytes: what the organization's private problems hold (see `sumStoredBytesByOrganization`). */

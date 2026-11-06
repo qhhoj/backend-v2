@@ -31,13 +31,14 @@ const lockKey = (id: string) => `chunked-upload:${id}:lock`;
 const userKey = (userId: string) => `chunked-upload:user:${userId}`;
 const heldChargeKey = (id: string) => `chunked-upload:${id}:charge`;
 const HELD_CHARGES_KEY = 'chunked-upload:held-charges';
-/** A held charge outlives its session this long: the hourly sweep gives it back well before. */
-const HELD_CHARGE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+/** A held charge outlives its session this long: the hourly sweep settles it well before, and it is gone before its refund claim (7 days from the write, which starts at most 24 h before the session's expiry). */
+const HELD_CHARGE_GRACE_MS = 6 * 24 * 60 * 60 * 1000;
 
-/** A charge a complete spent for its write: `claim` makes giving it back happen once. */
+/** A charge a complete spent for its write: `claim` makes giving it back happen once; `upload` lets the sweep check the write finished after the session is gone. */
 export interface HeldCharge {
   claim: string;
   spent: SpentCharge;
+  upload: Pick<UploadSession, 'problemId' | 'name' | 'size' | 'sha256'>;
 }
 
 const toSession = (fields: Record<string, string>): UploadSession => ({
@@ -166,9 +167,8 @@ export class UploadSessionsStore {
   /** Held while complete's write runs, in its own key that outlives the session by `HELD_CHARGE_GRACE_MS`, so the sweep can still give it back once the session expired; listed in one set for the sweep. */
   async holdCharge(
     session: Pick<UploadSession, 'id' | 'expiresAt'>,
-    spent: SpentCharge,
+    charge: HeldCharge,
   ): Promise<void> {
-    const charge: HeldCharge = { claim: randomUUID(), spent };
     await execOrThrow(
       this.redis
         .multi()

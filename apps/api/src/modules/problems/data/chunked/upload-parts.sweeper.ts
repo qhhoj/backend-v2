@@ -5,7 +5,7 @@ import { HeldCharges } from './held-charges.service';
 import { UploadPartsStore } from './upload-parts.store';
 import { UploadSessionsStore } from './upload-sessions.store';
 
-/** Ends what sessions that are gone (expired, cancelled, lost with Redis) left behind: gives back a charge a crashed complete still holds, then removes the parts. Hourly in every API process, and at each create; both steps are idempotent, so processes never need to agree. */
+/** Ends what sessions that are gone (expired, cancelled, lost with Redis) left behind: settles a charge a crashed complete still holds (`HeldCharges`), then removes the parts. Hourly in every API process, and at each create; both steps are idempotent, so processes never need to agree. */
 @Injectable()
 export class UploadPartsSweeper implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(UploadPartsSweeper.name);
@@ -29,7 +29,7 @@ export class UploadPartsSweeper implements OnModuleInit, OnModuleDestroy {
   /** Never throws: a failed step is logged and the next sweep tries again. */
   async sweep(): Promise<void> {
     await this.logFailure('Giving back held charges', () =>
-      this.charges.giveBackAbandoned(),
+      this.charges.settleAbandoned(),
     );
     await this.logFailure('Sweeping chunked upload parts', () =>
       this.parts.sweep((id) => this.sessions.isOpen(id)),

@@ -52,12 +52,14 @@ export function archiveNameOf(clientName: string): string {
 /** `assertZip`'s refusal: the archive itself is not an acceptable zip (a `zip_*` issue), so the same bytes can never pass. */
 export class ZipRefusedError extends ValidationFailedError {}
 
-/** Where a caller keeps the charge of a write while it runs, so a retry after the process died inside it can give that charge back first (`QuotaLedger.refundOnce`, like a Polygon import's job). */
+/** Where a caller keeps the charge of a write while it runs, so it can be given back when the process died inside the write (`QuotaLedger.refundOnce`, like a Polygon import's job). */
 export interface ChargeJournal {
+  /** Every refund of this charge goes through this claim, `charged`'s own included, so it is given back at most once. */
+  readonly claim: string;
   /** Right after the spend, before anything is written. */
   opened(spent: SpentCharge): Promise<void>;
-  /** The write ended, either way (`charged` refunds a failed one); must not throw. */
-  ended(): Promise<void>;
+  /** The write finished: the charge stands (its claim is closed). Not called on a failure, which `charged` refunds through the claim. Must not throw. */
+  settled(): Promise<void>;
 }
 
 /** A staged archive on its way to storage; `expectedVersion` pins the data version the caller checked (a write meanwhile is 409 `conflict`), `journal` records the charge while the write runs. */
@@ -76,11 +78,9 @@ async function journaled<Result>(
 ): Promise<Result> {
   if (spent === null || journal === undefined) return write();
   await journal.opened(spent);
-  try {
-    return await write();
-  } finally {
-    await journal.ended();
-  }
+  const result = await write();
+  await journal.settled();
+  return result;
 }
 
 @Injectable()
@@ -210,6 +210,7 @@ export class ProblemDataUploadService {
             return written;
           }),
         ),
+      { refundClaim: journal?.claim },
     );
     await this.store.recordChange(auth, problem, {
       before: previous,

@@ -7,8 +7,7 @@ import type { Model } from 'mongoose';
 import { REDIS } from '@libs/common';
 import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
 import { ProblemDataFilesService, QuotaLedger } from '@libs/problems';
-import { buildZip } from '@libs/problems/testing';
-import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
+import { buildZip, setStorageBackfilled } from '@libs/problems/testing';
 import { CHUNK_BYTES } from '../src/modules/problems/data/chunked/chunked-upload.limits';
 import { UploadPartsSweeper } from '../src/modules/problems/data/chunked/upload-parts.sweeper';
 import { UploadSessionsStore } from '../src/modules/problems/data/chunked/upload-sessions.store';
@@ -61,7 +60,7 @@ beforeAll(async () => {
   editor = await loginAs(api, editorId);
   coEditor = await loginAs(api, coEditorId);
   await api.setSetting('quota.enforce', 'enforce');
-  await api.app.get<Redis>(REDIS).set(QUOTA_BACKFILL_DONE_KEY, '1');
+  await setStorageBackfilled(api.app, true);
   editorIds = [editorId, coEditorId];
 });
 afterAll(() => api.teardown());
@@ -258,16 +257,13 @@ describe('chunked data upload', () => {
       ).not.toBeNull();
     });
 
-    /** A complete whose process dies inside the charged write: the write fails, and neither the refund nor the release of the held charge happens. */
+    /** A complete whose process dies inside the charged write: the write fails and its refund never happens, so the charge stays held. */
     async function crashInsideWrite(code: string, id: string) {
       const mocks = [
         failStampOnce(),
         jest
-          .spyOn(QuotaLedger.prototype, 'refund')
-          .mockResolvedValueOnce(undefined),
-        jest
-          .spyOn(UploadSessionsStore.prototype, 'releaseCharge')
-          .mockResolvedValueOnce(undefined),
+          .spyOn(QuotaLedger.prototype, 'refundOnce')
+          .mockResolvedValueOnce(false),
       ];
       await complete(code, id).expect(500);
       mocks.forEach((mock) => mock.mockRestore());
@@ -286,7 +282,7 @@ describe('chunked data upload', () => {
       ]);
     });
 
-    it('gives back once, at the sweep, the charge of a crashed complete whose session expired', async () => {
+    it('gives back once, at the sweep, the charge of a crashed complete whose session expired, never while a complete still writes', async () => {
       const { code, organizationId, id } = await readySession();
       await crashInsideWrite(code, id);
       expect(await creditsOf(organizationId)).toBe(1);
@@ -295,6 +291,10 @@ describe('chunked data upload', () => {
       await redis.zadd(`chunked-upload:user:${editorIds[0]}`, 1, id);
       await new Promise((resolve) => setTimeout(resolve, 20));
       const sweeper = api.app.get(UploadPartsSweeper);
+      await api.app
+        .get(UploadSessionsStore)
+        .withSessionLock(id, () => sweeper.sweep());
+      expect(await creditsOf(organizationId)).toBe(1);
       await sweeper.sweep();
       await sweeper.sweep();
       expect(await creditsOf(organizationId)).toBe(0);
@@ -328,9 +328,9 @@ describe('chunked data upload', () => {
       await api.app
         .get<Redis>(REDIS)
         .hdel(`chunked-upload:${next.id}`, 'completed');
+      await cancel(code, next.id).expect(404);
       const afterLostMarker = await complete(code, next.id).expect(201);
       expect(afterLostMarker.body).toEqual(stored.body);
-      await cancel(code, next.id).expect(404);
       expect(await creditsOf(organizationId!)).toBe(1);
       expect(await ledgerOf(organizationId!)).toEqual([['upload', 1]]);
     });

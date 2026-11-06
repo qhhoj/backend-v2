@@ -39,6 +39,7 @@ import { ChunkedUploadsService } from './data/chunked/chunked-uploads.service';
 import { UploadPartsStore } from './data/chunked/upload-parts.store';
 import { UploadPartsSweeper } from './data/chunked/upload-parts.sweeper';
 import { HeldCharges } from './data/chunked/held-charges.service';
+import { StoredUploads } from './data/chunked/stored-uploads';
 import { UploadSessionsStore } from './data/chunked/upload-sessions.store';
 import { ProblemDataController } from './data/problem-data.controller';
 import { ProblemDataLifecycleService } from './data/problem-data-lifecycle.service';
@@ -166,6 +167,7 @@ const repositories = [
     UploadPartsStore,
     UploadPartsSweeper,
     HeldCharges,
+    StoredUploads,
     SourceChecksService,
     ProblemStorageQuota,
     ProblemDataLifecycleService,
