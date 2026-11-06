@@ -36,17 +36,21 @@ export const pageOf = (comment: {
 /** Map key of a page. */
 export const pageRef = (page: CommentPage): string => `${page.type}:${page.id}`;
 
-/** SPA route of each page type that has a screen (contract with the frontend, listed in CONTRIBUTING). A page type missing here, like a tag problem, has no screen and no link. */
+type PathFn = (key: string) => string;
+/** SPA route of each page type (contract with the frontend, listed in CONTRIBUTING); `null` for a page type with no screen, like a tag problem, which gets no link. Every type must be listed. */
 const PAGE_PATHS = {
   problem: (key: string) => `/problem/${key}`,
   editorial: (key: string) => `/problem/${key}/editorial`,
   contest: (key: string) => `/contest/${key}`,
   blog: (key: string) => `/post/${key}`,
-} satisfies Partial<Record<CommentPageType, (key: string) => string>>;
-export type LinkedPageType = keyof typeof PAGE_PATHS;
+  tagProblem: null,
+} satisfies Record<CommentPageType, PathFn | null>;
+export type LinkedPageType = {
+  [T in CommentPageType]: null extends (typeof PAGE_PATHS)[T] ? never : T;
+}[CommentPageType];
 
 export const isLinked = (type: CommentPageType): type is LinkedPageType =>
-  type in PAGE_PATHS;
+  PAGE_PATHS[type] !== null;
 export const UNLINKED_PAGE_TYPES = COMMENT_PAGE_TYPES.filter(
   (type) => !isLinked(type),
 );
