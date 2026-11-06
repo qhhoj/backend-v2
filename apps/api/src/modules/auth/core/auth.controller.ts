@@ -1,4 +1,4 @@
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   Body,
   Controller,
@@ -22,7 +22,12 @@ import {
   setSessionCookie,
 } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { ENV } from '@libs/common';
+import { ENV, MINUTE_S } from '@libs/common';
+import {
+  FAILURE_IP_LIMIT,
+  FAILURE_LIMIT,
+  FAILURE_WINDOW_SECONDS,
+} from './rate-limits';
 import type { Env } from '@libs/common';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -42,14 +47,14 @@ export class AuthController {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  /**
-   * Sign in with a username and password
-   *
-   * @remarks
-   * Public. Verifies the credentials and opens a browser session: the `qhhoj_session` cookie is set and any session the browser already held is replaced. Send the returned `csrfToken` in the `X-CSRF-Token` header on every later non-GET request.
-   * When the account has TOTP or a security key, `twoFactorRequired` is true and `user` is null until the second factor is passed. When the password appears in a known breach, `passwordChangeRequired` is true and only the password change works.
-   * Failed attempts are limited per account from one IP (10 in 15 minutes) and per IP across all accounts (300 in 15 minutes), then 429 `rate_limited`; a refused attempt is not counted. Failures from elsewhere never lock the owner out, and one user's typos never lock out others behind the same address. Errors: 401 `invalid_credentials`, 403 `banned` (carries the ban reason), 403 `account_not_activated`, 403 `account_disabled` (deactivated by staff).
-   */
+  @ApiOperation({
+    summary: 'Sign in with a username and password',
+    description: [
+      'Public. Verifies the credentials and opens a browser session: the `qhhoj_session` cookie is set and any session the browser already held is replaced. Send the returned `csrfToken` in the `X-CSRF-Token` header on every later non-GET request.',
+      'When the account has TOTP or a security key, `twoFactorRequired` is true and `user` is null until the second factor is passed. When the password appears in a known breach, `passwordChangeRequired` is true and only the password change works.',
+      `Failed attempts are limited per account from one IP (${FAILURE_LIMIT} in ${FAILURE_WINDOW_SECONDS / MINUTE_S} minutes) and per IP across all accounts (${FAILURE_IP_LIMIT} in ${FAILURE_WINDOW_SECONDS / MINUTE_S} minutes), then 429 \`rate_limited\`; a refused attempt is not counted. Failures from elsewhere never lock the owner out, and one user's typos never lock out others behind the same address. Errors: 401 \`invalid_credentials\`, 403 \`banned\` (carries the ban reason), 403 \`account_not_activated\`, 403 \`account_disabled\` (deactivated by staff).`,
+    ].join('\n'),
+  })
   @Public()
   @Post('login')
   @HttpCode(200)

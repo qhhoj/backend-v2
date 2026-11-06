@@ -1,8 +1,10 @@
 import { Body, Controller, Param, Post, Req } from '@nestjs/common';
-import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { MAX_SOURCE_LENGTH } from '@libs/database';
+import { SUBMIT_LIMIT, UNFINISHED_LIMIT } from '../core/rate-limits';
 import { ProblemCodeParamDto } from '../../problems/core/dto/problem-params.dto';
 import { SubmitDto } from './dto/submit.dto';
 import { SubmitResponse } from './dto/submit.response';
@@ -13,25 +15,25 @@ import { SubmissionCreateService } from './submission-create.service';
 export class SubmissionCreateController {
   constructor(private readonly creation: SubmissionCreateService) {}
 
-  /**
-   * Submit a solution as typed source code
-   *
-   * @remarks
-   * Needs a signed-in user who can see the problem. `language` must be one of
-   * the problem's allowed languages, active (400 `language_inactive`) and not
-   * a file-only language (400 `language_takes_file`); `source` is 1 to 65536 characters. `judgeId` pins a
-   * judge and is for problem editors only (403 `judge_choice_forbidden`; 400
-   * `judge_unavailable` if it is offline or lacks the language). When the
-   * caller's current contest lists the problem, the submission counts as a
-   * contest submission, subject to the contest's attempt cap (403
-   * `contest_submission_limit`); a spectator who is not contest staff (author,
-   * curator, tester or contest editor) cannot submit to it until the contest
-   * ends (403 `spectator_cannot_submit`). Other errors: 403 `banned_from_problem`, 429
-   * `rate_limited` (20 per minute per user) and 429
-   * `unfinished_submission_limit` (2 unfinished submissions, waived by
-   * `judge.spam_submission`). Queues the submission for judging and returns its
-   * `id`.
-   */
+  @ApiOperation({
+    summary: 'Submit a solution as typed source code',
+    description: [
+      'Needs a signed-in user who can see the problem. `language` must be one of',
+      "the problem's allowed languages, active (400 `language_inactive`) and not",
+      `a file-only language (400 \`language_takes_file\`); \`source\` is 1 to ${MAX_SOURCE_LENGTH} characters. \`judgeId\` pins a`,
+      'judge and is for problem editors only (403 `judge_choice_forbidden`; 400',
+      '`judge_unavailable` if it is offline or lacks the language). When the',
+      "caller's current contest lists the problem, the submission counts as a",
+      "contest submission, subject to the contest's attempt cap (403",
+      '`contest_submission_limit`); a spectator who is not contest staff (author,',
+      'curator, tester or contest editor) cannot submit to it until the contest',
+      'ends (403 `spectator_cannot_submit`). Other errors: 403 `banned_from_problem`, 429',
+      `\`rate_limited\` (${SUBMIT_LIMIT} per minute per user) and 429`,
+      `\`unfinished_submission_limit\` (${UNFINISHED_LIMIT} unfinished submissions, waived by`,
+      '`judge.spam_submission`). Queues the submission for judging and returns its',
+      '`id`.',
+    ].join('\n'),
+  })
   @Post(':code/submit')
   submit(
     @CurrentAuth() auth: AuthContext,

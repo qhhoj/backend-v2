@@ -1,11 +1,12 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ScopeQueryDto } from '../core/dto/scope-query.dto';
 import { SimilarityRunResponse } from '../core/dto/similarity-run.response';
 import { SimilarityRunParamDto } from './dto/run-params.dto';
 import { SimilarityRunsService } from './similarity-runs.service';
+import { RECENT_RUNS_LIMIT } from '../core/rate-limits';
 
 @ApiTags('Judging')
 @RequirePermission('judge.moss_contest')
@@ -13,15 +14,15 @@ import { SimilarityRunsService } from './similarity-runs.service';
 export class SimilarityRunsController {
   constructor(private readonly runs: SimilarityRunsService) {}
 
-  /**
-   * List recent similarity runs of a problem or contest
-   *
-   * @remarks
-   * Needs `judge.moss_contest` and edit rights on the scope. Give exactly one of
-   * the `problem` (code) or `contest` (key) query parameters. Returns the 10
-   * newest runs, newest first, with their status, limits and per-language
-   * groups. Unknown or not editable scopes are 404 `not_found`.
-   */
+  @ApiOperation({
+    summary: 'List recent similarity runs of a problem or contest',
+    description: [
+      'Needs `judge.moss_contest` and edit rights on the scope. Give exactly one of',
+      `the \`problem\` (code) or \`contest\` (key) query parameters. Returns the ${RECENT_RUNS_LIMIT}`,
+      'newest runs, newest first, with their status, limits and per-language',
+      'groups. Unknown or not editable scopes are 404 `not_found`.',
+    ].join('\n'),
+  })
   @Get()
   list(
     @CurrentAuth() auth: AuthContext,
