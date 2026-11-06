@@ -6,7 +6,26 @@ import { MigrationRunner } from './migrations/migration-runner.service';
 import { MigrationsModule } from './migrations/migrations.module';
 import { WorkerModule } from './worker.module';
 
+const EX_USAGE = 64;
+
+/** Boots `MigrationsModule` (data access only) around one use of the runner. */
+async function withMigrationRunner<T>(
+  use: (runner: MigrationRunner) => Promise<T>,
+): Promise<T> {
+  const { logLevel } = loadEnv();
+  const app = await NestFactory.createApplicationContext(MigrationsModule, {
+    logger: nestLogLevels(logLevel),
+  });
+  try {
+    return await use(app.get(MigrationRunner));
+  } finally {
+    await app.close();
+  }
+}
+
+/** The worker refuses to start while a migration is pending, so a deploy that skipped `migrate` fails its health check. */
 async function bootstrap() {
+  await withMigrationRunner((runner) => runner.assertNonePending());
   const { logLevel } = loadEnv();
   const app = await NestFactory.createApplicationContext(WorkerModule, {
     logger: nestLogLevels(logLevel),
@@ -27,27 +46,28 @@ async function indexes() {
 }
 
 async function migrate() {
-  const { logLevel } = loadEnv();
-  const app = await NestFactory.createApplicationContext(MigrationsModule, {
-    logger: nestLogLevels(logLevel),
-  });
-  try {
-    await app.get(MigrationRunner).runPending();
-  } finally {
-    await app.close();
-  }
+  await withMigrationRunner((runner) => runner.runPending());
 }
 
-/** One-shot steps the deploy runs with the new image before the restart (`deploy/qhhoj-deploy`); a failure exits non-zero and stops the deploy. Their errors carry no row data (`indexBuildFailure`, `migrationFailure`), since the deploy log is public. */
+/** One-shot steps the deploy runs with the new image before the restart (`deploy/qhhoj-deploy`); a failure exits non-zero and stops the deploy. Their errors carry no row data or path (`indexBuildFailure`, `migrationFailure`), since the deploy log is public. Also listed in the Containerfile's `org.qhhoj.deploy-steps` label. */
 const STEPS = new Map([
   ['indexes', indexes],
   ['migrate', migrate],
 ]);
 
-const step = STEPS.get(process.argv[2] ?? '');
-if (step)
-  step().catch((error: Error) => {
-    console.error(`${process.argv[2]}: ${error.message}`);
-    process.exitCode = 1;
+/** Fails closed: an unknown step exits 64 at once, so a typo or a step this image predates never boots a worker. */
+function main(arg: string | undefined) {
+  const run = arg === undefined ? bootstrap : STEPS.get(arg);
+  if (!run) {
+    console.error(`unknown worker step: ${arg}`);
+    process.exitCode = EX_USAGE;
+    return;
+  }
+  run().catch((error: Error) => {
+    // A step's log is the public deploy log: its message only. The worker's own goes to the journal whole.
+    console.error(arg === undefined ? error : `${arg}: ${error.message}`);
+    process.exit(1);
   });
-else void bootstrap();
+}
+
+main(process.argv[2]);

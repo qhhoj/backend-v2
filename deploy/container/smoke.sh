@@ -9,6 +9,8 @@ work="$(mktemp -d)"; trap 'docker rm -f qhhoj-smoke-api qhhoj-smoke-worker >/dev
 
 set +e; docker run --rm "$image" >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 64 ] || { echo "APP unset must exit 64, got $code" >&2; exit 1; }
+set +e; docker run --rm -e APP=worker "$image" no-such-step >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 64 ] || { echo "an unknown worker step must exit 64, got $code" >&2; exit 1; }
 
 docker run --rm --entrypoint sh "$image" -c '
   set -e
@@ -45,6 +47,8 @@ run_app api
 for _ in $(seq 60); do curl -fsS http://127.0.0.1:3999/api/internal/site >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS http://127.0.0.1:3999/api/internal/site >/dev/null || { docker logs qhhoj-smoke-api; exit 1; }
 
+docker run --rm --network host --env-file "$work/env" -e APP=worker -v "$work/srv:/srv/qhhoj" "$image" migrate \
+  || { echo "worker migrate failed" >&2; exit 1; }
 run_app worker
 sleep 15
 [ "$(docker inspect -f '{{.State.Running}}' qhhoj-smoke-worker)" = true ] || { docker logs qhhoj-smoke-worker; exit 1; }

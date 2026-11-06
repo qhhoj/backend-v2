@@ -29,8 +29,12 @@ describe('MigrationRunner', () => {
       expect(new Set(ids).size).toBe(ids.length);
       const runner = test.module.get(MigrationRunner);
 
+      await expect(runner.assertNonePending()).rejects.toThrow(
+        `migrations pending: ${ids.join(', ')}; run \`worker migrate\` first`,
+      );
       expect(await runner.runPending()).toEqual(ids);
       expect(await runner.runPending()).toEqual([]);
+      await expect(runner.assertNonePending()).resolves.toBeUndefined();
       expect(await recordedIds(test)).toEqual([...ids].sort());
     });
   });
@@ -58,7 +62,7 @@ describe('MigrationRunner', () => {
     });
     afterAll(() => test.teardown());
 
-    it('stops there, keeps what ran before it, names only the Mongo error code, and resumes at it on the next run', async () => {
+    it('stops there, keeps what ran before it, names only the error code or class, and resumes at it on the next run', async () => {
       const runner = test.module.get(MigrationRunner);
 
       await expect(runner.runPending()).rejects.toThrow(
@@ -67,9 +71,18 @@ describe('MigrationRunner', () => {
       expect(ran).toEqual(['a']);
       expect(await recordedIds(test)).toEqual(['a']);
 
-      failure = new Error('ENOSPC: no space left on device');
+      failure = Object.assign(
+        new Error("ENOSPC: no space left on device, open '/srv/p/secret'"),
+        { code: 'ENOSPC' },
+      );
       await expect(runner.runPending()).rejects.toThrow(
-        'b failed: ENOSPC: no space left on device',
+        /^b failed: ENOSPC \(system error\)$/,
+      );
+      failure = new TypeError(
+        'Path escapes /srv/p through a symlink: /srv/p/x',
+      );
+      await expect(runner.runPending()).rejects.toThrow(
+        /^b failed: TypeError$/,
       );
       failure = null;
       expect(await runner.runPending()).toEqual(['b', 'c']);

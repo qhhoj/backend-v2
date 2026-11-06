@@ -12,7 +12,7 @@ import { PermissionRenameMigration } from './permission-rename/permission-rename
 import { ProblemDataBytesMigration } from './problem-databytes/problem-databytes.migration';
 import { ProblemDataBytesRepository } from './problem-databytes/problem-databytes.repository';
 
-/** Every migration, in the order they run; a new one goes at the end. The size backfill scans every data directory, so it stays last. */
+/** Every migration, in the order they run. Append-only: a new one goes at the end. */
 const IN_ORDER = [
   PermissionRenameMigration,
   IeOverrideCleanupMigration,

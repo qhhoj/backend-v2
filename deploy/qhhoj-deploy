@@ -22,6 +22,7 @@ ENV_FILE="$ROOT/etc/qhhoj/env"
 AUTHFILE="$ROOT/etc/qhhoj/ghcr-auth.json"
 HEALTH_TRIES="${QHHOJ_DEPLOY_HEALTH_TRIES:-30}"
 LOCK_WAIT="${QHHOJ_DEPLOY_LOCK_WAIT:-900}" # seconds; sudo env_reset keeps the override out of production
+STEP_TIMEOUT="${QHHOJ_DEPLOY_STEP_TIMEOUT:-1800}" # seconds per one-shot step (index build, migrations)
 # Backend images and frontend releases kept after a good deploy: the live one and the one `rollback` returns to (an
 # image is about 2.3 GB on a disk shared with other projects; only ghcr.io/qhhoj/backend-v2 tags are ever removed).
 KEEP=2
@@ -67,16 +68,39 @@ backend_healthy() {
   return 1
 }
 
+# The one-shot steps (`worker indexes`, `worker migrate`) run as confined as qhhoj-worker.container and under a hard
+# timeout: a hung step fails the deploy instead of holding the deploy lock. The container is named so one that
+# outlives its client is removed.
+run_step() { # <tag> <step> [podman run options]: runs one step of <tag>'s image
+  local tag=$1 step=$2 name="qhhoj-step-$2" code=0
+  shift 2
+  podman rm -f "$name" >/dev/null 2>&1 || true # left by a helper killed mid-step
+  timeout -k 30 "$STEP_TIMEOUT" podman run --rm --name "$name" --network=host --user 987:987 --read-only \
+    --cap-drop=all --security-opt=no-new-privileges --memory=5g "$@" "$IMAGE:$tag" "$step" || code=$?
+  [ "$code" = 0 ] && return 0
+  podman rm -f "$name" >/dev/null 2>&1 || true # a client killed by the timeout leaves its container running
+  [ "$code" = 124 ] || [ "$code" = 137 ] && echo "qhhoj-deploy: $step of $tag timed out after ${STEP_TIMEOUT}s" >&2
+  return "$code"
+}
+
+deploy_steps() { # <tag>: the steps the image lists in its org.qhhoj.deploy-steps label (Containerfile); empty before it
+  local steps
+  steps="$(podman image inspect --format '{{ index .Config.Labels "org.qhhoj.deploy-steps" }}' "$IMAGE:$1")" || return 1
+  [ "$steps" = "<no value>" ] || echo "$steps"
+}
+
 build_indexes() { # <tag>: the new image builds every schema index while the live version still serves
   # Hinted reads fail on a missing index and a unique index can fail over existing rows: both surface here, not live.
-  MONGO_URL="$(env_value MONGO_URL)" podman run --rm --network=host --user 987:987 -e MONGO_URL -e APP=worker \
-    "$IMAGE:$1" indexes
+  # Runs without the label check: every image since 2026-10-24 has the step, and the timeout bounds an older one.
+  MONGO_URL="$(env_value MONGO_URL)" run_step "$1" indexes -e MONGO_URL -e APP=worker
 }
 
 run_migrations() { # <tag>: the new image runs its pending one-off data migrations (`worker migrate`) while the live version still serves
+  # An image without the step (built before it) still runs its one-offs at boot, so it is skipped, never booted as a worker.
+  local steps; steps="$(deploy_steps "$1")" || return 1
+  if [[ " $steps " != *" migrate "* ]]; then echo "$1 has no migrate step; skipped"; return 0; fi
   # The worker's own env and volume: a migration may read the data directories. A failure is reduced to no row data.
-  podman run --rm --network=host --user 987:987 --env-file "$ENV_FILE" -e APP=worker -e NODE_ENV=production \
-    -v /srv/qhhoj:/srv/qhhoj "$IMAGE:$1" migrate
+  run_step "$1" migrate --env-file "$ENV_FILE" -e APP=worker -e NODE_ENV=production -v /srv/qhhoj:/srv/qhhoj
 }
 
 switch_backend() {
