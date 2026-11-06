@@ -1,6 +1,4 @@
-import { InjectQueue } from '@nestjs/bullmq';
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import {
   constantTimeEqual,
@@ -11,19 +9,20 @@ import {
 import type { Principal, UserDocument } from '@libs/auth';
 import {
   AppError,
+  InjectJob,
   Paginated,
   RateLimitService,
   REDIS,
   unique,
 } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import {
-  CONTEST_RESCORE_QUEUE,
+  contestJobs,
   contestPhase,
   hasParticipationEnded,
   isFrozenFor,
   isRegistrationOpen,
   LIVE,
-  notifyContestRescore,
   purgeRankingCache,
   requiresRegistration,
   SPECTATE,
@@ -116,8 +115,6 @@ interface JoinContext {
 /** Legacy `ContestRegister`, `ContestJoin`, `ContestLeave` and `ContestParticipationList`. */
 @Injectable()
 export class ContestParticipationService {
-  private readonly logger = new Logger(ContestParticipationService.name);
-
   constructor(
     private readonly contestsService: ContestsService,
     private readonly contests: ContestsRepository,
@@ -125,8 +122,8 @@ export class ContestParticipationService {
     private readonly currentContest: CurrentContestService,
     private readonly users: UsersRepository,
     private readonly rateLimit: RateLimitService,
-    @InjectQueue(CONTEST_RESCORE_QUEUE)
-    private readonly rescores: Queue<ContestRescoreJob>,
+    @InjectJob(contestJobs.rescore)
+    private readonly rescores: JobProducer<ContestRescoreJob>,
     @Inject(REDIS) private readonly redis: Redis,
     private readonly settings: SettingsService,
     private readonly sessions: SessionService,
@@ -433,7 +430,7 @@ export class ContestParticipationService {
 
   private async afterDisqualifying(contest: ContestDocument): Promise<void> {
     await purgeRankingCache(this.redis, contest._id);
-    void notifyContestRescore(this.rescores, contest._id, this.logger);
+    void this.rescores.enqueue({ contestId: contest._id });
   }
 
   /** Legacy `check_ban`, off unless the `contest.banAfterDisqualifications` setting is above 0: at the threshold the account is banned, unlisted, signed out everywhere and its API token revoked, like a staff ban, so the lift brings neither back; below it, only this ban is lifted, and the account is active again only if it was before the ban (as a manual unban). */

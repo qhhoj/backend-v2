@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { AUTO_PUBLISH_STATUSES } from '@libs/database';
 import type { ContestAutoPublishOutcome } from '@libs/database';
+import { CONTEST_ACTION_STATES } from '@libs/contests';
 import type { ContestActionState } from '@libs/contests';
 
-export const CONTEST_ACTION_STATES = ['queued', 'running', 'idle'] as const;
 const ACTION_STATE = {
   enum: CONTEST_ACTION_STATES,
   enumName: 'ContestActionState',

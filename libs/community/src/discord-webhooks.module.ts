@@ -1,10 +1,10 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
+import { JobsModule } from '@libs/common';
 import { DiscordWebhooksService } from './discord-webhooks.service';
-import { DISCORD_WEBHOOK_QUEUE } from './queues';
+import { communityJobs } from './jobs';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: DISCORD_WEBHOOK_QUEUE })],
+  imports: [JobsModule.register(communityJobs.discordWebhook)],
   providers: [DiscordWebhooksService],
   exports: [DiscordWebhooksService],
 })

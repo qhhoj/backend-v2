@@ -1,9 +1,8 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
-import { CONTEST_RESCORE_QUEUE, enqueueContestRescore } from '@libs/contests';
+import { AppError, InjectJob } from '@libs/common';
+import type { JobProducer } from '@libs/common';
+import { contestJobs } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
@@ -21,8 +20,8 @@ export class ContestProblemOpsService {
     private readonly contestsService: ContestsService,
     private readonly problems: ProblemsRepository,
     private readonly batches: SubmissionBatchService,
-    @InjectQueue(CONTEST_RESCORE_QUEUE)
-    private readonly rescores: Queue<ContestRescoreJob>,
+    @InjectJob(contestJobs.rescore)
+    private readonly rescores: JobProducer<ContestRescoreJob>,
   ) {}
 
   /** The bulk-rejudge rules (limit, locked, in-flight, dry run) over the problem's submissions in this contest only; logged like every batch. */
@@ -52,7 +51,7 @@ export class ContestProblemOpsService {
       key,
       code,
     );
-    await enqueueContestRescore(this.rescores, contest._id, { problemId });
+    await this.rescores.add({ contestId: contest._id, problemId });
     return { queued: true };
   }
 

@@ -2,10 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
-import {
-  CONTRIBUTION_POINTS_QUEUE,
-  DISCORD_WEBHOOK_QUEUE,
-} from '@libs/community';
+import { communityJobs } from '@libs/community';
 import type { ContributionPointsJob, DiscordWebhookJob } from '@libs/community';
 import { newId, uuidStr } from '@libs/database';
 import { BlogVisibilityService } from '../src/modules/blog/core/blog-visibility.service';
@@ -58,8 +55,10 @@ describe('blog editing', () => {
     await api.setSetting('discord.webhooks', {
       default: 'http://127.0.0.1:9/hook',
     });
-    discord = api.app.get(getQueueToken(DISCORD_WEBHOOK_QUEUE));
-    contributions = api.app.get(getQueueToken(CONTRIBUTION_POINTS_QUEUE));
+    discord = api.app.get(getQueueToken(communityJobs.discordWebhook.queue));
+    contributions = api.app.get(
+      getQueueToken(communityJobs.contributionPoints.queue),
+    );
   });
   beforeEach(async () => {
     await discord.drain();
@@ -560,7 +559,7 @@ describe('problem webhooks', () => {
       default: 'http://127.0.0.1:9/secret-hook',
     });
     catalog = await seedCatalog(api);
-    queue = api.app.get(getQueueToken(DISCORD_WEBHOOK_QUEUE));
+    queue = api.app.get(getQueueToken(communityJobs.discordWebhook.queue));
     admin = await loginAs(
       api,
       (await createUserWith(api, 'root', { isSuperuser: true }))._id,

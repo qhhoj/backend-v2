@@ -6,12 +6,8 @@ import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
 import { TEST_ENV, TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
-import { USER_DATA_QUEUE } from '@libs/community';
-import {
-  CONTEST_EXPORT_QUEUE,
-  CONTEST_FINAL_JUDGE_QUEUE,
-  CONTEST_PUBLISH_QUEUE,
-} from '@libs/contests';
+import { communityJobs } from '@libs/community';
+import { contestJobs } from '@libs/contests';
 import { judgingJobs } from '@libs/judging';
 import {
   Contest,
@@ -107,10 +103,10 @@ export async function setupWorkerTest({
       // Boot-time sweeps must finish before the flush, or they fail on their vanished jobs and race the tests.
       const sweepQueues = [
         judgingJobs.effectsSweep.queue,
-        CONTEST_FINAL_JUDGE_QUEUE,
-        CONTEST_PUBLISH_QUEUE,
-        USER_DATA_QUEUE,
-        CONTEST_EXPORT_QUEUE,
+        contestJobs.finalJudge.queue,
+        contestJobs.publish.queue,
+        communityJobs.userData.queue,
+        contestJobs.export.queue,
       ].map((name) => testingModule!.get<Queue>(getQueueToken(name)));
       await waitUntil(async () => {
         for (const queue of sweepQueues) {

@@ -2,7 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 
 import type { Queue } from 'bullmq';
 
-import { CONTEST_REPLAY_QUEUE } from '@libs/contests';
+import { contestJobs } from '@libs/contests';
 import type { ContestReplayJob, GhostInput } from '@libs/contests';
 
 import type { User } from '@libs/database';
@@ -194,7 +194,7 @@ afterAll(() => api.teardown());
 
     it('queues one replay rebuild when the set changes in an ended contest, and none while it runs or on a dry run', async () => {
       const queue = api.app.get<Queue<ContestReplayJob>>(
-        getQueueToken(CONTEST_REPLAY_QUEUE),
+        getQueueToken(contestJobs.replay.queue),
       );
       await queue.obliterate({ force: true });
       const waiting = () => queue.getJobs(['waiting', 'delayed']);

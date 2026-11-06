@@ -5,7 +5,7 @@ import {
   SCOREBOARD_VISIBILITIES,
 } from '@libs/database';
 import { CONTEST_PHASES } from '@libs/contests';
-import { CONTEST_ACTION_STATES } from '../../src/modules/contests/editing/dto/contest-actions.response';
+import { CONTEST_ACTION_STATES } from '@libs/contests';
 import { announcementFrameData } from '../../src/modules/contests/announcements/contest-streams.service';
 import { loadDocument, operationOf, parameterOf } from './document';
 import { inlineEnumSites, looseSites } from './schema-scans';

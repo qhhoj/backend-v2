@@ -1,14 +1,9 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { hasPermission } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { InjectJob, JobProducer, REDIS, runCoalesced } from '@libs/common';
-import {
-  CONTRIBUTION_POINTS_QUEUE,
-  notifyContributionPoints,
-} from '@libs/community';
+import { communityJobs, notifyContributionPoints } from '@libs/community';
 import type { ContributionPointsJob } from '@libs/community';
 import { contestPhase } from '@libs/contests';
 import { uuidStr } from '@libs/database';
@@ -55,8 +50,8 @@ export class ContestPublishService {
     private readonly repository: ContestPublishRepository,
     @InjectJob(judgingJobs.problemRescore)
     private readonly rescores: JobProducer<ProblemRescoreJob>,
-    @InjectQueue(CONTRIBUTION_POINTS_QUEUE)
-    private readonly contributions: Queue<ContributionPointsJob>,
+    @InjectJob(communityJobs.contributionPoints)
+    private readonly contributions: JobProducer<ContributionPointsJob>,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -164,12 +159,9 @@ export class ContestPublishService {
   private async queueFollowUps(problem: Problem): Promise<void> {
     await this.rescores.enqueue({ problemId: uuidStr(problem._id) });
     if (problem.suggester)
-      await notifyContributionPoints(
-        this.contributions,
-        this.redis,
-        [uuidStr(problem.suggester)],
-        this.logger,
-      );
+      await notifyContributionPoints(this.contributions, this.redis, [
+        uuidStr(problem.suggester),
+      ]);
   }
 
   /** Only for problems the editor may edit, and only a solution that is not already released. */

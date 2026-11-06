@@ -2,21 +2,17 @@ import { createReadStream } from 'node:fs';
 import type { ReadStream } from 'node:fs';
 import { once } from 'node:events';
 import { stat } from 'node:fs/promises';
-import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
-import { AppError, ENV, RateLimitService } from '@libs/common';
-import type { Env } from '@libs/common';
+import { AppError, ENV, InjectJob, RateLimitService } from '@libs/common';
+import type { Env, JobProducer } from '@libs/common';
 import {
   canPrepareData,
   CONTEST_DATA_PREPARE_INTERVAL_MS,
-  CONTEST_EXPORT_JOB,
-  CONTEST_EXPORT_QUEUE,
   contestExportJobId,
   contestExportPath,
+  contestJobs,
   contestPhase,
-  oneJobPerContest,
 } from '@libs/contests';
 import type { ContestExportJob } from '@libs/contests';
 import { ContestViewerService } from '../core/contest-viewer.service';
@@ -45,8 +41,8 @@ export class ContestExportService {
     private readonly viewers: ContestViewerService,
     private readonly contests: ContestsRepository,
     private readonly rateLimits: RateLimitService,
-    @InjectQueue(CONTEST_EXPORT_QUEUE)
-    private readonly queue: Queue<ContestExportJob>,
+    @InjectJob(contestJobs.export)
+    private readonly jobs: JobProducer<ContestExportJob>,
   ) {}
 
   async status(
@@ -99,11 +95,7 @@ export class ContestExportService {
       );
     await this.claimBuild(contest._id);
     await this.contests.setExportPreparedAt(contest._id, now);
-    await this.queue.add(
-      CONTEST_EXPORT_JOB,
-      { contestId: contest._id },
-      oneJobPerContest('export', contest._id),
-    );
+    await this.jobs.add({ contestId: contest._id });
     return { queued: true };
   }
 
@@ -145,9 +137,7 @@ export class ContestExportService {
   }
 
   private async isPreparing(contestId: string): Promise<boolean> {
-    return (
-      (await this.queue.getJob(contestExportJobId(contestId))) !== undefined
-    );
+    return (await this.jobs.job(contestExportJobId(contestId))) !== undefined;
   }
 
   /** Same rule as the data download: off without a root (404), editors only (403), ended only (409). */

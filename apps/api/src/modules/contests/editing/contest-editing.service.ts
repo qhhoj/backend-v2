@@ -1,19 +1,20 @@
-import { InjectQueue } from '@nestjs/bullmq';
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import type { FilterQuery } from 'mongoose';
 import type { Principal } from '@libs/auth';
-import { AppError, invalidField, REDIS, sameJson, unique } from '@libs/common';
 import {
-  CONTEST_FINAL_JUDGE_QUEUE,
-  CONTEST_PUBLISH_QUEUE,
-  CONTEST_RESCORE_QUEUE,
+  AppError,
+  InjectJob,
+  invalidField,
+  REDIS,
+  sameJson,
+  unique,
+} from '@libs/common';
+import type { JobProducer } from '@libs/common';
+import {
+  contestJobs,
   contestPhase,
-  enqueueContestRescore,
-  notifyContestRescore,
   purgeRankingCache,
-  requestFinalJudge,
   rescheduleFinalJudge,
   reschedulePublish,
   scoringKeyOf,
@@ -141,20 +142,18 @@ function pinnedFlags(
 
 @Injectable()
 export class ContestEditingService {
-  private readonly logger = new Logger(ContestEditingService.name);
-
   constructor(
     private readonly contests: ContestsRepository,
     private readonly contestsService: ContestsService,
     private readonly editFields: ContestEditFieldsService,
     private readonly problems: ProblemsRepository,
     private readonly participationRows: ParticipationsRepository,
-    @InjectQueue(CONTEST_RESCORE_QUEUE)
-    private readonly rescores: Queue<ContestRescoreJob>,
-    @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)
-    private readonly finalJudges: Queue<ContestFinalJudgeJob>,
-    @InjectQueue(CONTEST_PUBLISH_QUEUE)
-    private readonly publishes: Queue<ContestPublishJob>,
+    @InjectJob(contestJobs.rescore)
+    private readonly rescores: JobProducer<ContestRescoreJob>,
+    @InjectJob(contestJobs.finalJudge)
+    private readonly finalJudges: JobProducer<ContestFinalJudgeJob>,
+    @InjectJob(contestJobs.publish)
+    private readonly publishes: JobProducer<ContestPublishJob>,
     @Inject(REDIS) private readonly redis: Redis,
     private readonly quota: QuotaService,
   ) {}
@@ -235,22 +234,14 @@ export class ContestEditingService {
     next: Contest;
   }): Promise<void> {
     const { previous, next } = change;
-    await rescheduleFinalJudge(
-      this.finalJudges,
-      {
-        previous: previous && finalJudgeTarget(previous),
-        next: finalJudgeTarget(next),
-      },
-      this.logger,
-    );
-    await reschedulePublish(
-      this.publishes,
-      {
-        previous: previous && publishTarget(previous),
-        next: publishTarget(next),
-      },
-      this.logger,
-    );
+    await rescheduleFinalJudge(this.finalJudges, {
+      previous: previous && finalJudgeTarget(previous),
+      next: finalJudgeTarget(next),
+    });
+    await reschedulePublish(this.publishes, {
+      previous: previous && publishTarget(previous),
+      next: publishTarget(next),
+    });
   }
 
   /** Scoring edits queue a rescore; a new lock is copied onto live submissions. */
@@ -299,7 +290,7 @@ export class ContestEditingService {
     await this.rescheduleEndJobs({ previous: contest, next: updated });
     // `endTime` is part of the scoring: the rescore's follow-up re-rates a contest that has ratings.
     if (scoringKeyOf(updated) !== scoringKeyOf(contest))
-      void notifyContestRescore(this.rescores, contest._id, this.logger);
+      void this.rescores.enqueue({ contestId: contest._id });
     if (
       fields.lockedAfter !== undefined &&
       !sameJson(fields.lockedAfter, contest.lockedAfter)
@@ -395,7 +386,7 @@ export class ContestEditingService {
   /** An editor's manual rescore (legacy admin action). */
   async rescore(principal: Principal, key: string): Promise<QueuedResponse> {
     const contest = await this.contestsService.editableContest(principal, key);
-    await enqueueContestRescore(this.rescores, contest._id);
+    await this.rescores.add({ contestId: contest._id });
     return { queued: true };
   }
 
@@ -414,7 +405,7 @@ export class ContestEditingService {
       );
     if (contestPhase(contest, now) === 'upcoming')
       throw new AppError('conflict', 409, 'The contest has not started');
-    await requestFinalJudge(this.finalJudges, contest._id);
+    await this.finalJudges.add({ contestId: contest._id, manual: true });
     return { queued: true };
   }
 }

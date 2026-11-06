@@ -1,12 +1,8 @@
-import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
-import { AppError, Paginated, RateLimitService } from '@libs/common';
-import {
-  NOTIFICATION_FANOUT_QUEUE,
-  notifyAnnouncementFanout,
-} from '@libs/community';
+import { AppError, InjectJob, Paginated, RateLimitService } from '@libs/common';
+import type { JobProducer } from '@libs/common';
+import { communityJobs } from '@libs/community';
 import type { NotificationFanoutJob } from '@libs/community';
 import {
   contestPhase,
@@ -34,16 +30,14 @@ import {
 
 @Injectable()
 export class ContestAnnouncementsService {
-  private readonly logger = new Logger(ContestAnnouncementsService.name);
-
   constructor(
     private readonly contestsService: ContestsService,
     private readonly announcements: AnnouncementsRepository,
     private readonly events: ContestEventsService,
     private readonly rateLimit: RateLimitService,
     private readonly problems: ProblemsRepository,
-    @InjectQueue(NOTIFICATION_FANOUT_QUEUE)
-    private readonly fanout: Queue<NotificationFanoutJob>,
+    @InjectJob(communityJobs.notificationFanout)
+    private readonly fanout: JobProducer<NotificationFanoutJob>,
   ) {}
 
   async list(
@@ -139,7 +133,7 @@ export class ContestAnnouncementsService {
       contestId: contest._id,
       announcementId,
     });
-    await notifyAnnouncementFanout(this.fanout, announcementId, this.logger);
+    await this.fanout.enqueue({ announcementId });
   }
 
   /** Every push reaches every open stream of the contest: bounded per contest, never given back. */

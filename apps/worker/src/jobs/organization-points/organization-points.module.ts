@@ -1,12 +1,12 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
+import { JobsModule } from '@libs/common';
+import { communityJobs } from '@libs/community';
 import { OrganizationPointsProcessor } from './organization-points.processor';
 import { OrganizationPointsRepository } from './organization-points.repository';
 import { OrganizationPointsService } from './organization-points.service';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: ORGANIZATION_POINTS_QUEUE })],
+  imports: [JobsModule.register(communityJobs.organizationPoints)],
   providers: [
     OrganizationPointsProcessor,
     OrganizationPointsService,

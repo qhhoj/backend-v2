@@ -1,6 +1,6 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { USER_DATA_QUEUE } from '@libs/community';
+import { JobsModule } from '@libs/common';
+import { communityJobs } from '@libs/community';
 import { UserDataProcessor } from './user-data.processor';
 import { UserDataCommunityRepository } from './user-data-community.repository';
 import { UserDataRepository } from './user-data.repository';
@@ -11,7 +11,7 @@ import {
 } from './user-data.service';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: USER_DATA_QUEUE })],
+  imports: [JobsModule.register(communityJobs.userData)],
   providers: [
     UserDataProcessor,
     UserDataService,

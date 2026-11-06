@@ -2,13 +2,12 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { Logger } from '@nestjs/common';
-import { REDIS } from '@libs/common';
+import { JobProducer, REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import {
   childPath,
-  CONTRIBUTION_POINTS_QUEUE,
+  communityJobs,
   notifyContributionPoints,
-  ORGANIZATION_POINTS_JOB,
 } from '@libs/community';
 import type { ContributionPointsJob } from '@libs/community';
 import {
@@ -147,13 +146,12 @@ afterAll(() => worker.teardown());
       const user = await seedUser(worker, { contributionPoints: 99 });
       await comment(user._id, -2);
       const queue = worker.module.get<Queue<ContributionPointsJob>>(
-        getQueueToken(CONTRIBUTION_POINTS_QUEUE),
+        getQueueToken(communityJobs.contributionPoints.queue),
       );
       await notifyContributionPoints(
-        queue,
+        new JobProducer(communityJobs.contributionPoints, queue),
         worker.module.get<Redis>(REDIS),
         [user._id],
-        new Logger('test'),
       );
       await waitUntil(async () => (await pointsOf(user._id)) === -2);
     });
@@ -253,7 +251,7 @@ afterAll(() => worker.teardown());
       const queuedOrganizations = () =>
         added.mock.calls
           .flatMap(([jobs]) => jobs)
-          .filter(({ name }) => name === ORGANIZATION_POINTS_JOB)
+          .filter(({ name }) => name === communityJobs.organizationPoints.name)
           .map(
             ({ data }) => (data as { organizationId: string }).organizationId,
           );

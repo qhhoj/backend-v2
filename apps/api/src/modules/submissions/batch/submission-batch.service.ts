@@ -1,10 +1,8 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, InjectJob, JobProducer, unique } from '@libs/common';
-import { CONTEST_RESCORE_QUEUE, enqueueContestRescore } from '@libs/contests';
+import { contestJobs } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
 import type { Revision, Submission } from '@libs/database';
@@ -51,8 +49,8 @@ export class SubmissionBatchService {
     private readonly users: UsersRepository,
     @InjectJob(judgingJobs.problemRescore)
     private readonly problemRescores: JobProducer<ProblemRescoreJob>,
-    @InjectQueue(CONTEST_RESCORE_QUEUE)
-    private readonly contestRescores: Queue<ContestRescoreJob>,
+    @InjectJob(contestJobs.rescore)
+    private readonly contestRescores: JobProducer<ContestRescoreJob>,
   ) {}
 
   /** Matches at batch priority; publishes no events (up to 100k `queued` would flood every feed; pages see `processing` from the bridge); above `BULK_REJUDGE_LIMIT` needs `judge.rejudge_submission_lot`. */
@@ -131,8 +129,7 @@ export class SubmissionBatchService {
     count: number,
   ): Promise<void> {
     if (refs.contestId) {
-      if (count)
-        await enqueueContestRescore(this.contestRescores, refs.contestId);
+      if (count) await this.contestRescores.add({ contestId: refs.contestId });
       return;
     }
     if (problemIds.length)

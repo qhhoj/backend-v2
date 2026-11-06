@@ -1,6 +1,6 @@
 import type Redis from 'ioredis';
 import { JobProducer, REDIS } from '@libs/common';
-import { CONTEST_RATING_QUEUE, rankingCacheKeys } from '@libs/contests';
+import { contestJobs, rankingCacheKeys } from '@libs/contests';
 import type { ContestRatingJob } from '@libs/contests';
 import { newId, OrganizationJudgingCharge, toUuid } from '@libs/database';
 import type { Submission } from '@libs/database';
@@ -307,7 +307,7 @@ afterAll(() => worker.teardown());
 
     it('re-rates an ended contest that has ratings once a burst of verdict changes settles', async () => {
       const ratingQueue = worker.module.get<Queue<ContestRatingJob>>(
-        getQueueToken(CONTEST_RATING_QUEUE),
+        getQueueToken(contestJobs.rating.queue),
       );
       const { problem, contest, participation } = await contestOn(
         {},
@@ -618,16 +618,6 @@ afterAll(() => worker.teardown());
       queue = worker.module.get<Queue>(
         getQueueToken(judgingJobs.effectsSweep.queue),
       );
-    });
-
-    it('keeps one 10-minute schedule however many worker processes boot', async () => {
-      const processor = worker.module.get(EffectsSweepProcessor);
-      await processor.onApplicationBootstrap();
-      await processor.onApplicationBootstrap();
-      await sweepQueueIdle();
-      const schedulers = await queue.getJobSchedulers();
-      expect(schedulers).toHaveLength(1);
-      expect(schedulers[0]).toMatchObject({ every: 10 * MINUTE });
     });
 
     it('recovers users and problems whose graded job was lost, compile errors included', async () => {

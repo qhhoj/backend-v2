@@ -1,7 +1,6 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { RateLimitService } from '@libs/common';
-import { CONTEST_REPLAY_QUEUE } from '@libs/contests';
+import { JobsModule, RateLimitService } from '@libs/common';
+import { contestJobs } from '@libs/contests';
 import { ProblemsApiModule } from '../../problems/problems-api.module';
 import { ContestAccessModule } from '../core/contest-access.module';
 import { RankingUsersRepository } from '../ranking/ranking-users.repository';
@@ -14,7 +13,7 @@ import { ReplaysRepository } from './replays.repository';
   imports: [
     ContestAccessModule,
     ProblemsApiModule,
-    BullModule.registerQueue({ name: CONTEST_REPLAY_QUEUE }),
+    JobsModule.register(contestJobs.replay),
   ],
   controllers: [ReplayController],
   providers: [

@@ -1,12 +1,11 @@
 import { getQueueToken } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { JobProducer } from '@libs/common';
 import type { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import {
-  CONTEST_FINAL_JUDGE_QUEUE,
+  contestJobs,
   finalJudgeJobId,
-  requestFinalJudge,
   rescheduleFinalJudge,
 } from '@libs/contests';
 import type { ContestFinalJudgeJob, FinalJudgeTarget } from '@libs/contests';
@@ -191,11 +190,14 @@ describe('FSO final judging', () => {
 
   it("runs an editor's queued request through the processor, whatever autoJudge says", async () => {
     const queue = worker.module.get<Queue<ContestFinalJudgeJob>>(
-      getQueueToken(CONTEST_FINAL_JUDGE_QUEUE),
+      getQueueToken(contestJobs.finalJudge.queue),
     );
     const contest = await fsoContest({ formatConfig: { autoJudge: false } });
     const { ids } = await pending(contest, 2);
-    await requestFinalJudge(queue, contest._id);
+    await queue.add(contestJobs.finalJudge.name, {
+      contestId: contest._id,
+      manual: true,
+    });
     await waitUntil(
       async () => (await commandedIds()).length === ids.length,
       10_000,
@@ -205,7 +207,7 @@ describe('FSO final judging', () => {
 
   it('follows an endTime edit and ignores the stale job', async () => {
     const queue = worker.module.get<Queue<ContestFinalJudgeJob>>(
-      getQueueToken(CONTEST_FINAL_JUDGE_QUEUE),
+      getQueueToken(contestJobs.finalJudge.queue),
     );
     const firstEnd = new Date(Date.now() + 1500);
     const contest = await fsoContest({
@@ -219,21 +221,20 @@ describe('FSO final judging', () => {
       formatName: 'final_submission',
       formatConfig: { autoJudge: true },
     });
-    await rescheduleFinalJudge(
-      queue,
-      { previous: null, next: target(firstEnd) },
-      new Logger('spec'),
-    );
+    const finalJudges = new JobProducer(contestJobs.finalJudge, queue);
+    await rescheduleFinalJudge(finalJudges, {
+      previous: null,
+      next: target(firstEnd),
+    });
     const laterEnd = new Date(Date.now() + 4000);
     await worker.contests.updateOne(
       { _id: contest._id },
       { endTime: laterEnd },
     );
-    await rescheduleFinalJudge(
-      queue,
-      { previous: target(firstEnd), next: target(laterEnd) },
-      new Logger('spec'),
-    );
+    await rescheduleFinalJudge(finalJudges, {
+      previous: target(firstEnd),
+      next: target(laterEnd),
+    });
     expect(await queue.getJob(finalJudgeJobId(contest._id, firstEnd))).toBe(
       undefined,
     );

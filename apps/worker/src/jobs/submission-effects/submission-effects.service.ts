@@ -1,16 +1,11 @@
-import { InjectQueue } from '@nestjs/bullmq';
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
-import { REDIS, runCoalesced } from '@libs/common';
-import {
-  notifyOrganizationPoints,
-  ORGANIZATION_POINTS_QUEUE,
-} from '@libs/community';
+import { InjectJob, REDIS, runCoalesced } from '@libs/common';
+import type { JobProducer } from '@libs/common';
+import { communityJobs, notifyOrganizationPoints } from '@libs/community';
 import type { OrganizationPointsJob } from '@libs/community';
 import {
-  CONTEST_RATING_QUEUE,
-  CONTEST_REPLAY_QUEUE,
+  contestJobs,
   contestSubmissionPoints,
   disqualify,
   LIVE,
@@ -37,19 +32,17 @@ import { SubmissionEffectsRepository } from './submission-effects.repository';
 /** The only place a user's points, a problem's stats or a contest participation's results are recomputed (graded jobs, the sweep, rescores). Each recompute reads Mongo and `$set`s, serialised per key across processes. */
 @Injectable()
 export class SubmissionEffectsService {
-  private readonly logger = new Logger(SubmissionEffectsService.name);
-
   constructor(
     private readonly repository: SubmissionEffectsRepository,
     private readonly contestResults: ContestResultsRepository,
     private readonly judgingCharges: JudgingCharges,
     @Inject(REDIS) private readonly redis: Redis,
-    @InjectQueue(ORGANIZATION_POINTS_QUEUE)
-    private readonly organizationPoints: Queue<OrganizationPointsJob>,
-    @InjectQueue(CONTEST_REPLAY_QUEUE)
-    private readonly replayQueue: Queue<ContestReplayJob>,
-    @InjectQueue(CONTEST_RATING_QUEUE)
-    private readonly ratingQueue: Queue<ContestRatingJob>,
+    @InjectJob(communityJobs.organizationPoints)
+    private readonly organizationPoints: JobProducer<OrganizationPointsJob>,
+    @InjectJob(contestJobs.replay)
+    private readonly replays: JobProducer<ContestReplayJob>,
+    @InjectJob(contestJobs.rating)
+    private readonly ratings: JobProducer<ContestRatingJob>,
   ) {}
 
   /** The graded job (and the sweep's repair of one that was lost): the effects, then the run's judging time is charged (once per grading attempt, also for a deleted problem; after the effects, so billing never holds back a score), then the row's `effectsDueAt` is cleared, but only the stamp read before them, so a run that finished meanwhile keeps its own and a failed charge is repaired by the sweep. */
@@ -119,11 +112,11 @@ export class SubmissionEffectsService {
     if (participation?.virtual !== LIVE || participation.isDisqualified) return;
     const contestId = uuidStr(contest._id);
     if (contest.formatName !== 'final_submission')
-      await notifyReplayBuild(this.replayQueue, contestId, this.logger, {
+      await notifyReplayBuild(this.replays, contestId, {
         delayMs: replayDelayMs(contest.endTime, now),
       });
     if (await this.contestResults.hasRatings(contestId))
-      await requestContestRerate(this.ratingQueue, contestId);
+      await requestContestRerate(this.ratings, contestId);
   }
 
   /** Legacy `recompute_results` through the contest's format, then the contest's ranking cache is dropped (all four keys). */
@@ -174,7 +167,6 @@ export class SubmissionEffectsService {
           this.organizationPoints,
           this.redis,
           previous.organizations,
-          this.logger,
         );
     });
   }

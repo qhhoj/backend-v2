@@ -1,7 +1,7 @@
 import { utimesSync, writeFileSync } from 'node:fs';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { USER_DATA_QUEUE, userDataJobId, userDataPath } from '@libs/community';
+import { communityJobs, userDataJobId, userDataPath } from '@libs/community';
 import type { UserDataJob } from '@libs/community';
 import type { User } from '@libs/database';
 import type { UserDataStatusResponse } from '../src/modules/users/data/dto/user-data.response';
@@ -36,7 +36,7 @@ describe('user data routes', () => {
 
   beforeAll(async () => {
     api = await setupApiTest();
-    queue = api.app.get(getQueueToken(USER_DATA_QUEUE));
+    queue = api.app.get(getQueueToken(communityJobs.userData.queue));
   });
   afterAll(() => api.teardown());
 

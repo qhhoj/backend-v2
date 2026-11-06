@@ -43,6 +43,7 @@ export MONGO_URL='mongodb://127.0.0.1:$PORT_MONGO/qhhoj_e2e_real?replicaSet=rs0&
 export REDIS_URL='${REDIS_URL:-redis://127.0.0.1:$PORT_REDIS}'
 export ENCRYPTION_KEY=$(openssl rand -hex 32)
 export TOKEN_SECRET=$(openssl rand -hex 32)
+export SESSION_SECRET=$(openssl rand -hex 32)
 export SITE_URL=http://127.0.0.1:$PORT_PREVIEW
 export COOKIE_SECURE=false
 export PORT=$PORT_API

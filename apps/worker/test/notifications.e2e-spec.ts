@@ -1,16 +1,8 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
-import {
-  NOTIFICATION_CAP_PER_USER,
-  NOTIFICATION_TRIM_JOB,
-  NOTIFICATION_TRIM_PATTERN,
-  NOTIFICATION_TRIM_QUEUE,
-  NOTIFICATION_FANOUT_JOB,
-  NOTIFICATION_FANOUT_QUEUE,
-} from '@libs/community';
+import { communityJobs, NOTIFICATION_CAP_PER_USER } from '@libs/community';
 import { newId } from '@libs/database';
-import { NotificationTrimProcessor } from '../src/jobs/notification-trim/notification-trim.processor';
 import {
   NotificationTrimRepository,
   OVER_CAP_SCAN_INDEX,
@@ -167,27 +159,13 @@ afterAll(() => worker.teardown());
       expect(newestPlan).not.toContain('"SORT"');
     });
 
-    it('keeps one nightly schedule however many worker processes boot', async () => {
-      const processor = worker.module.get(NotificationTrimProcessor);
-      await processor.onApplicationBootstrap();
-      await processor.onApplicationBootstrap();
-      const queue = worker.module.get<Queue>(
-        getQueueToken(NOTIFICATION_TRIM_QUEUE),
-      );
-      const schedulers = await queue.getJobSchedulers();
-      expect(schedulers).toHaveLength(1);
-      expect(schedulers[0]).toMatchObject({
-        pattern: NOTIFICATION_TRIM_PATTERN,
-      });
-    });
-
     it('is consumed from the queue by the processor', async () => {
       const user = newId();
       await seed(user, NOTIFICATION_CAP_PER_USER + 3, 0);
       const queue = worker.module.get<Queue>(
-        getQueueToken(NOTIFICATION_TRIM_QUEUE),
+        getQueueToken(communityJobs.notificationTrim.queue),
       );
-      await queue.add(NOTIFICATION_TRIM_JOB, {});
+      await queue.add(communityJobs.notificationTrim.name, {});
       await waitUntil(
         async () => (await countOf(user)) === NOTIFICATION_CAP_PER_USER,
       );
@@ -495,9 +473,11 @@ afterAll(() => worker.teardown());
       await join(round._id, user);
       const saved = await announcement(round._id, 'Queued');
       const queue = worker.module.get<Queue>(
-        getQueueToken(NOTIFICATION_FANOUT_QUEUE),
+        getQueueToken(communityJobs.notificationFanout.queue),
       );
-      await queue.add(NOTIFICATION_FANOUT_JOB, { announcementId: saved._id });
+      await queue.add(communityJobs.notificationFanout.name, {
+        announcementId: saved._id,
+      });
       await waitUntil(async () => (await rowsOf(user)).length === 1);
     });
   });

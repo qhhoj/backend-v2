@@ -1,8 +1,7 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
-import { USER_DATA_QUEUE } from '@libs/community';
-import { RateLimitService } from '@libs/common';
+import { communityJobs } from '@libs/community';
+import { JobsModule, RateLimitService } from '@libs/common';
 import { AuthApiModule } from '../auth/auth-api.module';
 import { BlogApiModule } from '../blog/blog-api.module';
 import { CommentsApiModule } from '../comments/comments-api.module';
@@ -52,7 +51,7 @@ import { UserSuggestionsService } from './suggestions/user-suggestions.service';
     OrganizationsApiModule,
     ProblemsApiModule,
     SubmissionsApiModule,
-    BullModule.registerQueue({ name: USER_DATA_QUEUE }),
+    JobsModule.register(communityJobs.userData),
   ],
   controllers: [
     UserPagesController,

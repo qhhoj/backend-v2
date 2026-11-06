@@ -2,7 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 
 import { Queue } from 'bullmq';
 
-import { CONTEST_REPLAY_QUEUE, REPLAY_FORMAT_VERSION } from '@libs/contests';
+import { contestJobs, REPLAY_FORMAT_VERSION } from '@libs/contests';
 
 import type { ContestReplayJob } from '@libs/contests';
 
@@ -127,7 +127,7 @@ describe('contest replay', () => {
 
   beforeAll(async () => {
     api = await setupApiTest();
-    queue = api.app.get(getQueueToken(CONTEST_REPLAY_QUEUE));
+    queue = api.app.get(getQueueToken(contestJobs.replay.queue));
     const catalog = await seedCatalog(api);
     const roles: Array<[string, Partial<User>]> = [
       ['alice', {}],

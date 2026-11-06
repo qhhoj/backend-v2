@@ -1,17 +1,13 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { RateLimitService } from '@libs/common';
-import { CONTEST_EXPORT_QUEUE } from '@libs/contests';
+import { JobsModule, RateLimitService } from '@libs/common';
+import { contestJobs } from '@libs/contests';
 import { ContestAccessModule } from '../core/contest-access.module';
 import { ContestExportController } from './contest-export.controller';
 import { ContestExportService } from './contest-export.service';
 
 /** The contest submissions export (request, status, download). */
 @Module({
-  imports: [
-    ContestAccessModule,
-    BullModule.registerQueue({ name: CONTEST_EXPORT_QUEUE }),
-  ],
+  imports: [ContestAccessModule, JobsModule.register(contestJobs.export)],
   controllers: [ContestExportController],
   providers: [ContestExportService, RateLimitService],
 })

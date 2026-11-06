@@ -1,16 +1,8 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
-import {
-  CONTEST_EXPORT_QUEUE,
-  CONTEST_FINAL_JUDGE_QUEUE,
-  CONTEST_PUBLISH_QUEUE,
-  CONTEST_RATING_QUEUE,
-  CONTEST_REPLAY_QUEUE,
-  CONTEST_RESCORE_QUEUE,
-  contestActionState,
-} from '@libs/contests';
+import { InjectJob } from '@libs/common';
+import type { JobProducer } from '@libs/common';
+import { contestActionState, contestJobs } from '@libs/contests';
 import type {
   ContestExportJob,
   ContestFinalJudgeJob,
@@ -28,18 +20,18 @@ export class ContestActionsService {
   constructor(
     private readonly contestsService: ContestsService,
     private readonly contests: ContestsRepository,
-    @InjectQueue(CONTEST_RESCORE_QUEUE)
-    private readonly rescores: Queue<ContestRescoreJob>,
-    @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)
-    private readonly finalJudges: Queue<ContestFinalJudgeJob>,
-    @InjectQueue(CONTEST_RATING_QUEUE)
-    private readonly ratings: Queue<ContestRatingJob>,
-    @InjectQueue(CONTEST_PUBLISH_QUEUE)
-    private readonly publishes: Queue<ContestPublishJob>,
-    @InjectQueue(CONTEST_REPLAY_QUEUE)
-    private readonly replays: Queue<ContestReplayJob>,
-    @InjectQueue(CONTEST_EXPORT_QUEUE)
-    private readonly exports: Queue<ContestExportJob>,
+    @InjectJob(contestJobs.rescore)
+    private readonly rescores: JobProducer<ContestRescoreJob>,
+    @InjectJob(contestJobs.finalJudge)
+    private readonly finalJudges: JobProducer<ContestFinalJudgeJob>,
+    @InjectJob(contestJobs.rating)
+    private readonly ratings: JobProducer<ContestRatingJob>,
+    @InjectJob(contestJobs.publish)
+    private readonly publishes: JobProducer<ContestPublishJob>,
+    @InjectJob(contestJobs.replay)
+    private readonly replays: JobProducer<ContestReplayJob>,
+    @InjectJob(contestJobs.export)
+    private readonly exports: JobProducer<ContestExportJob>,
   ) {}
 
   /** Editors only, like `rescore`. The automatic final judging at the end is not an editor's request, so it is filtered out. */

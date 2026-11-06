@@ -1,15 +1,9 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import { hasPermission } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
-import {
-  CONTEST_RATING_QUEUE,
-  contestPhase,
-  enqueueContestRating,
-  isFrozen,
-} from '@libs/contests';
+import { AppError, InjectJob } from '@libs/common';
+import type { JobProducer } from '@libs/common';
+import { contestJobs, contestPhase, isFrozen } from '@libs/contests';
 import type { ContestRatingJob } from '@libs/contests';
 import { ContestsService } from '../core/contests.service';
 import type { QueuedResponse } from '../core/dto/queued.response';
@@ -18,8 +12,8 @@ import type { QueuedResponse } from '../core/dto/queued.response';
 export class ContestRatingService {
   constructor(
     private readonly contestsService: ContestsService,
-    @InjectQueue(CONTEST_RATING_QUEUE)
-    private readonly ratings: Queue<ContestRatingJob>,
+    @InjectJob(contestJobs.rating)
+    private readonly ratings: JobProducer<ContestRatingJob>,
   ) {}
 
   /** Legacy admin `rate_view`: any ended contest; one that is no longer rated loses its ratings, and the later contests are re-rated. */
@@ -35,7 +29,7 @@ export class ContestRatingService {
       throw new AppError('conflict', 409, 'The contest has not ended');
     if (isFrozen(contest, now))
       throw new AppError('conflict', 409, 'Unfreeze the ranking before rating');
-    await enqueueContestRating(this.ratings, contest._id);
+    await this.ratings.add({ contestId: contest._id });
     return { queued: true };
   }
 }

@@ -1,13 +1,14 @@
 import { Logger } from '@nestjs/common';
 import type { JobType, Queue } from 'bullmq';
+import { JobProducer } from '@libs/common';
+import { contestJobs } from './jobs';
 import {
   isReplayFinal,
   notifyReplayBuild,
   REPLAY_SETTLE_MS,
   replayDelayMs,
   requestReplayBuild,
-} from './replay-queue';
-import type { ContestReplayJob } from './replay-queue';
+} from './replay-requests';
 
 interface FakeJob {
   contestId: string;
@@ -39,8 +40,8 @@ const fakeQueue = (jobs: FakeJob[], fails = false) => {
           })),
       ),
     add,
-  } as unknown as Queue<ContestReplayJob>;
-  return { queue, add };
+  } as unknown as Queue;
+  return { queue: new JobProducer(contestJobs.replay, queue), add };
 };
 
 describe('requestReplayBuild', () => {
@@ -117,17 +118,15 @@ describe('requestReplayBuild', () => {
 
 describe('notifyReplayBuild', () => {
   it('reports true when a build is queued and false, without throwing, when the queue fails', async () => {
-    const logger = new Logger('spec');
     const error = jest
-      .spyOn(logger, 'error')
+      .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
-    expect(await notifyReplayBuild(fakeQueue([]).queue, 'c1', logger)).toBe(
-      true,
+    expect(await notifyReplayBuild(fakeQueue([]).queue, 'c1')).toBe(true);
+    expect(await notifyReplayBuild(fakeQueue([], true).queue, 'c1')).toBe(
+      false,
     );
-    expect(
-      await notifyReplayBuild(fakeQueue([], true).queue, 'c1', logger),
-    ).toBe(false);
     expect(error).toHaveBeenCalledTimes(1);
+    error.mockRestore();
   });
 });
 

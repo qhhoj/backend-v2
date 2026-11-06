@@ -1,5 +1,5 @@
 import { Global, Module } from '@nestjs/common';
-import { ENV, encryptionKey } from '@libs/common';
+import { ENV, encryptionKey, SITE_TIME_ZONE } from '@libs/common';
 import type { Env } from '@libs/common';
 import { SETTINGS_KEY } from './settings-key';
 import { SettingRevisionsRepository } from './setting-revisions.repository';
@@ -18,7 +18,13 @@ import { SettingsService } from './settings.service';
     SettingsQuerier,
     SettingRevisionsRepository,
     SettingsService,
+    {
+      provide: SITE_TIME_ZONE,
+      inject: [SettingsService],
+      useFactory: (settings: SettingsService) => () =>
+        settings.get('site.timeZone'),
+    },
   ],
-  exports: [SettingsService],
+  exports: [SettingsService, SITE_TIME_ZONE],
 })
 export class SettingsModule {}

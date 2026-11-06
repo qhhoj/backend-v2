@@ -1,14 +1,12 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
-import type { Queue } from 'bullmq';
-import { ENV, excerpt } from '@libs/common';
-import type { Env } from '@libs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ENV, excerpt, InjectJob } from '@libs/common';
+import type { Env, JobProducer } from '@libs/common';
 import type { Problem } from '@libs/database';
 import { SettingsService } from '@libs/settings';
 import { discordWebhookUrl } from './discord';
 import type { DiscordEvent, DiscordMessage } from './discord';
-import { DISCORD_WEBHOOK_QUEUE, notifyDiscord } from './queues';
-import type { DiscordWebhookJob } from './queues';
+import { communityJobs } from './jobs';
+import type { DiscordWebhookJob } from './jobs';
 
 /** The fields a new-problem announcement shows. */
 export type AnnouncedProblem = Pick<
@@ -19,18 +17,16 @@ export type AnnouncedProblem = Pick<
 /** The only door to Discord (api and worker): skips events without a URL, so an empty `discord.webhooks` setting queues nothing. */
 @Injectable()
 export class DiscordWebhooksService {
-  private readonly logger = new Logger(DiscordWebhooksService.name);
-
   constructor(
     @Inject(ENV) private readonly env: Env,
     private readonly settings: SettingsService,
-    @InjectQueue(DISCORD_WEBHOOK_QUEUE)
-    private readonly queue: Queue<DiscordWebhookJob>,
+    @InjectJob(communityJobs.discordWebhook)
+    private readonly webhooks: JobProducer<DiscordWebhookJob>,
   ) {}
 
   async notify(event: DiscordEvent, message: DiscordMessage): Promise<void> {
     if (discordWebhookUrl(this.settings.get('discord.webhooks'), event))
-      await notifyDiscord(this.queue, { event, message }, this.logger);
+      await this.webhooks.enqueue({ event, message });
   }
 
   /** Legacy `SITE_FULL_URL + path`. */

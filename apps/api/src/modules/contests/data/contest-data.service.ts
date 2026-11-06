@@ -2,21 +2,17 @@ import { createReadStream } from 'node:fs';
 import type { ReadStream } from 'node:fs';
 import { once } from 'node:events';
 import { stat } from 'node:fs/promises';
-import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
-import { AppError, ENV, RateLimitService } from '@libs/common';
-import type { Env } from '@libs/common';
+import { AppError, ENV, InjectJob, RateLimitService } from '@libs/common';
+import type { Env, JobProducer } from '@libs/common';
 import {
   canPrepareData,
-  CONTEST_DATA_JOB,
   CONTEST_DATA_PREPARE_INTERVAL_MS,
-  CONTEST_DATA_QUEUE,
   contestDataJobId,
   contestDataPath,
+  contestJobs,
   contestPhase,
-  oneJobPerContest,
 } from '@libs/contests';
 import type { ContestDataJob } from '@libs/contests';
 import { ContestsRepository } from '../core/contests.repository';
@@ -35,8 +31,8 @@ export class ContestDataService {
     private readonly contestsService: ContestsService,
     private readonly contests: ContestsRepository,
     private readonly rateLimits: RateLimitService,
-    @InjectQueue(CONTEST_DATA_QUEUE)
-    private readonly queue: Queue<ContestDataJob>,
+    @InjectJob(contestJobs.data)
+    private readonly jobs: JobProducer<ContestDataJob>,
   ) {}
 
   async status(
@@ -49,7 +45,7 @@ export class ContestDataService {
       () => null,
     );
     const preparing =
-      (await this.queue.getJob(contestDataJobId(contest._id))) !== undefined;
+      (await this.jobs.job(contestDataJobId(contest._id))) !== undefined;
     const preparedAt = contest.dataPreparedAt;
     return {
       state: preparing ? 'preparing' : file ? 'ready' : 'none',
@@ -71,7 +67,7 @@ export class ContestDataService {
     now = new Date(),
   ): Promise<QueuedResponse> {
     const { contest, root } = await this.dataContest(principal, key, now);
-    if (await this.queue.getJob(contestDataJobId(contest._id)))
+    if (await this.jobs.job(contestDataJobId(contest._id)))
       throw new AppError('conflict', 409, 'The data is being prepared');
     const zipExists = await stat(contestDataPath(root, contest._id)).then(
       () => true,
@@ -85,15 +81,11 @@ export class ContestDataService {
       );
     await claimZipBuild(this.rateLimits, 'data', contest._id);
     await this.contests.setDataPreparedAt(contest._id, now);
-    await this.queue.add(
-      CONTEST_DATA_JOB,
-      {
-        contestId: contest._id,
-        problemGlob: dto.problemGlob ?? '*',
-        results: dto.results ?? [],
-      },
-      oneJobPerContest('data', contest._id),
-    );
+    await this.jobs.add({
+      contestId: contest._id,
+      problemGlob: dto.problemGlob ?? '*',
+      results: dto.results ?? [],
+    });
     return { queued: true };
   }
 

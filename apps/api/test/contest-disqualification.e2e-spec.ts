@@ -3,7 +3,7 @@ import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { UsersRepository } from '@libs/auth';
-import { CONTEST_RESCORE_QUEUE, rankingCacheKey } from '@libs/contests';
+import { contestJobs, rankingCacheKey } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { CONTEST_CHEATING_BAN_REASON } from '../src/modules/contests/participation/contest-participation.service';
@@ -46,7 +46,7 @@ describe('disqualification', () => {
   beforeAll(async () => {
     api = await setupApiTest();
     await api.setSetting('contest.banAfterDisqualifications', 2);
-    rescores = api.app.get(getQueueToken(CONTEST_RESCORE_QUEUE));
+    rescores = api.app.get(getQueueToken(contestJobs.rescore.queue));
     editorId = (
       await createUserWith(api, 'dq_editor', {
         permissions: ['judge.edit_own_contest'],

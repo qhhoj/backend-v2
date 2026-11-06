@@ -1,7 +1,11 @@
-import { Queue } from 'bullmq';
+import { existsSync } from 'node:fs';
+import { Queue, QueueEvents } from 'bullmq';
+import Redis from 'ioredis';
 import { MongoClient } from 'mongodb';
 import type { UUID } from 'mongodb';
 import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
+import { userDataPath } from '@libs/community';
+import { contestDataPath, contestExportPath } from '@libs/contests';
 import { newId, toUuid } from '@libs/database';
 import { judgingJobs } from '@libs/judging';
 import mainJobs from './job-contracts/main-jobs.json';
@@ -126,5 +130,171 @@ describe('jobs queued by the previous release', () => {
         (await worker.similarityRuns.findById(ids.run, { status: 1 }).lean())
           ?.status === 'done',
     );
+  });
+});
+
+/** The contest and community jobs the previous release wrote (captured from its api routes and producers), its schedulers and its global limits: the new worker keeps the schedulers and limits, and completes every job. */
+describe('contest and community jobs queued by the previous release', () => {
+  const { ids, jobs, flags, schedulers, queues } = mainJobs;
+  const end = new Date(mainJobs.end);
+  const judgingQueues: string[] = [
+    judgingJobs.graded.queue,
+    judgingJobs.problemRescore.queue,
+    judgingJobs.similarity.queue,
+  ];
+  const captured = jobs.filter(({ queue }) => !judgingQueues.includes(queue));
+  const connection = { url: TEST_REDIS_URL };
+  let worker: WorkerTest;
+
+  beforeAll(async () => {
+    // A seed step keeps what the boot left in Redis (no flush after boot).
+    worker = await setupWorkerTest({ seedBeforeBoot: () => Promise.resolve() });
+  });
+  afterAll(() => worker.teardown());
+
+  /** One read per queue of the fixture, by queue name. */
+  const eachQueue = async <T>(read: (queue: Queue) => Promise<T>) => {
+    const byQueue: Record<string, T> = {};
+    for (const name of Object.keys(queues)) {
+      const queue = new Queue(name, { connection });
+      byQueue[name] = await read(queue);
+      await queue.close();
+    }
+    return byQueue;
+  };
+
+  it('keeps the schedulers, with the nightly ones in the site time zone, and the global limits', async () => {
+    const booted = await eachQueue((queue) => queue.getJobSchedulers());
+    expect(
+      Object.entries(booted).flatMap(([queue, list]) =>
+        list.map(({ key, name, every, pattern, tz, template }) => ({
+          queue,
+          key,
+          name,
+          ...(every && { every: Number(every) }),
+          ...(pattern && { pattern, tz }),
+          template,
+        })),
+      ),
+    ).toEqual(
+      expect.arrayContaining(
+        schedulers.map((scheduler) =>
+          'pattern' in scheduler
+            ? { ...scheduler, tz: 'Asia/Ho_Chi_Minh' }
+            : scheduler,
+        ),
+      ),
+    );
+    expect(Object.values(booted).flat()).toHaveLength(schedulers.length);
+    expect(
+      await eachQueue(async (queue) => ({
+        globalConcurrency: await queue.getGlobalConcurrency(),
+      })),
+    ).toEqual(queues);
+  });
+
+  const seedDocuments = async () => {
+    const ended = (extra: Record<string, unknown> = {}) => ({
+      name: 'Ended',
+      startTime: new Date(end.getTime() - 7_200_000),
+      endTime: end,
+      ...extra,
+    });
+    await worker.users.create([
+      { _id: ids.editor, username: 'editor', password: '!', isActive: true },
+      { _id: ids.contestUser, username: 'user', password: '!', isActive: true },
+    ]);
+    await worker.organizations.create({
+      _id: ids.organization,
+      name: 'Organization',
+      slug: 'organization',
+      shortName: 'organization',
+    });
+    await worker.contests.create([
+      { _id: ids.contest, key: 'ended', ...ended() },
+      {
+        _id: ids.fsoContest,
+        key: 'fso',
+        ...ended({
+          formatName: 'final_submission',
+          formatConfig: { autoJudge: true },
+        }),
+      },
+      { _id: ids.ratedContest, key: 'rated', ...ended({ isRated: true }) },
+      { _id: ids.rerateContest, key: 'rerated', ...ended({ isRated: true }) },
+      { _id: ids.replayContest, key: 'replay', ...ended() },
+      { _id: ids.delayedReplayContest, key: 'replay_later', ...ended() },
+      {
+        _id: ids.publishContest,
+        key: 'publish',
+        ...ended({ publishAfterEnd: true, publishAfterEndBy: ids.editor }),
+      },
+    ]);
+    await worker.announcements.create({
+      _id: ids.announcement,
+      contest: ids.contest,
+      title: 'Announcement',
+      description: '',
+      descriptionHtml: '',
+    });
+  };
+
+  /** Adds each job with its captured name, data and options; returns the ids BullMQ gave them. */
+  const addAsCaptured = async () => {
+    const added: string[] = [];
+    for (const job of captured) {
+      const queue = new Queue(job.queue, { connection });
+      const { id } = await queue.add(job.name, job.data, job.opts);
+      // The debounced re-rate waits a minute.
+      if (job.opts.delay === 60_000) await (await queue.getJob(id!))?.promote();
+      added.push(`${job.queue}:${id}`);
+      await queue.close();
+    }
+    return added;
+  };
+
+  it('completes every job, and clears the pending flags', async () => {
+    await seedDocuments();
+    const redis = new Redis(TEST_REDIS_URL);
+    for (const flag of flags) await redis.set(flag, '1');
+    const completed = new Set<string>();
+    const failed: string[] = [];
+    const listeners = [...new Set(captured.map(({ queue }) => queue))].map(
+      (name) => {
+        const events = new QueueEvents(name, { connection });
+        events.on('completed', ({ jobId }) =>
+          completed.add(`${name}:${jobId}`),
+        );
+        events.on('failed', ({ jobId, failedReason }) =>
+          failed.push(`${name}:${jobId}: ${failedReason}`),
+        );
+        return events;
+      },
+    );
+    await Promise.all(listeners.map((events) => events.waitUntilReady()));
+    try {
+      const added = await addAsCaptured();
+      expect(added).toHaveLength(captured.length);
+      await waitUntil(
+        () => failed.length > 0 || added.every((id) => completed.has(id)),
+        30_000,
+      );
+      expect(failed).toEqual([]);
+      expect(await redis.exists(...flags)).toBe(0);
+      expect(
+        [
+          contestDataPath(worker.contestDataRoot, ids.contest),
+          contestExportPath(worker.contestDataRoot, ids.contest),
+          userDataPath(worker.userDataRoot, ids.contestUser),
+        ].filter((path) => !existsSync(path)),
+      ).toEqual([]);
+      expect(
+        (await worker.contests.findById(ids.publishContest).lean())
+          ?.autoPublishOutcome,
+      ).not.toBeNull();
+    } finally {
+      await Promise.all(listeners.map((events) => events.close()));
+      await redis.quit();
+    }
   });
 });
