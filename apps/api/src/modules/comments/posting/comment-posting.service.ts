@@ -313,8 +313,13 @@ export class CommentPostingService {
     pageInfo: PageInfo,
     comment: CommentDocument,
   ): Promise<void> {
+    const link = commentLink(
+      pageInfo.page.type,
+      pageInfo.key,
+      uuidStr(comment._id),
+    );
     return this.discord.notify('on_new_comment', {
-      title: `New comment ${this.discord.link(commentLink(pageInfo.page.type, pageInfo.key, uuidStr(comment._id)))}`,
+      title: `New comment${link ? ` ${this.discord.link(link)}` : ''}`,
       description: excerpt(comment.body, 200),
       author: this.discord.author(principal.username),
     });

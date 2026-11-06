@@ -1711,6 +1711,39 @@ afterAll(() => api.teardown());
       });
     });
 
+    it('names a tag problem by its code', async () => {
+      const tagProblem = await api.tagProblems.create({
+        _id: newId(),
+        code: 'cf_1A',
+        name: 'Theatre Square',
+        link: 'https://codeforces.com/problemset/problem/1/A',
+        judge: null,
+        tags: [],
+      });
+      const revisionId = newId();
+      await api.revisions.create({
+        _id: revisionId,
+        entity: 'tagProblem',
+        entityId: tagProblem._id,
+        action: 'edit',
+        userId: null,
+        changes: { name: { before: 'a', after: 'b' } },
+        comment: '',
+      });
+      try {
+        const { body } = await feed({ type: 'tagProblem' });
+        expect(body.items[0].object).toEqual({
+          id: tagProblem._id,
+          label: 'cf_1A',
+          deleted: false,
+        });
+      } finally {
+        // Later tests count this block's rows by actor and by time.
+        await api.revisions.deleteOne({ _id: revisionId });
+        await api.tagProblems.deleteOne({ _id: tagProblem._id });
+      }
+    });
+
     it('leaves out notes and superuser-only setting rows for a viewer without the matching permission', async () => {
       const [note, secret] = [newId(), newId()];
       const settings = api.app.get<Model<SettingRevision>>(

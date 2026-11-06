@@ -36,21 +36,35 @@ export const pageOf = (comment: {
 /** Map key of a page. */
 export const pageRef = (page: CommentPage): string => `${page.type}:${page.id}`;
 
-/** SPA routes (contract with the frontend, listed in CONTRIBUTING). */
-const PAGE_PATHS: Record<CommentPageType, (key: string) => string> = {
-  problem: (key) => `/problem/${key}`,
-  editorial: (key) => `/problem/${key}/editorial`,
-  contest: (key) => `/contest/${key}`,
-  blog: (key) => `/post/${key}`,
-  tagProblem: (key) => `/tagproblem/${key}`,
-};
-export const pagePath = (type: CommentPageType, key: string): string =>
+type PathFn = (key: string) => string;
+/** SPA route of each page type (contract with the frontend, listed in CONTRIBUTING); `null` for a page type with no screen, like a tag problem, which gets no link. Every type must be listed. */
+const PAGE_PATHS = {
+  problem: (key: string) => `/problem/${key}`,
+  editorial: (key: string) => `/problem/${key}/editorial`,
+  contest: (key: string) => `/contest/${key}`,
+  blog: (key: string) => `/post/${key}`,
+  tagProblem: null,
+} satisfies Record<CommentPageType, PathFn | null>;
+export type LinkedPageType = {
+  [T in CommentPageType]: null extends (typeof PAGE_PATHS)[T] ? never : T;
+}[CommentPageType];
+
+export const isLinked = (type: CommentPageType): type is LinkedPageType =>
+  PAGE_PATHS[type] !== null;
+export const UNLINKED_PAGE_TYPES = COMMENT_PAGE_TYPES.filter(
+  (type) => !isLinked(type),
+);
+
+export const pagePath = (type: LinkedPageType, key: string): string =>
   PAGE_PATHS[type](encodeURIComponent(key));
+
+/** Link to a comment on its page, or `null` when the page type has no screen. */
 export const commentLink = (
   type: CommentPageType,
   key: string,
   commentId: string,
-): string => `${pagePath(type, key)}#comment-${commentId}`;
+): string | null =>
+  isLinked(type) ? `${pagePath(type, key)}#comment-${commentId}` : null;
 
 export const childPath = (parentPath: string | null, commentId: string) =>
   parentPath === null ? commentId : `${parentPath}/${commentId}`;
