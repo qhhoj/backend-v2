@@ -1,13 +1,13 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { CONTEST_DATA_QUEUE } from '@libs/contests';
+import { JobsModule } from '@libs/common';
+import { contestJobs } from '@libs/contests';
 import { ContestDataProcessor } from './contest-data.processor';
 import { ContestDataRepository } from './contest-data.repository';
 import { ContestDataService } from './contest-data.service';
 import { CONTEST_DATA_LIMITS, DEFAULT_CONTEST_DATA_LIMITS } from './data-zip';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: CONTEST_DATA_QUEUE })],
+  imports: [JobsModule.register(contestJobs.data)],
   providers: [
     ContestDataProcessor,
     ContestDataService,

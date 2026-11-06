@@ -38,10 +38,7 @@ import type { OrganizationWorld } from './organization-problem-fixtures';
 import { contestProblem, createContest } from './contest-fixtures';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import {
-  clearOrganizationPointsPending,
-  ORGANIZATION_POINTS_QUEUE,
-} from '@libs/community';
+import { clearOrganizationPointsPending, communityJobs } from '@libs/community';
 import type { OrganizationPointsJob } from '@libs/community';
 
 let api: ApiTest;
@@ -532,7 +529,9 @@ afterAll(() => api.teardown());
         expect(body.error.issues?.map((issue) => issue.code)).toContain(code);
 
     beforeAll(() => {
-      queue = api.app.get(getQueueToken(ORGANIZATION_POINTS_QUEUE));
+      queue = api.app.get(
+        getQueueToken(communityJobs.organizationPoints.queue),
+      );
     });
     beforeEach(async () => {
       await queue.drain();

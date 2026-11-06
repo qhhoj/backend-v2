@@ -1,15 +1,12 @@
 import { rm } from 'node:fs/promises';
-import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { hasPermission } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, ENV, REDIS } from '@libs/common';
-import type { Env } from '@libs/common';
+import { AppError, ENV, InjectJob, REDIS } from '@libs/common';
+import type { Env, JobProducer } from '@libs/common';
 import {
-  CONTEST_FINAL_JUDGE_QUEUE,
-  CONTEST_PUBLISH_QUEUE,
+  contestJobs,
   contestDataPath,
   contestExportPath,
   finalJudgeJobId,
@@ -34,10 +31,10 @@ export class ContestRemovalService {
     private readonly contestsService: ContestsService,
     private readonly removal: ContestRemovalRepository,
     private readonly revisions: RevisionsRepository,
-    @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)
-    private readonly finalJudges: Queue<ContestFinalJudgeJob>,
-    @InjectQueue(CONTEST_PUBLISH_QUEUE)
-    private readonly publishes: Queue<ContestPublishJob>,
+    @InjectJob(contestJobs.finalJudge)
+    private readonly finalJudges: JobProducer<ContestFinalJudgeJob>,
+    @InjectJob(contestJobs.publish)
+    private readonly publishes: JobProducer<ContestPublishJob>,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(ENV) private readonly env: Env,
   ) {}
@@ -91,16 +88,14 @@ export class ContestRemovalService {
       );
   }
 
-  /** The scheduled end jobs, the cached board and the export and data zips (they hold every contestant's source); a failure is logged, the contest is already gone. */
+  /** The scheduled end jobs (best effort), the cached board and the export and data zips (they hold every contestant's source); a failure is logged, the contest is already gone. */
   private async clearLeftovers(contest: ContestDocument): Promise<void> {
     const log = (what: string) => (error: Error) =>
       this.logger.error(`${what} of ${contest.key}: ${error.message}`);
-    await this.finalJudges
-      .remove(finalJudgeJobId(contest._id, contest.endTime))
-      .catch(log('Final-judge job not removed'));
-    await this.publishes
-      .remove(publishJobId(contest._id, contest.endTime))
-      .catch(log('Publish job not removed'));
+    await this.finalJudges.withdraw(
+      finalJudgeJobId(contest._id, contest.endTime),
+    );
+    await this.publishes.withdraw(publishJobId(contest._id, contest.endTime));
     await purgeRankingCache(this.redis, contest._id).catch(
       log('Ranking cache not purged'),
     );

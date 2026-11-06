@@ -1,16 +1,10 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, invalidField, REDIS } from '@libs/common';
-import {
-  CONTEST_RESCORE_QUEUE,
-  contestPhase,
-  enqueueContestRescore,
-  purgeRankingCache,
-} from '@libs/contests';
+import { AppError, InjectJob, invalidField, REDIS } from '@libs/common';
+import type { JobProducer } from '@libs/common';
+import { contestJobs, contestPhase, purgeRankingCache } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
@@ -49,8 +43,8 @@ export class ParticipationAdminService {
     private readonly adminRows: ParticipationAdminRepository,
     private readonly users: UsersRepository,
     private readonly revisions: RevisionsRepository,
-    @InjectQueue(CONTEST_RESCORE_QUEUE)
-    private readonly rescores: Queue<ContestRescoreJob>,
+    @InjectJob(contestJobs.rescore)
+    private readonly rescores: JobProducer<ContestRescoreJob>,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -112,7 +106,8 @@ export class ParticipationAdminService {
         },
       },
     });
-    await enqueueContestRescore(this.rescores, contest._id, {
+    await this.rescores.add({
+      contestId: contest._id,
       participationId: updated._id,
     });
     return ParticipationSummaryResponse.from(updated, contest);
@@ -147,7 +142,8 @@ export class ParticipationAdminService {
     id: string,
   ): Promise<QueuedResponse> {
     const { contest, participation } = await this.target(principal, key, id);
-    await enqueueContestRescore(this.rescores, contest._id, {
+    await this.rescores.add({
+      contestId: contest._id,
       participationId: participation._id,
     });
     return { queued: true };

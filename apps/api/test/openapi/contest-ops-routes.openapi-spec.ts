@@ -1,5 +1,5 @@
 import type { OpenAPIObject, SchemaObject } from '@nestjs/swagger';
-import { CONTEST_ACTION_STATES } from '../../src/modules/contests/editing/dto/contest-actions.response';
+import { CONTEST_ACTION_STATES } from '@libs/contests';
 import { loadDocument } from './document';
 import { inlineEnumSites } from './schema-scans';
 

@@ -1,16 +1,16 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
 import {
   AppError,
+  ENQUEUE_TIMEOUT_MS,
+  InjectJob,
   RateLimitService,
   unique,
   withinTimeout,
 } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import {
-  CONTEST_ENQUEUE_TIMEOUT_MS,
-  CONTEST_REPLAY_QUEUE,
+  contestJobs,
   isReplayFinal,
   notifyReplayBuild,
   problemLabel,
@@ -86,8 +86,8 @@ export class ReplayService {
     private readonly rankingUsers: RankingUsersRepository,
     private readonly problems: ProblemsRepository,
     private readonly rateLimit: RateLimitService,
-    @InjectQueue(CONTEST_REPLAY_QUEUE)
-    private readonly queue: Queue<ContestReplayJob>,
+    @InjectJob(contestJobs.replay)
+    private readonly replayJobs: JobProducer<ContestReplayJob>,
   ) {}
 
   /** The gate runs before anything is read or queued. No servable head answers `building` after queueing at most one build. Every refusal carries `issues[].code`. */
@@ -140,7 +140,7 @@ export class ReplayService {
           REPLAY_REBUILD_LIMIT,
           REPLAY_REBUILD_WINDOW_SECONDS,
         ),
-        CONTEST_ENQUEUE_TIMEOUT_MS,
+        ENQUEUE_TIMEOUT_MS,
       );
     } catch (error) {
       if (error instanceof AppError) throw error;
@@ -165,10 +165,10 @@ export class ReplayService {
   ): Promise<ReplayRequestOutcome> {
     try {
       return await withinTimeout(
-        requestReplayBuild(this.queue, contest._id, {
+        requestReplayBuild(this.replayJobs, contest._id, {
           delayMs: replayDelayMs(contest.endTime, now),
         }),
-        CONTEST_ENQUEUE_TIMEOUT_MS,
+        ENQUEUE_TIMEOUT_MS,
       );
     } catch (error) {
       throw this.unavailable(contest._id, error);
@@ -228,15 +228,10 @@ export class ReplayService {
     now: Date,
   ): Promise<ReplayResponse> {
     if (!(await this.mayEnqueue(contest._id))) return BUILDING;
-    const isQueued = await notifyReplayBuild(
-      this.queue,
-      contest._id,
-      this.logger,
-      {
-        ifRunning: 'skip',
-        delayMs: replayDelayMs(contest.endTime, now),
-      },
-    );
+    const isQueued = await notifyReplayBuild(this.replayJobs, contest._id, {
+      ifRunning: 'skip',
+      delayMs: replayDelayMs(contest.endTime, now),
+    });
     if (!isQueued) throw notReady();
     return BUILDING;
   }
@@ -249,7 +244,7 @@ export class ReplayService {
           `replay-lazy:${contestId}`,
           LAZY_BUILD_WINDOW_SECONDS,
         ),
-        CONTEST_ENQUEUE_TIMEOUT_MS,
+        ENQUEUE_TIMEOUT_MS,
       );
       return hits === 1;
     } catch (error) {

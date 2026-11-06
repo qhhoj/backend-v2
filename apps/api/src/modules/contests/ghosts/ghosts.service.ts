@@ -1,10 +1,9 @@
-import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { AppError, InjectJob } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import {
-  CONTEST_REPLAY_QUEUE,
+  contestJobs,
   contestPhase,
   currentGhostGap,
   notifyReplayBuild,
@@ -44,14 +43,12 @@ const importRefusal = ({ errors, issues }: GhostCsvResult): AppError =>
 
 @Injectable()
 export class GhostsService {
-  private readonly logger = new Logger(GhostsService.name);
-
   constructor(
     private readonly viewers: ContestViewerService,
     private readonly ghosts: GhostsRepository,
     private readonly problems: ProblemsRepository,
-    @InjectQueue(CONTEST_REPLAY_QUEUE)
-    private readonly replayQueue: Queue<ContestReplayJob>,
+    @InjectJob(contestJobs.replay)
+    private readonly replays: JobProducer<ContestReplayJob>,
   ) {}
 
   async importCsv(
@@ -117,7 +114,7 @@ export class GhostsService {
     now = new Date(),
   ): Promise<void> {
     if (contestPhase(contest, now) !== 'ended') return;
-    await notifyReplayBuild(this.replayQueue, contest._id, this.logger, {
+    await notifyReplayBuild(this.replays, contest._id, {
       delayMs: replayDelayMs(contest.endTime, now),
     });
   }

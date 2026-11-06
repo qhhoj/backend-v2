@@ -1,8 +1,7 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
-import { DAY_MS, HOUR_MS, MINUTE_MS, REDIS } from '@libs/common';
+import { DAY_MS, HOUR_MS, InjectJob, MINUTE_MS, REDIS } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import { judgingJobs, SWEEP_INTERVAL_MS } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { SubmissionEffectsRepository } from '../submission-effects/submission-effects.repository';
@@ -44,8 +43,8 @@ export class EffectsSweepService {
     private readonly repository: SubmissionEffectsRepository,
     private readonly effects: SubmissionEffectsService,
     @Inject(REDIS) private readonly redis: Redis,
-    @InjectQueue(judgingJobs.graded.queue)
-    private readonly graded: Queue<SubmissionGradedJob>,
+    @InjectJob(judgingJobs.graded)
+    private readonly graded: JobProducer<SubmissionGradedJob>,
   ) {}
 
   async sweep(now = Date.now()): Promise<SweepResult> {
@@ -105,8 +104,8 @@ export class EffectsSweepService {
   /** Rows due since before this have lost their job: due for longer than the grace, and stamped before every graded job still running or waiting (BullMQ serves them oldest first, so a row stamped later may only be queued behind them, e.g. during a bulk rejudge). A job in retry backoff is not waited for; repairing its row too is harmless. */
   private async dueCutoff(now: number): Promise<Date> {
     const [active, oldestWaiting] = await Promise.all([
-      this.graded.getJobs(['active']),
-      this.graded.getJobs(['waiting'], 0, 0, true),
+      this.graded.jobs(['active']),
+      this.graded.jobs(['waiting'], 0, 0, true),
     ]);
     const pendingSince = [...active, ...oldestWaiting].map(
       (job) => job.timestamp,

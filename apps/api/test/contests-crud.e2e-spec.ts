@@ -1,6 +1,6 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { CONTEST_RATING_QUEUE, CONTEST_RESCORE_QUEUE } from '@libs/contests';
+import { contestJobs } from '@libs/contests';
 import type { ContestRatingJob, ContestRescoreJob } from '@libs/contests';
 import { sha256 } from '@libs/auth';
 import { newId } from '@libs/database';
@@ -65,8 +65,8 @@ describe('contest CRUD', () => {
   beforeAll(async () => {
     api = await setupApiTest();
     catalog = await seedCatalog(api);
-    rescores = api.app.get(getQueueToken(CONTEST_RESCORE_QUEUE));
-    ratingQueue = api.app.get(getQueueToken(CONTEST_RATING_QUEUE));
+    rescores = api.app.get(getQueueToken(contestJobs.rescore.queue));
+    ratingQueue = api.app.get(getQueueToken(contestJobs.rating.queue));
     const roles: Array<[string, Partial<User>]> = [
       [
         'creator',

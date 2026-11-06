@@ -6,7 +6,7 @@ import { Logger } from '@nestjs/common';
 import { UnrecoverableError } from 'bullmq';
 import type { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
-import { DISCORD_WEBHOOK_JOB, DISCORD_WEBHOOK_QUEUE } from '@libs/community';
+import { communityJobs } from '@libs/community';
 import type { DiscordWebhookJob } from '@libs/community';
 import { DiscordWebhookProcessor } from '../src/jobs/discord-webhook/discord-webhook.processor';
 import { DiscordWebhookService } from '../src/jobs/discord-webhook/discord-webhook.service';
@@ -58,7 +58,9 @@ describe('discord webhook job', () => {
   });
   afterAll(async () => {
     await worker.module
-      .get<Queue<DiscordWebhookJob>>(getQueueToken(DISCORD_WEBHOOK_QUEUE))
+      .get<Queue<DiscordWebhookJob>>(
+        getQueueToken(communityJobs.discordWebhook.queue),
+      )
       .obliterate({ force: true });
     await worker.teardown();
     await new Promise((resolve) => server.close(resolve));
@@ -141,9 +143,9 @@ describe('discord webhook job', () => {
         `${base}/default`,
         expect.anything(),
       );
-      worker.module
+      await worker.module
         .get(DiscordWebhookProcessor)
-        .onFailed({ data: job } as never, failure);
+        .failed({ data: job } as never, failure);
       expect(failure.message).toMatch(/unreachable/);
       expect(failure.message).not.toContain(base);
       expect(String(logSpy.mock.calls)).not.toContain(base);
@@ -156,9 +158,9 @@ describe('discord webhook job', () => {
 
   it('sends queued jobs', async () => {
     const queue = worker.module.get<Queue<DiscordWebhookJob>>(
-      getQueueToken(DISCORD_WEBHOOK_QUEUE),
+      getQueueToken(communityJobs.discordWebhook.queue),
     );
-    await queue.add(DISCORD_WEBHOOK_JOB, job);
+    await queue.add(communityJobs.discordWebhook.name, job);
     await waitUntil(() => received.length === 1);
     expect(received[0].path).toBe('/default');
   });

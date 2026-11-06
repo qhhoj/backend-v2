@@ -1,6 +1,6 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { REDIS } from '@libs/common';
-import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
+import { communityJobs } from '@libs/community';
 import type { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { RegistrationService } from '../src/modules/auth/registration/registration.service';
@@ -95,7 +95,7 @@ describe('social login', () => {
       overrides: [{ provide: OAuthProvidersService, useValue: providers }],
     });
     redis = api.app.get<Redis>(REDIS);
-    queue = api.app.get(getQueueToken(ORGANIZATION_POINTS_QUEUE));
+    queue = api.app.get(getQueueToken(communityJobs.organizationPoints.queue));
   });
   afterAll(() => api.teardown());
   beforeEach(async () => {

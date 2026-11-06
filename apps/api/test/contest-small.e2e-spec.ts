@@ -2,15 +2,12 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { createOrganization } from './organization-fixtures';
 import type { Queue } from 'bullmq';
 import {
-  CONTEST_FINAL_JUDGE_QUEUE,
-  finalJudgeJobId,
-  CONTEST_RATING_QUEUE,
-  CONTEST_EXPORT_QUEUE,
-  contestExportJobId,
-  contestExportPath,
-  CONTEST_DATA_QUEUE,
   contestDataJobId,
   contestDataPath,
+  contestExportJobId,
+  contestExportPath,
+  contestJobs,
+  finalJudgeJobId,
 } from '@libs/contests';
 import type {
   ContestFinalJudgeJob,
@@ -62,7 +59,7 @@ afterAll(() => api.teardown());
       (await queue.getJobs(['delayed', 'waiting'])).map((job) => job.id);
 
     beforeAll(async () => {
-      queue = api.app.get(getQueueToken(CONTEST_FINAL_JUDGE_QUEUE));
+      queue = api.app.get(getQueueToken(contestJobs.finalJudge.queue));
       editorId = (
         await createUserWith(api, 'fso_editor', {
           permissions: ['judge.add_contest', 'judge.edit_own_contest'],
@@ -265,7 +262,7 @@ afterAll(() => api.teardown());
       );
 
     beforeAll(async () => {
-      finalJudges = api.app.get(getQueueToken(CONTEST_FINAL_JUDGE_QUEUE));
+      finalJudges = api.app.get(getQueueToken(contestJobs.finalJudge.queue));
       for (const [name, permissions] of [
         [
           'cloner',
@@ -632,7 +629,7 @@ describe('contest rating request', () => {
 
   beforeAll(async () => {
     await api.reset();
-    ratingQueue = api.app.get(getQueueToken(CONTEST_RATING_QUEUE));
+    ratingQueue = api.app.get(getQueueToken(contestJobs.rating.queue));
     for (const [name, permissions] of Object.entries(roles)) {
       users[name] = await createUserWith(api, name, { permissions });
       sessions[name] = await loginAs(api, users[name]._id);
@@ -705,7 +702,7 @@ describe('contest submissions export', () => {
 
   beforeAll(async () => {
     await api.reset();
-    queue = api.app.get(getQueueToken(CONTEST_EXPORT_QUEUE));
+    queue = api.app.get(getQueueToken(contestJobs.export.queue));
     for (const [name, permissions] of [
       ['plain', []],
       ['editor', ['judge.edit_own_contest']],
@@ -825,7 +822,7 @@ describe('contest data download', () => {
 
   beforeAll(async () => {
     await api.reset();
-    dataQueue = api.app.get(getQueueToken(CONTEST_DATA_QUEUE));
+    dataQueue = api.app.get(getQueueToken(contestJobs.data.queue));
     for (const [name, permissions] of [
       ['plain', []],
       ['editor', ['judge.edit_own_contest']],

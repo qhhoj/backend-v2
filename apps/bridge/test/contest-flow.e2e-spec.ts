@@ -3,11 +3,7 @@ import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import type { Queue } from 'bullmq';
 import { sha256 } from '@libs/auth';
-import {
-  CONTEST_REPLAY_JOB,
-  CONTEST_REPLAY_QUEUE,
-  CONTEST_RESCORE_QUEUE,
-} from '@libs/contests';
+import { contestJobs } from '@libs/contests';
 import { Status } from '@libs/judge-proto';
 import type { ContestReplayJob } from '@libs/contests';
 import { judgingJobs } from '@libs/judging';
@@ -135,8 +131,8 @@ describe('a contest across the api, the bridge and the worker', () => {
       name: 'judge-flow',
       key: KEY,
     });
-    rescores = api.app.get(getQueueToken(CONTEST_RESCORE_QUEUE));
-    replays = api.app.get(getQueueToken(CONTEST_REPLAY_QUEUE));
+    rescores = api.app.get(getQueueToken(contestJobs.rescore.queue));
+    replays = api.app.get(getQueueToken(contestJobs.replay.queue));
   });
   afterAll(async () => {
     await judge?.close();
@@ -238,7 +234,7 @@ describe('a contest across the api, the bridge and the worker', () => {
       await replays.getJobs(['waiting', 'active', 'delayed', 'completed'])
     ).filter((job) => job.data.contestId === contest._id);
     expect(builds).toHaveLength(1);
-    expect(builds[0].name).toBe(CONTEST_REPLAY_JOB);
+    expect(builds[0].name).toBe(contestJobs.replay.name);
   });
 
   it('holds final_submission rows pending, then judges each unrejected row exactly once after the end', async () => {

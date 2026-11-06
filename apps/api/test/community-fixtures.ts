@@ -3,7 +3,7 @@ import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import type { Principal } from '@libs/auth';
 import { REDIS } from '@libs/common';
-import { childPath, CONTRIBUTION_POINTS_QUEUE, rootOf } from '@libs/community';
+import { childPath, communityJobs, rootOf } from '@libs/community';
 import type { CommentPage, CommentPageType } from '@libs/community';
 import { newId } from '@libs/database';
 import type { BlogPost, Comment, User } from '@libs/database';
@@ -79,7 +79,9 @@ export const commentUrl = (id: string, suffix = '') =>
 
 /** Empties the contribution-points queue and its pending flags so a spec starts from no waiting recompute. */
 export async function clearContributionQueue(api: ApiTest) {
-  await api.app.get<Queue>(getQueueToken(CONTRIBUTION_POINTS_QUEUE)).drain();
+  await api.app
+    .get<Queue>(getQueueToken(communityJobs.contributionPoints.queue))
+    .drain();
   const redis = api.app.get<Redis>(REDIS);
   const pending = await redis.keys('contribution-points:pending:*');
   if (pending.length) await redis.del(...pending);

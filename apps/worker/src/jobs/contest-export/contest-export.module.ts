@@ -1,6 +1,6 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { CONTEST_EXPORT_QUEUE } from '@libs/contests';
+import { JobsModule } from '@libs/common';
+import { contestJobs } from '@libs/contests';
 import {
   CONTEST_EXPORT_LIMITS,
   DEFAULT_CONTEST_EXPORT_LIMITS,
@@ -12,7 +12,7 @@ import { ContestZipSweepService } from './contest-zip-sweep.service';
 
 /** Builds contest submission exports: `<contestId>.export.zip` beside the data zips; sweeps both kinds once they expire. */
 @Module({
-  imports: [BullModule.registerQueue({ name: CONTEST_EXPORT_QUEUE })],
+  imports: [JobsModule.register(contestJobs.export)],
   providers: [
     ContestExportProcessor,
     ContestExportService,

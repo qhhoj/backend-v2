@@ -23,10 +23,7 @@ import {
 import { createOrganization } from './organization-fixtures';
 import type { Catalog } from './problem-fixtures';
 import { Queue as BullQueue } from 'bullmq';
-import {
-  ORGANIZATION_POINTS_JOB,
-  CONTRIBUTION_POINTS_QUEUE,
-} from '@libs/community';
+import { communityJobs } from '@libs/community';
 import type {
   OrganizationPointsJob,
   ContributionPointsJob,
@@ -422,7 +419,7 @@ describe('profile', () => {
       await patch({ organizations: [third._id] }).expect(200);
       const queued = addBulk.mock.calls
         .flatMap(([jobs]) => jobs)
-        .filter((job) => job.name === ORGANIZATION_POINTS_JOB)
+        .filter((job) => job.name === communityJobs.organizationPoints.name)
         .map((job) => (job.data as OrganizationPointsJob).organizationId);
       expect(queued.sort()).toEqual([first._id, second._id].sort());
     } finally {
@@ -469,7 +466,7 @@ describe('vote ledger', () => {
   beforeAll(async () => {
     await api.reset();
     votes = api.app.get(VotesService);
-    queue = api.app.get(getQueueToken(CONTRIBUTION_POINTS_QUEUE));
+    queue = api.app.get(getQueueToken(communityJobs.contributionPoints.queue));
   });
   beforeEach(async () => {
     await clearRateLimits(api);

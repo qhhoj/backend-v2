@@ -1,17 +1,16 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { CONTEST_RATING_QUEUE } from '@libs/contests';
+import { JobsModule } from '@libs/common';
+import { contestJobs } from '@libs/contests';
 import { ContestRatingProcessor } from './contest-rating.processor';
 import { ContestRatingRepository } from './contest-rating.repository';
 import { ContestRatingService } from './contest-rating.service';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: CONTEST_RATING_QUEUE })],
+  imports: [JobsModule.register(contestJobs.rating)],
   providers: [
     ContestRatingProcessor,
     ContestRatingService,
     ContestRatingRepository,
   ],
-  exports: [ContestRatingService],
 })
 export class ContestRatingModule {}

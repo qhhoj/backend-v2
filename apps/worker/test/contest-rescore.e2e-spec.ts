@@ -3,13 +3,7 @@ import { Logger } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
-import {
-  CONTEST_RATING_QUEUE,
-  CONTEST_REPLAY_JOB,
-  CONTEST_REPLAY_QUEUE,
-  CONTEST_RESCORE_QUEUE,
-  enqueueContestRescore,
-} from '@libs/contests';
+import { contestJobs } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { newId, toUuid } from '@libs/database';
 import { judgingJobs } from '@libs/judging';
@@ -38,7 +32,7 @@ describe('contest rescore', () => {
     (await worker.contestSubmissions.findById(id).lean())!.points;
   const queueOf = () =>
     worker.module.get<Queue<ContestRescoreJob>>(
-      getQueueToken(CONTEST_RESCORE_QUEUE),
+      getQueueToken(contestJobs.rescore.queue),
     );
   const drained = async () => {
     const counts = await queueOf().getJobCounts('waiting', 'active', 'delayed');
@@ -218,7 +212,7 @@ describe('contest rescore', () => {
       { _id: contest._id },
       { 'problems.0.points': 30 },
     );
-    await enqueueContestRescore(queueOf(), contest._id);
+    await queueOf().add(contestJobs.rescore.name, { contestId: contest._id });
     await waitUntil(
       async () => (await participationOf(participation._id)).score === 30,
     );
@@ -238,7 +232,7 @@ describe('contest rescore', () => {
           { _id: contestId },
           { 'problems.0.points': 70 },
         );
-        await enqueueContestRescore(queueOf(), contestId);
+        await queueOf().add(contestJobs.rescore.name, { contestId: contestId });
         return result;
       });
     try {
@@ -246,7 +240,7 @@ describe('contest rescore', () => {
         { _id: contest._id },
         { 'problems.0.points': 30 },
       );
-      await enqueueContestRescore(queueOf(), contest._id);
+      await queueOf().add(contestJobs.rescore.name, { contestId: contest._id });
       await waitUntil(() => spy.mock.calls.length === 2);
       await waitUntil(drained);
     } finally {
@@ -391,7 +385,7 @@ describe('contest rescore', () => {
       this: Queue,
       ...args
     ) {
-      if (this.name === CONTEST_RESCORE_QUEUE && !failed) {
+      if (this.name === contestJobs.rescore.queue && !failed) {
         failed = true;
         return Promise.reject(new Error('redis down'));
       }
@@ -427,7 +421,8 @@ describe('contest rescore', () => {
       const spy = jest
         .spyOn(Queue.prototype, 'add')
         .mockImplementation(function (this: Queue, ...args) {
-          if (this.name !== CONTEST_REPLAY_QUEUE) return add.apply(this, args);
+          if (this.name !== contestJobs.replay.queue)
+            return add.apply(this, args);
           const options = args[2];
           requested.push({
             name: args[0] as string,
@@ -451,7 +446,7 @@ describe('contest rescore', () => {
       }
       expect(requested).toEqual([
         {
-          name: CONTEST_REPLAY_JOB,
+          name: contestJobs.replay.name,
           data: { contestId: contest._id },
           delay: 0,
         },
@@ -471,7 +466,7 @@ describe('contest rescore', () => {
         spy.mockRestore();
       }
       const [build] = requested;
-      expect(build.name).toBe(CONTEST_REPLAY_JOB);
+      expect(build.name).toBe(contestJobs.replay.name);
       // Settle is 10 minutes after the end; 2 minutes have passed, so about 8 minutes remain.
       expect(build.delay).toBeGreaterThan(7 * minute);
       expect(build.delay).toBeLessThanOrEqual(8 * minute);
@@ -542,7 +537,7 @@ describe('contest rescore', () => {
       } finally {
         spy.mockRestore();
       }
-      expect(queued).not.toContain(CONTEST_RATING_QUEUE);
+      expect(queued).not.toContain(contestJobs.rating.queue);
       expect(await ratingRows(contest._id)).toEqual([]);
     });
   });

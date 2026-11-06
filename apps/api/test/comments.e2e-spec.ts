@@ -1,8 +1,7 @@
 import {
-  COMMENT_THREADS_PAGE_SIZE,
-  CONTRIBUTION_POINTS_QUEUE,
   COMMENT_MAX_DEPTH,
-  DISCORD_WEBHOOK_QUEUE,
+  COMMENT_THREADS_PAGE_SIZE,
+  communityJobs,
 } from '@libs/community';
 import type {
   CommentPageResponse,
@@ -574,7 +573,9 @@ describe('comment votes and moderation', () => {
 
   beforeAll(async () => {
     await api.reset();
-    contributions = api.app.get(getQueueToken(CONTRIBUTION_POINTS_QUEUE));
+    contributions = api.app.get(
+      getQueueToken(communityJobs.contributionPoints.queue),
+    );
   });
   const clearQueued = async () => {
     await contributions.drain();
@@ -959,7 +960,7 @@ describe('comment posting and editing', () => {
     await api.setSetting('discord.webhooks', {
       on_new_comment: 'http://127.0.0.1:9/hook',
     });
-    discord = api.app.get(getQueueToken(DISCORD_WEBHOOK_QUEUE));
+    discord = api.app.get(getQueueToken(communityJobs.discordWebhook.queue));
   });
   beforeEach(async () => {
     await clearRateLimits(api);

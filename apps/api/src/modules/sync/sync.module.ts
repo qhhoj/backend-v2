@@ -1,9 +1,8 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Inject, Logger, Module } from '@nestjs/common';
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import { AuthModule, IntegrationClientsRepository } from '@libs/auth';
-import { ENV, RateLimitService, type Env } from '@libs/common';
-import { CONTEST_FINAL_JUDGE_QUEUE } from '@libs/contests';
+import { ENV, JobsModule, RateLimitService, type Env } from '@libs/common';
+import { contestJobs } from '@libs/contests';
 import { IntegrationClientsController } from './clients/integration-clients.controller';
 import { IntegrationClientsService } from './clients/integration-clients.service';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
@@ -26,7 +25,7 @@ import { SyncStandingsService } from './contests/sync-standings.service';
     ContestAccessModule,
     ContestsApiModule,
     ProblemsApiModule,
-    BullModule.registerQueue({ name: CONTEST_FINAL_JUDGE_QUEUE }),
+    JobsModule.register(contestJobs.finalJudge),
   ],
   controllers: [IntegrationClientsController, SyncContestsController],
   providers: [

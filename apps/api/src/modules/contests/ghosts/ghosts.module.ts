@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
-import { CONTEST_REPLAY_QUEUE } from '@libs/contests';
+import { JobsModule } from '@libs/common';
+import { contestJobs } from '@libs/contests';
 import { ProblemsApiModule } from '../../problems/problems-api.module';
 import { ContestAccessModule } from '../core/contest-access.module';
 import { GhostsController } from './ghosts.controller';
@@ -12,7 +12,7 @@ import { GhostsService } from './ghosts.service';
   imports: [
     ContestAccessModule,
     ProblemsApiModule,
-    BullModule.registerQueue({ name: CONTEST_REPLAY_QUEUE }),
+    JobsModule.register(contestJobs.replay),
   ],
   controllers: [GhostsController],
   providers: [GhostsRepository, GhostsService],

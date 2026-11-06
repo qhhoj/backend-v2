@@ -1,11 +1,10 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import type { ServiceClientPrincipal } from '@libs/auth';
-import { AppError, REDIS } from '@libs/common';
+import { AppError, InjectJob, REDIS } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import {
-  CONTEST_FINAL_JUDGE_QUEUE,
+  contestJobs,
   finalJudgeJobId,
   purgeRankingCache,
 } from '@libs/contests';
@@ -30,8 +29,8 @@ export class SyncContestRemovalService {
     private readonly actsAs: SyncActsAsService,
     private readonly participants: SyncParticipantsRepository,
     private readonly rateLimit: SyncRateLimit,
-    @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)
-    private readonly finalJudges: Queue<ContestFinalJudgeJob>,
+    @InjectJob(contestJobs.finalJudge)
+    private readonly finalJudges: JobProducer<ContestFinalJudgeJob>,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -58,18 +57,14 @@ export class SyncContestRemovalService {
     );
   }
 
-  /** The final-judge job and the cached board; a failure is logged, the contest is already gone. */
+  /** The final-judge job (best effort) and the cached board; a failure is logged, the contest is already gone. */
   private async clearLeftovers(
     contest: ContestDocument,
     key: string,
   ): Promise<void> {
-    await this.finalJudges
-      .remove(finalJudgeJobId(uuidStr(contest._id), contest.endTime))
-      .catch((error: Error) =>
-        this.logger.error(
-          `Final-judge job of ${key} not removed: ${error.message}`,
-        ),
-      );
+    await this.finalJudges.withdraw(
+      finalJudgeJobId(uuidStr(contest._id), contest.endTime),
+    );
     await purgeRankingCache(this.redis, contest._id).catch((error: Error) =>
       this.logger.error(`Ranking cache of ${key} not purged: ${error.message}`),
     );

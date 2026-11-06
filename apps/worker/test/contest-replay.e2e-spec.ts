@@ -3,7 +3,7 @@ import type { Contest, ContestParticipation, Problem } from '@libs/database';
 import { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
 import {
-  CONTEST_REPLAY_QUEUE,
+  contestJobs,
   REPLAY_FORMAT_VERSION,
   REPLAY_SETTLE_MS,
 } from '@libs/contests';
@@ -231,7 +231,7 @@ describe('contest replay build', () => {
     const add = jest.spyOn(Queue.prototype, 'add');
     const replayAdds = () =>
       add.mock.contexts.filter(
-        (queue) => (queue as Queue).name === CONTEST_REPLAY_QUEUE,
+        (queue) => (queue as Queue).name === contestJobs.replay.queue,
       ).length;
     try {
       const ended = await contestOf();

@@ -2,7 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { REDIS } from '@libs/common';
-import { DISCORD_WEBHOOK_QUEUE, TICKET_EVENTS_CHANNEL } from '@libs/community';
+import { communityJobs, TICKET_EVENTS_CHANNEL } from '@libs/community';
 import type { DiscordWebhookJob, TicketEvent } from '@libs/community';
 import { newId } from '@libs/database';
 import type {
@@ -49,7 +49,7 @@ describe('filing tickets and posting messages', () => {
     await api.setSetting('discord.webhooks', {
       default: 'http://127.0.0.1:9/secret-hook',
     });
-    queue = api.app.get(getQueueToken(DISCORD_WEBHOOK_QUEUE));
+    queue = api.app.get(getQueueToken(communityJobs.discordWebhook.queue));
     subscriber = api.app.get<Redis>(REDIS).duplicate();
     await subscriber.subscribe(TICKET_EVENTS_CHANNEL);
     // The channel is server-wide: keep only events of this file's tickets (another jest worker publishes too), in order.

@@ -1,6 +1,6 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
+import { communityJobs } from '@libs/community';
 import type { OrganizationPointsJob } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
@@ -59,7 +59,9 @@ afterAll(() => api.teardown());
         .lean())!.organizations.map(uuidStr);
 
     beforeAll(() => {
-      queue = api.app.get(getQueueToken(ORGANIZATION_POINTS_QUEUE));
+      queue = api.app.get(
+        getQueueToken(communityJobs.organizationPoints.queue),
+      );
     });
     beforeEach(async () => {
       await queue.drain();
@@ -482,7 +484,9 @@ afterAll(() => api.teardown());
       );
 
     beforeAll(() => {
-      queue = api.app.get(getQueueToken(ORGANIZATION_POINTS_QUEUE));
+      queue = api.app.get(
+        getQueueToken(communityJobs.organizationPoints.queue),
+      );
     });
     beforeEach(async () => {
       await queue.drain();

@@ -1,4 +1,4 @@
-import type { JobsOptions, RepeatOptions } from 'bullmq';
+import type { JobsOptions } from 'bullmq';
 
 /** Finished jobs are dropped at once; failed ones stay a week for inspection. */
 export const JOB_RETENTION = {
@@ -9,6 +9,12 @@ export const JOB_RETENTION = {
 export const JOB_RETRY = {
   attempts: 3,
   backoff: { type: 'exponential', delay: 10_000 },
+};
+/** One attempt, dropped as soon as it ends either way: with a job id per subject, "running" is "the job exists" (an add with a live id is ignored), and a failure never blocks the next request. */
+export const ONE_SHOT_JOB = {
+  attempts: 1,
+  removeOnComplete: true,
+  removeOnFail: true,
 };
 /** A scheduled run keeps its last 100 failures; the next run repeats the work anyway. */
 export const SCHEDULED_RETENTION = {
@@ -21,18 +27,27 @@ export interface IndexedModel {
   readonly name: string;
 }
 
-export interface JobSchedule {
+/** A recurring run: every so many milliseconds, or a cron pattern read in the site time zone (setting `site.timeZone`, read at boot). */
+export type JobSchedule = {
   /** The scheduler key in Redis; the upsert is idempotent, so every worker process runs it. */
   id: string;
-  repeat: Pick<RepeatOptions, 'every' | 'pattern' | 'tz'>;
-}
+} & ({ every: number } | { pattern: string; tz: 'site' });
+
+/** Retry and retention, the only options a contract fixes for every add. */
+export type JobRetention = Pick<
+  JobsOptions,
+  'attempts' | 'backoff' | 'removeOnComplete' | 'removeOnFail'
+>;
+
+/** Provides `() => string`, the site's IANA time zone, for pattern schedules (the settings module provides it; common cannot read settings). */
+export const SITE_TIME_ZONE = 'SITE_TIME_ZONE';
 
 /** Everything api, worker and bridge must agree on for one kind of job. Queue, name, job id and options are what Redis holds, so they never change for a job already queued. */
 export interface JobContract<Payload> {
   readonly queue: string;
   readonly name: string;
   /** Retry and retention of every add (and of scheduled runs). */
-  readonly options: JobsOptions;
+  readonly options: JobRetention;
   /** A job id derived from the payload: BullMQ ignores an add whose id is still kept. */
   readonly jobId?: (payload: Payload) => string;
   /** Subject of the log lines about one job, e.g. `Rescore of problem <id>`. */

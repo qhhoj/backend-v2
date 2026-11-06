@@ -1,17 +1,8 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
-import { NOTIFICATION_FANOUT_QUEUE } from '@libs/community';
-import { RateLimitService } from '@libs/common';
-import {
-  CONTEST_DATA_QUEUE,
-  CONTEST_EXPORT_QUEUE,
-  CONTEST_FINAL_JUDGE_QUEUE,
-  CONTEST_PUBLISH_QUEUE,
-  CONTEST_RATING_QUEUE,
-  CONTEST_REPLAY_QUEUE,
-  CONTEST_RESCORE_QUEUE,
-} from '@libs/contests';
+import { communityJobs } from '@libs/community';
+import { JobsModule, RateLimitService } from '@libs/common';
+import { contestJobs } from '@libs/contests';
 import { EventsModule } from '../events/events.module';
 import { OrganizationsApiModule } from '../organizations/organizations-api.module';
 import { OrganizationQuotaModule } from '../organizations/quota/organization-quota.module';
@@ -92,15 +83,15 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     OrganizationQuotaModule,
     ProblemsApiModule,
     SubmissionsApiModule,
-    BullModule.registerQueue(
-      { name: CONTEST_RESCORE_QUEUE },
-      { name: CONTEST_FINAL_JUDGE_QUEUE },
-      { name: CONTEST_PUBLISH_QUEUE },
-      { name: CONTEST_RATING_QUEUE },
-      { name: CONTEST_DATA_QUEUE },
-      { name: CONTEST_REPLAY_QUEUE },
-      { name: CONTEST_EXPORT_QUEUE },
-      { name: NOTIFICATION_FANOUT_QUEUE },
+    JobsModule.register(
+      contestJobs.rescore,
+      contestJobs.finalJudge,
+      contestJobs.publish,
+      contestJobs.rating,
+      contestJobs.data,
+      contestJobs.replay,
+      contestJobs.export,
+      communityJobs.notificationFanout,
     ),
   ],
   // Fastify matches a static segment (`current`) before `:key`, whatever the controller order.

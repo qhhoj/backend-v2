@@ -1,11 +1,7 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
-import { RateLimitService } from '@libs/common';
-import {
-  NotificationsModule,
-  ORGANIZATION_POINTS_QUEUE,
-} from '@libs/community';
+import { JobsModule, RateLimitService } from '@libs/common';
+import { communityJobs, NotificationsModule } from '@libs/community';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { OrganizationCreationModule } from './creation/organization-creation.module';
@@ -53,7 +49,7 @@ import {
     SubmissionsApiModule,
     OrganizationQuotaModule,
     OrganizationCreationModule,
-    BullModule.registerQueue({ name: ORGANIZATION_POINTS_QUEUE }),
+    JobsModule.register(communityJobs.organizationPoints),
   ],
   controllers: [
     OrganizationsController,

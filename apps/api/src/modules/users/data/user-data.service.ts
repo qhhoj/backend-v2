@@ -2,23 +2,19 @@ import { createReadStream } from 'node:fs';
 import type { ReadStream } from 'node:fs';
 import { once } from 'node:events';
 import { stat } from 'node:fs/promises';
-import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, ENV, RateLimitService } from '@libs/common';
-import type { Env } from '@libs/common';
+import { AppError, ENV, InjectJob, RateLimitService } from '@libs/common';
+import type { Env, JobProducer } from '@libs/common';
 import {
   canPrepareUserData,
+  communityJobs,
   isUserDataExpired,
-  USER_DATA_JOB,
   USER_DATA_PREPARE_INTERVAL_MS,
-  USER_DATA_QUEUE,
   USER_DATA_TTL_MS,
   userDataJobId,
   userDataPath,
-  oneJobPerUser,
 } from '@libs/community';
 import type { UserDataJob } from '@libs/community';
 import type { QueuedResponse } from '../../contests/core/dto/queued.response';
@@ -36,7 +32,8 @@ export class UserDataService {
     @Inject(ENV) private readonly env: Env,
     private readonly users: UsersRepository,
     private readonly rateLimits: RateLimitService,
-    @InjectQueue(USER_DATA_QUEUE) private readonly queue: Queue<UserDataJob>,
+    @InjectJob(communityJobs.userData)
+    private readonly jobs: JobProducer<UserDataJob>,
   ) {}
 
   async status(
@@ -46,7 +43,7 @@ export class UserDataService {
     const { user, root } = await this.exporter(principal);
     const file = await this.freshZip(root, user._id, now);
     const preparing =
-      (await this.queue.getJob(userDataJobId(user._id))) !== undefined;
+      (await this.jobs.job(userDataJobId(user._id))) !== undefined;
     const preparedAt = user.dataLastDownloaded;
     const dailyLimitUsed =
       (await this.rateLimits.count(dailyKey(user._id))) >=
@@ -78,7 +75,7 @@ export class UserDataService {
     now = new Date(),
   ): Promise<QueuedResponse> {
     const { user, root } = await this.exporter(principal);
-    if (await this.queue.getJob(userDataJobId(user._id)))
+    if (await this.jobs.job(userDataJobId(user._id)))
       throw new AppError('conflict', 409, 'Your data is being prepared');
     if (
       !canPrepareUserData({
@@ -98,11 +95,7 @@ export class UserDataService {
       USER_DATA_PREPARE_WINDOW_SECONDS,
     );
     await this.users.update(user._id, { dataLastDownloaded: now });
-    await this.queue.add(
-      USER_DATA_JOB,
-      { userId: user._id },
-      oneJobPerUser(user._id),
-    );
+    await this.jobs.add({ userId: user._id });
     return { queued: true };
   }
 

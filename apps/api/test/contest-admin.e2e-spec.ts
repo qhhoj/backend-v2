@@ -1,21 +1,9 @@
 import { getQueueToken } from '@nestjs/bullmq';
-
-import { Logger } from '@nestjs/common';
-
 import type { Queue } from 'bullmq';
 
-import {
-  CONTEST_EXPORT_QUEUE,
-  CONTEST_FINAL_JUDGE_QUEUE,
-  CONTEST_PUBLISH_QUEUE,
-  CONTEST_RATING_QUEUE,
-  CONTEST_REPLAY_QUEUE,
-  CONTEST_RESCORE_QUEUE,
-  enqueueContestRating,
-  enqueueContestRescore,
-  requestFinalJudge,
-  reschedulePublish,
-} from '@libs/contests';
+import { JobProducer } from '@libs/common';
+
+import { contestJobs, reschedulePublish } from '@libs/contests';
 
 import type {
   ContestExportJob,
@@ -55,7 +43,7 @@ import { errorCode, setupApiTest, sessionCookie, TEST_ENV } from './setup';
 
 import type { ApiTest } from './setup';
 
-import { NOTIFICATION_FANOUT_QUEUE } from '@libs/community';
+import { communityJobs } from '@libs/community';
 
 import type { NotificationFanoutJob } from '@libs/community';
 
@@ -119,12 +107,12 @@ afterAll(() => api.teardown());
     };
 
     beforeAll(async () => {
-      rescores = api.app.get(getQueueToken(CONTEST_RESCORE_QUEUE));
-      finalJudges = api.app.get(getQueueToken(CONTEST_FINAL_JUDGE_QUEUE));
-      ratings = api.app.get(getQueueToken(CONTEST_RATING_QUEUE));
-      publishes = api.app.get(getQueueToken(CONTEST_PUBLISH_QUEUE));
-      replays = api.app.get(getQueueToken(CONTEST_REPLAY_QUEUE));
-      exports = api.app.get(getQueueToken(CONTEST_EXPORT_QUEUE));
+      rescores = api.app.get(getQueueToken(contestJobs.rescore.queue));
+      finalJudges = api.app.get(getQueueToken(contestJobs.finalJudge.queue));
+      ratings = api.app.get(getQueueToken(contestJobs.rating.queue));
+      publishes = api.app.get(getQueueToken(contestJobs.publish.queue));
+      replays = api.app.get(getQueueToken(contestJobs.replay.queue));
+      exports = api.app.get(getQueueToken(contestJobs.export.queue));
       editorId = (
         await createUserWith(api, 'actions_editor', {
           permissions: ['judge.add_contest', 'judge.edit_own_contest'],
@@ -147,7 +135,7 @@ afterAll(() => api.teardown());
 
     it('reports a rescore queued while its request waits', async () => {
       const contest = await createContest(api, { authors: [editorId] });
-      await enqueueContestRescore(rescores, contest._id);
+      await rescores.add(contestJobs.rescore.name, { contestId: contest._id });
       expect(await statusOf(contest.key)).toEqual({
         ...idle,
         rescore: 'queued',
@@ -175,18 +163,14 @@ afterAll(() => api.teardown());
         authors: [editorId],
         publishAfterEnd: true,
       });
-      await reschedulePublish(
-        publishes,
-        {
-          previous: null,
-          next: {
-            id: contest._id,
-            endTime: contest.endTime,
-            publishAfterEnd: true,
-          },
+      await reschedulePublish(new JobProducer(contestJobs.publish, publishes), {
+        previous: null,
+        next: {
+          id: contest._id,
+          endTime: contest.endTime,
+          publishAfterEnd: true,
         },
-        new Logger('spec'),
-      );
+      });
       expect(await statusOf(contest.key)).toEqual({
         ...idle,
         publish: 'queued',
@@ -196,9 +180,12 @@ afterAll(() => api.teardown());
     it('ignores requests queued for another contest', async () => {
       const contest = await createContest(api, { authors: [editorId] });
       const other = await createContest(api, { authors: [editorId] });
-      await enqueueContestRescore(rescores, other._id);
-      await enqueueContestRating(ratings, other._id);
-      await requestFinalJudge(finalJudges, other._id);
+      await rescores.add(contestJobs.rescore.name, { contestId: other._id });
+      await ratings.add(contestJobs.rating.name, { contestId: other._id });
+      await finalJudges.add(contestJobs.finalJudge.name, {
+        contestId: other._id,
+        manual: true,
+      });
       expect(await statusOf(contest.key)).toEqual(idle);
     });
 
@@ -226,7 +213,9 @@ afterAll(() => api.teardown());
       (await queue.getJobs(['waiting', 'delayed'])).map((job) => job.data);
 
     beforeAll(async () => {
-      queue = api.app.get(getQueueToken(NOTIFICATION_FANOUT_QUEUE));
+      queue = api.app.get(
+        getQueueToken(communityJobs.notificationFanout.queue),
+      );
       const user = await createUserWith(api, 'editor', {
         permissions: ['judge.edit_own_contest'],
       });

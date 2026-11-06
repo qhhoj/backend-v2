@@ -5,8 +5,7 @@ import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import {
-  CONTEST_RATING_QUEUE,
-  enqueueContestRating,
+  contestJobs,
   MEAN_INIT,
   rankingCacheKeys,
   recalculateRatings,
@@ -39,7 +38,7 @@ describe('contest rating', () => {
   let problemId: string;
   const queueOf = () =>
     worker.module.get<Queue<ContestRatingJob>>(
-      getQueueToken(CONTEST_RATING_QUEUE),
+      getQueueToken(contestJobs.rating.queue),
     );
   const ratedContest = (endTime: Date, extra: Partial<Contest> = {}) =>
     seedContest(worker, {
@@ -561,7 +560,7 @@ describe('contest rating', () => {
       await join(row._id, alice._id, 10);
       await join(row._id, bob._id, 5);
     }
-    await enqueueContestRating(queueOf(), contest._id);
+    await queueOf().add(contestJobs.rating.name, { contestId: contest._id });
     await waitUntil(async () => (await worker.ratings.countDocuments()) === 4);
     const moved = daysAgo(1);
     await worker.contests.updateOne({ _id: contest._id }, { endTime: moved });
@@ -860,8 +859,8 @@ describe('contest rating', () => {
       await join(contest._id, alice._id, 10);
       await join(contest._id, bob._id, 5);
     }
-    await enqueueContestRating(queueOf(), first._id);
-    await enqueueContestRating(queueOf(), second._id);
+    await queueOf().add(contestJobs.rating.name, { contestId: first._id });
+    await queueOf().add(contestJobs.rating.name, { contestId: second._id });
     await waitUntil(async () => {
       const counts = await queueOf().getJobCounts(
         'active',

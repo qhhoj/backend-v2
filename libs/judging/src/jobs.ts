@@ -79,7 +79,7 @@ export const judgingJobs = {
     oneAtATime: true,
     schedule: {
       id: 'effects-sweep-every-10-minutes',
-      repeat: { every: SWEEP_INTERVAL_MS },
+      every: SWEEP_INTERVAL_MS,
     },
     needsIndexes: [Submission, OrganizationJudgingCharge],
   }),

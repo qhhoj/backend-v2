@@ -6,7 +6,7 @@ import Redis from 'ioredis';
 import { Model } from 'mongoose';
 import { createUser, errorCode, setupApiTest } from './setup';
 import { getQueueToken } from '@nestjs/bullmq';
-import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
+import { communityJobs } from '@libs/community';
 import type { Queue } from 'bullmq';
 import { ActivationService } from '../src/modules/auth/registration/activation.service';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
@@ -207,7 +207,7 @@ describe('registration extras', () => {
 
   beforeAll(async () => {
     await api.reset();
-    queue = api.app.get(getQueueToken(ORGANIZATION_POINTS_QUEUE));
+    queue = api.app.get(getQueueToken(communityJobs.organizationPoints.queue));
     await api.languages.create({
       key: 'PY3',
       name: 'Python 3',

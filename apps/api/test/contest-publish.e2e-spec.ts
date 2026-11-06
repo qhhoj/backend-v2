@@ -30,7 +30,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 
 import type { Queue } from 'bullmq';
 
-import { CONTEST_PUBLISH_QUEUE, publishJobId } from '@libs/contests';
+import { contestJobs, publishJobId } from '@libs/contests';
 
 import type { ContestPublishJob } from '@libs/contests';
 
@@ -130,7 +130,7 @@ afterAll(() => api.teardown());
       authed(api.http().patch(contestUrl(key)), editor).send(body);
 
     beforeAll(async () => {
-      queue = api.app.get(getQueueToken(CONTEST_PUBLISH_QUEUE));
+      queue = api.app.get(getQueueToken(contestJobs.publish.queue));
       editorId = (
         await createUserWith(api, 'schedule_editor', {
           permissions: [

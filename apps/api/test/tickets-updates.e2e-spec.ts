@@ -3,10 +3,7 @@ import type { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
-import {
-  CONTRIBUTION_POINTS_QUEUE,
-  TICKET_EVENTS_CHANNEL,
-} from '@libs/community';
+import { communityJobs, TICKET_EVENTS_CHANNEL } from '@libs/community';
 import type { TicketEvent } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
@@ -35,7 +32,9 @@ describe('ticket updates', () => {
 
   beforeAll(async () => {
     api = await setupApiTest();
-    contributions = api.app.get(getQueueToken(CONTRIBUTION_POINTS_QUEUE));
+    contributions = api.app.get(
+      getQueueToken(communityJobs.contributionPoints.queue),
+    );
     subscriber = api.app.get<Redis>(REDIS).duplicate();
     await subscriber.subscribe(TICKET_EVENTS_CHANNEL);
     // The channel is server-wide: keep only events of this file's tickets (another jest worker publishes too), in order.
