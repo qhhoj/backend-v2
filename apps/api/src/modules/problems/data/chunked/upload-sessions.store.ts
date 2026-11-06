@@ -20,6 +20,8 @@ export interface UploadSession {
   chunkCount: number;
   /** Epoch milliseconds. */
   expiresAt: number;
+  /** Stored by complete: a repeated complete answers the stored data instead of storing again. */
+  completed: boolean;
 }
 
 const sessionKey = (id: string) => `chunked-upload:${id}`;
@@ -36,6 +38,7 @@ const toSession = (fields: Record<string, string>): UploadSession => ({
   sha256: fields.sha256,
   chunkCount: Number(fields.chunkCount),
   expiresAt: Number(fields.expiresAt),
+  completed: fields.completed === 'true',
 });
 
 /** Upload sessions in Redis, each key expiring with the session: the fields, the set of received chunk indexes, and per user the open session ids (scored by expiry). */
@@ -56,6 +59,7 @@ export class UploadSessionsStore {
       id: randomUUID(),
       chunkCount: chunkCountOf(fields.size),
       expiresAt: now + UPLOAD_SESSION_TTL_SECONDS * 1000,
+      completed: false,
     };
     await this.takeUserSlot(session, now);
     await execOrThrow(
@@ -128,6 +132,16 @@ export class UploadSessionsStore {
         renew: true,
       },
       work,
+    );
+  }
+
+  /** Kept until it expires so a complete retried after a lost answer finds it; it no longer counts among the user's open sessions. */
+  async markCompleted(session: UploadSession): Promise<void> {
+    await execOrThrow(
+      this.redis
+        .multi()
+        .hset(sessionKey(session.id), 'completed', 'true')
+        .zrem(userKey(session.userId), session.id),
     );
   }
 

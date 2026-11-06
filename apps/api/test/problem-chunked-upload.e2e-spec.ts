@@ -157,7 +157,6 @@ describe('chunked data upload', () => {
       ),
     ).toBe(sha256Of(content));
     expect(existsSync(partsDirectory(session.id))).toBe(false);
-    await status(chunked.code, session.id).expect(404);
   });
 
   describe('quota', () => {
@@ -210,8 +209,9 @@ describe('chunked data upload', () => {
       expect(await ledgerOf(organizationId!)).toEqual([]);
 
       await putChunk(code, { id: next.id, index: 0 }, smallZip).expect(200);
-      await complete(code, next.id).expect(201);
-      await complete(code, next.id).expect(404);
+      const stored = await complete(code, next.id).expect(201);
+      const repeated = await complete(code, next.id).expect(201);
+      expect(repeated.body).toEqual(stored.body);
       expect(await creditsOf(organizationId!)).toBe(1);
       expect(await ledgerOf(organizationId!)).toEqual([['upload', 1]]);
     });

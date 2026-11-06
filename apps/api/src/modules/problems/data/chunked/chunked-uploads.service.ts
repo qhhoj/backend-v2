@@ -20,6 +20,7 @@ import {
   archiveNameOf,
   ProblemDataUploadService,
 } from '../problem-data-upload.service';
+import { ProblemDataService } from '../problem-data.service';
 import { ProblemDataStore } from '../problem-data.store';
 import { CHUNK_BYTES, chunkLengthOf } from './chunked-upload.limits';
 import type { CreateChunkedUploadDto } from './dto/chunked-upload.dto';
@@ -27,6 +28,8 @@ import { ChunkedUploadResponse } from './dto/chunked-upload.response';
 import { UploadPartsStore } from './upload-parts.store';
 import { UploadSessionsStore } from './upload-sessions.store';
 import type { UploadSession } from './upload-sessions.store';
+
+const noSuchUpload = () => new AppError('not_found', 404, 'No such upload');
 
 /**
  * A test-data archive sent in chunks: create a session, send each chunk, read what the server holds to resume, then
@@ -38,6 +41,7 @@ import type { UploadSession } from './upload-sessions.store';
 export class ChunkedUploadsService {
   constructor(
     private readonly store: ProblemDataStore,
+    private readonly data: ProblemDataService,
     private readonly uploads: ProblemDataUploadService,
     private readonly dataFiles: ProblemDataFilesService,
     private readonly sessions: UploadSessionsStore,
@@ -74,6 +78,7 @@ export class ChunkedUploadsService {
   ): Promise<ChunkedUploadResponse> {
     const { session } = await this.ownSession(auth, target);
     const { index } = target;
+    if (session.completed) throw noSuchUpload();
     if (index >= session.chunkCount)
       throw invalidField(
         'index',
@@ -108,21 +113,25 @@ export class ChunkedUploadsService {
     return this.responseOf(session, await this.sessions.received(session.id));
   }
 
-  /** Answers like the single archive upload. A size or sha256 mismatch drops the session (400 `upload_hash_mismatch`, nothing charged); any later refusal keeps the chunks, so complete can be retried. */
+  /** Answers like the single archive upload; a repeated complete (an answer lost on the way) answers the stored data and charges nothing. A size or sha256 mismatch drops the session (400 `upload_hash_mismatch`, nothing charged); any later refusal keeps the chunks, so complete can be retried. */
   async complete(
     auth: AuthContext,
     target: { code: string; id: string },
   ): Promise<ProblemDataResponse> {
     const { problem, session } = await this.ownSession(auth, target);
     const answer = await this.sessions.withSessionLock(session.id, async () => {
+      if ((await this.sessions.get(session.id))?.completed)
+        return this.data.get(auth, problem.code);
       await this.assertAllReceived(session);
       const staged = await this.assembleVerified(problem, session);
-      return this.uploads.commitStagedArchive(auth, problem, {
+      const stored = await this.uploads.commitStagedArchive(auth, problem, {
         staged,
         name: session.name,
       });
+      await this.sessions.markCompleted(session);
+      return stored;
     });
-    await this.drop(session);
+    await this.parts.remove(session.id);
     return answer;
   }
 
@@ -184,7 +193,7 @@ export class ChunkedUploadsService {
       session.userId !== auth.principal.userId ||
       session.problemId !== problem._id
     )
-      throw new AppError('not_found', 404, 'No such upload');
+      throw noSuchUpload();
     return { problem, session };
   }
 

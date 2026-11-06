@@ -35861,7 +35861,7 @@
     },
     "/api/internal/problems/{code}/data/archive": {
       "post": {
-        "description": "Needs edit rights; mirror problems are refused. Send one multipart `file`, a\n.zip of up to 512 MiB (400 `zip_required` or a zip error code otherwise). It\nreplaces the previous archive, regenerates `init.yml` and is counted against\nthe organization's storage and credits (403 `quota_exceeded`). Limited to 30\nuploads per hour per user. Returns the new data configuration.",
+        "description": "Needs edit rights; mirror problems are refused. Send one multipart `file`, a\n.zip of up to 512 MiB (400 `zip_required` or a zip error code otherwise);\nbehind Cloudflare one request carries at most 100 MB, so a larger archive\ngoes through the chunked upload (`/data/uploads`). It\nreplaces the previous archive, regenerates `init.yml` and is counted against\nthe organization's storage and credits (403 `quota_exceeded`). Limited to 30\nuploads per hour per user. Returns the new data configuration.",
         "operationId": "ProblemDataController_uploadArchive",
         "parameters": [
           {
@@ -36517,7 +36517,7 @@
     },
     "/api/internal/problems/{code}/data/uploads/{id}/complete": {
       "post": {
-        "description": "Needs every chunk (409 `chunks_missing`). Joins them and checks the size and\nSHA-256 given at create: a mismatch is 400 `upload_hash_mismatch` and ends\nthe upload. Then stores the archive exactly like the archive upload, with its\nanswer and its errors (zip codes, `quota_exceeded`, 409 `busy`); after such\nan error the chunks are kept, so complete can be retried or the upload\ncancelled.",
+        "description": "Needs every chunk (409 `chunks_missing`). Joins them and checks the size and\nSHA-256 given at create: a mismatch is 400 `upload_hash_mismatch` and ends\nthe upload. Then stores the archive exactly like the archive upload, with its\nanswer and its errors (zip codes, `quota_exceeded`, 409 `busy`); after such\nan error the chunks are kept, so complete can be retried or the upload\ncancelled. Once stored, completing again answers the stored data and\ncharges nothing (for an answer lost on the way); its chunks are refused.",
         "operationId": "ChunkedUploadsController_complete",
         "parameters": [
           {

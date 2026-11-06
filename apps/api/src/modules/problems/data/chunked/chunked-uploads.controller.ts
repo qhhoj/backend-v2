@@ -93,7 +93,8 @@ export class ChunkedUploadsController {
    * the upload. Then stores the archive exactly like the archive upload, with its
    * answer and its errors (zip codes, `quota_exceeded`, 409 `busy`); after such
    * an error the chunks are kept, so complete can be retried or the upload
-   * cancelled.
+   * cancelled. Once stored, completing again answers the stored data and
+   * charges nothing (for an answer lost on the way); its chunks are refused.
    */
   @Post(':code/data/uploads/:id/complete')
   complete(
