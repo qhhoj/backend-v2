@@ -1,3 +1,4 @@
+import { LowercaseUuid } from '@libs/common';
 import { HEX_SHA256 } from '@libs/database';
 import { Type } from 'class-transformer';
 import {
@@ -24,7 +25,7 @@ export class ChunkedUploadParamsDto {
   /** Problem code. */
   @IsString() code!: string;
   /** Upload session id, from create. */
-  @IsUUID('4') id!: string;
+  @LowercaseUuid() @IsUUID('4') id!: string;
 }
 
 export class ChunkedUploadChunkParamsDto extends ChunkedUploadParamsDto {
