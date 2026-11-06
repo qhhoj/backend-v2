@@ -8,7 +8,11 @@ import type {
   HydratedDocument,
   Model,
 } from 'mongoose';
-import { COMMENT_DELETED_BODY, subtreeFilter } from '@libs/community';
+import {
+  COMMENT_DELETED_BODY,
+  subtreeFilter,
+  UNLINKED_PAGE_TYPES,
+} from '@libs/community';
 import type { CommentPage, CommentPageType } from '@libs/community';
 import {
   Comment,
@@ -59,9 +63,13 @@ export class CommentsRepository {
     return this.comments.create(fields);
   }
 
-  /** Newest visible, undeleted comments (optionally one author's), older than `before`, through `{hidden, _id}` or `{author, hidden, _id}`. */
+  /** Newest visible, undeleted comments (optionally one author's, optionally only on pages that have a screen), older than `before`, through `{hidden, _id}` or `{author, hidden, _id}`. */
   newestVisible(
-    { authorId, before }: { authorId?: string; before?: string | null },
+    {
+      authorId,
+      before,
+      linkedOnly,
+    }: { authorId?: string; before?: string | null; linkedOnly?: boolean },
     limit: number,
   ): Promise<Comment[]> {
     return this.comments
@@ -69,6 +77,7 @@ export class CommentsRepository {
         hidden: false,
         deletedAt: null,
         ...(authorId ? { author: authorId } : {}),
+        ...(linkedOnly ? { 'page.type': { $nin: UNLINKED_PAGE_TYPES } } : {}),
         ...(before ? { _id: { $lt: before } } : {}),
       })
       .sort({ _id: -1 })

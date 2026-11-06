@@ -1720,21 +1720,28 @@ afterAll(() => api.teardown());
         judge: null,
         tags: [],
       });
+      const revisionId = newId();
       await api.revisions.create({
-        _id: newId(),
+        _id: revisionId,
         entity: 'tagProblem',
         entityId: tagProblem._id,
         action: 'edit',
-        userId: editorId,
+        userId: null,
         changes: { name: { before: 'a', after: 'b' } },
         comment: '',
       });
-      const { body } = await feed({ type: 'tagProblem' });
-      expect(body.items[0].object).toEqual({
-        id: tagProblem._id,
-        label: 'cf_1A',
-        deleted: false,
-      });
+      try {
+        const { body } = await feed({ type: 'tagProblem' });
+        expect(body.items[0].object).toEqual({
+          id: tagProblem._id,
+          label: 'cf_1A',
+          deleted: false,
+        });
+      } finally {
+        // Later tests count this block's rows by actor and by time.
+        await api.revisions.deleteOne({ _id: revisionId });
+        await api.tagProblems.deleteOne({ _id: tagProblem._id });
+      }
     });
 
     it('leaves out notes and superuser-only setting rows for a viewer without the matching permission', async () => {

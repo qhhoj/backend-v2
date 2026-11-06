@@ -72,14 +72,29 @@ export class FeedsService {
       }));
     if (kind === 'comments')
       return (
-        await this.recentComments.newest(null, { limit: FEED_ITEMS })
-      ).items.map((comment) => ({
-        id: comment.id,
-        title: `${comment.author?.username ?? 'unknown'} -> ${comment.page.title}`,
-        link: `${site}${commentLink(comment.page.type, comment.page.key, comment.id) ?? '/'}`,
-        published: comment.createdAt,
-        html: comment.bodyHtml,
-      }));
+        await this.recentComments.newest(null, {
+          limit: FEED_ITEMS,
+          linkedOnly: true,
+        })
+      ).items.flatMap((comment) => {
+        const path = commentLink(
+          comment.page.type,
+          comment.page.key,
+          comment.id,
+        );
+        // The query already leaves out pages without a screen; a feed entry must point at what it describes.
+        return path === null
+          ? []
+          : [
+              {
+                id: comment.id,
+                title: `${comment.author?.username ?? 'unknown'} -> ${comment.page.title}`,
+                link: `${site}${path}`,
+                published: comment.createdAt,
+                html: comment.bodyHtml,
+              },
+            ];
+      });
     return (
       await this.home.newProblems(FEED_ITEMS, {
         withStatement: true,

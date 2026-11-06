@@ -37,6 +37,7 @@ export const pageOf = (comment: {
 export const pageRef = (page: CommentPage): string => `${page.type}:${page.id}`;
 
 /** Page types that have a screen in the SPA (contract with the frontend, listed in CONTRIBUTING). A tag problem has none. */
+export const UNLINKED_PAGE_TYPES: CommentPageType[] = ['tagProblem'];
 export type LinkedPageType = Exclude<CommentPageType, 'tagProblem'>;
 
 const PAGE_PATHS: Record<LinkedPageType, (key: string) => string> = {

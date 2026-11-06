@@ -38,7 +38,13 @@ export class RecentCommentsService {
       authorId,
       before = null,
       limit,
-    }: { authorId?: string; before?: string | null; limit: number },
+      linkedOnly,
+    }: {
+      authorId?: string;
+      before?: string | null;
+      limit: number;
+      linkedOnly?: boolean;
+    },
   ): Promise<{ items: RecentCommentResponse[]; nextBefore: string | null }> {
     if (officialModeLocks(this.settings, principal))
       return { items: [], nextBefore: null };
@@ -50,7 +56,7 @@ export class RecentCommentsService {
     let cursor = before;
     for (let batch = 0; batch < RECENT_SCAN_BATCHES; batch += 1) {
       const rows = await this.comments.newestVisible(
-        { authorId, before: cursor },
+        { authorId, before: cursor, linkedOnly },
         2 * limit,
       );
       const readable = await this.pages.accessible(
