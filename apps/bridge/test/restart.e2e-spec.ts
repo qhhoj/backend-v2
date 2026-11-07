@@ -283,7 +283,8 @@ describe('Bridge restart', () => {
       const ref = (await judge.nextAssign()).ref!;
       slowClaim.mockRestore();
       judge.accept(ref);
-      judge.started(ref, 1);
+      // G once the ack says the write landed (a loaded host takes seconds): the ticks after it check the row is not requeued
+      await judge.ackOf(ref, judge.started(ref, 1), 15_000);
       await resyncTicks(3);
       expect(await submissionRow(id)).toMatchObject({
         status: 'G',
@@ -420,24 +421,33 @@ describe('Bridge restart', () => {
   });
 
   it('marks its judges offline when it stops, while a run they hold stays P/G', async () => {
-    await seedJudge(bridge, 'restart-15', KEY);
-    const stopping = await Test.createTestingModule({
-      imports: [BridgeModule],
-    }).compile();
-    await stopping.init();
-    const judge = await FakeJudge.online(stopping.get(JudgeLinkServer).port(), {
-      name: 'restart-15',
-      key: KEY,
-    });
-    const id = await seedOne({ status: 'PD' });
-    await bridge.submissions.updateOne({ _id: id }, { $set: { status: 'QU' } });
-    await commands.judge([id], 'restart-15');
-    await judge.nextAssign();
-    await stopping.close();
-    expect((await judge.closed).code).toBe(status.UNAVAILABLE);
-    expect(
-      (await bridge.judges.findOne({ name: 'restart-15' }).lean())?.online,
-    ).toBe(false);
-    expect(await submissionRow(id)).toMatchObject({ status: 'P' });
+    // one bridge per Mongo, as in production: the suite's bridge must not tick, or it requeues the run the second one holds
+    await bridge.restart({ ...TIMINGS, resyncMs: 3_600_000 });
+    try {
+      await seedJudge(bridge, 'restart-15', KEY);
+      const stopping = await Test.createTestingModule({
+        imports: [BridgeModule],
+      }).compile();
+      await stopping.init();
+      const judge = await FakeJudge.online(
+        stopping.get(JudgeLinkServer).port(),
+        { name: 'restart-15', key: KEY },
+      );
+      const id = await seedOne({ status: 'PD' });
+      await bridge.submissions.updateOne(
+        { _id: id },
+        { $set: { status: 'QU' } },
+      );
+      await commands.judge([id], 'restart-15');
+      await judge.nextAssign();
+      await stopping.close();
+      expect((await judge.closed).code).toBe(status.UNAVAILABLE);
+      expect(
+        (await bridge.judges.findOne({ name: 'restart-15' }).lean())?.online,
+      ).toBe(false);
+      expect(await submissionRow(id)).toMatchObject({ status: 'P' });
+    } finally {
+      await bridge.restart(TIMINGS);
+    }
   });
 });
