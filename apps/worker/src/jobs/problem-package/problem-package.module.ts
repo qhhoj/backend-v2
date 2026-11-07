@@ -1,13 +1,13 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { PACKAGE_QUEUE } from '@libs/problems';
+import { JobsModule } from '@libs/common';
+import { problemJobs } from '@libs/problems';
 import { DEFAULT_PACKAGE_LIMITS, PACKAGE_LIMITS } from './package-zip';
 import { ProblemPackageProcessor } from './problem-package.processor';
 import { ProblemPackageRepository } from './problem-package.repository';
 import { ProblemPackageService } from './problem-package.service';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: PACKAGE_QUEUE })],
+  imports: [JobsModule.register(problemJobs.package)],
   providers: [
     ProblemPackageProcessor,
     ProblemPackageService,

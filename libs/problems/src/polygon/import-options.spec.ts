@@ -1,10 +1,8 @@
 import {
-  IMPORT_OPTION_DEFAULTS,
   importOptionsOf,
-  jobOptionsOf,
+  languageMapOf,
+  languagePairsOf,
   linkWriteOf,
-  optionsViewOf,
-  patchedOptionsOf,
 } from './import-options';
 
 const stored = {
@@ -19,36 +17,26 @@ const stored = {
 };
 
 describe('import options', () => {
-  it('defaults every option a request leaves out and takes the requester limit', () => {
-    expect(
-      jobOptionsOf({ from: 'request', input: {}, requesterMaxCases: 300 }),
-    ).toEqual({ ...IMPORT_OPTION_DEFAULTS, maxCases: 300 });
-  });
-
-  it('turns request pairs into a map and keeps the flags given', () => {
-    const options = jobOptionsOf({
-      from: 'request',
-      input: {
-        statementLanguages: ['vietnamese=vi', 'russian=skip', '__proto__=en'],
-        appendMainSolution: true,
-        importTutorial: false,
-      },
-      requesterMaxCases: 300,
-    });
-    expect(options.statementLanguages).toEqual({
+  it('turns pairs into a map with own keys, and back into sorted pairs', () => {
+    const map = languageMapOf([
+      'vietnamese=vi',
+      'russian=skip',
+      '__proto__=en',
+    ]);
+    expect(map).toEqual({
       vietnamese: 'vi',
       russian: 'skip',
       ['__proto__']: 'en',
     });
-    expect(Object.hasOwn(options.statementLanguages, '__proto__')).toBe(true);
-    expect(options).toMatchObject({
-      appendMainSolution: true,
-      importTutorial: false,
-    });
+    expect(Object.hasOwn(map, '__proto__')).toBe(true);
+    expect(languagePairsOf({ vietnamese: 'vi', russian: 'skip' })).toEqual([
+      'russian=skip',
+      'vietnamese=vi',
+    ]);
   });
 
   it('re-applies a link with its own testcase limit', () => {
-    expect(jobOptionsOf({ from: 'link', stored })).toEqual(stored);
+    expect(importOptionsOf(stored)).toEqual(stored);
   });
 
   it('reads an old link or queued job: absent fields default, extra fields drop', () => {
@@ -62,32 +50,6 @@ describe('import options', () => {
     expect(
       importOptionsOf({ ...stored, appendMainSolution: null }),
     ).toMatchObject({ appendMainSolution: false });
-  });
-
-  it('patches: omitted keeps, null clears a language and is ignored on a flag, pairs replace the map', () => {
-    expect(patchedOptionsOf(stored, {})).toEqual(stored);
-    expect(
-      patchedOptionsOf(stored, {
-        mainStatementLanguage: null,
-        tutorialLanguage: null,
-        appendMainSolution: null as unknown as undefined,
-        statementLanguages: ['vietnamese=vi'],
-      }),
-    ).toEqual({
-      ...stored,
-      mainStatementLanguage: null,
-      tutorialLanguage: null,
-      statementLanguages: { vietnamese: 'vi' },
-    });
-  });
-
-  it('views the map as sorted pairs', () => {
-    expect(
-      optionsViewOf({
-        ...stored,
-        statementLanguages: { vietnamese: 'vi', russian: 'skip' },
-      }).statementLanguages,
-    ).toEqual(['russian=skip', 'vietnamese=vi']);
   });
 
   it('writes the whole link for a link import, the sync fields for a sync, nothing for a zip', () => {

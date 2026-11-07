@@ -1,6 +1,4 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import { createReadStream } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
 import {
@@ -27,15 +25,14 @@ import type { ProblemRescoreJob } from '@libs/judging';
 import {
   compileInitYaml,
   extensionOf,
-  PDF_QUEUE,
   PdfCacheService,
   importOptionsOf,
-  pdfJobId,
   ARCHIVE_MAX_BYTES,
   PolygonApiError,
   PolygonClient,
   ProblemDataError,
   ProblemDataFilesService,
+  problemJobs,
   SOURCE_MAX_BYTES,
   variantOf,
 } from '@libs/problems';
@@ -338,7 +335,8 @@ export class PolygonImportService {
     private readonly quota: ImportQuota,
     private readonly sourceChecks: ImportSourceChecks,
     private readonly runningContests: RunningContestsRepository,
-    @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
+    @InjectJob(problemJobs.pdf)
+    private readonly renders: JobProducer<PdfRenderJob>,
     @InjectJob(judgingJobs.problemRescore)
     private readonly rescores: JobProducer<ProblemRescoreJob>,
   ) {}
@@ -833,7 +831,7 @@ export class PolygonImportService {
     await this.pdfCache.delete(code);
     await Promise.all(
       STATEMENT_LANGUAGES.map((lang) =>
-        this.pdfQueue.remove(pdfJobId(code, lang)),
+        this.renders.remove(this.renders.idOf({ code, lang })),
       ),
     );
   }

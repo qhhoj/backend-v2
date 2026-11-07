@@ -1,13 +1,10 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { JobsModule } from '@libs/common';
 import { JudgingModule, judgingJobs } from '@libs/judging';
 import { DiscordWebhooksModule } from '@libs/community';
 import {
-  PDF_QUEUE,
-  POLYGON_QUEUE,
+  problemJobs,
   ProblemFilesModule,
-  SOURCE_CHECK_QUEUE,
   QuotaLedgerModule,
 } from '@libs/problems';
 import { ImportQuota } from './import-quota.service';
@@ -28,12 +25,12 @@ import { TestGenerationService } from './test-generation.service';
     ProblemFilesModule,
     QuotaLedgerModule,
     DiscordWebhooksModule,
-    BullModule.registerQueue(
-      { name: POLYGON_QUEUE },
-      { name: PDF_QUEUE },
-      { name: SOURCE_CHECK_QUEUE },
+    JobsModule.register(
+      problemJobs.polygonImport,
+      problemJobs.pdf,
+      problemJobs.sourceCheck,
+      judgingJobs.problemRescore,
     ),
-    JobsModule.register(judgingJobs.problemRescore),
   ],
   providers: [
     PolygonImportProcessor,

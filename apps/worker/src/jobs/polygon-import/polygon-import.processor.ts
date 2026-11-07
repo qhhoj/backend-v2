@@ -1,8 +1,8 @@
-import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
-import { DelayedError, UnrecoverableError } from 'bullmq';
+import { Injectable } from '@nestjs/common';
+import { DelayedError } from 'bullmq';
 import type { Job } from 'bullmq';
-import { AUTO_RETRIED_IMPORT_ERRORS, POLYGON_QUEUE } from '@libs/problems';
+import { JobProcessor } from '@libs/common';
+import { AUTO_RETRIED_IMPORT_ERRORS, problemJobs } from '@libs/problems';
 import type {
   ImportProgress,
   PolygonImportJob,
@@ -10,7 +10,7 @@ import type {
 } from '@libs/problems';
 import type { PolygonSyncStep } from '@libs/database';
 import { DiscordWebhooksService } from '@libs/community';
-import { importFailureOf } from './import-failure';
+import { importFailureOf, recordedErrorOf } from './import-failure';
 import type { ImportFailure } from './import-failure';
 import { ImportQuota } from './import-quota.service';
 import { ImportTracker } from './import-tracker';
@@ -19,10 +19,12 @@ import { PolygonImportRepository } from './polygon-import.repository';
 import { PolygonImportService } from './polygon-import.service';
 import { PolygonSyncRunsRepository } from './polygon-sync-runs.repository';
 
-@Processor(POLYGON_QUEUE, { concurrency: 1 })
-export class PolygonImportProcessor extends WorkerHost {
-  private readonly logger = new Logger(PolygonImportProcessor.name);
-
+/** Runs uploads, link imports and manual syncs (`import`) and automatic syncs (`sync`) alike. */
+@Injectable()
+export class PolygonImportProcessor extends JobProcessor<
+  PolygonImportJob,
+  PolygonImportResult
+>(problemJobs.polygonImport, problemJobs.autoSyncImport) {
   constructor(
     private readonly imports: PolygonImportService,
     private readonly repository: PolygonImportRepository,
@@ -34,7 +36,8 @@ export class PolygonImportProcessor extends WorkerHost {
   }
 
   /** Every Polygon job is recorded in the sync history; a failure also stores its step and code on the job and, for a sync, on the problem's link, and gives back the credits of a create. A created organization problem is announced like one made on the site. A deferred automatic sync waits for the contest's end, recording nothing. */
-  async process(
+  async run(
+    payload: PolygonImportJob,
     job: Job<PolygonImportJob>,
     token?: string,
   ): Promise<PolygonImportResult> {
@@ -43,7 +46,7 @@ export class PolygonImportProcessor extends WorkerHost {
       if (!job.id) throw new Error('A queued job always has an id');
       const result = await this.imports.import(
         { id: job.id, queuedAt: new Date(job.timestamp) },
-        job.data,
+        payload,
         tracker,
       );
       await this.recordSuccess(job, result);
@@ -53,7 +56,7 @@ export class PolygonImportProcessor extends WorkerHost {
         await job.moveToDelayed(error.until.getTime(), token);
         throw new DelayedError(error.message);
       }
-      throw await this.failed(job, tracker.step, error);
+      throw await this.failedWith(job, tracker.step, error);
     }
   }
 
@@ -64,12 +67,7 @@ export class PolygonImportProcessor extends WorkerHost {
   ): Promise<void> {
     if (result.attention) {
       const { code, params, message } = result.attention;
-      await this.recordFailure(job, 'finishing', {
-        code,
-        params,
-        message,
-        reason: message,
-      });
+      await this.recordFailure(job, 'finishing', { code, params, message });
     } else
       await this.bestEffort('Sync run', () =>
         this.runs.record(job.id ?? '', job.data, {
@@ -83,8 +81,8 @@ export class PolygonImportProcessor extends WorkerHost {
       );
   }
 
-  /** The error BullMQ records: an outage the job may outlast is retried once later with nothing recorded yet; anything else is final (`UnrecoverableError`) and recorded. */
-  private async failed(
+  /** The error BullMQ records: an outage the job may outlast is retried once later with nothing recorded yet; anything else is final and recorded. */
+  private async failedWith(
     job: Job<PolygonImportJob>,
     step: PolygonSyncStep,
     error: unknown,
@@ -95,9 +93,9 @@ export class PolygonImportProcessor extends WorkerHost {
         `Polygon import of ${job.data.code} failed`,
         error instanceof Error ? error.stack : String(error),
       );
-    if (retriesLater(job, failure)) return new Error(failure.reason);
+    if (retriesLater(job, failure)) return recordedErrorOf(error, false);
     await this.recordFailure(job, step, failure);
-    return new UnrecoverableError(failure.reason);
+    return recordedErrorOf(error, true);
   }
 
   /** Recording never masks the import's own error. */
@@ -168,13 +166,6 @@ export class PolygonImportProcessor extends WorkerHost {
         `Import progress not saved: ${(error as Error).message}`,
       );
     }
-  }
-
-  @OnWorkerEvent('failed')
-  onFailed(job: Job<PolygonImportJob> | undefined, error: Error): void {
-    this.logger.error(
-      `Polygon import of ${job?.data.code} failed: ${error.message}`,
-    );
   }
 }
 

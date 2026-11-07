@@ -1,6 +1,7 @@
+import { failureOf } from '@libs/common';
 import {
   IMPORT_STEPS,
-  POLYGON_ERROR_PREFIX,
+  problemJobs,
   RETRYABLE_IMPORT_ERRORS,
 } from '@libs/problems';
 import type {
@@ -38,7 +39,7 @@ export function importJobView(
     progress,
     queuePosition,
     result: resultOf(job.returnvalue),
-    error: failed ? shownReason(job.failedReason ?? '') : null,
+    error: failed ? shownReason(job) : null,
     errorCode,
     errorParams: errorCode ? (job.data.errorParams ?? {}) : null,
     retryable: errorCode !== null && RETRYABLE_IMPORT_ERRORS.has(errorCode),
@@ -75,11 +76,7 @@ const stepOf = (state: string, progress: ImportProgress | null): ImportStep => {
   return progress?.step ?? 'queued';
 };
 
-/** Only a failure the worker wrote for the requester is shown; the rest may carry paths and driver details. */
-const shownReason = (reason: string): string =>
-  reason.startsWith(POLYGON_ERROR_PREFIX)
-    ? reason.slice(
-        POLYGON_ERROR_PREFIX.length,
-        POLYGON_ERROR_PREFIX.length + MAX_SHOWN_REASON,
-      )
-    : GENERIC_FAILURE;
+/** Only a failure the worker wrote for the requester (a `JobFailure`, the same for an automatic sync) is shown; the rest may carry paths and driver details. */
+const shownReason = (job: ImportJob): string =>
+  failureOf(problemJobs.polygonImport, job)?.slice(0, MAX_SHOWN_REASON) ??
+  GENERIC_FAILURE;

@@ -16,13 +16,16 @@ import {
 } from '@libs/database';
 import {
   syncJobId,
-  POLYGON_ERROR_PREFIX,
   POLYGON_FETCH,
-  POLYGON_QUEUE,
   ProblemDataFilesService,
   QuotaLedger,
+  problemJobs,
 } from '@libs/problems';
-import type { ImportProgress, PolygonImportJob } from '@libs/problems';
+import type {
+  ImportProgress,
+  PolygonImportJob,
+  PolygonImportResult,
+} from '@libs/problems';
 import { FakePolygon, setStorageBackfilled } from '@libs/problems/testing';
 import { ImportQuota } from '../src/jobs/polygon-import/import-quota.service';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
@@ -119,7 +122,12 @@ describe('Polygon link, sync and auto-sync', () => {
       },
     } as unknown as Job<PolygonImportJob>;
     const outcome = await processor.process(job).then(
-      (result) => ({ result, error: null, final: true, delayed: false }),
+      (result) => ({
+        result: result as PolygonImportResult,
+        error: null,
+        final: true,
+        delayed: false,
+      }),
       (error: Error) => ({
         result: null,
         error: error.message,
@@ -209,7 +217,7 @@ describe('Polygon link, sync and auto-sync', () => {
     });
     processor = worker.module.get(PolygonImportProcessor);
     autoSync = worker.module.get(PolygonAutoSyncService);
-    imports = worker.module.get(getQueueToken(POLYGON_QUEUE));
+    imports = worker.module.get(getQueueToken(problemJobs.polygonImport.queue));
     runs = worker.module.get(getModelToken(PolygonSyncRun.name));
     revisions = worker.module.get(getModelToken(Revision.name));
     await worker.setSetting('polygon.apiKey', 'KEY');
@@ -332,7 +340,7 @@ describe('Polygon link, sync and auto-sync', () => {
     });
     const { error } = await runJob(linkJob('second_link', 10));
     expect(error).toBe(
-      `${POLYGON_ERROR_PREFIX}Polygon problem ${POLYGON_ID} is already linked to another QHHOJ problem`,
+      `polygon-import: Polygon problem ${POLYGON_ID} is already linked to another QHHOJ problem`,
     );
     expect(await worker.problems.countDocuments({ code: 'second_link' })).toBe(
       0,
@@ -344,7 +352,7 @@ describe('Polygon link, sync and auto-sync', () => {
       syncJob('never_linked', { packageId: 11, revision: 4 }, 0),
     );
     expect(error).toBe(
-      `${POLYGON_ERROR_PREFIX}problem with code never_linked not found`,
+      `polygon-import: problem with code never_linked not found`,
     );
     expect(failedStep).toBe('checking');
     expect(await runs.findOne({ jobId }).lean()).toMatchObject({
@@ -845,7 +853,7 @@ describe('Polygon link, sync and auto-sync', () => {
       problemId: String(before._id),
     });
     expect(error).toBe(
-      `${POLYGON_ERROR_PREFIX}Polygon: problem.package for package 12 of problem 4242 (type linux): packageId: Package is not full`,
+      `polygon-import: Polygon: problem.package for package 12 of problem 4242 (type linux): packageId: Package is not full`,
     );
     expect(failedStep).toBe('downloading');
     const run = await runs.findOne({ jobId }).lean();
@@ -910,7 +918,7 @@ describe('Polygon link, sync and auto-sync', () => {
     });
     expect(last).toMatchObject({
       final: true,
-      error: `${POLYGON_ERROR_PREFIX}Polygon: Polygon did not answer problem.package: ECONNRESET`,
+      error: `polygon-import: Polygon: Polygon did not answer problem.package: ECONNRESET`,
     });
     expect(
       (await worker.problems.findOne({ code: 'outage' }))!.polygonLink,
@@ -989,7 +997,7 @@ describe('Polygon link, sync and auto-sync', () => {
       syncJob('unlinked', { packageId: 11, revision: 4 }, before.dataVersion),
     );
     expect(error).toBe(
-      `${POLYGON_ERROR_PREFIX}the problem is no longer linked to Polygon problem ${POLYGON_ID}`,
+      `polygon-import: the problem is no longer linked to Polygon problem ${POLYGON_ID}`,
     );
     expect(polygon.calls).toEqual([]);
   });
@@ -1053,7 +1061,7 @@ describe('Polygon link, sync and auto-sync', () => {
           syncJob(code, { packageId: 11, revision: 4 }, before.dataVersion),
         );
         expect(error).toBe(
-          `${POLYGON_ERROR_PREFIX}the requesting user may no longer sync this problem`,
+          `polygon-import: the requesting user may no longer sync this problem`,
         );
         expect(polygon.calls).toEqual([]);
       } finally {

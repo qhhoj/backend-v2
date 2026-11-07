@@ -1,14 +1,12 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
-import { DAY_MS, HOUR_MS, StorageService } from '@libs/common';
+import { DAY_MS, HOUR_MS, InjectJob, StorageService } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import {
-  enqueuePurge,
   PackageCacheService,
   PdfCacheService,
-  PROBLEM_PURGE_QUEUE,
   ProblemDataFilesService,
+  problemJobs,
 } from '@libs/problems';
 import type { ProblemPurgeJob } from '@libs/problems';
 import { SettingsService } from '@libs/settings';
@@ -35,8 +33,8 @@ export class ProblemPurgeService {
     private readonly packages: PackageCacheService,
     private readonly storage: StorageService,
     private readonly settings: SettingsService,
-    @InjectQueue(PROBLEM_PURGE_QUEUE)
-    private readonly queue: Queue<ProblemPurgeJob>,
+    @InjectJob(problemJobs.purge)
+    private readonly purges: JobProducer<ProblemPurgeJob>,
   ) {}
 
   /** Null for a live (or restored, or unknown) problem. Runs regardless of the grace period: the sweep and `purge-now` both decide when. */
@@ -73,7 +71,8 @@ export class ProblemPurgeService {
       new Date(now.getTime() - graceMs),
       new Date(now.getTime() - STALE_CLAIM_MS),
     );
-    for (const id of ids) await enqueuePurge(this.queue, id);
+    for (const problemId of ids)
+      await this.purges.addReplacingFailed({ problemId });
     this.logger.log(
       JSON.stringify({ event: 'problem-purge-sweep', expired: ids.length }),
     );

@@ -12,14 +12,10 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { UnrecoverableError, Worker } from 'bullmq';
 import type { Queue } from 'bullmq';
 import {
-  POLYGON_ERROR_PREFIX,
-  POLYGON_QUEUE,
-  SOURCE_CHECK_QUEUE,
   SVG_MAX_BYTES,
-  PDF_QUEUE,
   PdfCacheService,
-  pdfJobId,
   listZipEntries,
+  problemJobs,
 } from '@libs/problems';
 import type {
   PolygonImportJob,
@@ -89,7 +85,7 @@ afterAll(() => api.teardown());
 
     beforeAll(async () => {
       catalog = await seedCatalog(api);
-      queue = api.app.get(getQueueToken(POLYGON_QUEUE));
+      queue = api.app.get(getQueueToken(problemJobs.polygonImport.queue));
       importerId = (
         await createUserWith(api, 'importer', {
           permissions: ['judge.edit_own_problem'],
@@ -163,7 +159,7 @@ afterAll(() => api.teardown());
         maxRetriesPerRequest: null,
       });
       const worker = new Worker<PolygonImportJob>(
-        POLYGON_QUEUE,
+        problemJobs.polygonImport.queue,
         // The worker's processor fails a job for good this way (a plain error is retried).
         (job) =>
           Promise.reject(new UnrecoverableError(reasonOf(job.data.code))),
@@ -590,7 +586,7 @@ afterAll(() => api.teardown());
       const shown = jobIdOf(await upload('code=leak2', creator).expect(202));
       await failAllJobs((code) =>
         code === 'leak2'
-          ? `${POLYGON_ERROR_PREFIX}not full package`
+          ? `polygon-import: not full package`
           : 'ENOSPC: no space left, write /data/problems/.imports/a.zip',
       );
       const hiddenBody: unknown = (await statusOf(hidden, creator).expect(200))
@@ -609,7 +605,7 @@ afterAll(() => api.teardown());
     });
     it('caps the import error it shows', async () => {
       const jobId = jobIdOf(await upload('code=longerr', creator).expect(202));
-      await failAllJobs(() => `${POLYGON_ERROR_PREFIX}${'x'.repeat(5000)}`);
+      await failAllJobs(() => `polygon-import: ${'x'.repeat(5000)}`);
       const body = (await statusOf(jobId, creator).expect(200)).body as {
         data: Status;
       };
@@ -1228,7 +1224,7 @@ afterAll(() => api.teardown());
     };
     const failingWorker = async () => {
       const worker = new Worker(
-        PDF_QUEUE,
+        problemJobs.pdf.queue,
         () => Promise.reject(new Error('render crashed')),
         { connection: { url: TEST_REDIS_URL } },
       );
@@ -1238,7 +1234,7 @@ afterAll(() => api.teardown());
 
     beforeAll(async () => {
       catalog = await seedCatalog(api);
-      queue = api.app.get(getQueueToken(PDF_QUEUE));
+      queue = api.app.get(getQueueToken(problemJobs.pdf.queue));
       redis = api.app.get<Redis>(REDIS);
       const editorUser = await createUserWith(api, 'editor', {
         permissions: ['judge.edit_own_problem'],
@@ -1275,15 +1271,15 @@ afterAll(() => api.teardown());
       await api.http().get(`${PROBLEMS}/sum/pdf`).expect(202);
       await api.http().get(`${PROBLEMS}/duo/pdf?lang=vi`).expect(202);
       await api.http().get(`${PROBLEMS}/sum/pdf?lang=en`).expect(202);
-      expect((await queue.getJob(pdfJobId('sum', 'vi')))?.data).toEqual({
+      expect((await queue.getJob('pdf-sum-vi'))?.data).toEqual({
         code: 'sum',
         lang: 'vi',
       });
-      expect((await queue.getJob(pdfJobId('duo', 'vi')))?.data).toEqual({
+      expect((await queue.getJob('pdf-duo-vi'))?.data).toEqual({
         code: 'duo',
         lang: 'vi',
       });
-      expect(await queue.getJob(pdfJobId('sum', 'en'))).toBeUndefined();
+      expect(await queue.getJob('pdf-sum-en')).toBeUndefined();
       expect(await queue.getWaitingCount()).toBe(2);
     });
     it('serves the cached file inline', async () => {
@@ -1316,22 +1312,23 @@ afterAll(() => api.teardown());
       );
     });
     it('enqueues again after the previous job completed', async () => {
-      const worker = new Worker(PDF_QUEUE, () => Promise.resolve('rendered'), {
-        connection: { url: TEST_REDIS_URL },
-      });
+      const worker = new Worker(
+        problemJobs.pdf.queue,
+        () => Promise.resolve('rendered'),
+        {
+          connection: { url: TEST_REDIS_URL },
+        },
+      );
       await worker.waitUntilReady();
       const completed = new Promise<void>((resolve) =>
-        worker.on(
-          'completed',
-          (job) => job.id === pdfJobId('again', 'vi') && resolve(),
-        ),
+        worker.on('completed', (job) => job.id === 'pdf-again-vi' && resolve()),
       );
       await api.http().get(`${PROBLEMS}/again/pdf`).expect(202);
       await completed;
       await worker.close();
-      expect(await queue.getJob(pdfJobId('again', 'vi'))).toBeUndefined();
+      expect(await queue.getJob('pdf-again-vi')).toBeUndefined();
       await api.http().get(`${PROBLEMS}/again/pdf`).expect(202);
-      expect(await queue.getJob(pdfJobId('again', 'vi'))).toBeDefined();
+      expect(await queue.getJob('pdf-again-vi')).toBeDefined();
     }, 30000);
     it('hides invisible problems and validates the language', async () => {
       writeFileSync(join(api.pdfCacheRoot, 'hidden.vi.pdf'), '%PDF-1.4 secret');
@@ -1382,25 +1379,25 @@ afterAll(() => api.teardown());
       await authed(api.http().patch(`${PROBLEMS}/edited`), editor)
         .send({ description: 'Fixed text' })
         .expect(200);
-      await waitUntil(
-        async () => !(await queue.getJob(pdfJobId('edited', 'vi'))),
-      );
+      await waitUntil(async () => !(await queue.getJob('pdf-edited-vi')));
       await api.http().get(`${PROBLEMS}/edited/pdf`).expect(202);
-      const job = await queue.getJob(pdfJobId('edited', 'vi'));
+      const job = await queue.getJob('pdf-edited-vi');
       expect(job).toBeDefined();
       expect(await job?.isFailed()).toBe(false);
     }, 30000);
     it('never answers 503 across successful renders', async () => {
       await resetBudget();
-      const worker = new Worker(PDF_QUEUE, () => Promise.resolve('rendered'), {
-        connection: { url: TEST_REDIS_URL },
-      });
+      const worker = new Worker(
+        problemJobs.pdf.queue,
+        () => Promise.resolve('rendered'),
+        {
+          connection: { url: TEST_REDIS_URL },
+        },
+      );
       await worker.waitUntilReady();
       for (let cycle = 0; cycle < 6; cycle += 1) {
         await api.http().get(`${PROBLEMS}/cycles/pdf`).expect(202);
-        await waitUntil(
-          async () => !(await queue.getJob(pdfJobId('cycles', 'vi'))),
-        );
+        await waitUntil(async () => !(await queue.getJob('pdf-cycles-vi')));
       }
       await worker.close();
     }, 30000);
@@ -1430,13 +1427,13 @@ afterAll(() => api.teardown());
       expect(cached.headers['content-type']).toBe('application/pdf');
       await api.http().head(`${PROBLEMS}/again2/pdf`).expect(404);
       await api.http().head(`${PROBLEMS}/busy/pdf?lang=vi`).expect(202);
-      expect(await queue.getJob(pdfJobId('busy', 'vi'))).toBeUndefined();
+      expect(await queue.getJob('pdf-busy-vi')).toBeUndefined();
       expect(await redis.keys('rate:*pdf-render*')).toEqual([]);
     });
     it('answers 200 on the same URL once the render job has written the file', async () => {
       await resetBudget();
       const worker = new Worker<PdfRenderJob>(
-        PDF_QUEUE,
+        problemJobs.pdf.queue,
         (job) => {
           cachePdf(
             `${job.data.code}.${job.data.lang}.pdf`,
@@ -1450,7 +1447,7 @@ afterAll(() => api.teardown());
       const completed = new Promise<void>((resolve) =>
         worker.on(
           'completed',
-          (job) => job.id === pdfJobId('rendered', 'vi') && resolve(),
+          (job) => job.id === 'pdf-rendered-vi' && resolve(),
         ),
       );
       try {
@@ -1488,7 +1485,7 @@ afterAll(() => api.teardown());
       } finally {
         spy.mockRestore();
       }
-      expect(await queue.getJob(pdfJobId('raced', 'vi'))).toBeDefined();
+      expect(await queue.getJob('pdf-raced-vi')).toBeDefined();
     });
   });
 }
@@ -1670,7 +1667,7 @@ afterAll(() => api.teardown());
         status: 'pending',
       });
       const checks: Queue<SourceCheckJob> = api.app.get(
-        getQueueToken(SOURCE_CHECK_QUEUE),
+        getQueueToken(problemJobs.sourceCheck.queue),
       );
       const queued = await checks.getJobs(['waiting', 'delayed']);
       expect(queued.map((job) => job.data)).toContainEqual(

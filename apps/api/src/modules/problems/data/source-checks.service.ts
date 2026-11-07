@@ -1,6 +1,6 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { InjectJob } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import type {
   CheckedSourceKind,
   DataFileKind,
@@ -8,7 +8,7 @@ import type {
   SourceCheck,
   SourceChecks,
 } from '@libs/database';
-import { SOURCE_CHECK_JOB_OPTIONS, SOURCE_CHECK_QUEUE } from '@libs/problems';
+import { problemJobs } from '@libs/problems';
 import type { SourceCheckJob } from '@libs/problems';
 import { ProblemsRepository } from '../core/problems.repository';
 
@@ -27,8 +27,8 @@ const compilesAlone = (kind: CheckedSourceKind, data: ProblemData): boolean =>
 export class SourceChecksService {
   constructor(
     private readonly repository: ProblemsRepository,
-    @InjectQueue(SOURCE_CHECK_QUEUE)
-    private readonly queue: Queue<SourceCheckJob>,
+    @InjectJob(problemJobs.sourceCheck)
+    private readonly checks: JobProducer<SourceCheckJob>,
   ) {}
 
   /** After `changed` was uploaded as `data[changed]` (or removed): a fresh `pending` check of it (of the checker, for a header) is queued, or the old state dropped. */
@@ -49,11 +49,7 @@ export class SourceChecksService {
       checkedAt: null,
     };
     await this.repository.setSourceCheck(problemId, kind, pending);
-    await this.queue.add(
-      SOURCE_CHECK_QUEUE,
-      { problemId, kind, file },
-      SOURCE_CHECK_JOB_OPTIONS,
-    );
+    await this.checks.add({ problemId, kind, file });
   }
 
   async of(problemId: string): Promise<SourceChecks> {

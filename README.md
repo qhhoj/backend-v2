@@ -125,8 +125,8 @@ One folder per job. Schedule: a repeating job registers its own scheduler when t
 | `pdf-render`                     | on request               | statement PDFs (Playwright)                                             |
 | `polygon-import`                 | on request               | Polygon package import and sync (includes Test generation requests)     |
 | `polygon-autosync`               | every 10 min             | enqueue the automatic Syncs that are due                                |
-| `problem-package`                | on request, daily 04:15  | problem package zip; the sweep trims the package cache                  |
-| `problem-purge`                  | daily 03:30              | purge the heavy data of deleted problems, leave the tombstone           |
+| `problem-package`                | on request, daily sweep  | problem package zip; the 04:15 site-time sweep trims the package cache  |
+| `problem-purge`                  | daily 03:30 site time    | purge the heavy data of deleted problems, leave the tombstone           |
 | `source-check`                   | on upload                | compile an uploaded checker or interactor on a judge                    |
 | `permission-rename` (boot)       | every worker start       | carry renamed permission codenames over to roles and users              |
 | `ie-override-cleanup` (boot)     | every worker start       | move an overridden internal error's message into its revision           |

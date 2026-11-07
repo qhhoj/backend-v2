@@ -1,6 +1,6 @@
-import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { Injectable } from '@nestjs/common';
+import { InjectJob } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import { CHECKED_SOURCE_KINDS } from '@libs/database';
 import type {
   CheckedSourceKind,
@@ -8,7 +8,7 @@ import type {
   SourceCheck,
   SyncedSetting,
 } from '@libs/database';
-import { SOURCE_CHECK_JOB_OPTIONS, SOURCE_CHECK_QUEUE } from '@libs/problems';
+import { problemJobs } from '@libs/problems';
 import type { SourceCheckJob } from '@libs/problems';
 import type { ImportedProblem } from './polygon-import.repository';
 
@@ -59,11 +59,9 @@ export function importedSourceChecks(
 /** After an import put its files in place, the checker and interactor it wrote are compiled on a judge, as an upload in the editor is; the editor shows the result. */
 @Injectable()
 export class ImportSourceChecks {
-  private readonly logger = new Logger(ImportSourceChecks.name);
-
   constructor(
-    @InjectQueue(SOURCE_CHECK_QUEUE)
-    private readonly queue: Queue<SourceCheckJob>,
+    @InjectJob(problemJobs.sourceCheck)
+    private readonly checks: JobProducer<SourceCheckJob>,
   ) {}
 
   /** The transaction already marked these checks pending (`importedSourceChecks`); a later upload in the editor wins, because the check job runs only while its file is still the problem's and records only over its own pending check. Never throws: the import stands, and the editor shows the check as pending. */
@@ -71,18 +69,12 @@ export class ImportSourceChecks {
     problemId: string,
     imported: WrittenSources,
   ): Promise<void> {
-    try {
-      for (const { kind, file } of writtenSources(imported))
-        if (file)
-          await this.queue.add(
-            SOURCE_CHECK_QUEUE,
-            { problemId, kind, file },
-            SOURCE_CHECK_JOB_OPTIONS,
-          );
-    } catch (error) {
-      this.logger.warn(
-        `Polygon import of ${problemId}: compile checks not queued: ${(error as Error).message}`,
-      );
-    }
+    await this.checks.bestEffort(
+      `Polygon import of ${problemId}: compile checks not queued`,
+      async () => {
+        for (const { kind, file } of writtenSources(imported))
+          if (file) await this.checks.add({ problemId, kind, file });
+      },
+    );
   }
 }

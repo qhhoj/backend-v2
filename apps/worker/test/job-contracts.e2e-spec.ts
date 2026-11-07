@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Queue, QueueEvents } from 'bullmq';
 import Redis from 'ioredis';
 import { MongoClient } from 'mongodb';
@@ -6,11 +7,21 @@ import type { UUID } from 'mongodb';
 import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import { userDataPath } from '@libs/community';
 import { contestDataPath, contestExportPath } from '@libs/contests';
-import { newId, toUuid } from '@libs/database';
+import { emptyProblemData, newId, toUuid } from '@libs/database';
 import { judgingJobs } from '@libs/judging';
+import { failureOf } from '@libs/common';
+import { ProblemDataFilesService, problemJobs } from '@libs/problems';
+import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import mainJobs from './job-contracts/main-jobs.json';
+import problemJobsFixture from './job-contracts/problem-jobs.json';
+import { buildPolygonPackage, properties } from './polygon-fixtures';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
+
+const fakePandoc = {
+  assertAvailable: () => Promise.resolve(),
+  texToMarkdown: (tex: string) => Promise.resolve(tex),
+};
 
 /** Jobs written by the release before this one (captured from its producers) and still in Redis at the restart: the new consumers run them. */
 describe('jobs queued by the previous release', () => {
@@ -296,5 +307,180 @@ describe('contest and community jobs queued by the previous release', () => {
       await Promise.all(listeners.map((events) => events.close()));
       await redis.quit();
     }
+  });
+});
+
+/** The problem jobs the previous release wrote (captured from its api and worker producers), and its problem schedulers: the new worker keeps the schedulers, runs every job, and fails a sync with the reason both releases' api read. */
+describe('problem jobs queued by the previous release', () => {
+  const { ids, jobs, schedulers, queues } = problemJobsFixture;
+  const connection = { url: TEST_REDIS_URL };
+  const jobOf = (name: string, reason?: string) =>
+    jobs.find(
+      (job) =>
+        job.name === name &&
+        (!reason || (job.data as { reason?: string }).reason === reason),
+    )!;
+  let worker: WorkerTest;
+
+  beforeAll(async () => {
+    // A seed step keeps what the boot left in Redis (no flush after boot).
+    worker = await setupWorkerTest({
+      seedBeforeBoot: () => Promise.resolve(),
+      overrides: [{ provide: PandocService, useValue: fakePandoc }],
+    });
+  });
+  afterAll(() => worker.teardown());
+
+  it('keeps the schedulers, with the package sweep moved to the site time zone', async () => {
+    const booted = [];
+    for (const name of Object.keys(queues)) {
+      const queue = new Queue(name, { connection });
+      for (const {
+        key,
+        name: jobName,
+        pattern,
+        tz,
+        template,
+      } of await queue.getJobSchedulers())
+        booted.push({ queue: name, key, name: jobName, pattern, tz, template });
+      expect(await queue.getGlobalConcurrency()).toBeNull();
+      await queue.close();
+    }
+    expect(booted).toEqual(
+      expect.arrayContaining(
+        schedulers.map((scheduler) => ({
+          ...scheduler,
+          tz: 'Asia/Ho_Chi_Minh',
+        })),
+      ),
+    );
+    expect(booted).toHaveLength(schedulers.length);
+  });
+
+  const seedDocuments = async () => {
+    const problem = (code: string, extra: Record<string, unknown> = {}) => ({
+      code,
+      name: code,
+      timeLimit: 1,
+      memoryLimit: 262144,
+      points: 800,
+      groupId: ids.group,
+      ...extra,
+    });
+    await worker.users.create({
+      _id: ids.requester,
+      username: 'setter',
+      password: '!',
+      isActive: true,
+    });
+    await worker.problemGroups.create({
+      _id: ids.group,
+      name: 'Uncategorized',
+      fullName: 'Uncategorized',
+    });
+    await worker.problemTypes.create({
+      name: 'uncategorized',
+      fullName: 'Uncategorized',
+    });
+    await worker.problems.create([
+      problem('checked', {
+        _id: ids.checkedProblem,
+        data: {
+          ...emptyProblemData(),
+          checker: 'bridged',
+          customChecker: 'chk.cpp',
+        },
+        sourceChecks: {
+          customChecker: {
+            status: 'pending',
+            file: 'chk.cpp',
+            log: '',
+            checkedAt: null,
+          },
+          customGrader: null,
+        },
+      }),
+      problem('recomputed', { _id: ids.recomputedProblem }),
+      problem('purged', {
+        _id: ids.purgedProblem,
+        deletedAt: new Date(Date.now() - 60 * 86_400_000),
+      }),
+      problem(jobOf('build').data.code as string),
+    ]);
+    await worker.module
+      .get(ProblemDataFilesService)
+      .writeFile('checked', 'chk.cpp', Buffer.from('#include "testlib.h"\n'));
+    const imports = join(worker.problemDataRoot, '.imports');
+    mkdirSync(imports, { recursive: true });
+    writeFileSync(
+      join(imports, `${ids.importJob}.zip`),
+      buildPolygonPackage({
+        tests: [{ input: '1 2', answer: '3' }],
+        statements: [
+          { language: 'english', name: 'Sum', properties: properties() },
+        ],
+      }),
+    );
+  };
+
+  /** Adds each job with its captured name, data and options; returns the outcome of each, by job name and payload. */
+  const runAsCaptured = async () => {
+    const outcomes = new Map<string, { returned?: string; failed?: string }>();
+    const listeners = Object.keys(queues).map((name) => {
+      const events = new QueueEvents(name, { connection });
+      events.on('completed', ({ jobId, returnvalue }) =>
+        outcomes.set(`${name}:${jobId}`, { returned: returnvalue }),
+      );
+      events.on('failed', ({ jobId, failedReason }) =>
+        outcomes.set(`${name}:${jobId}`, { failed: failedReason }),
+      );
+      return events;
+    });
+    await Promise.all(listeners.map((events) => events.waitUntilReady()));
+    try {
+      const added: string[] = [];
+      for (const job of jobs) {
+        const queue = new Queue(job.queue, { connection });
+        const { id } = await queue.add(job.name, job.data, job.opts);
+        added.push(`${job.queue}:${id}`);
+        await queue.close();
+      }
+      await waitUntil(() => added.every((id) => outcomes.has(id)), 30_000);
+      return added.map((id) => outcomes.get(id)!);
+    } finally {
+      await Promise.all(listeners.map((events) => events.close()));
+    }
+  };
+
+  it('runs every job, and fails the sync of an unlinked problem with the reason the api shows', async () => {
+    await seedDocuments();
+    const outcomes = await runAsCaptured();
+    const outcome = (name: string, reason?: string) =>
+      outcomes[jobs.indexOf(jobOf(name, reason))];
+    expect(outcome('render')).toEqual({ returned: 'missing' });
+    expect(outcome('import')).toMatchObject({ returned: { code: 'newsum' } });
+    expect(typeof outcome('build').returned).toBe('string');
+    expect(outcome('recompute', 'deleted')).toEqual({ returned: 0 });
+    expect(outcome('recompute', 'restored')).toEqual({ returned: 0 });
+    expect(outcome('purge')).toMatchObject({ returned: { revisions: 0 } });
+    expect(outcome('source-compile-check')).toEqual({ returned: null });
+    expect(
+      failureOf(problemJobs.autoSyncImport, {
+        failedReason: outcome('sync').failed,
+      }),
+    ).toBe('problem with code auto_new not found');
+    const [imported, purged, checked] = await Promise.all([
+      worker.problems.findOne({ code: 'newsum' }).lean(),
+      worker.problems.findById(ids.purgedProblem).lean(),
+      worker.problems.findById(ids.checkedProblem, { sourceChecks: 1 }).lean(),
+    ]);
+    expect(imported).toMatchObject({
+      points: 900,
+      curators: [toUuid(ids.requester)],
+    });
+    expect(purged?.purgedAt).toBeInstanceOf(Date);
+    expect(checked?.sourceChecks?.customChecker).toMatchObject({
+      status: 'unavailable',
+    });
   });
 });

@@ -1,7 +1,7 @@
 import { emptyProblemData } from '@libs/database';
 import type { ProblemData, SourceCheck } from '@libs/database';
+import type { JobProducer } from '@libs/common';
 import type { SourceCheckJob } from '@libs/problems';
-import type { Queue } from 'bullmq';
 import type { ProblemsRepository } from '../core/problems.repository';
 import { SourceChecksService } from './source-checks.service';
 
@@ -15,14 +15,14 @@ function serviceWithLog() {
       return Promise.resolve();
     },
   } as unknown as ProblemsRepository;
-  const queue = {
-    add: (_name: string, job: SourceCheckJob) => {
+  const checks = {
+    add: (job: SourceCheckJob) => {
       queued.push(job);
       return Promise.resolve();
     },
-  } as unknown as Queue<SourceCheckJob>;
+  } as unknown as JobProducer<SourceCheckJob>;
   return {
-    service: new SourceChecksService(repository, queue),
+    service: new SourceChecksService(repository, checks),
     stored,
     queued,
   };

@@ -8,12 +8,7 @@ import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import { newId, PolygonSyncRun, uuidStr } from '@libs/database';
 import type { PolygonLink } from '@libs/database';
-import {
-  POLYGON_ERROR_PREFIX,
-  POLYGON_FETCH,
-  POLYGON_QUEUE,
-  syncJobId,
-} from '@libs/problems';
+import { POLYGON_FETCH, syncJobId, problemJobs } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { buildZip, FakePolygon } from '@libs/problems/testing';
 import { POLYGON_LINK_LIMIT } from '../src/modules/problems/core/rate-limits';
@@ -147,7 +142,7 @@ describe('Polygon routes', () => {
       overrides: [{ provide: POLYGON_FETCH, useValue: polygon.fetch }],
     });
     catalog = await seedCatalog(api);
-    queue = api.app.get(getQueueToken(POLYGON_QUEUE));
+    queue = api.app.get(getQueueToken(problemJobs.polygonImport.queue));
     redis = api.app.get(REDIS);
     runs = api.app.get(getModelToken(PolygonSyncRun.name));
     importerId = (
@@ -550,7 +545,7 @@ describe('Polygon routes', () => {
     ).toMatchObject({ step: 'queued', progress: null });
     let release = () => undefined as void;
     const worker = new Worker<PolygonImportJob>(
-      POLYGON_QUEUE,
+      problemJobs.polygonImport.queue,
       () => new Promise<void>((resolve) => (release = resolve)),
       { connection: queue.opts.connection },
     );
@@ -624,7 +619,7 @@ describe('Polygon routes', () => {
 
   it('answers where a failed import stopped, with the error written for the requester and its code', async () => {
     const worker = new Worker<PolygonImportJob>(
-      POLYGON_QUEUE,
+      problemJobs.polygonImport.queue,
       async (job) => {
         await job.updateData({
           ...job.data,
@@ -633,7 +628,7 @@ describe('Polygon routes', () => {
           errorParams: { languages: ['english', 'vietnamese'] },
         });
         throw new UnrecoverableError(
-          `${POLYGON_ERROR_PREFIX}invalid main tutorial language (none)`,
+          `polygon-import: invalid main tutorial language (none)`,
         );
       },
       { connection: queue.opts.connection },
@@ -766,7 +761,7 @@ describe('Polygon routes', () => {
     };
     const localEdits = { kept: ['timeLimit'], updated: ['checker'] };
     const worker = new Worker<PolygonImportJob>(
-      POLYGON_QUEUE,
+      problemJobs.polygonImport.queue,
       (job) =>
         Promise.resolve({
           problemId: 'p',
@@ -994,7 +989,7 @@ describe('Polygon routes', () => {
       );
 
       const worker = new Worker<PolygonImportJob>(
-        POLYGON_QUEUE,
+        problemJobs.polygonImport.queue,
         (job) => Promise.resolve({ problemId: 'done', code: job.data.code }),
         { connection: queue.opts.connection },
       );

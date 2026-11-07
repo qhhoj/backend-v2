@@ -1,18 +1,18 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { rm, stat } from 'node:fs/promises';
 import { hasPermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { AppError, RateLimitService, unique } from '@libs/common';
+import { AppError, InjectJob, RateLimitService, unique } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import { newId } from '@libs/database';
 import {
+  languageMapOf,
   listZipEntries,
-  POLYGON_JOB_RETRY,
   ARCHIVE_MAX_BYTES,
   POLYGON_SYNC_PERMISSION,
-  POLYGON_QUEUE,
   ProblemDataFilesService,
+  problemJobs,
   ZipError,
 } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
@@ -28,14 +28,12 @@ import {
   unfinishedJob,
   jobsOf,
   queuePositionsOf,
-  removeDelayedAutoSync,
   removeFinished,
   unfinishedJobOf,
 } from './import-queue';
 import type { ImportJob, ImportQueue } from './import-queue';
 import { meteredOrganizationOf } from './import-charge';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
-import { languageMapOf } from './statement-language-pairs';
 import { codeTakenError } from '../editing/problem-edit-fields';
 import { rejectFile, saveMultipartFile } from '../core/multipart';
 import { ProblemDataStore } from '../data/problem-data.store';
@@ -44,10 +42,6 @@ import { ProblemsRepository } from '../core/problems.repository';
 import type { ProblemDocument } from '../core/problems.repository';
 import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';
 import { IMPORT_LIMIT, IMPORT_WINDOW_SECONDS } from '../core/rate-limits';
-
-/** A finished import job stays readable for a day, so the staff member can see its outcome. */
-const IMPORT_JOB_KEEP_SECONDS = 24 * 60 * 60;
-const IMPORT_JOB_KEEP = { age: IMPORT_JOB_KEEP_SECONDS };
 
 @Injectable()
 export class ProblemImportsService {
@@ -60,8 +54,10 @@ export class ProblemImportsService {
     private readonly storage: ProblemStorageQuota,
     private readonly quota: QuotaService,
     private readonly rights: OrganizationCreationRights,
-    @InjectQueue(POLYGON_QUEUE)
+    @InjectJob(problemJobs.polygonImport)
     private readonly queue: ImportQueue,
+    @InjectJob(problemJobs.autoSyncImport)
+    private readonly autoSyncs: JobProducer<PolygonImportJob>,
   ) {}
 
   /** Authorises and resolves everything the worker needs, streams the package to the data volume, checks it is a zip with problem.xml, then enqueues. The worker removes the package when the job ends; here any failure before that does. */
@@ -129,19 +125,14 @@ export class ProblemImportsService {
       job.meteredOrganizationId ?? null,
       { kind: 'problem', userId: auth.principal.userId, ref: job.code },
       (spent) =>
-        this.queue.add('import', spent ? { ...job, charge: spent } : job, {
-          ...POLYGON_JOB_RETRY,
-          jobId,
-          removeOnComplete: IMPORT_JOB_KEEP,
-          removeOnFail: IMPORT_JOB_KEEP,
-        }),
+        this.queue.add(spent ? { ...job, charge: spent } : job, { jobId }),
     );
   }
 
   /** The queued or running sync a manual sync of the same package joins; a delayed automatic one is removed instead, so the manual one never waits for a contest. */
   async joinableSync(jobId: string): Promise<ImportJob | null> {
     const job = await unfinishedJob(this.queue, jobId);
-    return job && !(await removeDelayedAutoSync(job)) ? job : null;
+    return job && !(await this.autoSyncs.preempt(job)) ? job : null;
   }
 
   /** The id of the queued or running import (a sync too) into the problem; null when none. */
@@ -151,7 +142,7 @@ export class ProblemImportsService {
 
   /** A job the caller may not read gets the same 404 as an unknown id. */
   async status(auth: AuthContext, jobId: string): Promise<ImportJobResponse> {
-    const job = await this.queue.getJob(jobId);
+    const job = (await this.queue.job(jobId)) as ImportJob | undefined;
     if (!job || !(await this.mayRead(auth.principal, job)))
       throw new AppError('not_found', 404, 'No such import');
     const [state, positions] = await Promise.all([

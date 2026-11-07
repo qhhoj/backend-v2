@@ -2,7 +2,7 @@ import type {
   PolygonImportOptions,
   StatementLanguageChoice,
 } from '@libs/database';
-import type { PolygonImportJob } from '../queues';
+import type { PolygonImportJob } from '../jobs';
 
 /** Every option one Import or Sync runs with, defaults applied. A job carries these fields flat; a Polygon link stores them as `options`. */
 export interface ImportOptions {
@@ -28,7 +28,7 @@ type Equal<A, B> =
 const stored: Equal<ImportOptions, PolygonImportOptions> = true;
 void stored;
 
-/** The value of each option a request leaves out, and of each field that a link or a queued job predates. */
+/** The value of each option a link or a queued job predates. */
 export const IMPORT_OPTION_DEFAULTS: Readonly<Omit<ImportOptions, 'maxCases'>> =
   {
     mainStatementLanguage: null,
@@ -40,17 +40,7 @@ export const IMPORT_OPTION_DEFAULTS: Readonly<Omit<ImportOptions, 'maxCases'>> =
     importTutorial: true,
   };
 
-/** The request form (query or JSON body) and the PATCH form: every option optional, `statementLanguages` as `<polygon language>=<en|vi|skip>` pairs. There is no `maxCases`. */
-export type ImportOptionsInput = Partial<
-  Omit<ImportOptions, 'statementLanguages' | 'maxCases'>
-> & { statementLanguages?: string[] };
-
-/** The view form: `statementLanguages` as pairs. */
-export type ImportOptionsView = Omit<ImportOptions, 'statementLanguages'> & {
-  statementLanguages: string[];
-};
-
-/** `english=en`, `russian=skip`: a Polygon statement language and the site language its translation is stored under, or `skip` to leave that statement out. */
+/** `english=en`, `russian=skip`: a Polygon statement language and the site language its translation is stored under, or `skip` to leave that statement out. The import and the link options both take this form. */
 export const LANGUAGE_PAIR = /^[a-z]+=(en|vi|skip)$/;
 
 /** A stored or queued record that may predate a field: a missing field, or a null on a flag, reads as the default. */
@@ -58,13 +48,21 @@ type OptionsRecord = {
   [K in keyof ImportOptions]?: ImportOptions[K] | null;
 } & Pick<ImportOptions, 'maxCases'>;
 
-/** `['russian=skip']` → `{ russian: 'skip' }`. Built with `Object.fromEntries`, so a pair named `__proto__` is an own key. */
-const languageMapOf = (
+/** `['russian=skip']` → `{ russian: 'skip' }`, as the job and the link store it. Built with `Object.fromEntries`, so a pair named `__proto__` is an own key. */
+export const languageMapOf = (
   pairs: string[],
 ): Record<string, StatementLanguageChoice> =>
   Object.fromEntries(
     pairs.map((pair) => pair.split('=') as [string, StatementLanguageChoice]),
   );
+
+/** The stored map back in the request form, sorted by Polygon language. */
+export const languagePairsOf = (
+  map: Record<string, StatementLanguageChoice>,
+): string[] =>
+  Object.entries(map)
+    .map(([language, choice]) => `${language}=${choice}`)
+    .sort();
 
 /** Options as a Polygon link stores them or a queued job carries them. A field the record predates (undefined, or a stored null on a flag) takes its default. Other fields of the record are ignored. */
 export function importOptionsOf(record: OptionsRecord): ImportOptions {
@@ -84,60 +82,6 @@ export function importOptionsOf(record: OptionsRecord): ImportOptions {
       record.appendMainSolution ?? defaults.appendMainSolution,
     importTutorial: record.importTutorial ?? defaults.importTutorial,
     maxCases: record.maxCases,
-  };
-}
-
-/** Which options a job runs with (the one written rule):
- *  - `request`: a first Import, a link import, a zip update. The request's options, absent ones defaulted, with the requester's testcase limit.
- *  - `link`: a Sync or an Autosync. The link's stored options re-applied, its testcase limit included. */
-export function jobOptionsOf(
-  source:
-    | { from: 'request'; input: ImportOptionsInput; requesterMaxCases: number }
-    | { from: 'link'; stored: OptionsRecord },
-): ImportOptions {
-  if (source.from === 'link') return importOptionsOf(source.stored);
-  const { statementLanguages, ...flags } = source.input;
-  return importOptionsOf({
-    ...flags,
-    statementLanguages: languageMapOf(statementLanguages ?? []),
-    maxCases: source.requesterMaxCases,
-  });
-}
-
-/** A PATCH of the link's options. An omitted field keeps its value. `null` clears `mainStatementLanguage` or `tutorialLanguage` and is ignored on a flag, the same as omitting it. `statementLanguages` replaces the whole map. `maxCases` cannot be given. */
-export function patchedOptionsOf(
-  stored: ImportOptions,
-  patch: ImportOptionsInput,
-): ImportOptions {
-  return {
-    mainStatementLanguage:
-      patch.mainStatementLanguage === undefined
-        ? stored.mainStatementLanguage
-        : patch.mainStatementLanguage,
-    statementLanguages: patch.statementLanguages
-      ? languageMapOf(patch.statementLanguages)
-      : stored.statementLanguages,
-    tutorialLanguage:
-      patch.tutorialLanguage === undefined
-        ? stored.tutorialLanguage
-        : patch.tutorialLanguage,
-    ignoreZeroPointBatches:
-      patch.ignoreZeroPointBatches ?? stored.ignoreZeroPointBatches,
-    ignoreZeroPointCases:
-      patch.ignoreZeroPointCases ?? stored.ignoreZeroPointCases,
-    appendMainSolution: patch.appendMainSolution ?? stored.appendMainSolution,
-    importTutorial: patch.importTutorial ?? stored.importTutorial,
-    maxCases: stored.maxCases,
-  };
-}
-
-/** The view form: `statementLanguages` as pairs sorted by Polygon language. */
-export function optionsViewOf(options: ImportOptions): ImportOptionsView {
-  return {
-    ...options,
-    statementLanguages: Object.entries(options.statementLanguages)
-      .map(([language, choice]) => `${language}=${choice}`)
-      .sort(),
   };
 }
 

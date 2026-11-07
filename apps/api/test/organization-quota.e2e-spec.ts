@@ -27,9 +27,9 @@ import type { Queue } from 'bullmq';
 import { NotificationsService } from '@libs/community';
 import {
   LEGACY_STORAGE_BACKFILL_KEY,
-  POLYGON_QUEUE,
   ProblemDataFilesService,
   QuotaLedger,
+  problemJobs,
 } from '@libs/problems';
 import { buildZip, setStorageBackfilled } from '@libs/problems/testing';
 import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
@@ -727,7 +727,7 @@ describe('problem data quota', () => {
     catalog = await seedCatalog(api);
     usage = api.app.get(getModelToken(OrganizationUsage.name));
     ledger = api.app.get(getModelToken(OrganizationCreditEntry.name));
-    polygon = api.app.get(getQueueToken(POLYGON_QUEUE));
+    polygon = api.app.get(getQueueToken(problemJobs.polygonImport.queue));
     authorId = (
       await createUserWith(api, 'dqauthor', {
         permissions: [

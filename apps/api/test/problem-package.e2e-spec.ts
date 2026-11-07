@@ -6,12 +6,10 @@ import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import { EMPTY_TEST_CASE, emptyProblemData } from '@libs/database';
 import type { Problem } from '@libs/database';
 import {
-  PACKAGE_QUEUE,
-  PACKAGE_TOO_LARGE_REASON,
   PackageCacheService,
-  packageJobId,
   packageKey,
   PdfCacheService,
+  problemJobs,
 } from '@libs/problems';
 import type { ProblemPackageJob } from '@libs/problems';
 import { clearRateLimits } from './contest-fixtures';
@@ -97,7 +95,7 @@ afterAll(() => api.teardown());
 
     beforeAll(async () => {
       catalog = await seedCatalog(api);
-      queue = api.app.get(getQueueToken(PACKAGE_QUEUE));
+      queue = api.app.get(getQueueToken(problemJobs.package.queue));
       cache = api.app.get(PackageCacheService);
       for (const [name, permissions] of [
         ['editor', ['judge.edit_own_problem']],
@@ -133,7 +131,7 @@ afterAll(() => api.teardown());
       expect(first).toEqual({ status: 'building', key });
       await requestPackage('editor', problem.code).expect(202);
       expect((await queue.getJobs(['waiting'])).map((job) => job.id)).toEqual([
-        packageJobId(problem.code, key),
+        `package-${problem.code}-${key}`,
       ]);
       const waiting = await fetchPackage('editor', problem.code).expect(202);
       expect(waiting.headers['retry-after']).toBeDefined();
@@ -175,9 +173,9 @@ afterAll(() => api.teardown());
     it('reports a build over the size cap as 409 and any other failed build as 503', async () => {
       const tooLarge = await editable();
       const crashed = await editable();
-      const reasons = new Map([[tooLarge.code, PACKAGE_TOO_LARGE_REASON]]);
+      const reasons = new Map([[tooLarge.code, 'problem-package: too_large']]);
       const failing = new Worker<ProblemPackageJob>(
-        PACKAGE_QUEUE,
+        problemJobs.package.queue,
         (job) =>
           Promise.reject(
             new Error(reasons.get(job.data.code) ?? 'build crashed'),
@@ -192,7 +190,7 @@ afterAll(() => api.teardown());
           await waitUntil(
             async () =>
               (
-                await queue.getJob(packageJobId(problem.code, key))
+                await queue.getJob(`package-${problem.code}-${key}`)
               )?.isFailed() ?? false,
           );
         }

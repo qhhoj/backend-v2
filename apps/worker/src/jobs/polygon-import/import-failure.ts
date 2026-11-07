@@ -1,5 +1,6 @@
+import { UnrecoverableError } from 'bullmq';
+import { JobFailure } from '@libs/common';
 import type { ImportErrorParams, PolygonImportErrorCode } from '@libs/problems';
-import { POLYGON_ERROR_PREFIX } from '@libs/problems';
 import { PolygonImportError } from './polygon-import.error';
 
 /** What a failure the requester may not see reads as; the api shows the same text. */
@@ -13,8 +14,6 @@ export interface ImportFailure {
   params: ImportErrorParams;
   /** The text shown to the requester. */
   message: string;
-  /** The job's failure reason: a `PolygonImportError` carries the prefix the api looks for; anything else (paths, driver details) stays in the logs. */
-  reason: string;
 }
 
 export function importFailureOf(error: unknown): ImportFailure {
@@ -23,12 +22,14 @@ export function importFailureOf(error: unknown): ImportFailure {
       code: error.code,
       params: error.params,
       message: error.message.slice(0, MAX_RECORDED_ERROR),
-      reason: POLYGON_ERROR_PREFIX + error.message,
     };
-  return {
-    code: 'import_failed',
-    params: {},
-    message: GENERIC_FAILURE,
-    reason: error instanceof Error ? error.message : String(error),
-  };
+  return { code: 'import_failed', params: {}, message: GENERIC_FAILURE };
+}
+
+/** The error BullMQ records: a `PolygonImportError` as a `JobFailure` the api shows; anything else (paths, driver details) under its own message, for the logs only. `final`: no attempt is left. */
+export function recordedErrorOf(error: unknown, final: boolean): Error {
+  if (error instanceof PolygonImportError)
+    return new JobFailure(error.message, final);
+  const message = error instanceof Error ? error.message : String(error);
+  return final ? new UnrecoverableError(message) : new Error(message);
 }

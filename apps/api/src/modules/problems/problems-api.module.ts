@@ -1,17 +1,8 @@
-import { BullModule } from '@nestjs/bullmq';
 import { forwardRef, Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { JobsModule, RateLimitService } from '@libs/common';
 import { ExternalJudgeApiModule, judgingJobs } from '@libs/judging';
-import {
-  PACKAGE_QUEUE,
-  PolygonApiModule,
-  PDF_QUEUE,
-  POLYGON_QUEUE,
-  PROBLEM_PURGE_QUEUE,
-  PROBLEM_SOLVERS_QUEUE,
-  SOURCE_CHECK_QUEUE,
-} from '@libs/problems';
+import { PolygonApiModule, problemJobs } from '@libs/problems';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { ContributionsModule } from '../contributions/contributions.module';
 import { OrganizationCreationModule } from '../organizations/creation/organization-creation.module';
@@ -110,15 +101,16 @@ const repositories = [
     PolygonApiModule,
     ExternalJudgeApiModule,
     forwardRef(() => ContributionsModule),
-    BullModule.registerQueue(
-      { name: PDF_QUEUE },
-      { name: POLYGON_QUEUE },
-      { name: PACKAGE_QUEUE },
-      { name: PROBLEM_PURGE_QUEUE },
-      { name: PROBLEM_SOLVERS_QUEUE },
-      { name: SOURCE_CHECK_QUEUE },
+    JobsModule.register(
+      problemJobs.pdf,
+      problemJobs.polygonImport,
+      problemJobs.autoSyncImport,
+      problemJobs.package,
+      problemJobs.purge,
+      problemJobs.solvers,
+      problemJobs.sourceCheck,
+      judgingJobs.problemRescore,
     ),
-    JobsModule.register(judgingJobs.problemRescore),
   ],
   controllers: [
     ProblemImportsController,

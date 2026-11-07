@@ -16,11 +16,7 @@ import { waitUntil } from '@libs/common/testing';
 import { Group, newId, Problem, Revision, uuidStr } from '@libs/database';
 import { judgingJobs } from '@libs/judging';
 import type { ProblemRescoreJob } from '@libs/judging';
-import {
-  listZipEntries,
-  POLYGON_ERROR_PREFIX,
-  ProblemDataFilesService,
-} from '@libs/problems';
+import { listZipEntries, ProblemDataFilesService } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { PNG } from '@libs/problems/testing';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
@@ -691,7 +687,7 @@ describe('PolygonImportProcessor', () => {
           }),
         ),
       ),
-    ).rejects.toThrow(`${POLYGON_ERROR_PREFIX}not full package`);
+    ).rejects.toThrow(`polygon-import: not full package`);
     await expect(
       processor.process(
         job(
@@ -723,7 +719,7 @@ describe('PolygonImportProcessor', () => {
       .process(job({ code: 'denied' }))
       .catch((error: Error) => error);
     expect((failure as Error).message).toContain('EACCES');
-    expect((failure as Error).message).not.toContain(POLYGON_ERROR_PREFIX);
+    expect((failure as Error).message).not.toContain('polygon-import: ');
   });
   it('rejects an editorial whose appended source breaks the statement limits', async () => {
     const imagesBefore = imageCount();
@@ -941,7 +937,7 @@ describe('PolygonImportProcessor', () => {
       : null;
     await expect(
       processor.process(bareUpdate({ code: 'plain' })),
-    ).rejects.toThrow(`${POLYGON_ERROR_PREFIX}the problem is manually managed`);
+    ).rejects.toThrow(`polygon-import: the problem is manually managed`);
     expect(await worker.problems.findOne({ code: 'plain' })).toMatchObject({
       dataVersion: before!.dataVersion,
       name: before!.name,
@@ -970,7 +966,7 @@ describe('PolygonImportProcessor', () => {
       processor.process(
         bareUpdate({ code: 'rename_src', problemId: original._id }),
       ),
-    ).rejects.toThrow(`${POLYGON_ERROR_PREFIX}The problem was renamed`);
+    ).rejects.toThrow(`polygon-import: The problem was renamed`);
     expect(
       (await worker.problems.findOne({ _id: squatter._id }))!.dataVersion,
     ).toBe(squatter.dataVersion);
@@ -1068,7 +1064,7 @@ describe('PolygonImportProcessor', () => {
       const { held, release } = await holdDataLock('locked');
       const importing = processor.process(bareUpdate({ code: 'locked' }));
       await expect(importing).rejects.toThrow(
-        `${POLYGON_ERROR_PREFIX}another change to this problem's data is in progress, try again`,
+        `polygon-import: another change to this problem's data is in progress, try again`,
       );
       release();
       await held;
