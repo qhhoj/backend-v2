@@ -1,0 +1,274 @@
+{
+  "ids": {
+    "requester": "0190f0c0-0000-7000-8000-000000000201",
+    "group": "0190f0c0-0000-7000-8000-000000000202",
+    "importJob": "0190f0c0-0000-7000-8000-000000000203",
+    "linker": "0190f0c0-0000-7000-8000-000000000204",
+    "syncedProblem": "0190f0c0-0000-7000-8000-000000000205",
+    "checkedProblem": "0190f0c0-0000-7000-8000-000000000206",
+    "recomputedProblem": "0190f0c0-0000-7000-8000-000000000207",
+    "purgedProblem": "0190f0c0-0000-7000-8000-000000000208"
+  },
+  "jobs": [
+    {
+      "producer": "api ProblemPdfService (GET /problems/:code/pdf)",
+      "queue": "pdf-render",
+      "name": "render",
+      "data": {
+        "code": "sum",
+        "lang": "vi"
+      },
+      "opts": {
+        "jobId": "pdf-sum-vi",
+        "removeOnComplete": true,
+        "removeOnFail": {
+          "age": 600
+        }
+      }
+    },
+    {
+      "producer": "api ProblemImportsService (POST /problems/import, zip upload)",
+      "queue": "polygon-import",
+      "name": "import",
+      "data": {
+        "requesterId": "0190f0c0-0000-7000-8000-000000000201",
+        "code": "newsum",
+        "mode": "create",
+        "groupId": "0190f0c0-0000-7000-8000-000000000202",
+        "points": 900,
+        "mainStatementLanguage": "english",
+        "statementLanguages": {
+          "vietnamese": "vi"
+        },
+        "tutorialLanguage": null,
+        "ignoreZeroPointBatches": false,
+        "ignoreZeroPointCases": false,
+        "appendMainSolution": true,
+        "importTutorial": true,
+        "maxCases": 300,
+        "curators": ["0190f0c0-0000-7000-8000-000000000201"],
+        "isFullMarkup": false
+      },
+      "opts": {
+        "attempts": 2,
+        "backoff": {
+          "type": "fixed",
+          "delay": 120000
+        },
+        "jobId": "0190f0c0-0000-7000-8000-000000000203",
+        "removeOnComplete": {
+          "age": 86400
+        },
+        "removeOnFail": {
+          "age": 86400
+        }
+      }
+    },
+    {
+      "producer": "worker PolygonAutoSyncService",
+      "queue": "polygon-import",
+      "name": "sync",
+      "data": {
+        "requesterId": "0190f0c0-0000-7000-8000-000000000204",
+        "code": "auto_new",
+        "mode": "update",
+        "problemId": "0190f0c0-0000-7000-8000-000000000205",
+        "isFullMarkup": false,
+        "mainStatementLanguage": "english",
+        "statementLanguages": {},
+        "tutorialLanguage": null,
+        "ignoreZeroPointBatches": false,
+        "ignoreZeroPointCases": false,
+        "appendMainSolution": false,
+        "importTutorial": true,
+        "maxCases": 300,
+        "expectedDataVersion": 1,
+        "polygon": {
+          "problemId": 4242,
+          "name": "sum-polygon",
+          "owner": "setter",
+          "revision": 6,
+          "packageId": 20,
+          "packageType": "full",
+          "packageCreatedAt": "2026-10-01T08:00:00.000Z",
+          "purpose": "sync",
+          "autoSync": true,
+          "trigger": "auto"
+        }
+      },
+      "opts": {
+        "attempts": 2,
+        "backoff": {
+          "type": "fixed",
+          "delay": 120000
+        },
+        "priority": 10,
+        "jobId": "polygon-sync-0190f0c0-0000-7000-8000-000000000205-20",
+        "removeOnComplete": {
+          "age": 86400
+        },
+        "removeOnFail": {
+          "age": 86400
+        }
+      }
+    },
+    {
+      "producer": "api SourceChecksService (checker upload)",
+      "queue": "source-compile-check",
+      "name": "source-compile-check",
+      "data": {
+        "problemId": "0190f0c0-0000-7000-8000-000000000206",
+        "kind": "customChecker",
+        "file": "chk.cpp"
+      },
+      "opts": {
+        "removeOnComplete": true,
+        "removeOnFail": 100
+      }
+    },
+    {
+      "producer": "api ProblemLifecycleService (delete)",
+      "queue": "problem-solvers-recompute",
+      "name": "recompute",
+      "data": {
+        "problemId": "0190f0c0-0000-7000-8000-000000000207",
+        "reason": "deleted"
+      },
+      "opts": {
+        "attempts": 3,
+        "backoff": {
+          "type": "exponential",
+          "delay": 10000
+        },
+        "removeOnComplete": true,
+        "removeOnFail": {
+          "age": 604800
+        }
+      }
+    },
+    {
+      "producer": "api ProblemLifecycleService (restore)",
+      "queue": "problem-solvers-recompute",
+      "name": "recompute",
+      "data": {
+        "problemId": "0190f0c0-0000-7000-8000-000000000207",
+        "reason": "restored"
+      },
+      "opts": {
+        "attempts": 3,
+        "backoff": {
+          "type": "exponential",
+          "delay": 10000
+        },
+        "removeOnComplete": true,
+        "removeOnFail": {
+          "age": 604800
+        }
+      }
+    },
+    {
+      "producer": "api ProblemLifecycleService (purge now)",
+      "queue": "problem-purge",
+      "name": "purge",
+      "data": {
+        "problemId": "0190f0c0-0000-7000-8000-000000000208"
+      },
+      "opts": {
+        "jobId": "problem-purge-0190f0c0-0000-7000-8000-000000000208",
+        "attempts": 3,
+        "backoff": {
+          "type": "exponential",
+          "delay": 10000
+        },
+        "removeOnComplete": true,
+        "removeOnFail": {
+          "age": 604800
+        }
+      }
+    },
+    {
+      "producer": "api ProblemPackageService (POST package)",
+      "queue": "problem-package",
+      "name": "build",
+      "data": {
+        "code": "pk3",
+        "key": "0.5404d1036491"
+      },
+      "opts": {
+        "jobId": "package-pk3-0.5404d1036491",
+        "attempts": 1,
+        "removeOnComplete": true,
+        "removeOnFail": {
+          "age": 600
+        }
+      }
+    }
+  ],
+  "schedulers": [
+    {
+      "queue": "polygon-autosync",
+      "key": "polygon-autosync-every-10-minutes",
+      "name": "polygon-autosync",
+      "pattern": "*/10 * * * *",
+      "template": {
+        "opts": {
+          "removeOnFail": 100,
+          "removeOnComplete": true,
+          "backoff": {
+            "delay": 10000,
+            "type": "exponential"
+          },
+          "attempts": 3
+        }
+      }
+    },
+    {
+      "queue": "problem-purge",
+      "key": "problem-purge-daily",
+      "name": "sweep",
+      "pattern": "30 3 * * *",
+      "tz": "Asia/Ho_Chi_Minh",
+      "template": {
+        "opts": {
+          "removeOnFail": 100,
+          "removeOnComplete": true
+        }
+      }
+    },
+    {
+      "queue": "problem-package",
+      "key": "problem-package-sweep-daily",
+      "name": "sweep",
+      "pattern": "15 4 * * *",
+      "template": {
+        "opts": {
+          "removeOnFail": 100,
+          "removeOnComplete": true
+        }
+      }
+    }
+  ],
+  "queues": {
+    "pdf-render": {
+      "globalConcurrency": null
+    },
+    "polygon-import": {
+      "globalConcurrency": null
+    },
+    "polygon-autosync": {
+      "globalConcurrency": null
+    },
+    "source-compile-check": {
+      "globalConcurrency": null
+    },
+    "problem-solvers-recompute": {
+      "globalConcurrency": null
+    },
+    "problem-purge": {
+      "globalConcurrency": null
+    },
+    "problem-package": {
+      "globalConcurrency": null
+    }
+  }
+}
