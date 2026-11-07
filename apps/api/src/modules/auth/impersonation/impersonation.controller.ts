@@ -4,7 +4,7 @@ import type { FastifyReply } from 'fastify';
 import { CurrentAuth, SessionOnly, setSessionCookie } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ENV } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import { SessionResponses } from '../core/session-responses.service';
 import { SessionResponse } from '../core/dto/session.response';
 import { ImpersonationService } from './impersonation.service';
@@ -15,7 +15,7 @@ export class ImpersonationController {
   constructor(
     private readonly impersonation: ImpersonationService,
     private readonly sessionResponses: SessionResponses,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
   ) {}
 
   /**

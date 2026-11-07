@@ -1,4 +1,4 @@
-import type { Env, JobProducer } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import type { DiscordWebhookJob } from './jobs';
 import type { SettingsService } from '@libs/settings';
 import { fakeSettings } from '@libs/settings/testing';
@@ -14,7 +14,7 @@ describe('DiscordWebhooksService', () => {
         Promise.resolve(true)
       ),
     } as unknown as JobProducer<DiscordWebhookJob>;
-    const env = { siteUrl: 'https://oj.example' } as unknown as Env;
+    const env = { siteUrl: 'https://oj.example' };
     const settings = fakeSettings({ 'discord.webhooks': urls });
     return {
       service: new DiscordWebhooksService(

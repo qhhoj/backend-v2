@@ -1,4 +1,3 @@
-import { tmpdir } from 'node:os';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -11,7 +10,7 @@ const QUEUE_NAME = 'worker-e2e-queue';
 
 @Module({
   imports: [
-    EnvModule,
+    EnvModule.forValues({ redisUrl: TEST_ENV.REDIS_URL }),
     QueueModule,
     BullModule.registerQueue({ name: QUEUE_NAME }),
   ],
@@ -20,13 +19,6 @@ class QueueProbeModule {}
 
 describe('WorkerModule', () => {
   it('a queue registered on the QueueModule root delivers jobs to a worker', async () => {
-    // EnvModule validates these; the probe uses neither Mongo nor the folders.
-    Object.assign(process.env, TEST_ENV, {
-      MONGO_URL: 'mongodb://127.0.0.1:1/unused',
-      MEDIA_ROOT: tmpdir(),
-      PROBLEM_DATA_ROOT: tmpdir(),
-      PDF_CACHE_ROOT: tmpdir(),
-    });
     const probe = await Test.createTestingModule({
       imports: [QueueProbeModule],
     }).compile();

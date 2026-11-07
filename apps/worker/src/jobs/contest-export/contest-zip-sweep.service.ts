@@ -2,7 +2,7 @@ import { readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
 import { DAY_MS, ENV, isTempName } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { WorkerConfig } from '@libs/common';
 import { CONTEST_ZIP_TTL_MS } from '@libs/contests';
 import { isUuid } from '@libs/database';
 
@@ -24,7 +24,7 @@ const maxAgeOf = (name: string): number | null => {
 
 @Injectable()
 export class ContestZipSweepService {
-  constructor(@Inject(ENV) private readonly env: Env) {}
+  constructor(@Inject(ENV) private readonly env: WorkerConfig) {}
 
   /** Export and data zips past their week and temp files of crashed runs older than a day; any other file in the root is left alone. Returns the files removed. */
   async sweep(now = new Date()): Promise<number> {

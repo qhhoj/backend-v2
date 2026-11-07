@@ -1,5 +1,4 @@
 import { join, resolve } from 'node:path';
-import type { Env } from '../env/env';
 import { StorageService } from './storage.service';
 
 describe('StorageService.absolutePathOf', () => {
@@ -7,7 +6,7 @@ describe('StorageService.absolutePathOf', () => {
   const storage = new StorageService({
     mediaRoot: root,
     mediaUrl: 'http://x/media',
-  } as Env);
+  });
 
   it('resolves inside the media root and refuses to leave it', () => {
     expect(storage.absolutePathOf('materials/p1/notes.txt')).toBe(

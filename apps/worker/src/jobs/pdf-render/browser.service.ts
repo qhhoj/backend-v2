@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import type { Browser } from 'playwright';
 import { ENV } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { WorkerConfig } from '@libs/common';
 import { SettingsService } from '@libs/settings';
 import { isAllowedRequest, statementMediaPaths } from './local-file-policy';
 import { KATEX_DIST_DIR, PAGE_FOOTER } from './pdf-template';
@@ -29,7 +29,7 @@ export class BrowserService implements OnModuleDestroy {
   private browser: Promise<Browser> | null = null;
 
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: WorkerConfig,
     private readonly settings: SettingsService,
   ) {}
 

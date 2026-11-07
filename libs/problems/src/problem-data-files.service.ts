@@ -25,7 +25,7 @@ import {
   SAFE_SEGMENT,
   withRedisLock,
 } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { DataRootsConfig } from '@libs/common';
 import { PROBLEM_CODE_PATTERN } from '@libs/database';
 
 export const INIT_FILE = 'init.yml';
@@ -54,7 +54,7 @@ export class ProblemDataFilesService {
   private readonly root: string;
 
   constructor(
-    @Inject(ENV) env: Env,
+    @Inject(ENV) env: Pick<DataRootsConfig, 'problemDataRoot'>,
     @Inject(REDIS) private readonly redis: Redis,
   ) {
     this.root = resolve(env.problemDataRoot);

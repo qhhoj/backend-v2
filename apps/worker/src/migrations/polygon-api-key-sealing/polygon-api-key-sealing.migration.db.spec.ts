@@ -1,6 +1,7 @@
 import { UUID } from 'mongodb';
 import type { Document } from 'mongodb';
 import { encryptionKey } from '@libs/common';
+import { TEST_ENV } from '@libs/common/testing';
 import { Setting, SettingRevision } from '@libs/database';
 import {
   readSetting,
@@ -24,7 +25,7 @@ describe('polygon api key sealing migration', () => {
 
   beforeAll(async () => {
     test = await setupMigrationsTest();
-    key = encryptionKey(process.env.ENCRYPTION_KEY);
+    key = encryptionKey(TEST_ENV.ENCRYPTION_KEY);
   });
   afterAll(() => test.teardown());
 

@@ -3,7 +3,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { ENV, unique } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { BridgeConfig } from '@libs/common';
 import { LIVE, scoresEveryCase } from '@libs/contests';
 import {
   Contest,
@@ -195,7 +195,7 @@ export class SubmissionsRepository {
     private readonly participations: Model<ContestParticipation>,
     @InjectModel(ContestSubmission.name)
     private readonly contestSubmissions: Model<ContestSubmission>,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: BridgeConfig,
   ) {}
 
   /** Queued submissions (all, or those of `ids`) in dispatch order; those of a problem the external judge takes only with `external` (then only those), with the codes judges know (a mirror is judged under its root's code), the judge features its root's data needs, and the judge pinned at submit, kept by an accept timeout and a resync (a judge loss or RETRY drops it). A row whose problem or language is gone is skipped. */

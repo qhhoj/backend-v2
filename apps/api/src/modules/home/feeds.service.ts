@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { ENV, REDIS } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import { commentLink, pagePath } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import { BlogAccess } from '../blog/core/blog-access';
@@ -25,7 +25,7 @@ const DESCRIPTIONS: Record<FeedKind, string> = {
 @Injectable()
 export class FeedsService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
     @Inject(REDIS) private readonly redis: Redis,
     private readonly posts: BlogPostsRepository,
     private readonly recentComments: RecentCommentsService,

@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ENV } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import { textExcerpt } from '../home/feed-xml';
 import { previewHtml, SITE_DESCRIPTION, SITE_NAME } from './preview-html';
 import type { Preview } from './preview-html';
@@ -23,7 +23,7 @@ const ROUTES: Array<[RegExp, Kind, string]> = [
 @Injectable()
 export class PreviewService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
     private readonly repository: SeoRepository,
   ) {}
 

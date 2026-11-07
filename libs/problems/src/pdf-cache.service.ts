@@ -9,7 +9,7 @@ import {
   resolveInside,
   SAFE_SEGMENT,
 } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { DataRootsConfig } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, STATEMENT_LANGUAGES } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
 
@@ -28,7 +28,7 @@ export interface CachedPdf {
 export class PdfCacheService {
   private readonly root: string;
 
-  constructor(@Inject(ENV) env: Env) {
+  constructor(@Inject(ENV) env: Pick<DataRootsConfig, 'pdfCacheRoot'>) {
     this.root = resolve(env.pdfCacheRoot);
   }
 

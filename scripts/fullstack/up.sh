@@ -46,6 +46,7 @@ export TOKEN_SECRET=$(openssl rand -hex 32)
 export SESSION_SECRET=$(openssl rand -hex 32)
 export SITE_URL=http://127.0.0.1:$PORT_PREVIEW
 export COOKIE_SECURE=false
+export LISTEN_HOST=127.0.0.1
 export PORT=$PORT_API
 export JUDGE_BRIDGE_HOST=127.0.0.1
 export JUDGE_BRIDGE_PORT=$PORT_BRIDGE

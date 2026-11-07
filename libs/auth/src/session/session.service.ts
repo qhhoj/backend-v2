@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { DAY_MS, DAY_S, ENV, Env, execOrThrow, REDIS } from '@libs/common';
+import { DAY_MS, DAY_S, ENV, execOrThrow, REDIS } from '@libs/common';
+import type { WebConfig } from '@libs/common';
 import { SettingsService } from '@libs/settings';
 import Redis from 'ioredis';
 import { randomToken } from '../crypto';
@@ -72,7 +73,7 @@ export class SessionService {
 
   constructor(
     @Inject(REDIS) private readonly redis: Redis,
-    @Inject(ENV) env: Pick<Env, 'sessionSecret'>,
+    @Inject(ENV) env: Pick<WebConfig, 'sessionSecret'>,
     @Inject(SettingsService)
     private readonly settings: Pick<SettingsService, 'get'>,
   ) {

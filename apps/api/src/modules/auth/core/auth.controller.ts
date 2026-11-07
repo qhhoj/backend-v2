@@ -23,7 +23,7 @@ import {
 } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ENV, MINUTE_S } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import { AuthService } from './auth.service';
 import {
   FAILURE_IP_LIMIT,
@@ -44,7 +44,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly sessionResponses: SessionResponses,
     private readonly sessions: SessionService,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
   ) {}
 
   @ApiOperation({

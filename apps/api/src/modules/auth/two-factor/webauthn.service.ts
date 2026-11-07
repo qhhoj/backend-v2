@@ -16,7 +16,7 @@ import type {
 import { SessionService, UsersRepository } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { AppError, ENV, isDuplicateKey } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import {
   newId,
   type WebauthnCredential as StoredWebauthnCredential,
@@ -43,7 +43,7 @@ export class WebauthnService {
     private readonly sessions: SessionService,
     private readonly secondFactor: SecondFactorService,
     private readonly authService: AuthService,
-    @Inject(ENV) env: Env,
+    @Inject(ENV) env: ApiConfig,
   ) {
     const site = new URL(env.siteUrl);
     this.rpID = site.hostname;

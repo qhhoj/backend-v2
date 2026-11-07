@@ -1,9 +1,9 @@
 import { NestFactory } from '@nestjs/core';
-import { loadEnv, nestLogLevels } from '@libs/common';
+import { bridgeConfig, nestLogLevels } from '@libs/common';
 import { BridgeModule } from './bridge.module';
 
 async function bootstrap() {
-  const { logLevel } = loadEnv();
+  const { logLevel } = bridgeConfig.load();
   const app = await NestFactory.createApplicationContext(BridgeModule, {
     logger: nestLogLevels(logLevel),
   });

@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { readFile, rm, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { ENV, type Env } from '../env/env';
+import type { MediaConfig } from '../env/config-parts';
+import { ENV } from '../env/env';
 import { assertRealPathInside, atomicWrite } from './atomic-write';
 import { resolveInside } from './paths';
 
@@ -13,7 +14,7 @@ export class StorageService {
   private readonly root: string;
   private readonly urlBase: string;
 
-  constructor(@Inject(ENV) env: Env) {
+  constructor(@Inject(ENV) env: MediaConfig) {
     this.root = resolve(env.mediaRoot);
     this.urlBase = env.mediaUrl;
   }

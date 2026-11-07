@@ -11,11 +11,8 @@ export const userSessionsKey = (userId: string) => `user-sessions:${userId}`;
  * `open` accepts, and a record copied to another key no longer opens.
  */
 export class SessionRecords {
-  /** Throws on a secret under 32 bytes, so the api refuses to boot without one. */
-  constructor(private readonly secret: string) {
-    if (Buffer.byteLength(secret) < 32)
-      throw new Error('SESSION_SECRET must be at least 32 bytes');
-  }
+  /** `secret` is at least 32 bytes: the api's config refuses a shorter one at boot (`web` in `@libs/common`). */
+  constructor(private readonly secret: string) {}
 
   keyFor(cookieId: string): string {
     return `session:${this.hmac(sha256(cookieId))}`;

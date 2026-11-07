@@ -1,13 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { getModelToken } from '@nestjs/mongoose';
 import { Logger } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
-import { encrypt, encryptionKey, EnvModule } from '@libs/common';
+import { encrypt, encryptionKey, ENV, EnvModule } from '@libs/common';
 import { TEST_ENV } from '@libs/common/testing';
 import { DatabaseModule, Setting, SettingRevision } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
@@ -34,13 +31,15 @@ describe('settings', () => {
   let settings: SettingsService;
   let rows: Model<Setting>;
   let revisions: Model<SettingRevision>;
-  let mediaRoot: string;
   const boot = async () => {
     const module = await Test.createTestingModule({
       imports: [
         ScheduleModule.forRoot(),
-        EnvModule,
-        DatabaseModule,
+        EnvModule.forValues({
+          mongoUrl: replSet.getUri('qhhoj'),
+          encryptionKey: TEST_ENV.ENCRYPTION_KEY,
+        }),
+        DatabaseModule.forRoot(ENV),
         SettingsModule,
       ],
     }).compile();
@@ -50,15 +49,8 @@ describe('settings', () => {
 
   beforeAll(async () => {
     replSet = await startMongo();
-    mediaRoot = mkdtempSync(join(tmpdir(), 'qhhoj-settings-'));
-    Object.assign(process.env, TEST_ENV, {
-      // Streams must run: the cross-process test waits for them, not for the one-minute resync.
-      DISABLE_MONGODB_STREAM: 'false',
-      MONGO_URL: replSet.getUri('qhhoj'),
-      MEDIA_ROOT: join(mediaRoot, 'media'),
-      PROBLEM_DATA_ROOT: join(mediaRoot, 'problems'),
-      PDF_CACHE_ROOT: join(mediaRoot, 'pdf'),
-    });
+    // Streams must run: the cross-process test waits for them, not for the one-minute resync.
+    process.env.DISABLE_MONGODB_STREAM = 'false';
     first = await boot();
     second = await boot();
     settings = first.get(SettingsService);
@@ -69,7 +61,6 @@ describe('settings', () => {
     await first.close();
     await second.close();
     await replSet.stop();
-    rmSync(mediaRoot, { recursive: true, force: true });
   });
 
   it('answers the registry default until a value is stored', () => {

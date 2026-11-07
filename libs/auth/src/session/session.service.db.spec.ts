@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ENV, REDIS, RedisModule } from '@libs/common';
+import { EnvModule, REDIS, RedisModule } from '@libs/common';
 import { TEST_ENV, TEST_REDIS_URL } from '@libs/common/testing';
 import { SettingsService } from '@libs/settings';
 import { fakeSettings } from '@libs/settings/testing';
@@ -23,18 +23,19 @@ describe('SessionService', () => {
   let redis: Redis;
 
   beforeAll(async () => {
-    process.env.REDIS_URL = TEST_REDIS_URL;
     testingModule = await Test.createTestingModule({
-      imports: [RedisModule],
+      imports: [
+        EnvModule.forValues({
+          redisUrl: TEST_REDIS_URL,
+          sessionSecret: TEST_ENV.SESSION_SECRET,
+        }),
+        RedisModule,
+      ],
       providers: [
         SessionService,
         {
           provide: SettingsService,
           useValue: fakeSettings({ 'auth.sessionMaxDays': 30 }),
-        },
-        {
-          provide: ENV,
-          useValue: { sessionSecret: TEST_ENV.SESSION_SECRET },
         },
       ],
     }).compile();

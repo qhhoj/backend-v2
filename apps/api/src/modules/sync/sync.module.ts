@@ -1,7 +1,12 @@
 import { Inject, Logger, Module } from '@nestjs/common';
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import { AuthModule, IntegrationClientsRepository } from '@libs/auth';
-import { ENV, JobsModule, RateLimitService, type Env } from '@libs/common';
+import {
+  ENV,
+  JobsModule,
+  RateLimitService,
+  type ApiConfig,
+} from '@libs/common';
 import { contestJobs } from '@libs/contests';
 import { IntegrationClientsController } from './clients/integration-clients.controller';
 import { IntegrationClientsService } from './clients/integration-clients.service';
@@ -46,7 +51,7 @@ export class SyncModule implements OnApplicationBootstrap {
 
   constructor(
     private readonly clients: IntegrationClientsRepository,
-    @Inject(ENV) private readonly env: Pick<Env, 'trustProxy'>,
+    @Inject(ENV) private readonly env: Pick<ApiConfig, 'trustProxy'>,
   ) {}
 
   /** Behind a proxy without `TRUST_PROXY`, `request.ip` is the proxy's address, so a client's CIDR check sees the proxy instead of the client. */

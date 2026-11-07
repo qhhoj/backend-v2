@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { decrypt, encryptionKey, ENV } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { WorkerConfig } from '@libs/common';
 import { Setting, SettingRevision } from '@libs/database';
 import { SETTINGS, sealSetting, shownRevisionValue } from '@libs/settings';
 import type { Model } from 'mongoose';
@@ -38,7 +38,7 @@ export class PolygonApiKeySealingMigration implements Migration {
   private readonly key: Buffer;
 
   constructor(
-    @Inject(ENV) env: Env,
+    @Inject(ENV) env: WorkerConfig,
     @InjectModel(Setting.name) private readonly settings: Model<Setting>,
     @InjectModel(SettingRevision.name)
     private readonly revisions: Model<SettingRevision>,

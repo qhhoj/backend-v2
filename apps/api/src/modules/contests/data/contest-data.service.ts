@@ -5,7 +5,7 @@ import { stat } from 'node:fs/promises';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError, ENV, InjectJob, RateLimitService } from '@libs/common';
-import type { Env, JobProducer } from '@libs/common';
+import type { ApiConfig, JobProducer } from '@libs/common';
 import {
   canPrepareData,
   CONTEST_DATA_PREPARE_INTERVAL_MS,
@@ -27,7 +27,7 @@ import type { QueuedResponse } from '../core/dto/queued.response';
 @Injectable()
 export class ContestDataService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
     private readonly contestsService: ContestsService,
     private readonly contests: ContestsRepository,
     private readonly rateLimits: RateLimitService,

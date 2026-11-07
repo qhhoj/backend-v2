@@ -1,4 +1,4 @@
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import { EventStreamHubService } from './event-stream-hub.service';
 import { DEFAULT_STREAM_LIMITS } from './stream-limits';
 import type { StreamLimits } from './stream-limits';
@@ -13,7 +13,7 @@ const LIMITS: StreamLimits = {
 
 const hubWith = (allowlist: string[], limits = LIMITS) =>
   new EventStreamHubService(
-    { sseIpAllowlist: allowlist } as Env,
+    { sseIpAllowlist: allowlist } as ApiConfig,
     limits,
     null as never,
     null as never,

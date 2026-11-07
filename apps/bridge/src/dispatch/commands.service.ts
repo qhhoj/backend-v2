@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { ENV, unique } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { BridgeConfig } from '@libs/common';
 import { BRIDGE_COMMANDS_STREAM, parseBridgeCommand } from '@libs/judging';
 import type { BridgeCommand } from '@libs/judging';
 import { JudgeLinkServer } from '../link/judge-link.server';
@@ -32,7 +32,7 @@ export class CommandsService {
   private lastApplied = '0-0';
 
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: BridgeConfig,
     private readonly dispatch: DispatcherService,
     private readonly submissions: SubmissionsRepository,
     private readonly link: JudgeLinkServer,

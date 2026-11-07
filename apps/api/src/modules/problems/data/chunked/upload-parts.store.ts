@@ -10,7 +10,7 @@ import {
   ENV,
   resolveInside,
 } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import { UUID_PATTERN } from '@libs/database';
 
 /** Beside `.imports`; dot-prefixed, so no problem code names it. */
@@ -36,7 +36,7 @@ export async function sha256OfFile(path: string): Promise<string> {
 export class UploadPartsStore {
   private readonly root: string;
 
-  constructor(@Inject(ENV) env: Env) {
+  constructor(@Inject(ENV) env: ApiConfig) {
     this.root = resolve(env.problemDataRoot);
   }
 

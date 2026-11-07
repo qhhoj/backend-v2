@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { createConnection } from 'mongoose';
-import { loadEnv, nestLogLevels } from '@libs/common';
+import { indexesConfig, nestLogLevels, workerConfig } from '@libs/common';
 import { buildIndexes } from '@libs/database';
 import { MigrationRunner } from './migrations/migration-runner.service';
 import { MigrationsModule } from './migrations/migrations.module';
@@ -12,7 +12,7 @@ const EX_USAGE = 64;
 async function withMigrationRunner<T>(
   use: (runner: MigrationRunner) => Promise<T>,
 ): Promise<T> {
-  const { logLevel } = loadEnv();
+  const { logLevel } = workerConfig.load();
   const app = await NestFactory.createApplicationContext(MigrationsModule, {
     logger: nestLogLevels(logLevel),
   });
@@ -26,7 +26,7 @@ async function withMigrationRunner<T>(
 /** The worker refuses to start while a migration is pending: it never serves data `worker migrate` has not brought up to date. */
 async function bootstrap() {
   await withMigrationRunner((runner) => runner.assertNonePending());
-  const { logLevel } = loadEnv();
+  const { logLevel } = workerConfig.load();
   const app = await NestFactory.createApplicationContext(WorkerModule, {
     logger: nestLogLevels(logLevel),
   });
@@ -35,7 +35,8 @@ async function bootstrap() {
 }
 
 async function indexes() {
-  const connection = await createConnection(process.env.MONGO_URL ?? '', {
+  const { mongoUrl } = indexesConfig.load();
+  const connection = await createConnection(mongoUrl, {
     autoIndex: false,
   }).asPromise();
   try {

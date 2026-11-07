@@ -9,12 +9,11 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Env } from '@libs/common';
 import { PdfCacheService } from './pdf-cache.service';
 
 describe('PdfCacheService', () => {
   const root = mkdtempSync(join(tmpdir(), 'qhhoj-pdf-cache-'));
-  const cache = new PdfCacheService({ pdfCacheRoot: root } as Env);
+  const cache = new PdfCacheService({ pdfCacheRoot: root });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
   it('maps code and language to <root>/<code>.<lang>.pdf and refuses bad codes', () => {

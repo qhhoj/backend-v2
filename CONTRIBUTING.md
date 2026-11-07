@@ -596,8 +596,10 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 ## Env and deploy
 
 - Production install, nginx, podman quadlets, env template, rollback: `deploy/RUNBOOK.md`
-- `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api, the worker and the bridge (all validate env)
-- The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
+- Each process reads only its own variables (`apiConfig`, `workerConfig`, `bridgeConfig` in `libs/common/src/env/process-configs.ts`, built from the parts in `config-parts.ts`) and ignores the rest, so one env file serves all three. A new variable goes into a part, `.env.example` and `deploy/env.production.example`; `process-configs.spec.ts` fails until the template lists exactly what the processes read and `scripts/fullstack/up.sh` sets each required one
+- What each process cannot boot without is the `REQUIRED` table of `process-configs.spec.ts`: the deploy contract, so changing it is a host env change
+- The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT` (both declare the `dataRoots` part)
+- `LISTEN_HOST` (api) defaults to `127.0.0.1` whatever `NODE_ENV` is; `.env.example` sets `0.0.0.0`
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly); boot checks only `CONTEST_DATA_ROOT` against it, the others are the operator's to keep apart
 - `CONTEST_DATA_ROOT` is shared by the api and the worker and must not be under `MEDIA_ROOT`
 - `USER_DATA_ROOT` is shared by the api and the worker; boot rejects it under `MEDIA_ROOT` or overlapping `CONTEST_DATA_ROOT`

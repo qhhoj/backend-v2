@@ -3,7 +3,7 @@ import { Controller, Get, Inject, Param, Query, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { Public } from '@libs/auth';
 import { ApiTextResponse, ENV, RawResponse } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import { PreviewService } from './preview.service';
 import { robotsTxt } from './robots';
 import { SitemapService } from './sitemap.service';
@@ -16,7 +16,7 @@ import { PreviewQueryDto, SitemapParamsDto } from './dto/seo-params.dto';
 @Controller('api/internal/seo')
 export class SeoController {
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
     private readonly sitemaps: SitemapService,
     private readonly previews: PreviewService,
   ) {}

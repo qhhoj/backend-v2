@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ENV, excerpt, InjectJob } from '@libs/common';
-import type { Env, JobProducer } from '@libs/common';
+import type { JobProducer, SiteConfig } from '@libs/common';
 import type { Problem } from '@libs/database';
 import { SettingsService } from '@libs/settings';
 import { discordWebhookUrl } from './discord';
@@ -18,7 +18,7 @@ export type AnnouncedProblem = Pick<
 @Injectable()
 export class DiscordWebhooksService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: SiteConfig,
     private readonly settings: SettingsService,
     @InjectJob(communityJobs.discordWebhook)
     private readonly webhooks: JobProducer<DiscordWebhookJob>,

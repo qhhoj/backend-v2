@@ -14,7 +14,7 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Public, setSessionCookie } from '@libs/auth';
 import { ENV } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import { SessionResponses } from '../core/session-responses.service';
 import { SessionResponse } from '../core/dto/session.response';
 import { SocialCompleteDto } from './dto/social-complete.dto';
@@ -32,7 +32,7 @@ export class SocialController {
   constructor(
     private readonly social: SocialService,
     private readonly sessionResponses: SessionResponses,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
   ) {}
 
   /**

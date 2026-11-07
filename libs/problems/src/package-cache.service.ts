@@ -11,7 +11,7 @@ import {
   HOUR_MS,
   resolveInside,
 } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { DataRootsConfig } from '@libs/common';
 import { PROBLEM_CODE_PATTERN } from '@libs/database';
 
 /** Total size of the package cache; past it the oldest zips are evicted (a package build is bounded per problem, not in sum). */
@@ -36,7 +36,7 @@ const STRAY_TEMPORARY_MS = HOUR_MS;
 export class PackageCacheService {
   private readonly root: string;
 
-  constructor(@Inject(ENV) env: Env) {
+  constructor(@Inject(ENV) env: Pick<DataRootsConfig, 'pdfCacheRoot'>) {
     this.root = resolve(env.pdfCacheRoot, 'packages');
   }
 

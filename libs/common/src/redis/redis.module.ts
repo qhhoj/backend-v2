@@ -1,6 +1,8 @@
 import { Global, Inject, Module } from '@nestjs/common';
 import type { OnApplicationShutdown } from '@nestjs/common';
 import Redis from 'ioredis';
+import { ENV } from '../env/env';
+import type { RedisConfig } from '../env/config-parts';
 
 export const REDIS = Symbol('REDIS');
 
@@ -9,8 +11,9 @@ export const REDIS = Symbol('REDIS');
   providers: [
     {
       provide: REDIS,
-      useFactory: () =>
-        new Redis(process.env.REDIS_URL ?? '', { maxRetriesPerRequest: 3 }),
+      inject: [ENV],
+      useFactory: ({ redisUrl }: RedisConfig) =>
+        new Redis(redisUrl, { maxRetriesPerRequest: 3 }),
     },
   ],
   exports: [REDIS],

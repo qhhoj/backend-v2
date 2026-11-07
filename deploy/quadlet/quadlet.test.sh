@@ -22,7 +22,9 @@ done
 expect qhhoj-bridge '/srv/qhhoj/problem-data:/srv/qhhoj/problem-data:ro'
 expect qhhoj-bridge '/etc/qhhoj/bridge-tls:/etc/qhhoj/bridge-tls:ro'
 expect qhhoj-bridge '/srv/qhhoj/media:/srv/qhhoj/media:ro'
+# The api and the worker read the same media and data roots (the `dataRoots` part), so both mount the same tree.
 expect qhhoj-api '/srv/qhhoj:/srv/qhhoj'
+expect qhhoj-worker '/srv/qhhoj:/srv/qhhoj'
 expect qhhoj-worker '^MemoryMax=5G'
 expect qhhoj-worker '--shm-size=1g'
 echo "quadlets ok"

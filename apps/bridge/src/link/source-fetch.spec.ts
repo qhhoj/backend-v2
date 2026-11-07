@@ -11,7 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Env } from '@libs/common';
+import type { BridgeConfig } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import { newId } from '@libs/database';
 import type { Chunk, FetchSourceRequest } from '@libs/judge-proto';
@@ -58,7 +58,7 @@ describe('SourceFetch', () => {
   const directory = join(mediaRoot, 'submission_file', 'sum', 'u1');
   const sources = new Map<string, string>();
   const fetcher = new SourceFetch(
-    { mediaRoot, mediaUrl: '/media' } as Env,
+    { mediaRoot, mediaUrl: '/media' } as BridgeConfig,
     {
       sourceOf: (id: string) => Promise.resolve(sources.get(id) ?? null),
     } as unknown as SubmissionsRepository,

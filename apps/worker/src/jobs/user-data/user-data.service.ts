@@ -2,7 +2,7 @@ import { mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
 import { DAY_MS, ENV, isTempName } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { WorkerConfig } from '@libs/common';
 import { isUserDataExpired, userDataPath } from '@libs/community';
 import { isUuid } from '@libs/database';
 import { chunkedSources, writeZipInPlace } from '../lazy-zip';
@@ -85,7 +85,7 @@ export class UserDataService {
   constructor(
     private readonly repository: UserDataRepository,
     private readonly community: UserDataCommunityRepository,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: WorkerConfig,
     @Inject(USER_DATA_LIMITS) private readonly limits: UserDataLimits,
   ) {}
 

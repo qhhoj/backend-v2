@@ -9,7 +9,6 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Env } from '../env/env';
 import { StorageService } from './storage.service';
 
 describe('StorageService', () => {
@@ -17,7 +16,7 @@ describe('StorageService', () => {
   const storage = new StorageService({
     mediaRoot: root,
     mediaUrl: '/media',
-  } as Env);
+  });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
   it('writes under MEDIA_ROOT, creating directories, and returns the public url', async () => {

@@ -7,7 +7,7 @@ async function main(): Promise<void> {
   const { MONGO_URL, PROBLEM_DATA_ROOT } = process.env;
   if (!MONGO_URL || !PROBLEM_DATA_ROOT)
     throw new Error('MONGO_URL and PROBLEM_DATA_ROOT are required');
-  const key = encryptionKey(process.env.ENCRYPTION_KEY);
+  const key = encryptionKey(process.env.ENCRYPTION_KEY ?? '');
   const connection = await createConnection(MONGO_URL).asPromise();
   try {
     const summary = await seedE2e(connection, {
