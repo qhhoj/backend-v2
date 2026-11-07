@@ -283,8 +283,8 @@ describe('Bridge restart', () => {
       const ref = (await judge.nextAssign()).ref!;
       slowClaim.mockRestore();
       judge.accept(ref);
-      // G once the ack says the write landed (a loaded host takes seconds): the ticks after it check the row is not requeued
-      await judge.ackOf(ref, judge.started(ref, 1), 15_000);
+      // G once the ack says the write landed: the ticks after it are what checks the row is not requeued
+      await judge.ackOf(ref, judge.started(ref, 1));
       await resyncTicks(3);
       expect(await submissionRow(id)).toMatchObject({
         status: 'G',

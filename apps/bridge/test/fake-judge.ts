@@ -49,6 +49,9 @@ export interface FakeJudgeOptions {
   ca?: Buffer;
 }
 
+/** Default bound of the waits for a bridge message or ack: they return as soon as it arrives, and a loaded host takes seconds to deliver one. */
+const WAIT_MS = 15_000;
+
 const keyOf = (ref: AssignmentRef) => `${ref.submissionId}.${ref.generation}`;
 
 /** A judge-v2 stand-in over real gRPC: records every message the bridge sends, answers pings, numbers each run's messages (seq 1, 2, ...) and sends whatever a test scripts. */
@@ -160,7 +163,7 @@ export class FakeJudge {
   /** Removes and returns the first received message of `kind`, waiting for it. */
   async next<Kind extends BridgeKind>(
     kind: Kind,
-    timeoutMs = 5000,
+    timeoutMs = WAIT_MS,
   ): Promise<BodyOf<Kind>> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
@@ -183,7 +186,7 @@ export class FakeJudge {
   }
 
   /** Removes and returns the first received message that is not a Ping, waiting for it (transcripts follow arrival order). */
-  async nextMessage(timeoutMs = 5000): Promise<BridgeMessage> {
+  async nextMessage(timeoutMs = WAIT_MS): Promise<BridgeMessage> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const index = this.received.findIndex(
@@ -282,7 +285,7 @@ export class FakeJudge {
   async ackOf(
     ref: AssignmentRef,
     seq: number,
-    timeoutMs = 5000,
+    timeoutMs = WAIT_MS,
   ): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (!this.acked(ref, seq)) {
