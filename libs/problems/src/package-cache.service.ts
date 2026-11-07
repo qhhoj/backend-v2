@@ -5,13 +5,19 @@ import { resolve } from 'node:path';
 import {
   assertRealPathInside,
   atomicWrite,
+  DAY_MS,
   ENV,
+  GIB,
   HOUR_MS,
   resolveInside,
 } from '@libs/common';
 import type { Env } from '@libs/common';
 import { PROBLEM_CODE_PATTERN } from '@libs/database';
-import { PACKAGE_CACHE_MAX_BYTES } from './lifecycle-queues';
+
+/** Total size of the package cache; past it the oldest zips are evicted (a package build is bounded per problem, not in sum). */
+export const PACKAGE_CACHE_MAX_BYTES = 8 * GIB;
+/** A cached package older than this is deleted by the daily sweep. */
+export const PACKAGE_MAX_AGE_MS = DAY_MS;
 
 const KEY_PATTERN = /^\d+\.[0-9a-f]{12}$/;
 /** An error the caller treats as "already gone": ENOENT becomes `fallback`, anything else is rethrown. */

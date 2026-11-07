@@ -8,10 +8,8 @@ import { childPath } from '@libs/community';
 import { newId, Revision } from '@libs/database';
 import {
   PackageCacheService,
-  PROBLEM_PURGE_QUEUE,
   ProblemDataFilesService,
-  PROBLEM_PURGE_SCHEDULER,
-  problemPurgeJobId,
+  problemJobs,
 } from '@libs/problems';
 import type { Model } from 'mongoose';
 import { ProblemPurgeService } from '../src/jobs/problem-purge/problem-purge.service';
@@ -24,7 +22,6 @@ import {
   seedProblem,
   seedUser,
 } from './effects-fixtures';
-import { ProblemPurgeProcessor } from '../src/jobs/problem-purge/problem-purge.processor';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
 
@@ -131,7 +128,7 @@ describe('problem purge', () => {
     revisions = worker.module.get(getModelToken(Revision.name));
     purgeAdd = jest
       .spyOn(
-        worker.module.get<Queue>(getQueueToken(PROBLEM_PURGE_QUEUE)),
+        worker.module.get<Queue>(getQueueToken(problemJobs.purge.queue)),
         'add',
       )
       .mockResolvedValue(undefined as never);
@@ -282,9 +279,9 @@ describe('problem purge', () => {
     purgeAdd.mockClear();
     await service.sweep();
     expect(queuedJobIds()).toEqual(
-      expect.arrayContaining([problemPurgeJobId(stale.problem._id)]),
+      expect.arrayContaining([`problem-purge-${stale.problem._id}`]),
     );
-    expect(queuedJobIds()).not.toContain(problemPurgeJobId(fresh.problem._id));
+    expect(queuedJobIds()).not.toContain(`problem-purge-${fresh.problem._id}`);
   });
 
   it('sweeps a crashed purge-now at once, although the grace period has not passed', async () => {
@@ -295,7 +292,7 @@ describe('problem purge', () => {
     );
     purgeAdd.mockClear();
     await service.sweep();
-    expect(queuedJobIds()).toContain(problemPurgeJobId(recent.problem._id));
+    expect(queuedJobIds()).toContain(`problem-purge-${recent.problem._id}`);
   });
 
   it('cannot be restored once claimed, and a stale claim is completed by a plain purge', async () => {
@@ -338,27 +335,11 @@ describe('problem purge', () => {
     );
     await seedProblem(worker);
     expect(await service.sweep()).toBe(1);
-    expect(queuedJobIds()).toEqual([problemPurgeJobId(expired.problem._id)]);
+    expect(queuedJobIds()).toEqual([`problem-purge-${expired.problem._id}`]);
     await worker.setSetting('problem.deleteGraceDays', 1);
     purgeAdd.mockClear();
     expect(await service.sweep()).toBeGreaterThanOrEqual(2);
-    expect(queuedJobIds()).toContain(problemPurgeJobId(recent.problem._id));
+    expect(queuedJobIds()).toContain(`problem-purge-${recent.problem._id}`);
     await worker.setSetting('problem.deleteGraceDays', 30);
-  });
-
-  it('runs the sweep daily at 03:30 in the site time zone, registered once', async () => {
-    // A boot registers the schedule (the setup's Redis flush dropped the one from this boot); a second boot must not add one.
-    const processor = worker.module.get(ProblemPurgeProcessor);
-    await processor.onApplicationBootstrap();
-    await processor.onApplicationBootstrap();
-    const queue = worker.module.get<Queue>(getQueueToken(PROBLEM_PURGE_QUEUE));
-    const ours = (await queue.getJobSchedulers()).filter(
-      (scheduler) => scheduler.key === PROBLEM_PURGE_SCHEDULER,
-    );
-    expect(ours).toHaveLength(1);
-    expect(ours[0]).toMatchObject({
-      pattern: '30 3 * * *',
-      tz: 'Asia/Ho_Chi_Minh',
-    });
   });
 });

@@ -3,7 +3,12 @@ import { isDeepStrictEqual } from 'node:util';
 import type { AuthContext } from '@libs/auth';
 import { AppError } from '@libs/common';
 import type { PolygonImportOptions, PolygonLink } from '@libs/database';
-import { latestPackageOf, PolygonClient } from '@libs/problems';
+import {
+  languageMapOf,
+  languagePairsOf,
+  latestPackageOf,
+  PolygonClient,
+} from '@libs/problems';
 import type {
   ImportErrorParams,
   LinkedProblem,
@@ -12,10 +17,6 @@ import type {
 import type { ProblemDocument } from '../core/problems.repository';
 import { RevisionsRepository } from '../core/revisions.repository';
 import { ProblemImportsService } from '../imports/problem-imports.service';
-import {
-  languageMapOf,
-  languagePairsOf,
-} from '../imports/statement-language-pairs';
 import { UpdatePolygonLinkDto } from './dto/polygon-link.dto';
 import {
   PolygonLinkOptionsResponse,

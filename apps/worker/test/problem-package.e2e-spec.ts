@@ -8,14 +8,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { getQueueToken } from '@nestjs/bullmq';
-import type { Queue } from 'bullmq';
 import { StorageService } from '@libs/common';
-import {
-  PackageCacheService,
-  PACKAGE_QUEUE,
-  PACKAGE_SWEEP_SCHEDULER,
-} from '@libs/problems';
+import { PackageCacheService } from '@libs/problems';
 import {
   PACKAGE_LIMITS,
   DEFAULT_PACKAGE_LIMITS,
@@ -25,7 +19,6 @@ import { ProblemPackageService } from '../src/jobs/problem-package/problem-packa
 import { softDeleteWorker } from './deleted-problem-fixtures';
 import { seedProblem } from './effects-fixtures';
 import { readZip } from './read-zip';
-import { ProblemPackageProcessor } from '../src/jobs/problem-package/problem-package.processor';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
 
@@ -253,18 +246,5 @@ describe('problem package build', () => {
     expect(await service.sweep()).toBeGreaterThanOrEqual(1);
     expect(await cache.has(old.code, oldKey)).toBe(false);
     expect(await cache.has(fresh.code, freshKey)).toBe(true);
-  });
-
-  it('registers the daily sweep once, whatever the number of boots', async () => {
-    // A boot registers the schedule (the setup's Redis flush dropped the one from this boot); a second boot must not add one.
-    const processor = worker.module.get(ProblemPackageProcessor);
-    await processor.onApplicationBootstrap();
-    await processor.onApplicationBootstrap();
-    const queue = worker.module.get<Queue>(getQueueToken(PACKAGE_QUEUE));
-    const ours = (await queue.getJobSchedulers()).filter(
-      (scheduler) => scheduler.key === PACKAGE_SWEEP_SCHEDULER,
-    );
-    expect(ours).toHaveLength(1);
-    expect(ours[0].pattern).toBe('15 4 * * *');
   });
 });

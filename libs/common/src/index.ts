@@ -24,6 +24,7 @@ export * from './queue/job-contract';
 export * from './queue/job-producer';
 export * from './queue/jobs.module';
 export * from './queue/job-processor';
+export * from './queue/on-demand';
 export * from './rate-limit/limiter-address';
 export * from './rate-limit/rate-limit.service';
 export * from './redis/redis-exec';

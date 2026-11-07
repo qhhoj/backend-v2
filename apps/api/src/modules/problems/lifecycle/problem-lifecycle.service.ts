@@ -1,21 +1,16 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import { UsersRepository } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
 import {
+  InjectJob,
   invalidField,
   Paginated,
   RateLimitService,
   unique,
 } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
-import {
-  enqueuePurge,
-  notifySolversRecompute,
-  PROBLEM_PURGE_QUEUE,
-  PROBLEM_SOLVERS_QUEUE,
-} from '@libs/problems';
+import { problemJobs } from '@libs/problems';
 import type {
   ProblemPurgeJob,
   ProblemSolversJob,
@@ -55,10 +50,10 @@ export class ProblemLifecycleService {
     private readonly users: UsersRepository,
     private readonly rateLimit: RateLimitService,
     private readonly settings: SettingsService,
-    @InjectQueue(PROBLEM_SOLVERS_QUEUE)
-    private readonly solvers: Queue<ProblemSolversJob>,
-    @InjectQueue(PROBLEM_PURGE_QUEUE)
-    private readonly purges: Queue<ProblemPurgeJob>,
+    @InjectJob(problemJobs.solvers)
+    private readonly solvers: JobProducer<ProblemSolversJob>,
+    @InjectJob(problemJobs.purge)
+    private readonly purges: JobProducer<ProblemPurgeJob>,
     private readonly events: ProblemEvents,
   ) {}
 
@@ -105,11 +100,7 @@ export class ProblemLifecycleService {
     problem: ProblemDocument,
     reason: SolversRecomputeReason,
   ): Promise<void> {
-    await notifySolversRecompute(
-      this.solvers,
-      { problemId: problem._id, reason },
-      this.logger,
-    );
+    await this.solvers.enqueue({ problemId: problem._id, reason });
     this.events.emit(
       'publicityChanged',
       problem._id,
@@ -149,7 +140,7 @@ export class ProblemLifecycleService {
       throw refusal('purged', 409, 'The problem was already purged');
     // A purge that was claimed but not finished is queued again on purpose: the job completes it.
     assertTyped(problem.code, confirmCode);
-    await enqueuePurge(this.purges, problem._id);
+    await this.purges.addReplacingFailed({ problemId: problem._id });
     this.logger.warn(
       JSON.stringify({
         event: 'problem-purge-requested',

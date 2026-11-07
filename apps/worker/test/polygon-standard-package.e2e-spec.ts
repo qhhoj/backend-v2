@@ -9,11 +9,7 @@ import { waitUntil } from '@libs/common/testing';
 import { newId, PolygonSyncRun, TestGeneration } from '@libs/database';
 import { generationBucket } from '@libs/judging';
 import type { GenerationPlan } from '@libs/judging';
-import {
-  listZipEntries,
-  POLYGON_ERROR_PREFIX,
-  POLYGON_FETCH,
-} from '@libs/problems';
+import { listZipEntries, POLYGON_FETCH } from '@libs/problems';
 import type { ImportProgress, PolygonImportJob } from '@libs/problems';
 import {
   buildZip,
@@ -306,7 +302,7 @@ describe('Polygon standard package import', () => {
       }),
     );
     await expect(processor.process(queued)).rejects.toThrow(
-      `${POLYGON_ERROR_PREFIX}test 2 (group g1) is rejected by the validator: n is 0`,
+      `polygon-import: test 2 (group g1) is rejected by the validator: n is 0`,
     );
     await judge;
     expect(queued.data.failedStep).toBe('generating');

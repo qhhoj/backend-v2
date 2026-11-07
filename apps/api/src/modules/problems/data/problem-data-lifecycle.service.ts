@@ -1,13 +1,12 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { OnModuleInit } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { InjectJob } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import { STATEMENT_LANGUAGES } from '@libs/database';
 import {
   PackageCacheService,
-  PDF_QUEUE,
   PdfCacheService,
-  pdfJobId,
+  problemJobs,
 } from '@libs/problems';
 import type { PdfRenderJob } from '@libs/problems';
 import { ProblemEvents } from '../core/problem.events';
@@ -22,7 +21,8 @@ export class ProblemDataLifecycleService implements OnModuleInit {
     private readonly pdfCache: PdfCacheService,
     private readonly packages: PackageCacheService,
     private readonly events: ProblemEvents,
-    @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
+    @InjectJob(problemJobs.pdf)
+    private readonly renders: JobProducer<PdfRenderJob>,
   ) {}
 
   /** Both caches are keyed by code: cached PDFs and packages are stale after a rename, PDFs after any statement change too. The data directory itself moves inside the rename's save (`ProblemEditingService`), under the data locks. */
@@ -69,7 +69,7 @@ export class ProblemDataLifecycleService implements OnModuleInit {
     await this.pdfCache.delete(code);
     await Promise.all(
       STATEMENT_LANGUAGES.map((lang) =>
-        this.pdfQueue.remove(pdfJobId(code, lang)),
+        this.renders.remove(this.renders.idOf({ code, lang })),
       ),
     );
   }

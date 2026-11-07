@@ -22,12 +22,7 @@ import type { ApiTest } from './setup';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
-import {
-  ProblemDataFilesService,
-  PROBLEM_PURGE_QUEUE,
-  PROBLEM_SOLVERS_QUEUE,
-  problemPurgeJobId,
-} from '@libs/problems';
+import { ProblemDataFilesService, problemJobs } from '@libs/problems';
 import type { ProblemPurgeJob, ProblemSolversJob } from '@libs/problems';
 import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 import { ContestsRepository } from '../src/modules/contests/core/contests.repository';
@@ -608,8 +603,8 @@ afterAll(() => api.teardown());
 
     beforeAll(async () => {
       catalog = await seedCatalog(api);
-      solvers = api.app.get(getQueueToken(PROBLEM_SOLVERS_QUEUE));
-      purges = api.app.get(getQueueToken(PROBLEM_PURGE_QUEUE));
+      solvers = api.app.get(getQueueToken(problemJobs.solvers.queue));
+      purges = api.app.get(getQueueToken(problemJobs.purge.queue));
       await newUser('owner', { permissions: DELETE_RIGHTS });
       await newUser('author_only', { permissions: ['judge.edit_own_problem'] });
       await newUser('stranger', { permissions: ['judge.delete_problem'] });
@@ -723,7 +718,7 @@ afterAll(() => api.teardown());
         confirmCode: problem.code,
       }).expect(202);
       expect((await purges.getJobs(['waiting'])).map((job) => job.id)).toEqual([
-        problemPurgeJobId(problem._id),
+        `problem-purge-${problem._id}`,
       ]);
       await post('root', problem.code, 'purge-now', {
         confirmCode: problem.code,

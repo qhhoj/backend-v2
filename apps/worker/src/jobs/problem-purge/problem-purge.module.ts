@@ -1,12 +1,12 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { PROBLEM_PURGE_QUEUE } from '@libs/problems';
+import { JobsModule } from '@libs/common';
+import { problemJobs } from '@libs/problems';
 import { ProblemPurgeProcessor } from './problem-purge.processor';
 import { ProblemPurgeRepository } from './problem-purge.repository';
 import { ProblemPurgeService } from './problem-purge.service';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: PROBLEM_PURGE_QUEUE })],
+  imports: [JobsModule.register(problemJobs.purge)],
   providers: [
     ProblemPurgeProcessor,
     ProblemPurgeService,

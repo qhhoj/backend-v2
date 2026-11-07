@@ -1,23 +1,17 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { InjectJob } from '@libs/common';
+import type { JobProducer } from '@libs/common';
 import {
-  AUTO_SYNC_PRIORITY,
   hasNewReadyPackage,
   latestPackageOf,
-  POLYGON_JOB_RETRY,
-  POLYGON_QUEUE,
   PolygonClient,
-  syncJobId,
+  problemJobs,
   syncJobOf,
 } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { RunningContestsRepository } from '../polygon-import/running-contests.repository';
 import { PolygonAutoSyncRepository } from './polygon-autosync.repository';
 import type { AutoSyncProblem } from './polygon-autosync.repository';
-
-/** A queued automatic sync stays readable (and blocks a duplicate of the same package) for a day. */
-const KEEP = { age: 24 * 60 * 60 };
 
 export interface AutoSyncSummary {
   checked: number;
@@ -33,8 +27,8 @@ export class PolygonAutoSyncService {
     private readonly repository: PolygonAutoSyncRepository,
     private readonly runningContests: RunningContestsRepository,
     private readonly polygon: PolygonClient,
-    @InjectQueue(POLYGON_QUEUE)
-    private readonly imports: Queue<PolygonImportJob>,
+    @InjectJob(problemJobs.autoSyncImport)
+    private readonly syncs: JobProducer<PolygonImportJob>,
   ) {}
 
   /** One pass over the auto-sync problems; a problem in a running contest is deferred to a later pass (a queued sync waits again when it runs). */
@@ -58,16 +52,8 @@ export class PolygonAutoSyncService {
         await this.polygon.packages(link.problemId),
       );
       if (!hasNewReadyPackage(link, latest)) return false;
-      await this.imports.add(
-        'sync',
+      await this.syncs.add(
         syncJobOf(problem, latest, { userId: link.linkedBy, trigger: 'auto' }),
-        {
-          ...POLYGON_JOB_RETRY,
-          priority: AUTO_SYNC_PRIORITY,
-          jobId: syncJobId(problem._id, latest.id),
-          removeOnComplete: KEEP,
-          removeOnFail: KEEP,
-        },
       );
       return true;
     } catch (error) {

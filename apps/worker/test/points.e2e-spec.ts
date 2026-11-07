@@ -30,7 +30,8 @@ import { SubmissionEffectsService } from '../src/jobs/submission-effects/submiss
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { OrganizationUsageAuditService } from '../src/jobs/organization-usage-audit/organization-usage-audit.service';
-import { PROBLEM_SOLVERS_QUEUE } from '@libs/problems';
+
+import { problemJobs } from '@libs/problems';
 import type { ProblemSolversJob } from '@libs/problems';
 import { ProblemSolversService } from '../src/jobs/problem-solvers/problem-solvers.service';
 import { softDeleteWorker, undeleteWorker } from './deleted-problem-fixtures';
@@ -457,7 +458,7 @@ afterAll(() => worker.teardown());
 
     it('consumes the queue: a queued delete recomputes the solver', async () => {
       const queue = worker.module.get<Queue<ProblemSolversJob>>(
-        getQueueToken(PROBLEM_SOLVERS_QUEUE),
+        getQueueToken(problemJobs.solvers.queue),
       );
       const solver = await seedUser(worker);
       const problem = await seedProblem(worker);

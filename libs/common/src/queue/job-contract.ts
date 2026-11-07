@@ -33,10 +33,10 @@ export type JobSchedule = {
   id: string;
 } & ({ every: number } | { pattern: string; tz: 'site' });
 
-/** Retry and retention, the only options a contract fixes for every add. */
-export type JobRetention = Pick<
+/** Retry, retention and priority: the options a contract fixes for every add. */
+export type ContractOptions = Pick<
   JobsOptions,
-  'attempts' | 'backoff' | 'removeOnComplete' | 'removeOnFail'
+  'attempts' | 'backoff' | 'removeOnComplete' | 'removeOnFail' | 'priority'
 >;
 
 /** Provides `() => string`, the site's IANA time zone, for pattern schedules (the settings module provides it; common cannot read settings). */
@@ -46,8 +46,8 @@ export const SITE_TIME_ZONE = 'SITE_TIME_ZONE';
 export interface JobContract<Payload> {
   readonly queue: string;
   readonly name: string;
-  /** Retry and retention of every add (and of scheduled runs). */
-  readonly options: JobRetention;
+  /** Retry, retention and priority of every add (and of scheduled runs). */
+  readonly options: ContractOptions;
   /** A job id derived from the payload: BullMQ ignores an add whose id is still kept. */
   readonly jobId?: (payload: Payload) => string;
   /** Subject of the log lines about one job, e.g. `Rescore of problem <id>`. */
@@ -59,6 +59,33 @@ export interface JobContract<Payload> {
   readonly schedule?: JobSchedule;
   /** Consumption starts once these models' indexes exist: Mongo rejects a hint to a missing index (decisions.md:196). */
   readonly needsIndexes: readonly IndexedModel[];
+  /** Marks a failed reason as a `JobFailure` written for the job's reader (`failureOf`); any other reason stays in the logs. */
+  readonly failurePrefix?: string;
+}
+
+/**
+ * A failure the job's reader may see: thrown by the worker, stored by BullMQ as `<failurePrefix><message>`, read back with `failureOf`.
+ * `final`: no attempt is left (stored as BullMQ's `UnrecoverableError`).
+ */
+export class JobFailure extends Error {
+  constructor(
+    message: string,
+    readonly final = false,
+  ) {
+    super(message);
+  }
+}
+
+/** The message of a `JobFailure` the job ended with; null for any other failed reason, or none. */
+export function failureOf(
+  contract: Pick<JobContract<never>, 'failurePrefix'>,
+  job: { failedReason?: string },
+): string | null {
+  const prefix = contract.failurePrefix;
+  const reason = job.failedReason;
+  return prefix && reason?.startsWith(prefix)
+    ? reason.slice(prefix.length)
+    : null;
 }
 
 /** Every contract declared in this process, for the contract spec. */

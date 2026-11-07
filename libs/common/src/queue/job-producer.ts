@@ -29,6 +29,11 @@ export class JobProducer<Payload> {
     );
   }
 
+  /** Removes a waiting, delayed or ended job by id, awaited and thrown; a job already running stays. */
+  async remove(jobId: string): Promise<void> {
+    await this.queue.remove(jobId);
+  }
+
   /** Removes a waiting or delayed job by id, best effort like `enqueue`; a job already running stays. */
   withdraw(jobId: string): Promise<boolean> {
     return this.bestEffort(
@@ -60,6 +65,23 @@ export class JobProducer<Payload> {
     );
   }
 
+  /** `add` under the contract's job id, after removing a failed job kept under it (it would swallow the add); a queued or running one is kept, and the add is ignored. */
+  async addReplacingFailed(payload: Payload): Promise<void> {
+    const previous = await this.job(this.idOf(payload));
+    if (previous && (await previous.isFailed())) await previous.remove();
+    await this.add(payload);
+  }
+
+  /** Removes `job` when it is a delayed job of this contract, so a later add replaces it; false when it is not, or a worker took it meanwhile. */
+  async preempt(job: Job): Promise<boolean> {
+    if (job.name !== this.contract.name) return false;
+    if ((await job.getState()) !== 'delayed') return false;
+    return job.remove().then(
+      () => true,
+      () => false,
+    );
+  }
+
   /** `add` for many payloads in one round trip. */
   async addBulk(payloads: readonly Payload[]): Promise<void> {
     await this.queue.addBulk(
@@ -86,6 +108,18 @@ export class JobProducer<Payload> {
     return this.queue.getJobs(types, start, end, asc) as Promise<
       Job<Payload>[]
     >;
+  }
+
+  /** How many jobs of the queue are in these states. */
+  count(...types: JobType[]): Promise<number> {
+    return this.queue.getJobCountByTypes(...types);
+  }
+
+  /** The contract's job id of a payload; a contract without one cannot keep a job per payload. */
+  idOf(payload: Payload): string {
+    const jobId = this.contract.jobId?.(payload);
+    if (!jobId) throw new Error(`${this.contract.name} jobs have no job id`);
+    return jobId;
   }
 
   private optionsOf(

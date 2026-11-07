@@ -7,7 +7,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
-import { LANGUAGE_PAIR } from '../../imports/statement-language-pairs';
+import { LANGUAGE_PAIR } from '@libs/problems';
 
 /** Every field is optional and an omitted one keeps its value; the options apply from the next sync (the one running keeps its own). */
 export class UpdatePolygonLinkDto {

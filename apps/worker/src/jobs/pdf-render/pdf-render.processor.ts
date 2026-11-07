@@ -1,20 +1,18 @@
-import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Inject, Logger } from '@nestjs/common';
-import type { OnApplicationBootstrap } from '@nestjs/common';
-import type { Job } from 'bullmq';
-import { ENV } from '@libs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ENV, JobProcessor } from '@libs/common';
 import type { Env } from '@libs/common';
-import { PDF_QUEUE } from '@libs/problems';
+import { problemJobs } from '@libs/problems';
 import type { PdfRenderJob } from '@libs/problems';
 import { PdfRenderService } from './pdf-render.service';
 
-@Processor(PDF_QUEUE)
-export class PdfRenderProcessor
-  extends WorkerHost
-  implements OnApplicationBootstrap
-{
-  private readonly logger = new Logger(PdfRenderProcessor.name);
+type RenderOutcome = 'rendered' | 'missing' | 'stale';
 
+/** A failed job stays for its fail window (the api answers 503 meanwhile); the log is the only trace of why. */
+@Injectable()
+export class PdfRenderProcessor extends JobProcessor<
+  PdfRenderJob,
+  RenderOutcome
+>(problemJobs.pdf) {
   constructor(
     private readonly render: PdfRenderService,
     @Inject(ENV) private readonly env: Env,
@@ -22,20 +20,13 @@ export class PdfRenderProcessor
     super();
   }
 
-  /** The decorator's options are static, so the env-driven concurrency is applied once the worker exists. */
-  onApplicationBootstrap(): void {
+  /** The decorator's options are static, so the env-driven concurrency is applied before the worker starts. */
+  override onApplicationBootstrap(): Promise<void> {
     this.worker.concurrency = this.env.pdfConcurrency;
+    return super.onApplicationBootstrap();
   }
 
-  process(job: Job<PdfRenderJob>): Promise<'rendered' | 'missing' | 'stale'> {
-    return this.render.render(job.data);
-  }
-
-  /** Jobs are removed on failure (so a later request can enqueue again); the log is the only trace. */
-  @OnWorkerEvent('failed')
-  onFailed(job: Job<PdfRenderJob> | undefined, error: Error): void {
-    this.logger.error(
-      `PDF ${job?.data.code}.${job?.data.lang} failed: ${error.message}`,
-    );
+  run(job: PdfRenderJob): Promise<RenderOutcome> {
+    return this.render.render(job);
   }
 }

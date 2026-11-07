@@ -1,20 +1,18 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type { FileHandle } from 'node:fs/promises';
 import type { Principal } from '@libs/auth';
-import { AppError, RateLimitService } from '@libs/common';
-import type { StatementLanguage } from '@libs/database';
 import {
-  PDF_QUEUE,
-  PdfCacheService,
-  pdfJobId,
-  statementFor,
-} from '@libs/problems';
+  AppError,
+  InjectJob,
+  onDemandState,
+  RateLimitService,
+} from '@libs/common';
+import type { JobProducer } from '@libs/common';
+import type { StatementLanguage } from '@libs/database';
+import { PdfCacheService, problemJobs, statementFor } from '@libs/problems';
 import type { PdfRenderJob } from '@libs/problems';
 import { ProblemsService } from '../core/problems.service';
 import {
-  PDF_FAIL_WINDOW_SECONDS,
   PDF_RENDER_LIMIT,
   PDF_RENDER_WINDOW_SECONDS,
 } from '../core/rate-limits';
@@ -29,12 +27,13 @@ export class ProblemPdfService {
   constructor(
     private readonly problems: ProblemsService,
     private readonly pdfCache: PdfCacheService,
-    @InjectQueue(PDF_QUEUE) private readonly queue: Queue<PdfRenderJob>,
+    @InjectJob(problemJobs.pdf)
+    private readonly renders: JobProducer<PdfRenderJob>,
     private readonly rateLimit: RateLimitService,
   ) {}
 
   /**
-   * Cached file, or a render job (one per problem and language). A completed job is removed so a later request can enqueue again; a failed one is kept for `PDF_FAIL_WINDOW_SECONDS`, answering 503 with Retry-After instead of an endless 202. A statement change or rename removes it earlier (`ProblemDataLifecycleService`).
+   * Cached file, or a render job (one per problem and language, `onDemandState`). A failed one answers 503 with Retry-After for its fail window instead of an endless 202. A statement change or rename removes it earlier (`ProblemDataLifecycleService`).
    * A pending or active job is answered for free; only a new enqueue spends the ip budget.
    * `shouldEnqueue: false` (HEAD) only peeks at the cache: no job, no rate-limit budget.
    */
@@ -62,39 +61,25 @@ export class ProblemPdfService {
     code: string,
     lang: StatementLanguage,
   ): Promise<void> {
-    const jobId = pdfJobId(code, lang);
-    const previous = await this.queue.getJob(jobId);
-    if (previous && (await previous.isFailed())) {
-      const retryAfter = this.secondsUntilRetry(previous.finishedOn);
-      if (retryAfter > 0)
-        throw new AppError(
-          'pdf_unavailable',
-          503,
-          'The PDF could not be rendered; try again later',
-          undefined,
-          { 'Retry-After': String(retryAfter), 'Cache-Control': 'no-store' },
-        );
-      await previous.remove();
-    } else if (previous) return; // pending or active: polling is free
+    const render = { code, lang };
+    const state = await onDemandState(this.renders, render);
+    if (state.status === 'building') return; // polling is free
+    if (state.status === 'failed' && state.retryAfterSeconds > 0)
+      throw new AppError(
+        'pdf_unavailable',
+        503,
+        'The PDF could not be rendered; try again later',
+        undefined,
+        {
+          'Retry-After': String(state.retryAfterSeconds),
+          'Cache-Control': 'no-store',
+        },
+      );
     await this.rateLimit.reserve(
       [`pdf-render:ip:${ip}`],
       PDF_RENDER_LIMIT,
       PDF_RENDER_WINDOW_SECONDS,
     );
-    await this.queue.add(
-      'render',
-      { code, lang },
-      {
-        jobId,
-        removeOnComplete: true,
-        removeOnFail: { age: PDF_FAIL_WINDOW_SECONDS },
-      },
-    );
-  }
-
-  private secondsUntilRetry(finishedOn = 0): number {
-    return Math.ceil(
-      (finishedOn + PDF_FAIL_WINDOW_SECONDS * 1000 - Date.now()) / 1000,
-    );
+    await this.renders.addReplacingFailed(render);
   }
 }

@@ -1,26 +1,19 @@
-import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
-import type { Job } from 'bullmq';
-import { PROBLEM_SOLVERS_QUEUE } from '@libs/problems';
+import { Injectable } from '@nestjs/common';
+import { JobProcessor } from '@libs/common';
+import { problemJobs } from '@libs/problems';
 import type { ProblemSolversJob } from '@libs/problems';
 import { ProblemSolversService } from './problem-solvers.service';
 
-@Processor(PROBLEM_SOLVERS_QUEUE, { concurrency: 1 })
-export class ProblemSolversProcessor extends WorkerHost {
-  private readonly logger = new Logger(ProblemSolversProcessor.name);
-
+@Injectable()
+export class ProblemSolversProcessor extends JobProcessor<
+  ProblemSolversJob,
+  number
+>(problemJobs.solvers) {
   constructor(private readonly solvers: ProblemSolversService) {
     super();
   }
 
-  process(job: Job<ProblemSolversJob>): Promise<number> {
-    return this.solvers.recompute(job.data.problemId);
-  }
-
-  @OnWorkerEvent('failed')
-  onFailed(job: Job<ProblemSolversJob> | undefined, error: Error): void {
-    this.logger.error(
-      `Recompute for the solvers of problem ${job?.data.problemId} (${job?.data.reason}) failed: ${error.message}`,
-    );
+  run(job: ProblemSolversJob): Promise<number> {
+    return this.solvers.recompute(job.problemId);
   }
 }
