@@ -35,10 +35,14 @@ describe('settings', () => {
     const module = await Test.createTestingModule({
       imports: [
         ScheduleModule.forRoot(),
-        EnvModule.forValues({
-          mongoUrl: replSet.getUri('qhhoj'),
-          encryptionKey: TEST_ENV.ENCRYPTION_KEY,
-        }),
+        // Streams must run: the cross-process test waits for them, not for the one-minute resync.
+        EnvModule.forValues(
+          {
+            mongoUrl: replSet.getUri('qhhoj'),
+            encryptionKey: TEST_ENV.ENCRYPTION_KEY,
+          },
+          { mongoStreams: true },
+        ),
         DatabaseModule.forRoot(ENV),
         SettingsModule,
       ],
@@ -49,8 +53,6 @@ describe('settings', () => {
 
   beforeAll(async () => {
     replSet = await startMongo();
-    // Streams must run: the cross-process test waits for them, not for the one-minute resync.
-    process.env.DISABLE_MONGODB_STREAM = 'false';
     first = await boot();
     second = await boot();
     settings = first.get(SettingsService);

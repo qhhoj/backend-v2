@@ -2,7 +2,7 @@ import type { ServerResponse } from 'node:http';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnModuleDestroy } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { AppError } from '@libs/common';
+import { AppError, TUNING } from '@libs/common';
 import type { FeedEvent } from '@libs/contests';
 import { EventStreamHubService } from '../../events/event-stream-hub.service';
 import { STREAM_LIMITS } from '../../events/stream-limits';
@@ -12,7 +12,6 @@ import { FeedService } from './feed.service';
 import { FeedRoom, unsentOf } from './feed-room';
 import type { FeedSubscriber } from './feed-room';
 
-export const FEED_STREAM_OPTIONS = Symbol('FEED_STREAM_OPTIONS');
 export interface FeedStreamOptions {
   /** How often a stream re-checks its key and reads the changed submissions: ten seconds is plenty for a resolver, and a tick still costs a few queries. */
   intervalMs: number;
@@ -23,6 +22,9 @@ export const DEFAULT_FEED_STREAM_OPTIONS: FeedStreamOptions = {
   intervalMs: 10_000,
   keepAliveMs: 30_000,
 };
+export interface FeedStreamTuning {
+  feedStream: FeedStreamOptions;
+}
 /** A tick whose build fails for a reason that may pass (a database blip) is retried on the next tick; the stream ends after this many in a row. */
 export const MAX_FAILED_TICKS = 3;
 /** A resolver needs one or two. */
@@ -58,7 +60,7 @@ export class FeedStreamService implements OnModuleDestroy {
   constructor(
     private readonly hub: EventStreamHubService,
     @Inject(STREAM_LIMITS) private readonly limits: StreamLimits,
-    @Inject(FEED_STREAM_OPTIONS) private readonly options: FeedStreamOptions,
+    @Inject(TUNING) private readonly tuning: FeedStreamTuning,
     private readonly auth: FeedAuthService,
     private readonly feeds: FeedService,
   ) {}
@@ -144,7 +146,7 @@ export class FeedStreamService implements OnModuleDestroy {
     response.write(this.feeds.ndjson(first));
     subscriber.keepAlive = setInterval(
       () => response.write('\n'),
-      this.options.keepAliveMs,
+      this.tuning.feedStream.keepAliveMs,
     );
     room.subscribers.add(subscriber);
   }
@@ -152,10 +154,10 @@ export class FeedStreamService implements OnModuleDestroy {
   private joinRoom(contestId: string): FeedRoom {
     let room = this.rooms.get(contestId);
     if (!room) {
-      room = new FeedRoom(this.feeds, this.options.intervalMs / 2);
+      room = new FeedRoom(this.feeds, this.tuning.feedStream.intervalMs / 2);
       room.timer = setInterval(
         () => void this.tickRoom(room!),
-        this.options.intervalMs,
+        this.tuning.feedStream.intervalMs,
       );
       this.rooms.set(contestId, room);
     }

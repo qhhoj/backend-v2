@@ -7,7 +7,8 @@ import type { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { MongoClient } from 'mongodb';
 import type { Model } from 'mongoose';
-import { TEST_ENV, TEST_REDIS_URL } from '@libs/common/testing';
+import { TUNING } from '@libs/common';
+import { TEST_ENV, TEST_REDIS_URL, TEST_TUNING } from '@libs/common/testing';
 import {
   Contest,
   ContestParticipation,
@@ -25,6 +26,7 @@ import { judgingJobs } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { BridgeModule } from '../src/bridge.module';
 import { BRIDGE_TIMINGS } from '../src/bridge-timings';
+import { bridgeTuning } from '../src/bridge-tuning';
 import type { BridgeTimings } from '../src/bridge-timings';
 import { GRACE_CLOCK, TIMER_GRACE_CLOCK } from '../src/dispatch/grace-clock';
 import type { GraceClock } from '../src/dispatch/grace-clock';
@@ -87,6 +89,8 @@ export async function setupBridgeTest({
   });
   const compile = async (): Promise<TestingModule> => {
     const compiled = await Test.createTestingModule({ imports: [BridgeModule] })
+      .overrideProvider(TUNING)
+      .useValue({ ...bridgeTuning, ...TEST_TUNING })
       .overrideProvider(BRIDGE_TIMINGS)
       .useValue({ ...FAST_TIMINGS, ...timings })
       .overrideProvider(ACCEPT_CLOCK)

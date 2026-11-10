@@ -1,4 +1,4 @@
-import { hashPassword } from '@libs/auth';
+import { hashPassword, Passwords } from '@libs/auth';
 import type { RateLimitService } from '@libs/common';
 import { AuthService } from './auth.service';
 
@@ -18,6 +18,7 @@ describe('AuthService budget refunds', () => {
         null,
         null,
         null,
+        new Passwords({ passwordIterations: 1000 }),
         rateLimit,
         {},
       ] as unknown as ConstructorParameters<typeof AuthService>),

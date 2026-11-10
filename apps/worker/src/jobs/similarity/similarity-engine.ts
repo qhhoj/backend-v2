@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { Injectable, Logger } from '@nestjs/common';
-import type { BeforeApplicationShutdown } from '@nestjs/common';
+import type { OnModuleDestroy } from '@nestjs/common';
 import type { SimilarityError } from '@libs/database';
 import { ENGINE_SOURCE } from './similarity-engine.script';
 import type { SimilarityFamily } from './similarity-languages';
@@ -117,18 +117,15 @@ const writeLines = async (child: ChildProcess, lines: Iterable<string>) => {
 };
 
 @Injectable()
-export class SimilarityEngine implements BeforeApplicationShutdown {
+export class SimilarityEngine implements OnModuleDestroy {
   private readonly logger = new Logger(SimilarityEngine.name);
   /** The worker runs one comparison at a time (queue concurrency 1). */
   protected activeChild: ChildProcess | null = null;
   /** Set once by the shutdown hook: no child may start after it, since nothing would kill that one. */
   private isShuttingDown = false;
 
-  /**
-   * The orchestrator kills the worker, not its children. `before…` runs for every module ahead of any `onApplicationShutdown`,
-   * so it fires before the BullMQ worker starts waiting for the active job.
-   */
-  beforeApplicationShutdown(): void {
+  /** The orchestrator kills the worker, not its children. The destroy phase comes before `JobWorkersDrain` waits for the active job. */
+  onModuleDestroy(): void {
     this.isShuttingDown = true;
     this.activeChild?.kill('SIGKILL');
   }

@@ -14,7 +14,9 @@ describe('PolygonClient', () => {
   let polygon: FakePolygon;
   let directory: string;
   const client = (settings = CONNECTED) =>
-    new PolygonClient(fakeSettings(settings), polygon.fetch);
+    new PolygonClient(fakeSettings(settings), {
+      polygonFetch: polygon.fetch,
+    });
   const failureCode = (promise: Promise<unknown>) =>
     promise.then(
       () => 'resolved',
@@ -87,7 +89,9 @@ describe('PolygonClient', () => {
         }),
       );
     const offline = (reason: Error) =>
-      new PolygonClient(fakeSettings(CONNECTED), () => Promise.reject(reason));
+      new PolygonClient(fakeSettings(CONNECTED), {
+        polygonFetch: () => Promise.reject(reason),
+      });
 
     it.each([
       [
@@ -211,7 +215,7 @@ describe('PolygonClient', () => {
         }),
       );
     const download = (fetchFn: typeof fetch, idleMs?: number) =>
-      new PolygonClient(fakeSettings(CONNECTED), fetchFn)
+      new PolygonClient(fakeSettings(CONNECTED), { polygonFetch: fetchFn })
         .downloadPackage(
           { problemId: 1, packageId: 1 },
           join(directory, 'package.zip'),

@@ -1,9 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { newId, toUuid } from '@libs/database';
-import {
-  randomShortCode,
-  SHORT_CODE_SOURCE,
-} from '../src/modules/short-links/short-code';
+import { randomShortCode } from '../src/modules/short-links/short-code';
 import { clearRateLimits } from './contest-fixtures';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
@@ -33,12 +30,9 @@ describe('short links', () => {
 
   beforeAll(async () => {
     api = await setupApiTest({
-      overrides: [
-        {
-          provide: SHORT_CODE_SOURCE,
-          useValue: { next: () => forcedCodes.shift() ?? randomShortCode() },
-        },
-      ],
+      tuning: {
+        shortCodes: { next: () => forcedCodes.shift() ?? randomShortCode() },
+      },
     });
     staff = await loginAs(
       api,

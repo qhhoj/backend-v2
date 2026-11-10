@@ -21,7 +21,7 @@ export const REDIS = Symbol('REDIS');
 export class RedisModule implements OnApplicationShutdown {
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
-  /** The last shutdown phase, not `onModuleDestroy`: the HTTP server closes after the destroy phase (Fastify `onClose` hooks such as the final activity flush still write), and BullMQ workers finish their running jobs in `onApplicationShutdown`. */
+  /** The last shutdown phase (`JobWorkersDrain` declares the order): after the running jobs finished and the HTTP server closed, whose Fastify `onClose` hooks such as the final activity flush still write. */
   async onApplicationShutdown() {
     await this.redis.quit();
   }

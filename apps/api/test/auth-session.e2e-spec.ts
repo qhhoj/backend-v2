@@ -136,16 +136,17 @@ describe('auth session endpoints', () => {
     expect(sessionOf(mixed).twoFactor?.methods).toEqual(['totp']);
   });
 
-  // The rehash runs at the production cost: under the e2e override (1000 rounds) the fixtures' hashes are not weak.
+  // The rehash runs at the production cost: at the e2e cost (1000 rounds) the fixtures' hashes are not weak.
   describe('at the production hash cost', () => {
-    let override: string | undefined;
+    let productionCost: jest.ReplaceProperty<number>;
     beforeAll(() => {
-      override = process.env.TEST_PASSWORD_ITERATIONS;
-      delete process.env.TEST_PASSWORD_ITERATIONS;
+      productionCost = jest.replaceProperty(
+        api.tuning,
+        'passwordIterations',
+        PASSWORD_ITERATIONS,
+      );
     });
-    afterAll(() => {
-      process.env.TEST_PASSWORD_ITERATIONS = override;
-    });
+    afterAll(() => productionCost.restore());
 
     it('upgrades weak password hashes on login', async () => {
       await createUser(api.users, {

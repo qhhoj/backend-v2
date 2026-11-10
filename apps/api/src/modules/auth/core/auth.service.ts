@@ -2,15 +2,13 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   DUMMY_PASSWORD_HASH,
   generateApiToken,
-  hashPassword,
-  needsRehash,
   passwordProblems,
+  Passwords,
   PWNED_PASSWORD_PROBLEM,
   PrincipalService,
   PwnedPasswordService,
   SessionService,
   UsersRepository,
-  verifyPassword,
 } from '@libs/auth';
 import type { AuthContext, SessionData, UserDocument } from '@libs/auth';
 import {
@@ -53,6 +51,7 @@ export class AuthService {
     private readonly sessions: SessionService,
     private readonly principals: PrincipalService,
     private readonly pwned: PwnedPasswordService,
+    private readonly passwords: Passwords,
     private readonly rateLimit: RateLimitService,
     @Inject(ENV) private readonly env: ApiConfig,
   ) {}
@@ -94,7 +93,12 @@ export class AuthService {
     const passwordValid = await this.verifyMetered(
       { failureBudgets, successBudgets },
       // Queued under the client: another network's login waits for at most one check per hash slot.
-      () => verifyPassword(password, user?.password ?? DUMMY_PASSWORD_HASH, ip),
+      () =>
+        this.passwords.verify(
+          password,
+          user?.password ?? DUMMY_PASSWORD_HASH,
+          ip,
+        ),
     );
     if (!user || !passwordValid)
       throw new AppError(
@@ -172,12 +176,12 @@ export class AuthService {
     password: string,
     ip: string,
   ): Promise<void> {
-    if (!needsRehash(user.password)) return;
+    if (!this.passwords.needsRehash(user.password)) return;
     try {
       await this.users.updatePasswordIfUnchanged(
         user._id,
         user.password,
-        await hashPassword(password, { requester: ip }),
+        await this.passwords.hash(password, ip),
       );
     } catch (error) {
       this.logger.warn(
@@ -250,7 +254,7 @@ export class AuthService {
         ],
         successBudgets: [passwordSuccessBudget(userId)],
       },
-      () => verifyPassword(password, auth.user.password, auth.ip),
+      () => this.passwords.verify(password, auth.user.password, auth.ip),
     );
     if (!passwordValid)
       throw new AppError(
@@ -295,7 +299,7 @@ export class AuthService {
     const changed = await this.users.updatePasswordIfUnchanged(
       userId,
       auth.user.password,
-      await hashPassword(newPassword, { requester: auth.ip }),
+      await this.passwords.hash(newPassword, auth.ip),
     );
     if (!changed)
       throw new AppError(

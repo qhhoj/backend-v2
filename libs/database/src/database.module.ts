@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { SCHEMAS } from './schemas';
+import { SCHEMAS } from './schemas/models';
 
 const models = MongooseModule.forFeature(SCHEMAS);
 

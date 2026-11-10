@@ -25,6 +25,7 @@ import { PasswordVerificationBackfillMigration } from './password-verification-b
 import { PermissionRenameMigration } from './permission-rename/permission-rename.migration';
 import { ProblemDataBytesMigration } from './problem-databytes/problem-databytes.migration';
 import { ProblemDataBytesRepository } from './problem-databytes/problem-databytes.repository';
+import { workerTuning } from '../worker-tuning';
 
 /** Every migration, in the order they run. Append-only: a new one goes at the end. */
 const IN_ORDER = [
@@ -46,7 +47,7 @@ const IN_ORDER = [
 /** What `worker migrate` boots: data access only, no queue, processor or schedule, so nothing but the migrations touches the live site. */
 @Module({
   imports: [
-    EnvModule.forRoot(workerConfig),
+    EnvModule.forRoot(workerConfig, workerTuning),
     DatabaseModule.forRoot(ENV),
     RedisModule,
     StorageModule,

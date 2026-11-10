@@ -4,7 +4,6 @@ import { userDataPath } from '@libs/community';
 import { newId } from '@libs/database';
 import {
   DEFAULT_USER_DATA_LIMITS,
-  USER_DATA_LIMITS,
   UserDataError,
   UserDataService,
 } from '../src/jobs/user-data/user-data.service';
@@ -21,7 +20,7 @@ describe('user data export', () => {
 
   beforeAll(async () => {
     worker = await setupWorkerTest({
-      overrides: [{ provide: USER_DATA_LIMITS, useValue: limits }],
+      tuning: { userDataLimits: limits },
     });
     service = worker.module.get(UserDataService);
     cppId = (

@@ -12,12 +12,14 @@ export interface PackageLimits {
   dataWaitAttempts: number;
   dataWaitMs: number;
 }
-export const PACKAGE_LIMITS = Symbol('PACKAGE_LIMITS');
 export const DEFAULT_PACKAGE_LIMITS: PackageLimits = {
   maxBytes: ARCHIVE_MAX_BYTES,
   dataWaitAttempts: 5,
   dataWaitMs: 1000,
 };
+export interface PackageTuning {
+  packageLimits: PackageLimits;
+}
 
 /** The package would pass the size cap; raised before any file is written. */
 export class PackageTooLargeError extends Error {}

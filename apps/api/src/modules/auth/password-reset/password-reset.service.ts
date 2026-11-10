@@ -1,9 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   createPasswordResetToken,
-  hashPassword,
   passwordIssues,
   passwordResetTokenValid,
+  Passwords,
   PwnedPasswordService,
   readPasswordResetToken,
   SessionService,
@@ -42,6 +42,7 @@ export class PasswordResetService {
     private readonly users: UsersRepository,
     private readonly sessions: SessionService,
     private readonly pwned: PwnedPasswordService,
+    private readonly passwords: Passwords,
     private readonly rateLimit: RateLimitService,
     @Inject(MAILER) private readonly mailer: Mailer,
     @Inject(ENV) private readonly env: ApiConfig,
@@ -114,7 +115,7 @@ export class PasswordResetService {
     const changed = await this.users.updatePasswordIfUnchanged(
       user._id,
       user.password,
-      await hashPassword(newPassword, { requester: ip }),
+      await this.passwords.hash(newPassword, ip),
     );
     if (!changed) throw invalidToken();
     // Reset is the recovery path: a leaked API token must not survive it; the mailbox chose this password.

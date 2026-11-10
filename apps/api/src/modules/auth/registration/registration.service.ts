@@ -1,8 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import {
-  hashPassword,
   passwordProblems,
+  Passwords,
   PWNED_PASSWORD_PROBLEM,
   PwnedPasswordService,
   sha256,
@@ -52,6 +52,7 @@ export class RegistrationService {
   constructor(
     private readonly users: UsersRepository,
     private readonly pwned: PwnedPasswordService,
+    private readonly passwords: Passwords,
     private readonly rateLimit: RateLimitService,
     private readonly activation: ActivationService,
     private readonly organizationPoints: OrganizationPointsService,
@@ -298,7 +299,7 @@ export class RegistrationService {
       },
     ip: string,
   ): Promise<UserDocument> {
-    const hashed = await hashPassword(password, { requester: ip });
+    const hashed = await this.passwords.hash(password, ip);
     try {
       return await this.insertWithinSlots({ ...fields, password: hashed });
     } catch (error) {

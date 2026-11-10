@@ -1,12 +1,12 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { Inject, Injectable } from '@nestjs/common';
-import { ENV } from '@libs/common';
+import { ENV, TUNING } from '@libs/common';
 import type { WorkerConfig } from '@libs/common';
 import { contestDataPath, matchesGlob } from '@libs/contests';
 import type { ContestDataJob } from '@libs/contests';
 import { ContestDataRepository } from './contest-data.repository';
-import { CONTEST_DATA_LIMITS, ContestDataError, planEntries } from './data-zip';
-import type { ContestDataLimits } from './data-zip';
+import { ContestDataError, planEntries } from './data-zip';
+import type { ContestDataTuning } from './data-zip';
 import { chunkedSources, writeZipInPlace } from '../lazy-zip';
 
 @Injectable()
@@ -14,7 +14,7 @@ export class ContestDataService {
   constructor(
     private readonly repository: ContestDataRepository,
     @Inject(ENV) private readonly env: WorkerConfig,
-    @Inject(CONTEST_DATA_LIMITS) private readonly limits: ContestDataLimits,
+    @Inject(TUNING) private readonly tuning: ContestDataTuning,
   ) {}
 
   /** Legacy `prepare_contest_data`. The previous zip goes first; the new one is written beside it and renamed into place. Returns the entry count. */
@@ -39,24 +39,24 @@ export class ContestDataService {
       problems,
       results,
     );
-    if (rows.length > this.limits.maxEntries)
+    if (rows.length > this.tuning.contestDataLimits.maxEntries)
       throw new ContestDataError(
-        `More than ${this.limits.maxEntries} submissions; narrow the filter`,
+        `More than ${this.tuning.contestDataLimits.maxEntries} submissions; narrow the filter`,
       );
     const entries = planEntries(rows);
     await writeZipInPlace(
       entries.map((entry) => entry.name),
       chunkedSources(
         entries.map((entry) => entry.submissionId),
-        this.limits.sourceChunk,
+        this.tuning.contestDataLimits.sourceChunk,
         (ids) => this.repository.sources(ids),
       ),
       {
         path,
-        maxBytes: this.limits.maxBytes,
+        maxBytes: this.tuning.contestDataLimits.maxBytes,
         tooLarge: () =>
           new ContestDataError(
-            `The sources pass ${this.limits.maxBytes} bytes; narrow the filter`,
+            `The sources pass ${this.tuning.contestDataLimits.maxBytes} bytes; narrow the filter`,
           ),
       },
     );

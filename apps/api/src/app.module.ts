@@ -36,10 +36,11 @@ import { UserActivityModule } from './modules/user-activity/user-activity.module
 import { ShortLinksModule } from './modules/short-links/short-links.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { HealthController } from './health.controller';
+import { apiTuning } from './api-tuning';
 
 @Module({
   imports: [
-    EnvModule.forRoot(apiConfig),
+    EnvModule.forRoot(apiConfig, apiTuning),
     DatabaseModule.forRoot(ENV),
     RedisModule,
     SettingsModule,

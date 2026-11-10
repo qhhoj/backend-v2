@@ -22,7 +22,6 @@ import { PNG } from '@libs/problems/testing';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import { PolygonImportProcessor } from '../src/jobs/polygon-import/polygon-import.processor';
 import { PolygonImportRepository } from '../src/jobs/polygon-import/polygon-import.repository';
-import { IMPORT_DATA_LOCK } from '../src/jobs/polygon-import/polygon-import.service';
 import { seedGraded, seedUser } from './effects-fixtures';
 import { buildPolygonPackage, properties } from './polygon-fixtures';
 import type { PolygonFixture } from './polygon-fixtures';
@@ -1057,8 +1056,8 @@ describe('PolygonImportProcessor', () => {
       const before = (await worker.problems.findOne({ code: 'locked' }))!;
       const filesBefore = readdirSync(dataDirectory('locked')).sort();
       const shortWait = jest.replaceProperty(
-        IMPORT_DATA_LOCK,
-        'waitSeconds',
+        worker.tuning,
+        'importDataLockSeconds',
         0.5,
       );
       const { held, release } = await holdDataLock('locked');

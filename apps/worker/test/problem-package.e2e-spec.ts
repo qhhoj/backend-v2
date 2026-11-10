@@ -15,7 +15,6 @@ import {
   ProblemDataFilesService,
 } from '@libs/problems';
 import {
-  PACKAGE_LIMITS,
   DEFAULT_PACKAGE_LIMITS,
   PackageTooLargeError,
 } from '../src/jobs/problem-package/package-zip';
@@ -99,7 +98,7 @@ describe('problem package build', () => {
 
   beforeAll(async () => {
     worker = await setupWorkerTest({
-      overrides: [{ provide: PACKAGE_LIMITS, useValue: limits }],
+      tuning: { packageLimits: limits },
     });
     service = worker.module.get(ProblemPackageService);
     cache = worker.module.get(PackageCacheService);

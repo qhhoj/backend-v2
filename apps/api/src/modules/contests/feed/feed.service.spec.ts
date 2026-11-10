@@ -24,7 +24,9 @@ describe('FeedService size check', () => {
       allSubmissions: jest.fn().mockResolvedValue([]),
       changedSubmissions: jest.fn().mockResolvedValue([]),
     };
-    feeds = new FeedService(data as unknown as FeedDataRepository, limits);
+    feeds = new FeedService(data as unknown as FeedDataRepository, {
+      feedLimits: limits,
+    });
   });
 
   it('refuses a stream whose contest outgrew the cap before the periodic full reload reads any row', async () => {

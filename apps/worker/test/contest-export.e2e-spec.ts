@@ -18,7 +18,6 @@ import { ContestExportRepository } from '../src/jobs/contest-export/contest-expo
 import { ContestExportService } from '../src/jobs/contest-export/contest-export.service';
 import { ContestZipSweepService } from '../src/jobs/contest-export/contest-zip-sweep.service';
 import {
-  CONTEST_EXPORT_LIMITS,
   ContestExportError,
   DEFAULT_CONTEST_EXPORT_LIMITS,
 } from '../src/jobs/contest-export/contest-export.limits';
@@ -78,7 +77,7 @@ describe('contest export', () => {
 
   beforeAll(async () => {
     worker = await setupWorkerTest({
-      overrides: [{ provide: CONTEST_EXPORT_LIMITS, useValue: limits }],
+      tuning: { contestExportLimits: limits },
     });
     service = worker.module.get(ContestExportService);
     cpp = await worker.languages.create({

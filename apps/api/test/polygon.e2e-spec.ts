@@ -8,7 +8,7 @@ import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import { newId, PolygonSyncRun, uuidStr } from '@libs/database';
 import type { PolygonLink } from '@libs/database';
-import { POLYGON_FETCH, syncJobId, problemJobs } from '@libs/problems';
+import { syncJobId, problemJobs } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { buildZip, FakePolygon } from '@libs/problems/testing';
 import {
@@ -142,7 +142,7 @@ describe('Polygon routes', () => {
 
   beforeAll(async () => {
     api = await setupApiTest({
-      overrides: [{ provide: POLYGON_FETCH, useValue: polygon.fetch }],
+      tuning: { polygonFetch: polygon.fetch },
     });
     catalog = await seedCatalog(api);
     queue = api.app.get(getQueueToken(problemJobs.polygonImport.queue));

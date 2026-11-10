@@ -53,9 +53,14 @@ export const TEST_ENV = {
   SITE_URL: 'http://localhost:5173',
   COOKIE_SECURE: 'false',
   LOG_LEVEL: 'silent',
-  DISABLE_MONGODB_STREAM: 'true',
-  /** New hashes and the rehash floor at `createUser`'s cost, not 870k rounds per login (`passwordIterations`). */
-  TEST_PASSWORD_ITERATIONS: '1000',
+};
+
+/** What every app spec replaces in its process's tuning (`TUNING`). */
+export const TEST_TUNING = {
+  /** The in-memory replica set run follows no change streams; specs resync the queriers they wrote under. */
+  mongoStreams: false,
+  /** New hashes and the rehash floor at `createUser`'s cost, not 870k rounds per login. */
+  passwordIterations: 1000,
 };
 
 /** Polls `condition` every 20 ms until it holds; throws after `timeoutMs`. */

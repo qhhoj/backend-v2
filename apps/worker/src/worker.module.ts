@@ -36,14 +36,14 @@ import { ContributionPointsModule } from './jobs/contribution-points/contributio
 import { DiscordWebhookModule } from './jobs/discord-webhook/discord-webhook.module';
 import { NotificationFanoutModule } from './jobs/notification-fanout/notification-fanout.module';
 import { NotificationTrimModule } from './jobs/notification-trim/notification-trim.module';
+import { workerTuning } from './worker-tuning';
 
 @Module({
   imports: [
-    EnvModule.forRoot(workerConfig),
+    EnvModule.forRoot(workerConfig, workerTuning),
     DatabaseModule.forRoot(ENV),
     StorageModule,
     QueueModule,
-    // Keep RedisModule before the job modules: Nest runs shutdown hooks in module order, and running jobs still use REDIS (test/shutdown-order.e2e-spec.ts pins it).
     RedisModule,
     ScheduleModule.forRoot(),
     SettingsModule,

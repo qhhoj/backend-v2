@@ -258,7 +258,7 @@ export type FakePolygonReply =
   | { zip: Buffer }
   | { status: number; page?: string; contentType?: string };
 
-/** A stand-in for Polygon's HTTP API, given to the client as its `fetch`; it records every call's method and form fields. */
+/** A stand-in for Polygon's HTTP API, given to the client as its `polygonFetch`; it records every call's method and form fields. */
 export class FakePolygon {
   readonly calls: Array<{ method: string; params: Record<string, string> }> =
     [];

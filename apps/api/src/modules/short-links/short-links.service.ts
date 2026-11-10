@@ -8,6 +8,7 @@ import {
   Paginated,
   RateLimitService,
   retryOnDuplicateKey,
+  TUNING,
 } from '@libs/common';
 import type { ShortLink } from '@libs/database';
 import type {
@@ -25,8 +26,8 @@ import {
   VISIT_LIMIT,
   VISIT_WINDOW_SECONDS,
 } from './rate-limits';
-import { isReservedShortCode, SHORT_CODE_SOURCE } from './short-code';
-import type { ShortCodeSource } from './short-code';
+import { isReservedShortCode } from './short-code';
+import type { ShortCodeTuning } from './short-code';
 import { shortTargetOf } from './short-target';
 import { ShortLinksRepository } from './short-links.repository';
 
@@ -46,7 +47,7 @@ export class ShortLinksService {
   constructor(
     private readonly links: ShortLinksRepository,
     private readonly rateLimit: RateLimitService,
-    @Inject(SHORT_CODE_SOURCE) private readonly codes: ShortCodeSource,
+    @Inject(TUNING) private readonly tuning: ShortCodeTuning,
   ) {}
 
   /** Anyone signed in gets the one automatic link of an allowed path (idempotent); staff may pick the code and an expiry and have no daily quota. */
@@ -141,7 +142,7 @@ export class ShortLinksService {
         () =>
           this.links.create({
             ...fields,
-            code: chosenCode ?? this.codes.next(),
+            code: chosenCode ?? this.tuning.shortCodes.next(),
           }),
         attempts,
         'code',

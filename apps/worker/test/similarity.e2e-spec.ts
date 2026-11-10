@@ -600,7 +600,7 @@ describe('similarity run', () => {
       .spyOn(stoppingEngine, 'compare')
       .mockImplementation((request) => {
         const comparison = realCompare(request);
-        stoppingEngine.beforeApplicationShutdown();
+        stoppingEngine.onModuleDestroy();
         return comparison;
       });
     const finish = jest.spyOn(repository, 'finish');

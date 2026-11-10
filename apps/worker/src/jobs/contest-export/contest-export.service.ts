@@ -1,15 +1,12 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { Inject, Injectable } from '@nestjs/common';
-import { ENV } from '@libs/common';
+import { ENV, TUNING } from '@libs/common';
 import type { WorkerConfig } from '@libs/common';
 import { contestExportPath } from '@libs/contests';
 import type { ContestExportJob } from '@libs/contests';
 import { chunkedSources, writeZipInPlace } from '../lazy-zip';
-import {
-  CONTEST_EXPORT_LIMITS,
-  ContestExportError,
-} from './contest-export.limits';
-import type { ContestExportLimits } from './contest-export.limits';
+import { ContestExportError } from './contest-export.limits';
+import type { ContestExportTuning } from './contest-export.limits';
 import { ContestExportRepository } from './contest-export.repository';
 import { exportCsv } from './export-csv';
 import type { ExportRow } from './export-csv';
@@ -22,7 +19,7 @@ export class ContestExportService {
   constructor(
     private readonly repository: ContestExportRepository,
     @Inject(ENV) private readonly env: WorkerConfig,
-    @Inject(CONTEST_EXPORT_LIMITS) private readonly limits: ContestExportLimits,
+    @Inject(TUNING) private readonly tuning: ContestExportTuning,
   ) {}
 
   /** `submissions.csv` first, then `sources/<problem code>/<submission id>.<ext>` for every row whose problem was not deleted since the contest (a deleted problem's sources are for their owners and staff only, and the zip goes to any editor). The previous zip goes first; the new one is written beside it and renamed into place. Returns the entry count. */
@@ -51,7 +48,7 @@ export class ContestExportService {
     ];
     const source = chunkedSources(
       withSource.map((row) => row.submissionId),
-      this.limits.sourceChunk,
+      this.tuning.contestExportLimits.sourceChunk,
       (ids) => this.repository.sources(ids),
     );
     const csv = exportCsv(rows);
@@ -60,10 +57,10 @@ export class ContestExportService {
       (index) => (index === 0 ? Promise.resolve(csv) : source(index - 1)),
       {
         path,
-        maxBytes: this.limits.maxBytes,
+        maxBytes: this.tuning.contestExportLimits.maxBytes,
         tooLarge: () =>
           new ContestExportError(
-            `The export passes ${this.limits.maxBytes} bytes`,
+            `The export passes ${this.tuning.contestExportLimits.maxBytes} bytes`,
           ),
       },
     );
@@ -72,9 +69,9 @@ export class ContestExportService {
 
   private async assertWithinEntryCap(contestId: string): Promise<void> {
     const count = await this.repository.countSubmissions(contestId);
-    if (count + 1 > this.limits.maxEntries)
+    if (count + 1 > this.tuning.contestExportLimits.maxEntries)
       throw new ContestExportError(
-        `Too many submissions to export (more than ${this.limits.maxEntries - 1})`,
+        `Too many submissions to export (more than ${this.tuning.contestExportLimits.maxEntries - 1})`,
       );
   }
 }

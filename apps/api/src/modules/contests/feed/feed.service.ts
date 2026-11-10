@@ -8,7 +8,7 @@ import {
   problemLabel,
 } from '@libs/contests';
 import type { FeedEvent, FeedInput } from '@libs/contests';
-import { AppError, MINUTE_MS } from '@libs/common';
+import { AppError, MINUTE_MS, TUNING } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { FeedLineResponse } from './dto/feed-frame.response';
 import type { FeedContext } from './feed-auth.service';
@@ -24,7 +24,6 @@ export const feedLineOf = (event: FeedEvent): FeedLineResponse => ({
   token: event.token,
 });
 
-export const FEED_LIMITS = Symbol('FEED_LIMITS');
 export interface FeedLimits {
   /** The feed is built in memory: refuse a contest past this many submissions. */
   maxSubmissions: number;
@@ -35,6 +34,9 @@ export const DEFAULT_FEED_LIMITS: FeedLimits = {
   maxSubmissions: 100_000,
   maxStreamSubmissions: 20_000,
 };
+export interface FeedTuning {
+  feedLimits: FeedLimits;
+}
 
 /** What one stream remembers between ticks, so a tick reads only what changed. */
 export interface FeedSession {
@@ -114,7 +116,7 @@ const problemsOf = (
 export class FeedService {
   constructor(
     private readonly data: FeedDataRepository,
-    @Inject(FEED_LIMITS) private readonly limits: FeedLimits,
+    @Inject(TUNING) private readonly tuning: FeedTuning,
   ) {}
 
   /** Gated: `frozen-until-release`, not released for the current freeze, and the contest frozen now (a freeze outlives the end until an editor lifts it). With a `session` this is one stream tick. */
@@ -163,13 +165,13 @@ export class FeedService {
     isStream: boolean,
   ): Promise<void> {
     const count = await this.data.countContestSubmissions(contestId);
-    if (isStream && count > this.limits.maxStreamSubmissions)
+    if (isStream && count > this.tuning.feedLimits.maxStreamSubmissions)
       throw new AppError(
         'feed_too_large_for_stream',
         409,
         'This contest has too many submissions to stream; poll the snapshot',
       );
-    if (count > this.limits.maxSubmissions)
+    if (count > this.tuning.feedLimits.maxSubmissions)
       throw new AppError(
         'feed_too_large',
         409,
@@ -200,7 +202,7 @@ export class FeedService {
 
   /** A contest that grew past the stream cap after the stream opened stops the stream. */
   private assertStreamable(count: number): void {
-    if (count > this.limits.maxStreamSubmissions)
+    if (count > this.tuning.feedLimits.maxStreamSubmissions)
       throw new AppError(
         'feed_too_large_for_stream',
         409,

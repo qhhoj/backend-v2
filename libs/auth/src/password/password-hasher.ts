@@ -46,13 +46,6 @@ const MIN_SALT_LENGTH = 22;
 
 export const PASSWORD_ITERATIONS = 870_000;
 
-/** The cost of a new hash and the floor below which a login rehashes: `PASSWORD_ITERATIONS`, unless a jest run sets `TEST_PASSWORD_ITERATIONS` (ignored outside jest) so e2e logins skip the 870k rounds. */
-export function passwordIterations(): number {
-  const override = Number(process.env.TEST_PASSWORD_ITERATIONS);
-  return process.env.JEST_WORKER_ID && override > 0
-    ? override
-    : PASSWORD_ITERATIONS;
-}
 const DUMMY_SALT = 'dummysaltdummysaltdumm';
 /** Well-formed hash no password matches; verifying against it keeps unknown-user logins as slow as real ones. */
 export const DUMMY_PASSWORD_HASH = `pbkdf2_sha256$${PASSWORD_ITERATIONS}$${DUMMY_SALT}$${'A'.repeat(43)}=`;
@@ -60,23 +53,24 @@ export const DUMMY_PASSWORD_HASH = `pbkdf2_sha256$${PASSWORD_ITERATIONS}$${DUMMY
 /**
  * `requester` (the client IP) queues the check in that client's lane: slots go to the networks in turn and, inside one,
  * to its clients in turn; a client holding `MAX_HASHES_PER_REQUESTER` checks is refused (429) at once. Without it the
- * check has a lane of its own.
+ * check has a lane of its own. A malformed hash costs `iterations` rounds, as a real check would.
  */
 export async function verifyPassword(
   password: string,
   encoded: string,
   requester?: string,
+  iterations = PASSWORD_ITERATIONS,
 ): Promise<boolean> {
   const [algorithmName, iterationText, salt, expectedText, ...extra] =
     encoded.split('$');
   const algorithm = ALGORITHMS.get(algorithmName);
-  const iterations = Number(iterationText);
+  const hashIterations = Number(iterationText);
   if (
     extra.length ||
     !algorithm ||
     !/^\d+$/.test(iterationText) ||
-    iterations < 1 ||
-    iterations > MAX_ITERATIONS ||
+    hashIterations < 1 ||
+    hashIterations > MAX_ITERATIONS ||
     !salt ||
     !expectedText
   ) {
@@ -85,7 +79,7 @@ export async function verifyPassword(
       requester,
       password,
       DUMMY_SALT,
-      passwordIterations(),
+      iterations,
       32,
       'sha256',
     );
@@ -96,7 +90,7 @@ export async function verifyPassword(
     requester,
     password,
     salt,
-    iterations,
+    hashIterations,
     algorithm.keyLength,
     algorithm.digest,
   );
@@ -113,7 +107,7 @@ export async function hashPassword(
   password: string,
   {
     requester,
-    iterations = passwordIterations(),
+    iterations = PASSWORD_ITERATIONS,
   }: { requester?: string; iterations?: number } = {},
 ): Promise<string> {
   const salt = randomBytes(32)
@@ -131,11 +125,15 @@ export async function hashPassword(
   return `pbkdf2_sha256$${iterations}$${salt}$${hash.toString('base64')}`;
 }
 
-export function needsRehash(encoded: string): boolean {
-  const [algorithm, iterations, salt = ''] = encoded.split('$');
+/** `iterations` is the cost of a new hash, the floor below which a login rehashes. */
+export function needsRehash(
+  encoded: string,
+  iterations = PASSWORD_ITERATIONS,
+): boolean {
+  const [algorithm, hashIterations, salt = ''] = encoded.split('$');
   return (
     algorithm !== 'pbkdf2_sha256' ||
-    Number(iterations) < passwordIterations() ||
+    Number(hashIterations) < iterations ||
     salt.length < MIN_SALT_LENGTH
   );
 }

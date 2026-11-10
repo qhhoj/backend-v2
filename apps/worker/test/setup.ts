@@ -1,48 +1,29 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
+import { getConnectionToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
-import { TEST_ENV, TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
+import { TUNING } from '@libs/common';
+import {
+  TEST_ENV,
+  TEST_REDIS_URL,
+  TEST_TUNING,
+  waitUntil,
+} from '@libs/common/testing';
 import { communityJobs } from '@libs/community';
 import { contestJobs } from '@libs/contests';
 import { judgingJobs } from '@libs/judging';
-import {
-  Contest,
-  ContestAnnouncement,
-  ContestGhost,
-  ContestReplayChunk,
-  ContestBalloon,
-  ContestFeedKey,
-  ContestReplayHead,
-  Notification,
-  SimilarityPair,
-  SimilarityRun,
-  ContestParticipation,
-  ContestSubmission,
-  Language,
-  BlogPost,
-  Comment,
-  Organization,
-  Problem,
-  ProblemGroup,
-  ProblemType,
-  Rating,
-  Submission,
-  TagProblem,
-  SubmissionSource,
-  Ticket,
-  User,
-} from '@libs/database';
-import { startMongo } from '@libs/database/testing';
+import { modelsOf, startMongo } from '@libs/database/testing';
 import { SettingsService } from '@libs/settings';
 import type { SettingKey } from '@libs/settings';
 import Redis from 'ioredis';
 import type { Queue } from 'bullmq';
-import type { Connection, Model } from 'mongoose';
+import type { Connection } from 'mongoose';
 import { WorkerModule } from '../src/worker.module';
+import { workerTuning } from '../src/worker-tuning';
+import type { WorkerTuning } from '../src/worker-tuning';
 
 const temporaryDirectory = (prefix: string) =>
   mkdtempSync(join(tmpdir(), prefix));
@@ -50,8 +31,11 @@ const temporaryDirectory = (prefix: string) =>
 export async function setupWorkerTest({
   overrides = [],
   env = {},
+  tuning: replaced = {},
   seedBeforeBoot,
 }: {
+  /** Parts of the worker tuning to replace; the whole object is `tuning` on the result, which a spec may change mid-run. */
+  tuning?: Partial<WorkerTuning>;
   /** Runs against the empty database and Redis before the module boots (no indexes yet, a queued job already waiting); Redis is then not flushed after boot. */
   seedBeforeBoot?: (mongoUri: string) => Promise<void>;
   /** Extra environment variables (e.g. render limits), applied before the module compiles. */
@@ -85,7 +69,10 @@ export async function setupWorkerTest({
     await redis.flushdb();
     await redis.quit();
   };
-  const builder = Test.createTestingModule({ imports: [WorkerModule] });
+  const tuning: WorkerTuning = { ...workerTuning, ...TEST_TUNING, ...replaced };
+  const builder = Test.createTestingModule({ imports: [WorkerModule] })
+    .overrideProvider(TUNING)
+    .useValue(tuning);
   for (const { provide, useValue } of overrides)
     builder.overrideProvider(provide).useValue(useValue);
   let testingModule: TestingModule | undefined;
@@ -128,59 +115,8 @@ export async function setupWorkerTest({
   const ready = testingModule;
   return {
     module: ready,
-    problems: ready.get<Model<Problem>>(getModelToken(Problem.name)),
-    languages: ready.get<Model<Language>>(getModelToken(Language.name)),
-    users: ready.get<Model<User>>(getModelToken(User.name)),
-    problemTypes: ready.get<Model<ProblemType>>(
-      getModelToken(ProblemType.name),
-    ),
-    problemGroups: ready.get<Model<ProblemGroup>>(
-      getModelToken(ProblemGroup.name),
-    ),
-    submissions: ready.get<Model<Submission>>(getModelToken(Submission.name)),
-    submissionSources: ready.get<Model<SubmissionSource>>(
-      getModelToken(SubmissionSource.name),
-    ),
-    contests: ready.get<Model<Contest>>(getModelToken(Contest.name)),
-    participations: ready.get<Model<ContestParticipation>>(
-      getModelToken(ContestParticipation.name),
-    ),
-    contestSubmissions: ready.get<Model<ContestSubmission>>(
-      getModelToken(ContestSubmission.name),
-    ),
-    balloonDeliveries: ready.get<Model<ContestBalloon>>(
-      getModelToken(ContestBalloon.name),
-    ),
-    feedKeys: ready.get<Model<ContestFeedKey>>(
-      getModelToken(ContestFeedKey.name),
-    ),
-    replayHeads: ready.get<Model<ContestReplayHead>>(
-      getModelToken(ContestReplayHead.name),
-    ),
-    replayChunks: ready.get<Model<ContestReplayChunk>>(
-      getModelToken(ContestReplayChunk.name),
-    ),
-    ghosts: ready.get<Model<ContestGhost>>(getModelToken(ContestGhost.name)),
-    ratings: ready.get<Model<Rating>>(getModelToken(Rating.name)),
-    similarityRuns: ready.get<Model<SimilarityRun>>(
-      getModelToken(SimilarityRun.name),
-    ),
-    similarityPairs: ready.get<Model<SimilarityPair>>(
-      getModelToken(SimilarityPair.name),
-    ),
-    organizations: ready.get<Model<Organization>>(
-      getModelToken(Organization.name),
-    ),
-    blogPosts: ready.get<Model<BlogPost>>(getModelToken(BlogPost.name)),
-    comments: ready.get<Model<Comment>>(getModelToken(Comment.name)),
-    tickets: ready.get<Model<Ticket>>(getModelToken(Ticket.name)),
-    notifications: ready.get<Model<Notification>>(
-      getModelToken(Notification.name),
-    ),
-    announcements: ready.get<Model<ContestAnnouncement>>(
-      getModelToken(ContestAnnouncement.name),
-    ),
-    tagProblems: ready.get<Model<TagProblem>>(getModelToken(TagProblem.name)),
+    tuning,
+    ...modelsOf(ready),
     db: ready.get<Connection>(getConnectionToken()).db!,
     ...roots,
     /** Writes through the real service, so readers see it at once. */

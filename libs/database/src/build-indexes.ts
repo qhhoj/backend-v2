@@ -1,5 +1,5 @@
 import type { Connection } from 'mongoose';
-import { SCHEMAS } from './schemas';
+import { SCHEMAS } from './schemas/models';
 
 /**
  * Builds every schema's indexes, one model at a time; the deploy runs it with the new image before the restart, so no

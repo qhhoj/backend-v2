@@ -3,12 +3,13 @@ import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { setupWorkerTest } from './setup';
 
-/** The shared `REDIS` client serves running jobs (RedisCoalesce, locks, watermarks), so it may only quit after every BullMQ worker finished its job. Nest orders the two shutdown hooks by module position, which nothing else pins down. */
+/** The shared `REDIS` client serves running jobs (RedisCoalesce, locks, watermarks), so it may only quit after every BullMQ worker finished its job (`JobWorkersDrain`), wherever the modules sit in the list. */
 describe('worker shutdown order', () => {
   afterEach(() => jest.restoreAllMocks());
 
   it('quits the shared Redis client only after every BullMQ worker has closed', async () => {
     const events: string[] = [];
+    const closed = new Set<Worker>();
     // eslint-disable-next-line @typescript-eslint/unbound-method -- re-applied with the worker as `this` below
     const close = Worker.prototype.close;
     jest.spyOn(Worker.prototype, 'close').mockImplementation(async function (
@@ -16,7 +17,9 @@ describe('worker shutdown order', () => {
       force?: boolean,
     ) {
       await close.call(this, force);
-      events.push('worker closed');
+      // Closing again (BullMQ's own hook after the drain) returns the first close's promise: count each worker once.
+      if (!closed.has(this)) events.push('worker closed');
+      closed.add(this);
     });
     const worker = await setupWorkerTest();
     const redis = worker.module.get<Redis>(REDIS);

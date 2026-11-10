@@ -2,72 +2,27 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Type } from '@nestjs/common';
-import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
+import { ModulesContainer } from '@nestjs/core';
+import { getConnectionToken } from '@nestjs/mongoose';
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { hashPassword, SessionService } from '@libs/auth';
-import { MAILER, REDIS } from '@libs/common';
-import { createTestApp, InMemoryMailer, TEST_ENV } from '@libs/common/testing';
+import { BaseCatalogQuerier, MAILER, REDIS, TUNING } from '@libs/common';
 import {
-  Contest,
-  ContestAnnouncement,
-  SimilarityPair,
-  SimilarityRun,
-  Flatpage,
-  GeneralIssue,
-  MiscConfig,
-  Notification,
-  Ticket,
-  TicketCannedReply,
-  UserActivity,
-  UserSession,
-  ContestBalloon,
-  ContestFeedKey,
-  ContestOfficialRanking,
-  ContestGhost,
-  ContestReplayChunk,
-  ContestReplayHead,
-  ContestParticipation,
-  ContestPublicRankingLink,
-  ContestSubmission,
-  ContestTag,
-  Group,
-  Judge,
-  Language,
-  License,
-  BlogPost,
-  BlogVote,
-  Comment,
-  CommentLock,
-  CommentVote,
-  Organization,
-  OrganizationRequest,
-  Problem,
-  ProblemGroup,
-  ProblemType,
-  Rating,
-  Revision,
-  Submission,
-  SubmissionSource,
-  Tag,
-  TagGroup,
-  TagProblem,
-  User,
-} from '@libs/database';
-import { startMongo } from '@libs/database/testing';
+  createTestApp,
+  InMemoryMailer,
+  TEST_ENV,
+  TEST_TUNING,
+} from '@libs/common/testing';
+import type { User } from '@libs/database';
+import { modelsOf, startMongo } from '@libs/database/testing';
 import { SettingsQuerier, SettingsService } from '@libs/settings';
 import type { SettingKey } from '@libs/settings';
 import Redis from 'ioredis';
 import type { Connection, Model } from 'mongoose';
 import request from 'supertest';
+import { apiTuning } from '../src/api-tuning';
+import type { ApiTuning } from '../src/api-tuning';
 import { AppModule } from '../src/app.module';
-import { LanguagesQuerier } from '../src/modules/problems/catalog/languages.querier';
-import { LicensesQuerier } from '../src/modules/problems/catalog/licenses.querier';
-import { ProblemGroupsQuerier } from '../src/modules/problems/catalog/problem-groups.querier';
-import { ProblemTypesQuerier } from '../src/modules/problems/catalog/problem-types.querier';
-import { TagGroupsQuerier } from '../src/modules/tags/tag-groups.querier';
-import { TagsQuerier } from '../src/modules/tags/tags.querier';
-import { ContestTagsQuerier } from '../src/modules/contests/tags/contest-tags.querier';
-import { MiscConfigQuerier } from '../src/modules/site/public/misc-config.querier';
 import { setupApiDocs } from '../src/api-docs';
 import { setupOpenApi } from '../src/openapi';
 
@@ -81,13 +36,17 @@ export async function setupApiTest({
   controllers = [],
   overrides = [],
   env = {},
+  tuning: replaced = {},
 }: {
   controllers?: Type[];
   overrides?: Array<{ provide: unknown; useValue: unknown }>;
   /** Extra environment variables, applied after the defaults. */
   env?: Record<string, string>;
+  /** Parts of the api tuning to replace; the whole object is `tuning` on the result, which a spec may change mid-run. */
+  tuning?: Partial<ApiTuning>;
 } = {}) {
   const mailer = new InMemoryMailer();
+  const tuning: ApiTuning = { ...apiTuning, ...TEST_TUNING, ...replaced };
   const replSet = await startMongo();
   const mediaRoot = mkdtempSync(join(tmpdir(), 'qhhoj-media-'));
   const problemDataRoot = mkdtempSync(join(tmpdir(), 'qhhoj-problem-data-'));
@@ -120,7 +79,11 @@ export async function setupApiTest({
           setupOpenApi(app);
           setupApiDocs(app);
         },
-        overrides: [{ provide: MAILER, useValue: mailer }, ...overrides],
+        overrides: [
+          { provide: MAILER, useValue: mailer },
+          { provide: TUNING, useValue: tuning },
+          ...overrides,
+        ],
       },
     );
     await app.listen(0, '127.0.0.1');
@@ -144,120 +107,19 @@ export async function setupApiTest({
   return {
     app: readyApp,
     http: () => request(readyApp.getHttpServer()),
-    users: readyApp.get<Model<User>>(getModelToken(User.name)),
-    groups: readyApp.get<Model<Group>>(getModelToken(Group.name)),
-    problemTypes: readyApp.get<Model<ProblemType>>(
-      getModelToken(ProblemType.name),
-    ),
-    problemGroups: readyApp.get<Model<ProblemGroup>>(
-      getModelToken(ProblemGroup.name),
-    ),
-    problems: readyApp.get<Model<Problem>>(getModelToken(Problem.name)),
-    revisions: readyApp.get<Model<Revision>>(getModelToken(Revision.name)),
-    licenses: readyApp.get<Model<License>>(getModelToken(License.name)),
-    tagGroups: readyApp.get<Model<TagGroup>>(getModelToken(TagGroup.name)),
-    tags: readyApp.get<Model<Tag>>(getModelToken(Tag.name)),
-    tagProblems: readyApp.get<Model<TagProblem>>(
-      getModelToken(TagProblem.name),
-    ),
-    languages: readyApp.get<Model<Language>>(getModelToken(Language.name)),
-    judges: readyApp.get<Model<Judge>>(getModelToken(Judge.name)),
-    submissions: readyApp.get<Model<Submission>>(
-      getModelToken(Submission.name),
-    ),
-    submissionSources: readyApp.get<Model<SubmissionSource>>(
-      getModelToken(SubmissionSource.name),
-    ),
-    contests: readyApp.get<Model<Contest>>(getModelToken(Contest.name)),
-    participations: readyApp.get<Model<ContestParticipation>>(
-      getModelToken(ContestParticipation.name),
-    ),
-    contestTags: readyApp.get<Model<ContestTag>>(
-      getModelToken(ContestTag.name),
-    ),
-    contestSubmissions: readyApp.get<Model<ContestSubmission>>(
-      getModelToken(ContestSubmission.name),
-    ),
-    ratings: readyApp.get<Model<Rating>>(getModelToken(Rating.name)),
-    similarityRuns: readyApp.get<Model<SimilarityRun>>(
-      getModelToken(SimilarityRun.name),
-    ),
-    similarityPairs: readyApp.get<Model<SimilarityPair>>(
-      getModelToken(SimilarityPair.name),
-    ),
-    announcements: readyApp.get<Model<ContestAnnouncement>>(
-      getModelToken(ContestAnnouncement.name),
-    ),
-    rankingLinks: readyApp.get<Model<ContestPublicRankingLink>>(
-      getModelToken(ContestPublicRankingLink.name),
-    ),
-    officialRankings: readyApp.get<Model<ContestOfficialRanking>>(
-      getModelToken(ContestOfficialRanking.name),
-    ),
-    balloonDeliveries: readyApp.get<Model<ContestBalloon>>(
-      getModelToken(ContestBalloon.name),
-    ),
-    feedKeys: readyApp.get<Model<ContestFeedKey>>(
-      getModelToken(ContestFeedKey.name),
-    ),
-    replayHeads: readyApp.get<Model<ContestReplayHead>>(
-      getModelToken(ContestReplayHead.name),
-    ),
-    replayChunks: readyApp.get<Model<ContestReplayChunk>>(
-      getModelToken(ContestReplayChunk.name),
-    ),
-    ghosts: readyApp.get<Model<ContestGhost>>(getModelToken(ContestGhost.name)),
-    organizations: readyApp.get<Model<Organization>>(
-      getModelToken(Organization.name),
-    ),
-    organizationRequests: readyApp.get<Model<OrganizationRequest>>(
-      getModelToken(OrganizationRequest.name),
-    ),
-    blogPosts: readyApp.get<Model<BlogPost>>(getModelToken(BlogPost.name)),
-    blogVotes: readyApp.get<Model<BlogVote>>(getModelToken(BlogVote.name)),
-    comments: readyApp.get<Model<Comment>>(getModelToken(Comment.name)),
-    commentVotes: readyApp.get<Model<CommentVote>>(
-      getModelToken(CommentVote.name),
-    ),
-    commentLocks: readyApp.get<Model<CommentLock>>(
-      getModelToken(CommentLock.name),
-    ),
-    tickets: readyApp.get<Model<Ticket>>(getModelToken(Ticket.name)),
-    ticketCannedReplies: readyApp.get<Model<TicketCannedReply>>(
-      getModelToken(TicketCannedReply.name),
-    ),
-    generalIssues: readyApp.get<Model<GeneralIssue>>(
-      getModelToken(GeneralIssue.name),
-    ),
-    flatpages: readyApp.get<Model<Flatpage>>(getModelToken(Flatpage.name)),
-    miscConfigs: readyApp.get<Model<MiscConfig>>(
-      getModelToken(MiscConfig.name),
-    ),
-    userSessions: readyApp.get<Model<UserSession>>(
-      getModelToken(UserSession.name),
-    ),
-    notifications: readyApp.get<Model<Notification>>(
-      getModelToken(Notification.name),
-    ),
-    userActivities: readyApp.get<Model<UserActivity>>(
-      getModelToken(UserActivity.name),
-    ),
+    ...modelsOf(readyApp),
     db: readyApp.get<Connection>(getConnectionToken()).db!,
-    /** Streams are disabled in tests; call after inserting catalog rows. */
+    /** Streams are off in specs: call after inserting catalog rows. Resyncs every catalog querier the app registers. */
     resyncCatalog: async () => {
-      await Promise.all(
-        [
-          ProblemTypesQuerier,
-          ProblemGroupsQuerier,
-          LicensesQuerier,
-          LanguagesQuerier,
-          TagGroupsQuerier,
-          TagsQuerier,
-          ContestTagsQuerier,
-          MiscConfigQuerier,
-        ].map((querier) => readyApp.get(querier).resync()),
+      const queriers = [...readyApp.get(ModulesContainer).values()].flatMap(
+        ({ providers }) =>
+          [...providers.values()]
+            .map(({ instance }) => instance)
+            .filter((instance) => instance instanceof BaseCatalogQuerier),
       );
+      await Promise.all(queriers.map((querier) => querier.resync()));
     },
+    tuning,
     mediaRoot,
     problemDataRoot,
     pdfCacheRoot,
@@ -300,7 +162,7 @@ export async function setupApiTest({
 
 export type ApiTest = Awaited<ReturnType<typeof setupApiTest>>;
 
-/** Hashed at 1000 iterations, the e2e cost (`TEST_PASSWORD_ITERATIONS`): a login verifies it fast and does not rehash it. */
+/** Hashed at the e2e cost (`TEST_TUNING`): a login verifies it fast and does not rehash it. */
 export const createUser = async (
   users: Model<User>,
   {
@@ -313,7 +175,9 @@ export const createUser = async (
     email: 'alice@example.com',
     isActive: true,
     ...fields,
-    password: await hashPassword(password, { iterations: 1000 }),
+    password: await hashPassword(password, {
+      iterations: TEST_TUNING.passwordIterations,
+    }),
   });
 
 export const sessionCookie = (id: string) => `qhhoj_session=${id}`;

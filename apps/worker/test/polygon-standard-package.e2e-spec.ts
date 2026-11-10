@@ -9,7 +9,7 @@ import { waitUntil } from '@libs/common/testing';
 import { newId, PolygonSyncRun, TestGeneration } from '@libs/database';
 import { generationBucket } from '@libs/judging';
 import type { GenerationPlan } from '@libs/judging';
-import { listZipEntries, POLYGON_FETCH } from '@libs/problems';
+import { listZipEntries } from '@libs/problems';
 import type { ImportProgress, PolygonImportJob } from '@libs/problems';
 import {
   buildZip,
@@ -186,10 +186,8 @@ describe('Polygon standard package import', () => {
 
   beforeAll(async () => {
     worker = await setupWorkerTest({
-      overrides: [
-        { provide: PandocService, useValue: fakePandoc },
-        { provide: POLYGON_FETCH, useValue: polygon.fetch },
-      ],
+      tuning: { polygonFetch: polygon.fetch },
+      overrides: [{ provide: PandocService, useValue: fakePandoc }],
     });
     processor = worker.module.get(PolygonImportProcessor);
     generations = worker.module.get(getModelToken(TestGeneration.name));

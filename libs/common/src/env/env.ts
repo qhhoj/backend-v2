@@ -5,6 +5,13 @@ import type { EnvSource } from './env-reader';
 /** The loaded config of the running process (`EnvModule.forRoot`); a consumer types it as the parts it reads. */
 export const ENV = Symbol('ENV');
 
+/**
+ * The fixed values of the running process, declared once at its root (`EnvModule.forRoot`'s second argument): limits,
+ * costs and outbound clients production never varies and specs replace (`setupApiTest({ tuning })`). Never read from
+ * the environment. A consumer types it as the part it reads, as with `ENV`.
+ */
+export const TUNING = Symbol('TUNING');
+
 type IntersectionOf<Union> = (
   Union extends unknown ? (value: Union) => void : never
 ) extends (value: infer Intersection) => void
