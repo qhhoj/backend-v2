@@ -4,6 +4,7 @@ import { constantTimeEqual, sha256 } from '../crypto';
 
 /** The session keys of one user, so a password change or a ban can end them all. */
 export const userSessionsKey = (userId: string) => `user-sessions:${userId}`;
+export const userEpochKey = (userId: string) => `session-epoch:${userId}`;
 
 /**
  * Keys and stored values of sessions, both bound to `SESSION_SECRET`: the key is

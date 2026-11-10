@@ -163,6 +163,36 @@ describe('auth session endpoints', () => {
         new RegExp(`^pbkdf2_sha256\\$${PASSWORD_ITERATIONS}\\$`),
       );
     });
+    it('signs in two overlapping logins that both rehash the same weak hash', async () => {
+      await createUser(api.users, {
+        username: 'twin',
+        email: 'twin@example.com',
+      });
+      const repository = api.app.get(UsersRepository);
+      const original = repository.updatePasswordIfUnchanged.bind(repository);
+      let arrived = 0;
+      let openGate!: () => void;
+      const gate = new Promise<void>((resolve) => (openGate = resolve));
+      const spy = jest
+        .spyOn(repository, 'updatePasswordIfUnchanged')
+        .mockImplementation(async (id, expected, replacement) => {
+          arrived += 1;
+          if (arrived === 2) openGate();
+          await gate;
+          return original(id, expected, replacement);
+        });
+      try {
+        const send = () =>
+          api
+            .http()
+            .post(LOGIN)
+            .send({ username: 'twin', password: 'correct horse battery' });
+        const results = await Promise.all([send(), send()]);
+        expect(results.map((result) => result.status)).toEqual([200, 200]);
+      } finally {
+        spy.mockRestore();
+      }
+    });
     it('refuses banned and inactive accounts before any rehash', async () => {
       for (const username of ['carol', 'dave']) {
         const before = (await api.users.findOne({ username }))!.password;
@@ -175,7 +205,7 @@ describe('auth session endpoints', () => {
         expect((await api.users.findOne({ username }))!.password).toBe(before);
       }
     });
-    it('keeps a password changed between verify and rehash, and refuses that login', async () => {
+    it('keeps a password changed between verify and rehash', async () => {
       await createUser(api.users, {
         username: 'rex',
         email: 'rex@example.com',
@@ -194,7 +224,7 @@ describe('auth session endpoints', () => {
           .http()
           .post(LOGIN)
           .send({ username: 'rex', password: 'correct horse battery' })
-          .expect(401);
+          .expect(200);
       } finally {
         spy.mockRestore();
       }

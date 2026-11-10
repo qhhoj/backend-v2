@@ -64,6 +64,7 @@ export class AuthService {
     previousSessionId: string | null,
   ) {
     const user = await this.users.findByUsername(username);
+    const epoch = user ? await this.sessions.signOutEpoch(user._id) : 0;
     const address = limiterAddress(ip);
     // The tight budget is per (account, address): typos lock only that username from that address, and failures from
     // elsewhere never lock the owner out; the per-(account, network) budget caps one site's addresses together, and the
@@ -96,23 +97,22 @@ export class AuthService {
       );
     this.assertLoginAllowed(user);
     const passwordPwned = await this.pwned.isPwned(password);
-    const verifiedHash = await this.upgradeWeakHash(user, password, ip);
+    await this.upgradeWeakHash(user, password, ip);
     const opened = await this.startSession(user, {
       isPasswordPwned: passwordPwned,
       previousSessionId,
     });
-    await this.assertCredentialsUnchanged(opened.sessionId, user, verifiedHash);
+    await this.assertNotSignedOutSince(opened.sessionId, user._id, epoch);
     return opened;
   }
 
-  /** A password change, reset or deactivation signs every session out; one opened by a login that verified the old password just before must not survive it. */
-  private async assertCredentialsUnchanged(
+  /** A sign-out of every session (password change or reset, staff set-password, ban, sign out everywhere) that ran while this login was in flight must not leave the new session behind. */
+  private async assertNotSignedOutSince(
     sessionId: string,
-    user: UserDocument,
-    verifiedHash: string,
+    userId: string,
+    epoch: number,
   ): Promise<void> {
-    const current = await this.users.findById(user._id);
-    if (current?.password === verifiedHash && current.isActive) return;
+    if ((await this.sessions.signOutEpoch(userId)) === epoch) return;
     await this.sessions.destroy(sessionId);
     throw new AppError(
       'invalid_credentials',
@@ -164,21 +164,18 @@ export class AuthService {
     user: UserDocument,
     password: string,
     ip: string,
-  ): Promise<string> {
-    if (!needsRehash(user.password)) return user.password;
+  ): Promise<void> {
+    if (!needsRehash(user.password)) return;
     try {
-      const upgraded = await hashPassword(password, { requester: ip });
-      const swapped = await this.users.updatePasswordIfUnchanged(
+      await this.users.updatePasswordIfUnchanged(
         user._id,
         user.password,
-        upgraded,
+        await hashPassword(password, { requester: ip }),
       );
-      return swapped ? upgraded : user.password;
     } catch (error) {
       this.logger.warn(
         `Password rehash skipped: ${error instanceof Error ? error.name : 'unknown error'}`,
       );
-      return user.password;
     }
   }
 
