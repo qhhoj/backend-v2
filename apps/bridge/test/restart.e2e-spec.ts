@@ -17,6 +17,7 @@ import {
 import type { BridgeCatalog } from './fixtures';
 import { BridgeModule } from '../src/bridge.module';
 import { DispatcherService } from '../src/dispatch/dispatcher.service';
+import { JudgesRepository } from '../src/judges/judges.repository';
 import { JudgeLinkServer } from '../src/link/judge-link.server';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import { countResyncTicks, resyncTicks } from './resync-ticks';
@@ -417,6 +418,39 @@ describe('Bridge restart', () => {
       );
       expect((await judge.nextAssign(3000)).ref?.submissionId).toBe(id);
       await judge.close();
+    });
+
+    it('keeps a judge that registers while a tick reads the judge rows', async () => {
+      await seedJudge(bridge, 'restart-24', KEY);
+      await seedJudge(bridge, 'restart-25', KEY);
+      const repository = bridge.module.get(JudgesRepository);
+      const dispatch = bridge.module.get(DispatcherService);
+      const accessOf = repository.accessOf.bind(repository);
+      let read = false;
+      // the tick's read lands before restart-25 registers, its reconcile after
+      const slowRead = jest
+        .spyOn(repository, 'accessOf')
+        .mockImplementationOnce(async (names) => {
+          const access = await accessOf(names);
+          read = true;
+          await waitUntil(
+            () => dispatch.connectedNames().includes('restart-25'),
+            10_000,
+          );
+          return access;
+        });
+      try {
+        const present = await connect('restart-24');
+        await waitUntil(() => read, 10_000);
+        const joining = await connect('restart-25');
+        await resyncTicks(2);
+        expect(joining.isClosed).toBe(false);
+        expect(present.isClosed).toBe(false);
+        await joining.close();
+        await present.close();
+      } finally {
+        slowRead.mockRestore();
+      }
     });
   });
 

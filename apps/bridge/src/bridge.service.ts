@@ -92,12 +92,12 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.dispatch.enqueue(await this.submissions.loadQueued(ids));
   }
 
-  /** A block, disable or key rotation whose command was lost still takes effect: connected judges are compared with their rows. */
+  /** A block, disable or key rotation whose command was lost still takes effect: the sessions registered when the rows are read are compared with them; one that registers meanwhile waits for the next tick. */
   private async reconcileJudges(): Promise<void> {
-    const names = this.dispatch.connectedNames();
-    if (!names.length) return;
-    const access = await this.judges.accessOf(names);
-    for (const name of await this.dispatch.reconcile(access))
+    const sessions = this.dispatch.registeredSessions();
+    if (!sessions.length) return;
+    const access = await this.judges.accessOf(sessions.map(({ name }) => name));
+    for (const name of await this.dispatch.reconcile(sessions, access))
       this.server.revoke(name);
   }
 
