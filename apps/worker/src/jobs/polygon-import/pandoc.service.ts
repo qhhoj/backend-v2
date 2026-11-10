@@ -1,5 +1,5 @@
-import { MIB, MINUTE_MS } from '@libs/common';
-import { Injectable } from '@nestjs/common';
+import { MIB, MINUTE_MS, TUNING } from '@libs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -188,7 +188,7 @@ end
 /** The statement is attacker-controlled TeX: `--sandbox` (pandoc >= 2.15) forbids \input, \include, \includegraphics and \verbatiminput from reading local files. It does NOT restrict Lua filters, so the filter must stay a trusted constant (PANDOC_FILTER), never derived from a package. */
 const PANDOC_ARGUMENTS = ['--sandbox', '-f', 'latex', '-t', 'gfm'] as const;
 
-interface ProcessLimits {
+export interface ProcessLimits {
   timeoutMs: number;
   maxInputBytes: number;
   maxOutputBytes: number;
@@ -196,21 +196,30 @@ interface ProcessLimits {
   maxMemoryBytes: number;
 }
 
+export interface PandocTuning {
+  pandoc: { binary: string; limiter: string; limits: ProcessLimits };
+}
+export const PANDOC_TUNING: PandocTuning = {
+  pandoc: {
+    binary: 'pandoc',
+    limiter: 'prlimit',
+    limits: {
+      timeoutMs: MINUTE_MS,
+      maxInputBytes: MIB,
+      maxOutputBytes: 8 * MIB,
+      maxMemoryBytes: 768 * MIB,
+    },
+  },
+};
+
 /** pandoc >= 3 in the worker image; TeX → GitHub-flavoured Markdown through the legacy Lua filter. The TeX goes in on stdin and never in argv; the process is killed on timeout and on output overflow. */
 @Injectable()
 export class PandocService {
-  protected readonly binary: string = 'pandoc';
-  protected readonly limiter: string = 'prlimit';
-  protected readonly limits: ProcessLimits = {
-    timeoutMs: MINUTE_MS,
-    maxInputBytes: MIB,
-    maxOutputBytes: 8 * MIB,
-    maxMemoryBytes: 768 * MIB,
-  };
+  constructor(@Inject(TUNING) private readonly tuning: PandocTuning) {}
 
   async texToMarkdown(tex: string): Promise<string> {
     const input = Buffer.from(TEX_MACROS + tex, 'utf8');
-    if (input.length > this.limits.maxInputBytes)
+    if (input.length > this.tuning.pandoc.limits.maxInputBytes)
       throw new PolygonImportError('statement TeX is too large');
     const directory = await mkdtemp(join(tmpdir(), 'qhhoj-pandoc-'));
     try {
@@ -252,12 +261,13 @@ export class PandocService {
     args: readonly string[],
     input: Buffer,
     cwd: string,
-    timeoutMs = this.limits.timeoutMs,
+    timeoutMs = this.tuning.pandoc.limits.timeoutMs,
   ): Promise<string> {
+    const { binary, limiter, limits } = this.tuning.pandoc;
     return new Promise((resolve, reject) => {
       const child = spawn(
-        this.limiter,
-        [`--as=${this.limits.maxMemoryBytes}`, '--', this.binary, ...args],
+        limiter,
+        [`--as=${limits.maxMemoryBytes}`, '--', binary, ...args],
         {
           cwd,
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -290,7 +300,7 @@ export class PandocService {
       const timer = setTimeout(() => abort('pandoc timed out'), timeoutMs);
       child.stdout.on('data', (chunk: Buffer) => {
         outputBytes += chunk.length;
-        if (outputBytes > this.limits.maxOutputBytes)
+        if (outputBytes > limits.maxOutputBytes)
           return abort('pandoc output is too large');
         chunks.push(chunk);
       });

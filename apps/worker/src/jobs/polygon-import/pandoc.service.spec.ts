@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PandocService } from './pandoc.service';
+import { PANDOC_TUNING, PandocService } from './pandoc.service';
 
 const probe = spawnSync('pandoc', ['--version'], { encoding: 'utf8' });
 const pandocMajor =
@@ -14,7 +14,7 @@ const describeWithPandoc =
   Boolean(process.env.CI) || pandocMajor >= 3 ? describe : describe.skip;
 
 describeWithPandoc('PandocService (pandoc >= 3)', () => {
-  const pandoc = new PandocService();
+  const pandoc = new PandocService(PANDOC_TUNING);
   it('converts Polygon TeX to Markdown through the legacy filter', async () => {
     const markdown = await pandoc.texToMarkdown(
       "\\bf{Bold} and $x^2$ with \\t{code} and ``quoted'' -- dash.",
@@ -73,16 +73,14 @@ const fakePandoc = (script: string, limits: Record<string, number> = {}) => {
   const path = join(mkdtempSync(join(tmpdir(), 'qhhoj-fake-')), 'pandoc');
   writeFileSync(path, `#!/bin/sh\n${script}\n`);
   chmodSync(path, 0o755);
-  return new (class extends PandocService {
-    protected readonly binary = path;
-    protected readonly limits = {
-      timeoutMs: 60_000,
-      maxInputBytes: 1024 * 1024,
-      maxOutputBytes: 8 * 1024 * 1024,
-      maxMemoryBytes: 768 * 1024 * 1024,
-      ...limits,
-    };
-  })();
+  const { pandoc } = PANDOC_TUNING;
+  return new PandocService({
+    pandoc: {
+      ...pandoc,
+      binary: path,
+      limits: { ...pandoc.limits, ...limits },
+    },
+  });
 };
 
 describe('PandocService process handling', () => {
@@ -132,9 +130,9 @@ describe('PandocService process handling', () => {
     expect(await frugal.texToMarkdown('x')).toContain('ok');
   });
   it('fails closed when prlimit is missing', async () => {
-    const unlimited = new (class extends PandocService {
-      protected readonly limiter = '/nonexistent/prlimit';
-    })();
+    const unlimited = new PandocService({
+      pandoc: { ...PANDOC_TUNING.pandoc, limiter: '/nonexistent/prlimit' },
+    });
     await expect(unlimited.texToMarkdown('x')).rejects.toThrow('prlimit');
     await expect(unlimited.assertAvailable()).rejects.toThrow('prlimit');
   });

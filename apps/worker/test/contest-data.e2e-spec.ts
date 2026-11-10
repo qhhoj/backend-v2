@@ -5,7 +5,6 @@ import type { Contest, Language, Problem } from '@libs/database';
 import { ContestDataRepository } from '../src/jobs/contest-data/contest-data.repository';
 import { ContestDataService } from '../src/jobs/contest-data/contest-data.service';
 import {
-  CONTEST_DATA_LIMITS,
   ContestDataError,
   DEFAULT_CONTEST_DATA_LIMITS,
 } from '../src/jobs/contest-data/data-zip';
@@ -63,7 +62,7 @@ describe('contest data zip', () => {
 
   beforeAll(async () => {
     worker = await setupWorkerTest({
-      overrides: [{ provide: CONTEST_DATA_LIMITS, useValue: limits }],
+      tuning: { contestDataLimits: limits },
     });
     service = worker.module.get(ContestDataService);
     repository = worker.module.get(ContestDataRepository);

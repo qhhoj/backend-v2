@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createReadStream } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
 import {
@@ -8,6 +8,7 @@ import {
   InjectJob,
   JobProducer,
   StorageService,
+  TUNING,
 } from '@libs/common';
 import {
   dataFileNamesOf,
@@ -157,8 +158,11 @@ interface WrittenImport {
 /** How long an automatic sync may wait for running contests (from when it was queued) before it fails with `problem_in_running_contest`. */
 export const MAX_SYNC_DEFERRAL_MS = 7 * DAY_MS;
 
-/** How long an import waits for an API data write that holds the problem's data lock; a test may shorten it. */
-export const IMPORT_DATA_LOCK = { waitSeconds: 60 };
+export interface ImportTuning {
+  /** How long an import waits for an API data write that holds the problem's data lock. */
+  importDataLockSeconds: number;
+}
+export const IMPORT_TUNING: ImportTuning = { importDataLockSeconds: 60 };
 
 /** `withDataWrite` refused the lock: another data change held it for the whole wait. */
 const isLockBusy = (error: unknown): boolean =>
@@ -339,6 +343,7 @@ export class PolygonImportService {
     private readonly renders: JobProducer<PdfRenderJob>,
     @InjectJob(judgingJobs.problemRescore)
     private readonly rescores: JobProducer<ProblemRescoreJob>,
+    @Inject(TUNING) private readonly tuning: ImportTuning,
   ) {}
 
   /** A sync another sync of the same package already applied ends at once; then pre-checks that cost nothing come first; the package (uploaded, or downloaded here from Polygon) is removed however the job ends. */
@@ -585,7 +590,7 @@ export class PolygonImportService {
   }
 
   /**
-   * The data lock is taken before the transaction and held until the stamp, so no API data write lands between the commit and the files: one that holds the lock is waited for (`IMPORT_DATA_LOCK`), and one still holding it fails the import before anything changed.
+   * The data lock is taken before the transaction and held until the stamp, so no API data write lands between the commit and the files: one that holds the lock is waited for (`importDataLockSeconds`), and one still holding it fails the import before anything changed.
    * The data steps run under the judge's writing marker, ending with the stamp; a failure after the commit comes back as `attention`.
    */
   private async commitWithData(
@@ -609,7 +614,7 @@ export class PolygonImportService {
     };
     try {
       return await this.dataFiles.withDataWrite(job.code, write, {
-        waitSeconds: IMPORT_DATA_LOCK.waitSeconds,
+        waitSeconds: this.tuning.importDataLockSeconds,
       });
     } catch (error) {
       throw isLockBusy(error) ? dataLockBusyError() : error;

@@ -1,9 +1,9 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
-  hashPassword,
-  passwordProblems,
   passwordIssues,
+  passwordProblems,
+  Passwords,
   PwnedPasswordService,
   UsersRepository,
 } from '@libs/auth';
@@ -93,6 +93,7 @@ export class UserCreationService {
   constructor(
     private readonly users: UsersRepository,
     private readonly pwned: PwnedPasswordService,
+    private readonly passwords: Passwords,
     private readonly passwordReset: PasswordResetService,
     private readonly organizations: OrganizationsRepository,
     private readonly points: OrganizationPointsService,
@@ -193,7 +194,7 @@ export class UserCreationService {
         firstName: row.fullName ?? '',
         password: row.invite
           ? `!${randomBytes(20).toString('hex')}`
-          : await hashPassword(row.password ?? generatedPassword!),
+          : await this.passwords.hash(row.password ?? generatedPassword!),
         isActive: true,
         passwordSetBeforeVerification: true,
         organizations: organizationId ? [organizationId] : [],

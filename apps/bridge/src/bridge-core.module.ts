@@ -24,11 +24,12 @@ import { ProblemDataWrites } from './submissions/problem-data-writes';
 import { RunWritesRepository } from './submissions/run-writes.repository';
 import { RunsService } from './submissions/runs.service';
 import { SubmissionsRepository } from './submissions/submissions.repository';
+import { bridgeTuning } from './bridge-tuning';
 
 /** The judge side of the bridge: the gRPC link, dispatch and the run writes. `BridgeModule` adds the api's commands and the start/stop/resync loop. */
 @Module({
   imports: [
-    EnvModule.forRoot(bridgeConfig),
+    EnvModule.forRoot(bridgeConfig, bridgeTuning),
     DatabaseModule.forRoot(ENV),
     QueueModule,
     RedisModule,

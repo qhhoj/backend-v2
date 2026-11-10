@@ -10,7 +10,6 @@ import { FeedAuthService } from '../src/modules/contests/feed/feed-auth.service'
 
 import {
   DEFAULT_FEED_LIMITS,
-  FEED_LIMITS,
   FeedService,
   newFeedSession,
 } from '../src/modules/contests/feed/feed.service';
@@ -121,7 +120,7 @@ describe('contest event feed', () => {
 
   beforeAll(async () => {
     api = await setupApiTest({
-      overrides: [{ provide: FEED_LIMITS, useValue: limits }],
+      tuning: { feedLimits: limits },
     });
     auth = api.app.get(FeedAuthService);
     feeds = api.app.get(FeedService);

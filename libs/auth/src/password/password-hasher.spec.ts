@@ -24,10 +24,6 @@ const MALFORMED_HASHES = [
 ];
 
 describe('password hasher', () => {
-  // The production cost, whatever an e2e file of this jest worker left in the environment.
-  beforeAll(() => {
-    delete process.env.TEST_PASSWORD_ITERATIONS;
-  });
   it.each(fixtures.passwords)(
     'verifies Django hash for "$password"',
     async ({ password, hash }) => {

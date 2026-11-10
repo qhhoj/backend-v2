@@ -4,13 +4,14 @@ import { join } from 'node:path';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
-import { REDIS } from '@libs/common';
-import { TEST_ENV } from '@libs/common/testing';
+import { REDIS, TUNING } from '@libs/common';
+import { TEST_ENV, TEST_TUNING } from '@libs/common/testing';
 import { startMongo } from '@libs/database/testing';
 import type Redis from 'ioredis';
 import type { Document } from 'mongodb';
 import type { Model } from 'mongoose';
 import { MigrationsModule } from '../src/migrations/migrations.module';
+import { workerTuning } from '../src/worker-tuning';
 
 /** The module `worker migrate` boots, on a database, a Redis db and data roots of its own; `override` replaces a provider. */
 export async function setupMigrationsTest(override?: {
@@ -29,7 +30,9 @@ export async function setupMigrationsTest(override?: {
     PROBLEM_DATA_ROOT: roots.problemDataRoot,
     PDF_CACHE_ROOT: roots.pdfCacheRoot,
   });
-  const builder = Test.createTestingModule({ imports: [MigrationsModule] });
+  const builder = Test.createTestingModule({ imports: [MigrationsModule] })
+    .overrideProvider(TUNING)
+    .useValue({ ...workerTuning, ...TEST_TUNING });
   if (override)
     builder.overrideProvider(override.provide).useValue(override.useValue);
   const module: TestingModule = await builder.compile();

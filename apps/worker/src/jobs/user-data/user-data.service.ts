@@ -1,7 +1,7 @@
 import { mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
-import { DAY_MS, ENV, isTempName } from '@libs/common';
+import { DAY_MS, ENV, isTempName, TUNING } from '@libs/common';
 import type { WorkerConfig } from '@libs/common';
 import { isUserDataExpired, userDataPath } from '@libs/community';
 import { isUuid } from '@libs/database';
@@ -16,12 +16,14 @@ import type {
 import type { UserDataSubmission } from './user-data.repository';
 
 export type UserDataLimits = ZipLimits;
-export const USER_DATA_LIMITS = Symbol('USER_DATA_LIMITS');
 export const DEFAULT_USER_DATA_LIMITS: UserDataLimits = {
   maxBytes: 256 * 1024 * 1024,
   maxEntries: 50_000,
   sourceChunk: 100,
 };
+export interface UserDataTuning {
+  userDataLimits: UserDataLimits;
+}
 /** The job is dropped on failure, so the status returns to `none`; the message reaches only the worker log. */
 export class UserDataError extends Error {}
 
@@ -86,7 +88,7 @@ export class UserDataService {
     private readonly repository: UserDataRepository,
     private readonly community: UserDataCommunityRepository,
     @Inject(ENV) private readonly env: WorkerConfig,
-    @Inject(USER_DATA_LIMITS) private readonly limits: UserDataLimits,
+    @Inject(TUNING) private readonly tuning: UserDataTuning,
   ) {}
 
   /** Legacy `prepare_user_data` plus the profile, own comments (hidden included) and blog posts. The previous zip goes first; the new one is written beside it and renamed into place. Returns the entry count. */
@@ -99,11 +101,14 @@ export class UserDataService {
     if (!profile) return 0;
     const submissions = await this.repository.submissionsOf(
       userId,
-      this.limits.maxEntries + 1,
+      this.tuning.userDataLimits.maxEntries + 1,
     );
     const [comments, posts] = await Promise.all([
-      this.community.commentsOf(userId, this.limits.maxEntries + 1),
-      this.community.postsOf(userId, this.limits.maxEntries + 1),
+      this.community.commentsOf(
+        userId,
+        this.tuning.userDataLimits.maxEntries + 1,
+      ),
+      this.community.postsOf(userId, this.tuning.userDataLimits.maxEntries + 1),
     ]);
     const texts: Array<[name: string, text: string]> = [
       ['profile.json', json(profile)],
@@ -135,8 +140,10 @@ export class UserDataService {
       ...texts.map(([name]) => name),
       ...streams.flatMap((stream) => stream.names),
     ];
-    if (names.length > this.limits.maxEntries)
-      throw new UserDataError(`More than ${this.limits.maxEntries} entries`);
+    if (names.length > this.tuning.userDataLimits.maxEntries)
+      throw new UserDataError(
+        `More than ${this.tuning.userDataLimits.maxEntries} entries`,
+      );
     await writeZipInPlace(
       names,
       async (index) => {
@@ -150,9 +157,11 @@ export class UserDataService {
       },
       {
         path,
-        maxBytes: this.limits.maxBytes,
+        maxBytes: this.tuning.userDataLimits.maxBytes,
         tooLarge: () =>
-          new UserDataError(`Your data passes ${this.limits.maxBytes} bytes`),
+          new UserDataError(
+            `Your data passes ${this.tuning.userDataLimits.maxBytes} bytes`,
+          ),
       },
     );
     return names.length;
@@ -164,7 +173,7 @@ export class UserDataService {
   ) {
     return chunkedSources(
       rows.map((row) => row.id),
-      this.limits.sourceChunk,
+      this.tuning.userDataLimits.sourceChunk,
       fetch,
     );
   }

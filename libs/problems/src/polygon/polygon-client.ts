@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SettingsService } from '@libs/settings';
-import { MINUTE_MS } from '@libs/common';
+import { MINUTE_MS, TUNING } from '@libs/common';
 import { failureOf, PolygonApiError } from './polygon-api.error';
 import type { PolygonErrorCode } from './polygon-api.error';
 import { failureTextOf, IdleWatch, writeCappedBody } from './polygon-download';
@@ -15,9 +15,14 @@ import type {
 } from './polygon-types';
 
 const POLYGON_API_URL = 'https://polygon.codeforces.com/api/';
-/** The `fetch` the client sends with; a test provides a fake Polygon here. */
-export const POLYGON_FETCH = Symbol('POLYGON_FETCH');
 export type PolygonFetch = typeof fetch;
+export interface PolygonTuning {
+  /** The `fetch` the client sends with; specs give a fake Polygon here. */
+  polygonFetch: PolygonFetch;
+}
+export const POLYGON_TUNING: PolygonTuning = {
+  polygonFetch: (input, init) => fetch(input, init),
+};
 
 const CALL_TIMEOUT_MS = 30_000;
 /** A download fails after this long without a byte (headers or body); a slow one that keeps moving runs to the end. */
@@ -33,7 +38,7 @@ export class PolygonClient {
   constructor(
     @Inject(SettingsService)
     private readonly settings: Pick<SettingsService, 'get'>,
-    @Inject(POLYGON_FETCH) private readonly fetchFn: PolygonFetch,
+    @Inject(TUNING) private readonly tuning: PolygonTuning,
   ) {}
 
   isConnected(): boolean {
@@ -155,7 +160,7 @@ export class PolygonClient {
       signPolygonParams(method, params, credentials, randomSalt()),
     );
     try {
-      return await this.fetchFn(POLYGON_API_URL + method, {
+      return await this.tuning.polygonFetch(POLYGON_API_URL + method, {
         method: 'POST',
         body,
         redirect: 'error',

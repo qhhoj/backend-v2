@@ -226,11 +226,11 @@ describe('SimilarityEngine', () => {
     expect(isRunning(pid)).toBe(false);
   });
 
-  it('kills the child before application shutdown, failing the comparison as a shutdown', async () => {
+  it('kills the child when its module is destroyed, failing the comparison as a shutdown', async () => {
     const stopping = new InspectableEngine();
     const comparison = stopping.compare(request(twoCopies()));
     const pid = stopping.childPid()!;
-    stopping.beforeApplicationShutdown();
+    stopping.onModuleDestroy();
     await expect(comparison).rejects.toBeInstanceOf(EngineShutdownError);
     await sleep(300);
     expect(isRunning(pid)).toBe(false);
@@ -238,7 +238,7 @@ describe('SimilarityEngine', () => {
 
   it('starts no child once shutdown began', async () => {
     const stopping = new InspectableEngine();
-    stopping.beforeApplicationShutdown();
+    stopping.onModuleDestroy();
     const comparison = stopping.compare(request(twoCopies()));
     expect(stopping.childPid()).toBeUndefined();
     await expect(comparison).rejects.toBeInstanceOf(EngineShutdownError);

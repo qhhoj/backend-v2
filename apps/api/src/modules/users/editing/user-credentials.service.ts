@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
-  hashPassword,
   passwordIssues,
+  Passwords,
   PwnedPasswordService,
   SessionService,
   UsersRepository,
@@ -37,6 +37,7 @@ export class UserCredentialsService {
     private readonly users: UsersRepository,
     private readonly sessions: SessionService,
     private readonly pwned: PwnedPasswordService,
+    private readonly passwords: Passwords,
     private readonly rateLimit: RateLimitService,
     private readonly auth: AuthService,
     private readonly passwordReset: PasswordResetService,
@@ -61,7 +62,7 @@ export class UserCredentialsService {
       !(await this.users.updatePasswordIfUnchanged(
         user._id,
         user.password,
-        await hashPassword(newPassword, { requester: auth.ip }),
+        await this.passwords.hash(newPassword, auth.ip),
       ))
     )
       throw new AppError(

@@ -171,7 +171,7 @@ user-activity/
 - Reference: `libs/common/src/querier/base-mongo-stream.querier.ts`, `libs/auth/src/groups/groups.querier.ts`
 - Whole-collection queriers extend `BaseCatalogQuerier` (reference: `apps/api/src/modules/problems/catalog/languages.querier.ts`)
 - Querier shape: `onModuleInit` -> `resync()` -> `setupMongoStream(model, pipeline, onChange)` -> `forceResyncQuerier(resync, cron)`
-- Streams need a replica set; `DISABLE_MONGODB_STREAM=true` turns them off
+- Streams need a replica set; specs turn them off with the process tuning (`mongoStreams: false` in `TEST_TUNING`)
 - Queriers never handle deletes (stream only forwards insert/update/replace)
 
 ## Runtime settings
@@ -489,7 +489,7 @@ Replaces MOSS. Code similarity per problem or contest with `@dodona/dolos-lib`.
 - Case-insensitive unique fields: `ciIndex(Schema, 'field')` and query with `.collation(CI)` (see `libs/database/src/schema.db.spec.ts`); `ciIndex(schema, field, unique = true)`, e.g. `ciIndex(UserSchema, 'email', false)` for non-unique
 - Catalog collections (languages, licenses, problem types and groups) are querier-backed and never deleted
 - `submissions`, `submissionSources` and `judges` are repository-backed
-- Register every schema in `SCHEMAS` (`libs/database/src/schemas/index.ts`) and export it there
+- Export every schema file from `libs/database/src/schemas/index.ts`; each exported `<Model>Schema` with a `collection` is a model (`SCHEMAS`, in `schemas/models.ts`), and the spec setups give it the name in `MODEL_ACCESSORS` (`libs/database/src/testing.ts`)
 
 ### Migrations
 

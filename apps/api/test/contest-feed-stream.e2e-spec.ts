@@ -17,14 +17,10 @@ import { EventStreamHubService } from '../src/modules/events/event-stream-hub.se
 
 import {
   DEFAULT_FEED_LIMITS,
-  FEED_LIMITS,
   FeedService,
 } from '../src/modules/contests/feed/feed.service';
 
-import {
-  FEED_STREAM_OPTIONS,
-  MAX_FAILED_TICKS,
-} from '../src/modules/contests/feed/feed-stream.service';
+import { MAX_FAILED_TICKS } from '../src/modules/contests/feed/feed-stream.service';
 import type { MintedFeedKeyResponse } from '../src/modules/contests/feed/dto/feed-key.dto';
 
 import {
@@ -175,14 +171,11 @@ describe('contest event feed stream', () => {
 
   beforeAll(async () => {
     api = await setupApiTest({
-      overrides: [
-        {
-          provide: FEED_STREAM_OPTIONS,
-          useValue: { intervalMs: TICK_MS, keepAliveMs: KEEP_ALIVE_MS },
-        },
-        { provide: FEED_LIMITS, useValue: feedLimits },
-        { provide: STREAM_LIMITS, useValue: streamLimits },
-      ],
+      tuning: {
+        feedStream: { intervalMs: TICK_MS, keepAliveMs: KEEP_ALIVE_MS },
+        feedLimits,
+      },
+      overrides: [{ provide: STREAM_LIMITS, useValue: streamLimits }],
     });
     catalog = await seedCatalog(api);
     const roles: Array<[string, Partial<User>]> = [

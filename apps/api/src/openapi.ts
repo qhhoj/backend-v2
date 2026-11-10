@@ -5,7 +5,7 @@ import type { OpenAPIObject } from '@nestjs/swagger';
 import { ErrorResponse, envelopeResponses, errorResponses } from '@libs/common';
 import { untypeAnyJson } from './modules/settings/dto/any-json-value';
 
-/** The sections of the API reference, in sidebar order; every controller is tagged with exactly one of these names (`@ApiTags`). */
+/** The sections of the API reference, in sidebar order; every API controller is tagged with exactly one of these names (`@ApiTags`, checked by `document.openapi-spec.ts`; the `/healthz` probe is not). */
 export const API_SECTIONS: ReadonlyArray<
   readonly [name: string, description: string]
 > = [

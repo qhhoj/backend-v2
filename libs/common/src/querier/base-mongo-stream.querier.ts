@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
 import { CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import {
@@ -11,11 +11,18 @@ import {
 import { SNAPSHOT_LOAD_COMMENT } from '@libs/database';
 import { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
+import { TUNING } from '../env/env';
 
 export type QuerierChange =
   | ChangeStreamInsertDocument
   | ChangeStreamUpdateDocument
   | ChangeStreamReplaceDocument;
+
+export interface StreamTuning {
+  /** Off in specs: the in-memory replica set run follows no change streams, and `resync` loads the rows. */
+  mongoStreams: boolean;
+}
+export const STREAM_TUNING: StreamTuning = { mongoStreams: true };
 
 export interface StreamHandlers {
   onChange: (change: QuerierChange) => Promise<void>;
@@ -28,6 +35,7 @@ export abstract class BaseMongoStreamQuerier {
   private readonly streamLogger = new Logger(BaseMongoStreamQuerier.name);
   /** One list per snapshot load in flight: the stream events handled since that load began. */
   private readonly loadsInFlight = new Set<Array<() => void>>();
+  @Inject(TUNING) private readonly tuning!: StreamTuning;
 
   constructor(private readonly scheduler: SchedulerRegistry) {}
 
@@ -45,7 +53,8 @@ export abstract class BaseMongoStreamQuerier {
     pipeline: Record<string, unknown>[],
     handlers: StreamHandlers,
   ) {
-    if (process.env.DISABLE_MONGODB_STREAM === 'true') return handlers.resync();
+    // A spec module that declares no tuning (`EnvModule.forValues`) follows the streams, as production does.
+    if (this.tuning.mongoStreams === false) return handlers.resync();
     const syncAndWatch = async () => {
       const stream = this.getModelStream(
         model,

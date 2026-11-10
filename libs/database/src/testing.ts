@@ -2,6 +2,10 @@ import { randomBytes } from 'node:crypto';
 import { MongoClient } from 'mongodb';
 import type { Db } from 'mongodb';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { getModelToken } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import * as schemas from './schemas';
+import { SCHEMAS } from './schemas/models';
 import { SNAPSHOT_LOAD_COMMENT } from './snapshot-load';
 
 /** Set by `test/jest/global-setup.js`: the run's one replica set, with `__DB__` where the database name goes. */
@@ -97,4 +101,92 @@ export async function profileQueries(
       keysExamined: Number(entry.keysExamined ?? 0),
       hasSortStage: Boolean(entry.hasSortStage),
     }));
+}
+
+/**
+ * The name every spec setup gives each model: the collection's, or the shorter name specs already use. A model
+ * `SCHEMAS` registers and this table leaves out fails every setup (`modelsOf`).
+ */
+const MODEL_ACCESSORS = {
+  activationKeys: schemas.ActivationKey,
+  announcements: schemas.ContestAnnouncement,
+  balloonDeliveries: schemas.ContestBalloon,
+  blogPosts: schemas.BlogPost,
+  blogVotes: schemas.BlogVote,
+  commentLocks: schemas.CommentLock,
+  commentPageCounters: schemas.CommentPageCounter,
+  commentReports: schemas.CommentReport,
+  commentVotes: schemas.CommentVote,
+  comments: schemas.Comment,
+  contestSubmissions: schemas.ContestSubmission,
+  contestTags: schemas.ContestTag,
+  contests: schemas.Contest,
+  externalRuns: schemas.ExternalRun,
+  feedKeys: schemas.ContestFeedKey,
+  flatpages: schemas.Flatpage,
+  generalIssues: schemas.GeneralIssue,
+  ghosts: schemas.ContestGhost,
+  groups: schemas.Group,
+  integrationClients: schemas.IntegrationClient,
+  judges: schemas.Judge,
+  languages: schemas.Language,
+  licenses: schemas.License,
+  migrations: schemas.MigrationRecord,
+  miscConfigs: schemas.MiscConfig,
+  notifications: schemas.Notification,
+  officialRankings: schemas.ContestOfficialRanking,
+  organizationCreditEntries: schemas.OrganizationCreditEntry,
+  organizationJudgingCharges: schemas.OrganizationJudgingCharge,
+  organizationProblemTags: schemas.OrganizationProblemTag,
+  organizationProblems: schemas.OrganizationProblem,
+  organizationRequests: schemas.OrganizationRequest,
+  organizationUsage: schemas.OrganizationUsage,
+  organizations: schemas.Organization,
+  participations: schemas.ContestParticipation,
+  polygonSyncRuns: schemas.PolygonSyncRun,
+  problemGroups: schemas.ProblemGroup,
+  problemTypes: schemas.ProblemType,
+  problems: schemas.Problem,
+  rankingLinks: schemas.ContestPublicRankingLink,
+  ratings: schemas.Rating,
+  replayChunks: schemas.ContestReplayChunk,
+  replayHeads: schemas.ContestReplayHead,
+  revisions: schemas.Revision,
+  settingRevisions: schemas.SettingRevision,
+  settings: schemas.Setting,
+  shortLinks: schemas.ShortLink,
+  similarityPairs: schemas.SimilarityPair,
+  similarityRuns: schemas.SimilarityRun,
+  submissionSources: schemas.SubmissionSource,
+  submissions: schemas.Submission,
+  tagGroups: schemas.TagGroup,
+  tagProblems: schemas.TagProblem,
+  tags: schemas.Tag,
+  testGenerations: schemas.TestGeneration,
+  ticketCannedReplies: schemas.TicketCannedReply,
+  tickets: schemas.Ticket,
+  userActivities: schemas.UserActivity,
+  userSessions: schemas.UserSession,
+  users: schemas.User,
+};
+type ModelAccessors = {
+  [Name in keyof typeof MODEL_ACCESSORS]: Model<
+    InstanceType<(typeof MODEL_ACCESSORS)[Name]>
+  >;
+};
+
+/** Every model of the app under test, by its accessor name. */
+export function modelsOf(app: { get<T>(token: string): T }): ModelAccessors {
+  const named = new Set(Object.values(MODEL_ACCESSORS).map(({ name }) => name));
+  const missing = SCHEMAS.filter(({ name }) => !named.has(name));
+  if (missing.length)
+    throw new Error(
+      `MODEL_ACCESSORS lacks ${missing.map(({ name }) => name).join(', ')}`,
+    );
+  return Object.fromEntries(
+    Object.entries(MODEL_ACCESSORS).map(([accessor, { name }]) => [
+      accessor,
+      app.get(getModelToken(name)),
+    ]),
+  ) as ModelAccessors;
 }

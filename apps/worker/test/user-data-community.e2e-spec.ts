@@ -3,7 +3,6 @@ import { newId } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
 import {
   DEFAULT_USER_DATA_LIMITS,
-  USER_DATA_LIMITS,
   UserDataError,
   UserDataService,
 } from '../src/jobs/user-data/user-data.service';
@@ -24,7 +23,7 @@ describe('user data export of comments and posts', () => {
 
   beforeAll(async () => {
     worker = await setupWorkerTest({
-      overrides: [{ provide: USER_DATA_LIMITS, useValue: limits }],
+      tuning: { userDataLimits: limits },
     });
     service = worker.module.get(UserDataService);
   });

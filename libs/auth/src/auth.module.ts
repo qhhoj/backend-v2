@@ -4,6 +4,7 @@ import { RateLimitService } from '@libs/common';
 import { GroupsModule } from './groups/groups.module';
 import { AuthGuard } from './guards/auth.guard';
 import { IntegrationClientsRepository } from './integration/integration-clients.repository';
+import { Passwords } from './password/passwords';
 import { PwnedPasswordService } from './password/pwned-password.service';
 import { PrincipalService } from './principal/principal.service';
 import { SessionService } from './session/session.service';
@@ -14,6 +15,7 @@ const services = [
   UsersRepository,
   PrincipalService,
   PwnedPasswordService,
+  Passwords,
   IntegrationClientsRepository,
 ];
 

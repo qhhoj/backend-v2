@@ -6,6 +6,7 @@ import {
   ENV,
   JobFailure,
   StorageService,
+  TUNING,
 } from '@libs/common';
 import type { WorkerConfig } from '@libs/common';
 import { DATA_FILE_KINDS } from '@libs/database';
@@ -23,8 +24,8 @@ import {
   ProblemDataFilesService,
 } from '@libs/problems';
 import type { CachedPdf, ProblemPackageJob } from '@libs/problems';
-import { PACKAGE_LIMITS, writePackageZip } from './package-zip';
-import type { PackageEntry, PackageLimits } from './package-zip';
+import { writePackageZip } from './package-zip';
+import type { PackageEntry, PackageTuning } from './package-zip';
 import { ProblemPackageRepository } from './problem-package.repository';
 
 /** A data write's marker was up during a build: worth building again once it is down. */
@@ -52,7 +53,7 @@ export class ProblemPackageService {
     private readonly pdfCache: PdfCacheService,
     private readonly packages: PackageCacheService,
     private readonly storage: StorageService,
-    @Inject(PACKAGE_LIMITS) private readonly limits: PackageLimits,
+    @Inject(TUNING) private readonly tuning: PackageTuning,
     @Inject(ENV) private readonly env: WorkerConfig,
   ) {}
 
@@ -63,9 +64,9 @@ export class ProblemPackageService {
         return await this.buildOnce(job);
       } catch (error) {
         if (!(error instanceof DataWriteUnderWay)) throw error;
-        if (attempt >= this.limits.dataWaitAttempts)
+        if (attempt >= this.tuning.packageLimits.dataWaitAttempts)
           throw new JobFailure(PACKAGE_DATA_WRITING);
-        await sleep(this.limits.dataWaitMs);
+        await sleep(this.tuning.packageLimits.dataWaitMs);
       }
     }
   }
@@ -81,7 +82,7 @@ export class ProblemPackageService {
     await this.packages.write(problem.code, key, async (temporaryPath) => {
       await writePackageZip(entries, {
         path: temporaryPath,
-        maxBytes: this.limits.maxBytes,
+        maxBytes: this.tuning.packageLimits.maxBytes,
       });
       await this.assertDataFinished(problem);
     });

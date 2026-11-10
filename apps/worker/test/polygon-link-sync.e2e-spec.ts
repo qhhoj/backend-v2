@@ -16,7 +16,6 @@ import {
 } from '@libs/database';
 import {
   syncJobId,
-  POLYGON_FETCH,
   ProblemDataFilesService,
   QuotaLedger,
   problemJobs,
@@ -210,10 +209,8 @@ describe('Polygon link, sync and auto-sync', () => {
 
   beforeAll(async () => {
     worker = await setupWorkerTest({
-      overrides: [
-        { provide: PandocService, useValue: fakePandoc },
-        { provide: POLYGON_FETCH, useValue: polygon.fetch },
-      ],
+      tuning: { polygonFetch: polygon.fetch },
+      overrides: [{ provide: PandocService, useValue: fakePandoc }],
     });
     processor = worker.module.get(PolygonImportProcessor);
     autoSync = worker.module.get(PolygonAutoSyncService);
