@@ -111,6 +111,143 @@ describe('Bridge restart', () => {
     await again.close();
   });
 
+  it('a judge resuming after a restart holds its run while Mongo is read: ticks meanwhile never requeue it to another judge', async () => {
+    await seedJudge(bridge, 'restart-20', KEY);
+    await seedJudge(bridge, 'restart-21', KEY);
+    const repository = bridge.module.get(SubmissionsRepository);
+    const inFlightRuns = repository.inFlightRuns.bind(repository);
+    const resumableRun = repository.resumableRun.bind(repository);
+    let reading = false;
+    // the restart was just now: the row is unheld only from the resume's read on
+    const freshRestart = jest
+      .spyOn(repository, 'inFlightRuns')
+      .mockImplementation(async () =>
+        (await inFlightRuns()).filter(
+          (run) => reading || run.judgedOn !== 'restart-20',
+        ),
+      );
+    // three ticks complete while the resume reads Mongo: unheld on two of them, the row would be reset
+    const slowRead = jest
+      .spyOn(repository, 'resumableRun')
+      .mockImplementation(async (...args) => {
+        reading = true;
+        const stored = await resumableRun(...args);
+        await resyncTicks(3);
+        return stored;
+      });
+    try {
+      const other = await connect('restart-21');
+      const id = await seedOne({
+        status: 'G',
+        judgedOn: 'restart-20',
+        judgeGeneration: 1,
+        judgeSeq: 2,
+      });
+      const ref = { submissionId: id, generation: 1 };
+      const resuming = FakeJudge.open(bridge.judgePort(), {
+        name: 'restart-20',
+        key: KEY,
+        inFlight: [{ ref, lastSeqSent: 2 }],
+      });
+      resuming.hello();
+      const { welcome } = await resuming.next('welcome', 15_000);
+      expect(welcome.resume).toEqual([
+        { ref, action: Resume_Action.ACTION_CONTINUE, fromSeq: 3 },
+      ]);
+      // a requeue during the read would have sent the next generation to the free judge
+      await resyncTicks(2);
+      expect(other.seen('assign').map(({ assign }) => assign.ref)).toEqual([]);
+      expect(await submissionRow(id)).toMatchObject({
+        status: 'G',
+        judgedOn: 'restart-20',
+        judgeGeneration: 1,
+      });
+      resuming.cases(ref, [
+        { position: 1, status: Status.STATUS_AC, points: 1, total: 1 },
+      ]);
+      resuming.final(ref, Outcome.OUTCOME_GRADED);
+      await waitUntil(async () => (await submissionRow(id)).status === 'D');
+      expect(await submissionRow(id)).toMatchObject({
+        result: 'AC',
+        judgedOn: 'restart-20',
+        judgeGeneration: 1,
+        requeueCount: 0,
+      });
+      await resuming.close();
+      await other.close();
+    } finally {
+      freshRestart.mockRestore();
+      slowRead.mockRestore();
+    }
+  });
+
+  it('a reset that a tick decided before the Hello and that lands after the resume read the row: one judge holds the run, the resume is dropped', async () => {
+    await seedJudge(bridge, 'restart-22', KEY);
+    await seedJudge(bridge, 'restart-23', KEY);
+    const repository = bridge.module.get(SubmissionsRepository);
+    const resumableRun = repository.resumableRun.bind(repository);
+    const resetStrandedRuns = repository.resetStrandedRuns.bind(repository);
+    let resetDecided = false;
+    let readDone = false;
+    const lateReset = jest
+      .spyOn(repository, 'resetStrandedRuns')
+      .mockImplementation(async (runs) => {
+        resetDecided = true;
+        await waitUntil(() => readDone, 10_000);
+        return resetStrandedRuns(runs);
+      });
+    // the read returns once that tick (reset, then dispatch) is over
+    const slowRead = jest
+      .spyOn(repository, 'resumableRun')
+      .mockImplementation(async (...args) => {
+        const stored = await resumableRun(...args);
+        readDone = true;
+        await resyncTicks(1);
+        return stored;
+      });
+    try {
+      const other = await connect('restart-23');
+      const id = await seedOne({
+        status: 'G',
+        judgedOn: 'restart-22',
+        judgeGeneration: 1,
+        judgeSeq: 2,
+      });
+      const ref = { submissionId: id, generation: 1 };
+      await waitUntil(() => resetDecided, 10_000);
+      const resuming = FakeJudge.open(bridge.judgePort(), {
+        name: 'restart-22',
+        key: KEY,
+        inFlight: [{ ref, lastSeqSent: 2 }],
+      });
+      resuming.hello();
+      const { welcome } = await resuming.next('welcome', 15_000);
+      const live = (await other.nextAssign(15_000)).ref!;
+      expect(live).toEqual({ submissionId: id, generation: 2 });
+      expect(welcome.resume).toEqual([
+        { ref, action: Resume_Action.ACTION_DROP, fromSeq: 0 },
+      ]);
+      // the user's abort reaches the judge that holds the live generation
+      other.accept(live);
+      await other.ackOf(live, 1);
+      await commands.publish({ type: 'abort', submissionId: id });
+      expect((await other.next('abort', 15_000)).abort.ref).toEqual(live);
+      expect(resuming.seen('abort')).toEqual([]);
+      other.final(live, Outcome.OUTCOME_ABORTED);
+      await waitUntil(async () => (await submissionRow(id)).status === 'AB');
+      expect(await submissionRow(id)).toMatchObject({
+        judgedOn: 'restart-23',
+        judgeGeneration: 2,
+        requeueCount: 0,
+      });
+      await resuming.close();
+      await other.close();
+    } finally {
+      lateReset.mockRestore();
+      slowRead.mockRestore();
+    }
+  });
+
   it('a judge replays its outbox after a restart: every run resumes, a repeated message is not applied twice, nothing is lost', async () => {
     await seedJudge(bridge, 'restart-19', KEY);
     const [first, second] = [await seedOne(), await seedOne()];
