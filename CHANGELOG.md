@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.37.4
+
+### Patch Changes
+
+- 1d6e7bc: fix(deploy): the helper restores the previous version when the ssh session is gone; the contest deferral prints only the end time.
+
 ## 2.37.3
 
 ### Patch Changes
