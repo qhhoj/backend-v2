@@ -57,14 +57,21 @@ export class AuthService {
     @Inject(ENV) private readonly env: ApiConfig,
   ) {}
 
+  /** The epoch is read before the user document the password is checked against, so a sign-out landing between the two reads cannot leave a stale hash with a current epoch. */
+  private async userAndEpoch(username: string) {
+    const found = await this.users.findByUsername(username);
+    if (!found) return { user: null, epoch: 0 };
+    const epoch = await this.sessions.signOutEpoch(found._id);
+    return { user: await this.users.findById(found._id), epoch };
+  }
+
   async login(
     username: string,
     password: string,
     ip: string,
     previousSessionId: string | null,
   ) {
-    const user = await this.users.findByUsername(username);
-    const epoch = user ? await this.sessions.signOutEpoch(user._id) : 0;
+    const { user, epoch } = await this.userAndEpoch(username);
     const address = limiterAddress(ip);
     // The tight budget is per (account, address): typos lock only that username from that address, and failures from
     // elsewhere never lock the owner out; the per-(account, network) budget caps one site's addresses together, and the

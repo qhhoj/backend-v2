@@ -77,4 +77,28 @@ describe('a login in flight while every session of the user is signed out', () =
       }
     },
   );
+
+  it('refuses a login whose user read predates a password change that lands before its epoch read', async () => {
+    const { _id } = await createUser(api.users, {
+      username: 'gapuser',
+      email: 'gapuser@example.com',
+    });
+    const owner = await loginAs(api, _id);
+    const readEpoch = api.sessions.signOutEpoch.bind(api.sessions);
+    const spy = jest
+      .spyOn(api.sessions, 'signOutEpoch')
+      .mockImplementationOnce(async (userId) => {
+        await signOuts['a password change'](owner);
+        return readEpoch(userId);
+      });
+    try {
+      const login = await api
+        .http()
+        .post(`${AUTH}/login`)
+        .send({ username: 'gapuser', password: OLD_PASSWORD });
+      expect(login.status).toBe(401);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
