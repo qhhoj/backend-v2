@@ -50,6 +50,7 @@ import { ProblemImportsService } from './imports/problem-imports.service';
 import { ProblemLifecycleController } from './lifecycle/problem-lifecycle.controller';
 import { ProblemLifecycleService } from './lifecycle/problem-lifecycle.service';
 import { ProblemPackageController } from './package/problem-package.controller';
+import { PackageBudget } from './package/package-budget';
 import { ProblemPackageService } from './package/problem-package.service';
 import { ExternalJudgeConnectionController } from './external-judge/external-judge-connection.controller';
 import { ExternalJudgeLookupService } from './external-judge/external-judge-lookup.service';
@@ -176,6 +177,7 @@ const repositories = [
     ProblemPdfService,
     ProblemLifecycleService,
     ProblemPackageService,
+    PackageBudget,
     ProblemRescoreEnqueuerService,
     ProblemEvents,
     RateLimitService,

@@ -8,6 +8,7 @@ import {
   invalidField,
   RateLimitService,
 } from '@libs/common';
+import { isProblemRenamed } from '@libs/problems';
 import { rejectFile, saveMultipartFile } from '../../core/multipart';
 import type { ProblemDocument } from '../../core/problems.repository';
 import {
@@ -144,8 +145,8 @@ export class ChunkedUploadsService {
         : await this.uploads.reserveUpload(auth);
       const { stored, version } = await this.storedState(problem, session);
       if (stored) {
-        await giveBackUpload?.();
         await this.markStored(session);
+        await this.giveBackQuietly(giveBackUpload);
         return this.data.get(auth, problem.code);
       }
       await this.charges.giveBack(session.id);
@@ -178,6 +179,19 @@ export class ChunkedUploadsService {
       }
       await this.drop(session);
     });
+  }
+
+  /** The upload is stored already: a failed release is logged, not answered (the hit only lapses with its window). */
+  private async giveBackQuietly(
+    giveBack: (() => Promise<void>) | null,
+  ): Promise<void> {
+    try {
+      await giveBack?.();
+    } catch (error) {
+      this.logger.warn(
+        `Giving back an upload hit failed: ${(error as Error).message}`,
+      );
+    }
   }
 
   private async markStored(session: UploadSession): Promise<void> {
@@ -244,12 +258,17 @@ export class ChunkedUploadsService {
     }
   }
 
-  /** The chunks in one `stageUpload` file, refused (and the session dropped) unless they are the announced file; a part lost on disk is 409 `chunks_missing` and must be sent again. */
+  /** The chunks in one `stageUpload` file, refused (and the session dropped) unless they are the announced file; a part lost on disk is 409 `chunks_missing` and must be sent again. A problem renamed meanwhile also drops the session (409 issue `problem_renamed`): it can only be resumed under the old code. */
   private async assembleVerified(
     problem: ProblemDocument,
     session: UploadSession,
   ): Promise<string> {
-    const staged = await this.store.stageUpload(problem);
+    const staged = await this.store
+      .stageUpload(problem)
+      .catch(async (error: unknown) => {
+        if (isProblemRenamed(error)) await this.drop(session);
+        throw error;
+      });
     try {
       const { bytes, sha256 } = await this.parts.assemble(
         session.id,

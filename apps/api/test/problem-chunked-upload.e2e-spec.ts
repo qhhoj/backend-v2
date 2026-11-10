@@ -219,10 +219,14 @@ describe('chunked data upload', () => {
 
     for (const { code } of [single, chunked, settings])
       expect(existsSync(join(api.problemDataRoot, code))).toBe(false);
-    expect([source.status, completed.status, written.status]).toEqual([
-      409, 409, 409,
-    ]);
-    await cancel(`${chunked.code}_moved`, session.id).expect(204);
+    for (const refused of [source, completed, written])
+      expect(refused).toMatchObject({
+        status: 409,
+        body: {
+          error: { issues: [{ code: 'problem_renamed' }] },
+        },
+      });
+    await status(`${chunked.code}_moved`, session.id).expect(404);
   });
 
   it('reads the stored archive only for a session holding every chunk, within the upload budget', async () => {
@@ -401,12 +405,15 @@ describe('chunked data upload', () => {
       const stored = await complete(code, next.id).expect(201);
       const repeated = await complete(code, next.id).expect(201);
       expect(repeated.body).toEqual(stored.body);
-      await api.app
-        .get<Redis>(REDIS)
-        .hdel(`chunked-upload:${next.id}`, 'completed');
-      await cancel(code, next.id).expect(404);
+      const redis = api.app.get<Redis>(REDIS);
+      const budget = () => redis.get(`rate:upload:user:${editorIds[0]}`);
+      await redis.hdel(`chunked-upload:${next.id}`, 'completed');
+      const budgetBefore = await budget();
       const afterLostMarker = await complete(code, next.id).expect(201);
       expect(afterLostMarker.body).toEqual(stored.body);
+      expect(await budget()).toBe(budgetBefore);
+      await redis.hdel(`chunked-upload:${next.id}`, 'completed');
+      await cancel(code, next.id).expect(404);
       expect(await creditsOf(organizationId!)).toBe(1);
       expect(await ledgerOf(organizationId!)).toEqual([['upload', 1]]);
     });

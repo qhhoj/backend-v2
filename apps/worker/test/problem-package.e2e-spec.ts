@@ -9,7 +9,11 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { StorageService } from '@libs/common';
-import { PackageCacheService, ProblemDataFilesService } from '@libs/problems';
+import {
+  PACKAGE_DATA_UNSAVED,
+  PackageCacheService,
+  ProblemDataFilesService,
+} from '@libs/problems';
 import {
   PACKAGE_LIMITS,
   DEFAULT_PACKAGE_LIMITS,
@@ -103,7 +107,7 @@ describe('problem package build', () => {
   });
   afterAll(() => worker.teardown());
   beforeEach(() => {
-    limits.maxBytes = DEFAULT_PACKAGE_LIMITS.maxBytes;
+    Object.assign(limits, DEFAULT_PACKAGE_LIMITS);
   });
 
   it('rebuilds under a new key once a PDF is cached after a build', async () => {
@@ -236,30 +240,37 @@ describe('problem package build', () => {
     ).rejects.toThrow('problem not found');
   });
 
-  it('builds only finished data: never during a data write, nor after a write that stopped before its stamp', async () => {
+  it('builds only finished data: waits out a data write, refuses an unfinished save, accepts a stamp ahead', async () => {
+    Object.assign(limits, { dataWaitAttempts: 100, dataWaitMs: 20 });
     const problem = await seedPackageProblem('pkg_midwrite');
     const { code } = problem;
     const dataFiles = worker.module.get(ProblemDataFilesService);
     await dataFiles.writeDataVersion(code, 3);
+    let built: Promise<string> = Promise.resolve('');
     await dataFiles.withDataWrite(code, async () => {
       await worker.problems.updateOne(
         { _id: problem._id },
         { $inc: { dataVersion: 1 } },
       );
-      await expect(service.build({ code, key: 'x' })).rejects.toThrow();
+      built = service.build({ code, key: 'x' });
+      await new Promise((resolve) => setTimeout(resolve, 100));
       writeFileSync(join(dataDirectory(code), 'tests.zip'), 'NEW-ARCHIVE');
+      await dataFiles.writeDataVersion(code, 4);
     });
-    await expect(service.build({ code, key: 'x' })).rejects.toThrow();
-    expect(
-      readdirSync(packagesDirectory()).filter((name) =>
-        name.startsWith(`${code}.`),
-      ),
-    ).toEqual([]);
-    await dataFiles.writeDataVersion(code, 4);
-    const key = await service.build({ code, key: 'x' });
+    const key = await built;
     expect((await readZip(cache.pathOf(code, key)))['data/tests.zip']).toBe(
       'NEW-ARCHIVE',
     );
+
+    await worker.problems.updateOne(
+      { _id: problem._id },
+      { $inc: { dataVersion: 1 } },
+    );
+    await expect(service.build({ code, key: 'x' })).rejects.toThrow(
+      PACKAGE_DATA_UNSAVED,
+    );
+    await dataFiles.writeDataVersion(code, 9);
+    expect(await service.build({ code, key: 'x' })).toMatch(/^5\./);
   });
 
   it('sweeps cached packages older than a day', async () => {

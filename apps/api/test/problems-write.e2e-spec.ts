@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -506,6 +507,15 @@ afterAll(() => api.teardown());
       await authed(api.http().post(`${PROBLEMS}/origin/clone`), admin)
         .send({ code: 'emptied_clone' })
         .expect(201);
+      mkdirSync(join(api.problemDataRoot, 'link_target'));
+      symlinkSync(
+        join(api.problemDataRoot, 'link_target'),
+        join(api.problemDataRoot, 'linked'),
+      );
+      const ontoLink = await authed(api.http().post(PROBLEMS), setter)
+        .send({ ...valid, code: 'linked' })
+        .expect(400);
+      expect(issueCodesOf(ontoLink)).toEqual(['data_directory_taken']);
     });
     it('emits publicityChanged with the suggester and renders statement text unsanitized only from a problem_full_markup writer', async () => {
       const problem = await createProblem(api, catalog, {

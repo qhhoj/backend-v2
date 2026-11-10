@@ -53,6 +53,10 @@ export interface ProblemPackageJob {
 }
 /** The `JobFailure` of a build over the size cap; the api turns it into `409 package_too_large`. */
 export const PACKAGE_TOO_LARGE = 'too_large';
+/** The `JobFailure` of a build that found a data write still under way after its bounded wait; the api answers 503 and gives the request back. */
+export const PACKAGE_DATA_WRITING = 'data_writing';
+/** The `JobFailure` of a build that found the last data save unfinished (`DataState` `unsaved`); the api answers 409 `package_data_unsaved` and gives the request back. */
+export const PACKAGE_DATA_UNSAVED = 'data_unsaved';
 
 /** Everything the api resolved and authorised before enqueueing; the worker never re-reads request state. */
 export interface PolygonImportJob extends ImportOptions {

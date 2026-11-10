@@ -42,8 +42,11 @@ export class ProblemPackageController {
    * the package is cached and `GET` on the same path returns it; 202
    * `{ data: { status: 'building', key } }` means a build is queued or running,
    * so poll `GET`. Every request counts against 3 per problem and 10 in total
-   * per user per hour (429 `rate_limited`). Responds 409 `package_too_large`
-   * when the package is over the size limit.
+   * per user per hour (429 `rate_limited`); a build later refused for the test
+   * data's state gives the request back. Responds 409 `package_too_large` when
+   * the package is over the size limit, and 409 `conflict` (issue
+   * `data_save_unfinished`, nothing spent) when the last test-data save did not
+   * finish: save the test data again.
    */
   // Plain `@Res()` because the status (200 or 202) depends on the answer.
   @ApiExtension('x-enveloped', true)
@@ -79,8 +82,10 @@ export class ProblemPackageController {
    * attachment named `<code>.zip`; 202 `{ data: { status: 'building' } }` with
    * `Retry-After` means the build is still running. Other outcomes: 404
    * `package_not_built` when no package was requested for the current data, 409
-   * `package_too_large`, 503 `package_unavailable` with `Retry-After` when the
-   * build failed. Polling is free of rate limits.
+   * `package_too_large`, 409 `package_data_unsaved` when the last test-data
+   * save did not finish (save it again), 503 `package_unavailable` with
+   * `Retry-After` when the build failed (including a data write that outlasted
+   * the build's wait). Polling is free of rate limits.
    */
   @ApiExtension('x-enveloped', true)
   @ApiExtraModels(PackageBuildingResponse)

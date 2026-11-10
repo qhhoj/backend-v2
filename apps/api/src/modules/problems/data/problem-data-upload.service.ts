@@ -314,7 +314,7 @@ export class ProblemDataUploadService {
     });
   }
 
-  /** One upload attempt against the user's budget (30 per hour); a chunked upload spends it once, at create. */
+  /** One upload attempt against the user's budget (30 per hour); a chunked upload spends it at create and at each complete that is not answered as already stored. */
   reserveUpload(auth: AuthContext): Promise<() => Promise<void>> {
     return this.rateLimit.reserve(
       [`upload:user:${auth.principal.userId}`],

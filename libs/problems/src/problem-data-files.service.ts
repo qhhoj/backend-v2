@@ -17,6 +17,7 @@ import type Redis from 'ioredis';
 import {
   AppError,
   assertRealPathInside,
+  conflictIssue,
   atomicWrite,
   DAY_MS,
   ENV,
@@ -48,13 +49,25 @@ const STALE_IMPORT_MS = 2 * DAY_MS;
 /** Whether the problem a write was started for still has the code it read; run under that code's data lock, where no rename can change it. */
 export type HoldsCode = () => Promise<boolean>;
 
-/** A write whose problem was renamed after it read the code (409 `conflict`): it must not create a directory at the old code. */
+const PROBLEM_RENAMED = 'problem_renamed';
+
+/** A write whose problem was renamed after it read the code (409 `conflict`, issue `problem_renamed`): it must not create a directory at the old code. */
 const codeChanged = () =>
-  new AppError(
-    'conflict',
-    409,
-    'The problem was renamed meanwhile; reload and try again',
+  conflictIssue(
+    'code',
+    PROBLEM_RENAMED,
+    'The problem was renamed meanwhile; reload it and try again.',
   );
+
+/** Whether `error` is the refusal of a write whose problem was renamed meanwhile. */
+export const isProblemRenamed = (error: unknown): boolean =>
+  error instanceof AppError &&
+  ((error.extra?.issues ?? []) as Array<{ code: string }>).some(
+    (issue) => issue.code === PROBLEM_RENAMED,
+  );
+
+/** Whether `<code>/` holds a finished data write of `dataVersion`: `writing` while a write's marker is up; `unsaved` when the stamp is behind (a write stopped after its Mongo write, so files may be half moved; the next save heals it). A stamp ahead (a database-only restore) or none (legacy data) is finished, as judges read it. */
+export type DataState = 'finished' | 'writing' | 'unsaved';
 
 /** Redis lock held for the whole of one data change of `code` (the judge's marker is up meanwhile); the bridge reads it to hold a submission waiting for that problem's data. */
 export const problemDataLockKey = (code: string): string =>
@@ -188,14 +201,17 @@ export class ProblemDataFilesService {
     }
   }
 
-  /** Whether a data write's marker is up: the write has started and its stamp is not written yet (judges wait meanwhile). */
-  async isWriting(code: string): Promise<boolean> {
+  /** See `DataState`; `dataVersion` is the problem's as Mongo holds it. */
+  async dataState(code: string, dataVersion: number): Promise<DataState> {
     const marker = this.markerPath(code);
     await assertRealPathInside(this.root, marker);
-    return access(marker).then(
+    const isWriting = await access(marker).then(
       () => true,
       () => false,
     );
+    if (isWriting) return 'writing';
+    const stamp = await this.readDataVersion(code);
+    return stamp !== null && stamp < dataVersion ? 'unsaved' : 'finished';
   }
 
   private lockKey(code: string): string {
@@ -232,11 +248,8 @@ export class ProblemDataFilesService {
 
   /** Frees a code a refused write left an empty `<code>/` at: the empty directory is removed under the code's data lock; one that holds anything (a stamp, data a failed rename stranded) stays. */
   async removeEmptyDirectory(code: string): Promise<void> {
-    const isPresent = await access(this.directoryOf(code)).then(
-      () => true,
-      () => false,
-    );
-    if (!isPresent) return;
+    const found = await lstat(this.directoryOf(code)).catch(() => null);
+    if (!found?.isDirectory()) return;
     await withRedisLock(
       this.redis,
       {
