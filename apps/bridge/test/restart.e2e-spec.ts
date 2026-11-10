@@ -2,6 +2,7 @@ import { status } from '@grpc/grpc-js';
 import { Test } from '@nestjs/testing';
 import type { Submission } from '@libs/database';
 import Redis from 'ioredis';
+import { sha256 } from '@libs/auth';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { BridgeCommandsService } from '@libs/judging';
 import { recordSubmissionEvents } from '@libs/judging/testing';
@@ -17,6 +18,7 @@ import {
 import type { BridgeCatalog } from './fixtures';
 import { BridgeModule } from '../src/bridge.module';
 import { DispatcherService } from '../src/dispatch/dispatcher.service';
+import { JudgesRepository } from '../src/judges/judges.repository';
 import { JudgeLinkServer } from '../src/link/judge-link.server';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import { countResyncTicks, resyncTicks } from './resync-ticks';
@@ -417,6 +419,85 @@ describe('Bridge restart', () => {
       );
       expect((await judge.nextAssign(3000)).ref?.submissionId).toBe(id);
       await judge.close();
+    });
+
+    it('keeps a judge that registers while a tick reads the judge rows', async () => {
+      await seedJudge(bridge, 'restart-24', KEY);
+      await seedJudge(bridge, 'restart-25', KEY);
+      const repository = bridge.module.get(JudgesRepository);
+      const dispatch = bridge.module.get(DispatcherService);
+      const accessOf = repository.accessOf.bind(repository);
+      let read = false;
+      // the tick's read lands before restart-25 registers, its reconcile after
+      const slowRead = jest
+        .spyOn(repository, 'accessOf')
+        .mockImplementationOnce(async (names) => {
+          const access = await accessOf(names);
+          read = true;
+          await waitUntil(
+            () => dispatch.connectedNames().includes('restart-25'),
+            10_000,
+          );
+          return access;
+        });
+      try {
+        const present = await connect('restart-24');
+        await waitUntil(() => read, 10_000);
+        const joining = await connect('restart-25');
+        await resyncTicks(2);
+        expect(joining.isClosed).toBe(false);
+        expect(present.isClosed).toBe(false);
+        await joining.close();
+        await present.close();
+      } finally {
+        slowRead.mockRestore();
+      }
+    });
+
+    it('keeps the new session of a judge that reconnected with its rotated key while a tick read the judge rows', async () => {
+      const rotatedKey = 'restart rotated key';
+      await seedJudge(bridge, 'restart-26', KEY);
+      const repository = bridge.module.get(JudgesRepository);
+      const dispatch = bridge.module.get(DispatcherService);
+      const accessOf = repository.accessOf.bind(repository);
+      const stale = await connect('restart-26');
+      let read = false;
+      // the tick snapshots the old session; the key is rotated before the read, and the judge reconnects with the new key before the reconcile
+      const slowRead = jest
+        .spyOn(repository, 'accessOf')
+        .mockImplementationOnce(async (names) => {
+          await bridge.judges.updateOne(
+            { name: 'restart-26' },
+            { authKeyHash: sha256(rotatedKey) },
+          );
+          const access = await accessOf(names);
+          read = true;
+          await waitUntil(
+            () =>
+              dispatch
+                .registeredSessions()
+                .some(
+                  (session) =>
+                    session.name === 'restart-26' &&
+                    session.authKeyHash === sha256(rotatedKey),
+                ),
+            10_000,
+          );
+          return access;
+        });
+      try {
+        await waitUntil(() => read, 10_000);
+        const fresh = await FakeJudge.online(bridge.judgePort(), {
+          name: 'restart-26',
+          key: rotatedKey,
+        });
+        await resyncTicks(2);
+        expect(stale.isClosed).toBe(true);
+        expect(fresh.isClosed).toBe(false);
+        await fresh.close();
+      } finally {
+        slowRead.mockRestore();
+      }
     });
   });
 

@@ -374,11 +374,16 @@ export class DispatcherService {
     await this.offerWork(judge);
   }
 
-  /** Mongo is the truth for access: a connected judge that is now blocked, deleted or holds a rotated key is dropped, and a changed `isDisabled` is applied. Covers a lost command. Returns the names dropped, for the link to revoke. */
-  async reconcile(access: JudgeAccess[]): Promise<string[]> {
+  /** Mongo is the truth for access: of the sessions whose rows were read (`read`, then `access`), one still registered that is now blocked, deleted or holds a rotated key is dropped, and a changed `isDisabled` is applied. A session registered during the read passed its own key check after it began, so it waits for the next tick. Covers a lost command. Returns the names dropped, for the link to revoke. */
+  async reconcile(
+    read: DispatchTarget[],
+    access: JudgeAccess[],
+  ): Promise<string[]> {
     const byName = new Map(access.map((judge) => [judge.name, judge]));
     const dropped: string[] = [];
-    for (const [name, judge] of this.judges) {
+    for (const judge of read) {
+      const { name } = judge;
+      if (this.judges.get(name) !== judge) continue;
       const stored = byName.get(name);
       if (
         !stored ||
@@ -449,6 +454,11 @@ export class DispatcherService {
 
   connectedNames(): string[] {
     return [...this.judges.keys()];
+  }
+
+  /** Registered sessions now, for a resync that reads their judge rows before it calls `reconcile`. */
+  registeredSessions(): DispatchTarget[] {
+    return [...this.judges.values()];
   }
 
   /** Runs a registered or handshaking judge holds (a claim in flight included) and runs waiting in grace: the resync never requeues these. */

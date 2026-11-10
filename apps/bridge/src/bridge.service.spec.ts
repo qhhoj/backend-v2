@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { BridgeService } from './bridge.service';
+import type { DispatchTarget } from './dispatch/slots';
 
 const RESYNC_MS = 300;
 
@@ -35,6 +36,7 @@ function setup() {
       hasQueued: () => false,
       heldIds,
       connectedNames: () => [] as string[],
+      registeredSessions: () => [] as DispatchTarget[],
       stop: () => calls.push('dispatch.stop'),
     },
     commands: {
