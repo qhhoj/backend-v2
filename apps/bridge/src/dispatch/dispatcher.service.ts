@@ -57,10 +57,11 @@ const isSameEntry = (left: QueuedSubmission, right: QueuedSubmission) =>
   left.waitsForData === right.waitsForData &&
   left.dataVersion === right.dataVersion;
 
-/** A session between Hello and `register`: it holds the runs it resumed; `plan` is open until its Welcome goes out. */
+/** A session between Hello and `register`: it holds the runs it resumed; `plan` is open until its Welcome goes out. `reading` holds the listed runs whose row is still being read (by `windingKey`), so a resync tick never requeues them meanwhile; a QU row of that generation or newer voids such a hold, and the resume then drops the run. Kept out of `inFlight`: aborts, grace and slots see a run only once it is resumed. */
 interface Resuming {
   judge: DispatchTarget;
   plan: ResumePlan | null;
+  reading: Map<string, AssignmentRef>;
 }
 
 /** The bridge's in-memory view (legacy `JudgeList`): connected judges by name with the runs each holds, runs waiting in grace, and the queue in dispatch order. Mongo stays the truth: nothing is sent before the claim moved QU → P. */
@@ -100,9 +101,15 @@ export class DispatcherService {
   ): Promise<ResumePlan> {
     this.replace(judge);
     const plan: ResumePlan = { resume: [], abort: [] };
-    const resuming: Resuming = { judge, plan };
+    const reading = new Map(listed.map(({ ref }) => [windingKey(ref), ref]));
+    const resuming: Resuming = { judge, plan, reading };
     this.resuming.set(judge.name, resuming);
-    for (const { ref } of listed) await this.resumeOne(judge, ref, plan);
+    try {
+      for (const { ref } of listed)
+        await this.resumeOne(judge, ref, plan, reading);
+    } finally {
+      reading.clear();
+    }
     // replaced meanwhile: the newer handshake decides what expires
     if (judge.isClosed) return plan;
     const listedIds = new Set(listed.map(({ ref }) => ref.submissionId));
@@ -461,10 +468,13 @@ export class DispatcherService {
     return [...this.judges.values()];
   }
 
-  /** Runs a registered or handshaking judge holds (a claim in flight included) and runs waiting in grace: the resync never requeues these. */
+  /** Runs a registered or handshaking judge holds (a claim in flight included), runs a handshaking judge is still reading to resume, and runs waiting in grace: the resync never requeues these. */
   heldIds(): string[] {
     const live = this.sessions().flatMap((judge) => [...judge.inFlight.keys()]);
-    return [...live, ...this.grace.ids()];
+    const reading = [...this.resuming.values()].flatMap(({ reading }) =>
+      [...reading.values()].map((ref) => ref.submissionId),
+    );
+    return [...live, ...reading, ...this.grace.ids()];
   }
 
   queuedIds(): string[] {
@@ -499,6 +509,7 @@ export class DispatcherService {
   /** The row is QU at `generation`, so a run of that generation or older still held (live, resumed by a handshaking session, or in grace) is void: the judge is told to stop, and the slot comes back with its `Final{ABORTED}` (`winding`). A newer run (claimed after the row was read), a claim in flight, and a run whose Final is being stored (`settling`: a RETRY's own requeue read by a resync tick before the session ended the run) are kept. */
   private voidOlderRuns(submission: QueuedSubmission): void {
     this.grace.discard(submission.id, submission.generation);
+    this.voidReads(submission);
     for (const judge of this.sessions()) {
       const generation = judge.inFlight.get(submission.id);
       if (!generation || generation > submission.generation) continue;
@@ -509,17 +520,34 @@ export class DispatcherService {
     }
   }
 
+  /** Runs of generation ≤ the QU row's that a handshake is still reading are void: the resume drops them. */
+  private voidReads(submission: QueuedSubmission): void {
+    for (const { reading } of this.resuming.values())
+      for (const [key, ref] of reading)
+        if (
+          ref.submissionId === submission.id &&
+          ref.generation <= submission.generation
+        )
+          reading.delete(key);
+  }
+
   /** Some session holds a run of it, or is claiming it. */
   private isHeld(submissionId: string): boolean {
     return this.sessions().some((judge) => judge.inFlight.has(submissionId));
   }
 
+  /** CONTINUE when the row still names this judge and generation and nothing voided the run during the read (`reading`), else DROP. */
   private async resumeOne(
     judge: DispatchTarget,
     ref: AssignmentRef,
     plan: ResumePlan,
+    reading: Map<string, AssignmentRef>,
   ): Promise<void> {
-    const stored = await this.runs.resumableRun(ref, judge.name);
+    const read = await this.runs.resumableRun(ref, judge.name);
+    const key = windingKey(ref);
+    const stored = reading.has(key) ? read : null;
+    // a resumed run keeps its read hold until the loop ends: a Hello listing it twice resumes it twice, as before
+    if (stored === null || judge.isClosed) reading.delete(key);
     // taken only now: while Mongo is read the entry stays in grace, where an abort or a failed read leaves it
     if (judge.isClosed) return;
     const waiting = this.grace.take(ref, judge.name);
