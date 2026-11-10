@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { isSessionSecret, SESSION_SECRET_PROBLEM } from '@libs/common';
 import { constantTimeEqual, sha256 } from '../crypto';
 
 /** The session keys of one user, so a password change or a ban can end them all. */
@@ -11,8 +12,10 @@ export const userSessionsKey = (userId: string) => `user-sessions:${userId}`;
  * `open` accepts, and a record copied to another key no longer opens.
  */
 export class SessionRecords {
-  /** `secret` is at least 32 bytes: the api's config refuses a shorter one at boot (`web` in `@libs/common`). */
-  constructor(private readonly secret: string) {}
+  /** Refuses a short or missing secret, so a process that builds records without the `web` config part stops at boot. */
+  constructor(private readonly secret: string) {
+    if (!isSessionSecret(secret)) throw new Error(SESSION_SECRET_PROBLEM);
+  }
 
   keyFor(cookieId: string): string {
     return `session:${this.hmac(sha256(cookieId))}`;

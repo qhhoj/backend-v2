@@ -85,6 +85,11 @@ function readIpList(reader: EnvReader, name: string): string[] {
   return [];
 }
 
+export const SESSION_SECRET_PROBLEM =
+  'SESSION_SECRET must be at least 32 bytes';
+export const isSessionSecret = (secret: unknown): secret is string =>
+  typeof secret === 'string' && Buffer.byteLength(secret) >= 32;
+
 /** The HTTP side of the api: tokens, sessions, proxies, event streams and cookies. */
 export const web: ConfigPart<WebConfig> = {
   read: (reader) => ({
@@ -98,9 +103,7 @@ export const web: ConfigPart<WebConfig> = {
     ...(tokenSecret.length < 32
       ? ['TOKEN_SECRET must be at least 32 chars']
       : []),
-    ...(Buffer.byteLength(sessionSecret) < 32
-      ? ['SESSION_SECRET must be at least 32 bytes']
-      : []),
+    ...(isSessionSecret(sessionSecret) ? [] : [SESSION_SECRET_PROBLEM]),
   ],
 };
 
