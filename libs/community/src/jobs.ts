@@ -46,6 +46,7 @@ export const communityJobs = {
     queue: 'organization-points',
     name: 'recompute',
     options: { ...JOB_RETRY, ...JOB_RETENTION },
+    requeueWhenStalledOut: true,
     describe: ({ organizationId }) =>
       `Points of organization ${organizationId}`,
     concurrency: 4,
@@ -54,6 +55,7 @@ export const communityJobs = {
     queue: 'contribution-points',
     name: 'recompute',
     options: { ...JOB_RETRY, ...JOB_RETENTION },
+    requeueWhenStalledOut: true,
     describe: ({ userId }) => `Contribution points of user ${userId}`,
     concurrency: 4,
   }),

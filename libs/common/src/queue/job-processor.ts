@@ -96,17 +96,24 @@ export abstract class ContractProcessor<Payload, Result>
       `${sweep ? sweep.describe() : this.contractOf(job).describe(job.data)} failed: ${error.message}`,
     );
     if (sweep) return;
-    if (error.message === STALLED_OUT) await this.requeueStalled(job);
+    if (
+      error.message === STALLED_OUT &&
+      this.contractOf(job).requeueWhenStalledOut
+    )
+      await this.requeueStalled(job);
     if (this.onFailure) await this.onFailure(job.data, error);
   }
 
   /**
-   * BullMQ fails a job that stalled again after its one allowed redelivery (a worker killed twice mid-run) without spending an attempt, and a plain retry would fail at once on the stored stall count. A job with attempts left is added again as a fresh job under the same id, with the attempts it has left, so the limit still holds. Runs are repeatable by contract (`attempts` above 1 marks an idempotent recompute); a job that does not retry stays failed.
+   * BullMQ fails a job that stalled again after its one allowed redelivery (a worker killed twice mid-run) without spending an attempt, and a plain retry would fail at once on the stored stall count. A job with attempts left is added again as a fresh job under the same id, with the attempts it has left, so the limit still holds. Only for contracts with `requeueWhenStalledOut`, whose `run` is safe when two runs overlap: a run that lost its lock may still be live beside the new job. The remove then add is not atomic (the add must wait for the remove, or BullMQ ignores the id), so the payload is logged before the remove: if the process dies in between, the log line is the record.
    */
   private async requeueStalled(job: Job<Payload>): Promise<void> {
     const attempts = (job.opts.attempts ?? 1) - job.attemptsMade;
     if (attempts < 1) return;
     try {
+      this.logger.error(
+        `${this.contractOf(job).describe(job.data)} stalled out; queueing it again (payload ${JSON.stringify(job.data)})`,
+      );
       await job.remove();
       await this.resolve<Queue>(getQueueToken(this.contract.queue)).add(
         job.name,

@@ -59,6 +59,10 @@ export interface JobContract<Payload> {
   readonly schedule?: JobSchedule;
   /** Consumption starts once these models' indexes exist: Mongo rejects a hint to a missing index (decisions.md:196). */
   readonly needsIndexes: readonly IndexedModel[];
+  /**
+   * Opt-in: a job BullMQ failed as stalled out (worker lost its lock twice, no attempt spent) is queued again while attempts are left. Set it only when `run` is safe when two runs overlap (a run that lost its lock may still be live): compare-and-set or coalesced recomputes. Not for effects that cannot be repeated (a webhook post, a whole import).
+   */
+  readonly requeueWhenStalledOut?: boolean;
   /** Marks a failed reason as a `JobFailure` written for the job's reader (`failureOf`); any other reason stays in the logs. */
   readonly failurePrefix?: string;
 }
