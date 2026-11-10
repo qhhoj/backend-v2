@@ -111,14 +111,14 @@ describe('Bridge restart', () => {
     await again.close();
   });
 
-  it('a judge resuming after a restart holds its run while Mongo is read: ticks meanwhile never requeue it to another judge', async () => {
+  it('a judge resuming after a restart holds its runs while Mongo is read: ticks meanwhile never requeue one to another judge', async () => {
     await seedJudge(bridge, 'restart-20', KEY);
     await seedJudge(bridge, 'restart-21', KEY);
     const repository = bridge.module.get(SubmissionsRepository);
     const inFlightRuns = repository.inFlightRuns.bind(repository);
     const resumableRun = repository.resumableRun.bind(repository);
     let reading = false;
-    // the restart was just now: the row is unheld only from the resume's read on
+    // the restart was just now: the rows are unheld only from the resume's first read on
     const freshRestart = jest
       .spyOn(repository, 'inFlightRuns')
       .mockImplementation(async () =>
@@ -126,7 +126,7 @@ describe('Bridge restart', () => {
           (run) => reading || run.judgedOn !== 'restart-20',
         ),
       );
-    // three ticks complete while the resume reads Mongo: unheld on two of them, the row would be reset
+    // three ticks complete during each read: a run unheld on two of them would be reset
     const slowRead = jest
       .spyOn(repository, 'resumableRun')
       .mockImplementation(async (...args) => {
@@ -137,42 +137,56 @@ describe('Bridge restart', () => {
       });
     try {
       const other = await connect('restart-21');
-      const id = await seedOne({
+      const running = {
         status: 'G',
         judgedOn: 'restart-20',
         judgeGeneration: 1,
         judgeSeq: 2,
-      });
-      const ref = { submissionId: id, generation: 1 };
+      } as const;
+      // the second run waits through the first one's read
+      const ids = [await seedOne(running), await seedOne(running)];
+      const refs = ids.map((submissionId) => ({ submissionId, generation: 1 }));
       const resuming = FakeJudge.open(bridge.judgePort(), {
         name: 'restart-20',
         key: KEY,
-        inFlight: [{ ref, lastSeqSent: 2 }],
+        slots: 2,
+        inFlight: refs.map((ref) => ({ ref, lastSeqSent: 2 })),
       });
       resuming.hello();
       const { welcome } = await resuming.next('welcome', 15_000);
-      expect(welcome.resume).toEqual([
-        { ref, action: Resume_Action.ACTION_CONTINUE, fromSeq: 3 },
-      ]);
-      // a requeue during the read would have sent the next generation to the free judge
+      // a requeue during a read would have sent the next generation to the free judge
       await resyncTicks(2);
-      expect(other.seen('assign').map(({ assign }) => assign.ref)).toEqual([]);
-      expect(await submissionRow(id)).toMatchObject({
-        status: 'G',
-        judgedOn: 'restart-20',
-        judgeGeneration: 1,
+      expect({
+        resumed: welcome.resume,
+        assignedElsewhere: other.seen('assign').map(({ assign }) => assign.ref),
+      }).toEqual({
+        resumed: refs.map((ref) => ({
+          ref,
+          action: Resume_Action.ACTION_CONTINUE,
+          fromSeq: 3,
+        })),
+        assignedElsewhere: [],
       });
-      resuming.cases(ref, [
-        { position: 1, status: Status.STATUS_AC, points: 1, total: 1 },
-      ]);
-      resuming.final(ref, Outcome.OUTCOME_GRADED);
-      await waitUntil(async () => (await submissionRow(id)).status === 'D');
-      expect(await submissionRow(id)).toMatchObject({
-        result: 'AC',
-        judgedOn: 'restart-20',
-        judgeGeneration: 1,
-        requeueCount: 0,
-      });
+      for (const ref of refs) {
+        expect(await submissionRow(ref.submissionId)).toMatchObject({
+          status: 'G',
+          judgedOn: 'restart-20',
+          judgeGeneration: 1,
+        });
+        resuming.cases(ref, [
+          { position: 1, status: Status.STATUS_AC, points: 1, total: 1 },
+        ]);
+        resuming.final(ref, Outcome.OUTCOME_GRADED);
+      }
+      for (const id of ids) {
+        await waitUntil(async () => (await submissionRow(id)).status === 'D');
+        expect(await submissionRow(id)).toMatchObject({
+          result: 'AC',
+          judgedOn: 'restart-20',
+          judgeGeneration: 1,
+          requeueCount: 0,
+        });
+      }
       await resuming.close();
       await other.close();
     } finally {
