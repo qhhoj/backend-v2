@@ -134,6 +134,11 @@ async function enqueueFlagged<Payload>(
   { jobs, payloadOf, label }: FlaggedJob<Payload>,
 ): Promise<void> {
   const flagged: string[] = [];
+  // The bound can fire while the callback still runs and sets a flag; its own failure clears it too.
+  const clearFlags = () =>
+    Promise.allSettled(
+      flagged.map((id) => redis.del(pendingKey(jobs.contract, id))),
+    );
   const isQueued = await jobs.bestEffort(
     `${label} ${ids.join(', ')} not enqueued`,
     async () => {
@@ -148,13 +153,14 @@ async function enqueueFlagged<Payload>(
           )) === 'OK'
         )
           flagged.push(id);
-      if (flagged.length) await jobs.addBulk(flagged.map(payloadOf));
+      if (flagged.length)
+        await jobs.addBulk(flagged.map(payloadOf)).catch(async (error) => {
+          await clearFlags();
+          throw error;
+        });
     },
   );
-  if (!isQueued)
-    await Promise.allSettled(
-      flagged.map((id) => redis.del(pendingKey(jobs.contract, id))),
-    );
+  if (!isQueued) await clearFlags();
 }
 
 export const notifyOrganizationPoints = (

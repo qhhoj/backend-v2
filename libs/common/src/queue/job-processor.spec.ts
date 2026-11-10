@@ -99,3 +99,41 @@ describe('JobProcessor failed()', () => {
     },
   );
 });
+
+describe('JobProcessor start', () => {
+  class Indexed {}
+  const indexed = defineJob<Payload>({
+    queue: 'spec-indexed',
+    name: 'run',
+    options: {},
+    describe: ({ id }) => `Indexed ${id}`,
+    needsIndexes: [Indexed],
+  });
+  class Spec extends JobProcessor<Payload>(indexed) {
+    run(): Promise<unknown> {
+      return Promise.resolve();
+    }
+  }
+
+  // Nest awaits bootstrap hooks module after module: a slow index build must not hold back the queues after it.
+  it('returns from bootstrap before the indexes exist, and consumes once they do', async () => {
+    let indexesBuilt!: () => void;
+    const init = jest.fn(
+      () => new Promise<void>((resolve) => (indexesBuilt = resolve)),
+    );
+    const run = jest.fn();
+    const processor = new Spec();
+    Object.assign(processor, {
+      moduleRef: {
+        get: (token: string) => (token.includes('Indexed') ? { init } : {}),
+      },
+      _worker: { isRunning: () => false, run },
+    });
+    await processor.onApplicationBootstrap();
+    expect(init).toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    indexesBuilt();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+});

@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
-import { JobProducer } from '@libs/common';
+import { ENQUEUE_TIMEOUT_MS, JobProducer } from '@libs/common';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { newId } from '@libs/database';
 import IORedis from 'ioredis';
@@ -64,6 +64,30 @@ describe('notifyOrganizationPoints', () => {
     expect(logged).toHaveBeenCalledWith(
       expect.stringContaining(organizationId),
     );
+    expect(
+      await redis.exists(`organization-points:pending:${organizationId}`),
+    ).toBe(0);
+    logged.mockRestore();
+  });
+  it('drops a flag set after the 1 s bound when its add then fails', async () => {
+    const failing = new JobProducer(contract, {
+      addBulk: () => Promise.reject(new Error('redis down')),
+    } as unknown as Queue);
+    const slowRedis = {
+      set: async (...args: Parameters<Redis['set']>) => {
+        await new Promise((resolve) =>
+          setTimeout(resolve, ENQUEUE_TIMEOUT_MS + 300),
+        );
+        return redis.set(...args);
+      },
+      del: (key: string) => redis.del(key),
+    } as unknown as Redis;
+    const logged = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    const organizationId = newId();
+    await notifyOrganizationPoints(failing, slowRedis, [organizationId]);
+    await new Promise((resolve) => setTimeout(resolve, 600));
     expect(
       await redis.exists(`organization-points:pending:${organizationId}`),
     ).toBe(0);
