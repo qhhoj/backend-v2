@@ -1,5 +1,13 @@
 # qhhoj-backend
 
+## 2.37.7
+
+### Patch Changes
+
+- f53f68d: Bridge: a judge that connects while a resync tick reads the judge rows is no longer disconnected as revoked; the tick reconciles only the sessions whose rows it read (#367).
+- be22c61: Every api answer without its own `Cache-Control` gets `private, no-store`, whatever the path. The Polygon and external judge connection tests are limited to 10 per user per minute. A password login that overlaps a sign out everywhere, password change or reset, staff set-password or ban no longer leaves a session behind (401 instead).
+- 348d836: Problem test data: an upload or data change whose problem was renamed meanwhile is refused (409 `conflict`, issue `problem_renamed`) instead of leaving an empty directory at the old code, and an empty leftover directory no longer blocks reusing a code. A chunked complete or cancel reads the stored archive only once every chunk is received and the upload budget allows it. A problem package is never built from data that is being written (the build waits briefly) or whose last save did not finish (409, "save the test data again"); such refusals give the package request back.
+
 ## 2.37.6
 
 ### Patch Changes
