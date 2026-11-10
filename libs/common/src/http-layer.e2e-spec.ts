@@ -85,17 +85,19 @@ describe('http layer', () => {
   });
   afterAll(() => app.close());
 
-  it('keeps /api answers out of shared caches', async () => {
-    for (const path of ['/api/t/json', '/api/t/files/tests.zip'])
+  it('keeps every answer out of shared caches, whatever the path spelling', async () => {
+    for (const path of [
+      '/api/t/json',
+      '/api/t/files/tests.zip',
+      '/%61pi/t/files/tests.zip',
+      '/a%70i/t/json',
+      '/%61%70%69/t/json',
+      '/t/obj',
+    ])
       await http()
         .get(path)
         .expect(200)
         .expect('cache-control', 'private, no-store');
-    await http()
-      .get('/t/obj')
-      .expect((res) => {
-        expect(res.headers['cache-control']).toBeUndefined();
-      });
   });
   it('varies a private max-age answer by cookie', () =>
     http()

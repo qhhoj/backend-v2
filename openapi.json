@@ -29827,7 +29827,7 @@
     },
     "/api/internal/external-judge/test": {
       "post": {
-        "description": "Needs `judge.change_settings`. Calls the external judge's OJ list with the\nsaved base URL and token and answers the OJ ids it serves. Errors: 409\n`external_judge_not_configured`, 502 `external_judge_unauthorized`, 404\n`external_judge_not_found`, 502 `external_judge_rejected`, 503\n`external_judge_unavailable`. Messages never carry the URL or the token.",
+        "description": "Needs `judge.change_settings`. Calls the external judge's OJ list with the\nsaved base URL and token and answers the OJ ids it serves. Errors: 409\n`external_judge_not_configured`, 502 `external_judge_unauthorized`, 404\n`external_judge_not_found`, 502 `external_judge_rejected`, 503\n`external_judge_unavailable`, 429 `rate_limited` (10 tests per user per minute). Messages never carry the URL or the token.",
         "operationId": "ExternalJudgeConnectionController_test",
         "parameters": [],
         "responses": {
@@ -33566,7 +33566,7 @@
     },
     "/api/internal/polygon/test": {
       "post": {
-        "description": "Needs `judge.change_settings`. Calls Polygon's `problems.list` with the saved\nkey and secret and answers how many problems the account can read. Errors:\n409 `polygon_not_connected` (key or secret unset), 502\n`polygon_unauthorized` (wrong key or secret), 502 `polygon_clock_skew` (the\nserver clock is off by more than Polygon allows), 503 `polygon_unavailable`.",
+        "description": "Needs `judge.change_settings`. Calls Polygon's `problems.list` with the saved\nkey and secret and answers how many problems the account can read. Errors:\n409 `polygon_not_connected` (key or secret unset), 502\n`polygon_unauthorized` (wrong key or secret), 502 `polygon_clock_skew` (the\nserver clock is off by more than Polygon allows), 503 `polygon_unavailable`, 429 `rate_limited` (10 tests per user per minute).",
         "operationId": "PolygonConnectionController_test",
         "parameters": [],
         "responses": {

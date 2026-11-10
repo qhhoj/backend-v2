@@ -4,7 +4,11 @@ import type { WebConfig } from '@libs/common';
 import { SettingsService } from '@libs/settings';
 import Redis from 'ioredis';
 import { randomToken } from '../crypto';
-import { SessionRecords, userSessionsKey } from './session-record';
+import {
+  SessionRecords,
+  userEpochKey,
+  userSessionsKey,
+} from './session-record';
 
 export interface SessionData {
   userId: string;
@@ -176,7 +180,18 @@ export class SessionService {
       );
   }
 
+  /** Counts the user's sign-outs of every session; a login compares it before and after it opens its session. */
+  async signOutEpoch(userId: string): Promise<number> {
+    return Number(await this.redis.get(userEpochKey(userId)));
+  }
+
   async destroyAllForUser(userId: string, keepId?: string): Promise<void> {
+    await execOrThrow(
+      this.redis
+        .multi()
+        .incr(userEpochKey(userId))
+        .expire(userEpochKey(userId), SESSION_TTL_SECONDS),
+    );
     const keep = keepId && this.records.keyFor(keepId);
     const doomed = (await this.redis.smembers(userSessionsKey(userId))).filter(
       (key) => key !== keep,

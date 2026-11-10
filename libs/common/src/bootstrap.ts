@@ -1,7 +1,7 @@
 import fastifyCookie from '@fastify/cookie';
 import fastifyMultipart from '@fastify/multipart';
 import { randomUUID } from 'node:crypto';
-import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply } from 'fastify';
 import { Reflector } from '@nestjs/core';
 import {
   FastifyAdapter,
@@ -51,9 +51,8 @@ function addVaryCookie(reply: FastifyReply) {
     reply.header('vary', vary ? `${vary}, Cookie` : 'Cookie');
 }
 
-/** Every `/api` answer says how a shared cache may treat it: no `Cache-Control` becomes `private, no-store` (a CDN caches by file extension otherwise), and a `private, max-age` answer varies by `Cookie`, so a browser never replays one user's answer to the next sign-in. */
-function setApiCacheHeaders(request: FastifyRequest, reply: FastifyReply) {
-  if (!request.url.startsWith('/api/')) return;
+/** Every api answer says how a shared cache may treat it, whatever its path: no `Cache-Control` becomes `private, no-store` (a CDN caches by file extension otherwise), and a `private, max-age` answer varies by `Cookie`, so a browser never replays one user's answer to the next sign-in. */
+function setApiCacheHeaders(reply: FastifyReply) {
   const cacheControl = reply.getHeader('cache-control');
   if (cacheControl === undefined)
     reply.header('cache-control', PRIVATE_NO_STORE);
@@ -94,8 +93,8 @@ export async function configureApp(app: NestFastifyApplication): Promise<void> {
   app
     .getHttpAdapter()
     .getInstance()
-    .addHook('onSend', async (request, reply) => {
-      setApiCacheHeaders(request, reply);
+    .addHook('onSend', async (_request, reply) => {
+      setApiCacheHeaders(reply);
     });
   app.enableShutdownHooks();
   app.useGlobalPipes(validationPipe);

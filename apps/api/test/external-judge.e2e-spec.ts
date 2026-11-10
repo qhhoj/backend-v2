@@ -6,7 +6,10 @@ import { ExternalRun, uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import { EXTERNAL_JUDGE_FETCH } from '@libs/judging';
 import { ExternalJudgeStatusService } from '../src/modules/problems/external-judge/external-judge-status.service';
-import { EXTERNAL_JUDGE_LOOKUP_LIMIT } from '../src/modules/problems/core/rate-limits';
+import {
+  CONNECTION_TEST_LIMIT,
+  EXTERNAL_JUDGE_LOOKUP_LIMIT,
+} from '../src/modules/problems/core/rate-limits';
 import {
   authed,
   createProblem,
@@ -176,6 +179,15 @@ describe('External judge routes', () => {
       .post(ADMIN_TEST)
       .expect(503)
       .expect(errorCode('external_judge_unavailable'));
+  });
+
+  it('limits connection tests per user', async () => {
+    const keys = await redis.keys('rate:external-judge-test:*');
+    if (keys.length) await redis.del(...keys);
+    for (let used = 0; used < CONNECTION_TEST_LIMIT; used += 1)
+      await as(admin).post(ADMIN_TEST).expect(200);
+    await as(admin).post(ADMIN_TEST).expect(429);
+    await redis.del(...(await redis.keys('rate:external-judge-test:*')));
   });
 
   it('answers 409 while the external judge is not configured', async () => {

@@ -57,13 +57,21 @@ export class AuthService {
     @Inject(ENV) private readonly env: ApiConfig,
   ) {}
 
+  /** The epoch is read before the user document the password is checked against, so a sign-out landing between the two reads cannot leave a stale hash with a current epoch. */
+  private async userAndEpoch(username: string) {
+    const found = await this.users.findByUsername(username);
+    if (!found) return { user: null, epoch: 0 };
+    const epoch = await this.sessions.signOutEpoch(found._id);
+    return { user: await this.users.findById(found._id), epoch };
+  }
+
   async login(
     username: string,
     password: string,
     ip: string,
     previousSessionId: string | null,
   ) {
-    const user = await this.users.findByUsername(username);
+    const { user, epoch } = await this.userAndEpoch(username);
     const address = limiterAddress(ip);
     // The tight budget is per (account, address): typos lock only that username from that address, and failures from
     // elsewhere never lock the owner out; the per-(account, network) budget caps one site's addresses together, and the
@@ -97,10 +105,27 @@ export class AuthService {
     this.assertLoginAllowed(user);
     const passwordPwned = await this.pwned.isPwned(password);
     await this.upgradeWeakHash(user, password, ip);
-    return this.startSession(user, {
+    const opened = await this.startSession(user, {
       isPasswordPwned: passwordPwned,
       previousSessionId,
     });
+    await this.assertNotSignedOutSince(opened.sessionId, user._id, epoch);
+    return opened;
+  }
+
+  /** A sign-out of every session (password change or reset, staff set-password, ban, sign out everywhere) that ran while this login was in flight must not leave the new session behind. */
+  private async assertNotSignedOutSince(
+    sessionId: string,
+    userId: string,
+    epoch: number,
+  ): Promise<void> {
+    if ((await this.sessions.signOutEpoch(userId)) === epoch) return;
+    await this.sessions.destroy(sessionId);
+    throw new AppError(
+      'invalid_credentials',
+      401,
+      'Invalid username or password',
+    );
   }
 
   /**
