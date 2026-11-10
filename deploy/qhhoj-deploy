@@ -33,10 +33,14 @@ TAG_RE='^(v[0-9]+\.[0-9]+\.[0-9]+|sha-[0-9a-f]{12})$'
 EX_USAGE=64
 EX_DEFERRED=75
 
-die() { echo "qhhoj-deploy: $*" >&2; exit 1; }
+# Every message goes to the deploy log file first, then to the session. The session's output may be gone (a dropped ssh
+# link, a cancelled job): a failed write must never stop a restore or the version bookkeeping, so it is ignored.
+say() { echo "$(date -u +%FT%TZ) $*" >> "$STATE/deploy.log" 2>/dev/null || true; { echo "$*"; } 2>/dev/null || true; }
+warn() { echo "$(date -u +%FT%TZ) $*" >> "$STATE/deploy.log" 2>/dev/null || true; { echo "$*" >&2; } 2>/dev/null || true; }
+die() { warn "qhhoj-deploy: $*"; exit 1; }
 usage() { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//' >&2; exit "$EX_USAGE"; }
-defer() { echo "deferred: $*"; exit "$EX_DEFERRED"; }
-valid_tag() { [[ $1 =~ $TAG_RE ]] || { echo "qhhoj-deploy: bad version '$1'" >&2; exit "$EX_USAGE"; }; }
+defer() { say "deferred: $*"; exit "$EX_DEFERRED"; }
+valid_tag() { [[ $1 =~ $TAG_RE ]] || { warn "qhhoj-deploy: bad version '$1'"; exit "$EX_USAGE"; }; }
 env_value() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -1; }
 
 history_file() { echo "$STATE/$1.history"; }
@@ -46,7 +50,8 @@ live() { tail -n 1 "$(history_file "$1")" 2>/dev/null || true; }
 record() { [ "$2" = "$(live "$1")" ] || echo "$2" >> "$(history_file "$1")"; }
 drop_last() { local file; file="$(history_file "$1")"; sed -i '$d' "$file"; }
 
-running_contest() { # a running contest that ends within 24 h; long practice contests do not block deploys
+running_contest() { # the end time of a running contest that ends within 24 h; long practice contests do not block deploys.
+  # Only the end time is printed: the deploy log is public and a contest key or title can name a hidden contest.
 
   # The URL carries the DB password: pass it in the environment, never in argv (visible in ps).
   # shellcheck disable=SC2016 # the eval is JavaScript ($lte/$gt are Mongo operators), not shell
@@ -54,8 +59,8 @@ running_contest() { # a running contest that ends within 24 h; long practice con
     const db = connect(process.env.QHHOJ_MONGO_URL);
     const now = new Date();
     const soon = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    const c = db.contests.findOne({ startTime: { $lte: now }, endTime: { $gt: now, $lte: soon } }, { key: 1, endTime: 1 });
-    if (c) print(c.key + " ends " + c.endTime.toISOString());'
+    const c = db.contests.findOne({ startTime: { $lte: now }, endTime: { $gt: now, $lte: soon } }, { endTime: 1 });
+    if (c) print(c.endTime.toISOString());'
 }
 
 BACKEND_UNITS="qhhoj-api qhhoj-bridge qhhoj-worker"
@@ -91,8 +96,8 @@ run_step() { # <tag> <step> [podman run options]: runs one step of <tag>'s image
   [ "$code" = 0 ] && return 0
   podman rm -f "$name" >/dev/null 2>&1 || true # a client killed by the timeout leaves its container running
   case "$code" in
-    124) echo "qhhoj-deploy: $step of $tag timed out after ${STEP_TIMEOUT}s" >&2 ;;
-    137) echo "qhhoj-deploy: $step of $tag was killed (timeout or out of memory)" >&2 ;;
+    124) warn "qhhoj-deploy: $step of $tag timed out after ${STEP_TIMEOUT}s" ;;
+    137) warn "qhhoj-deploy: $step of $tag was killed (timeout or out of memory)" ;;
   esac
   return "$code"
 }
@@ -112,7 +117,7 @@ build_indexes() { # <tag>: the new image builds every schema index while the liv
 run_migrations() { # <tag>: the new image runs its pending one-off data migrations (`worker migrate`) while the live version still serves
   # An image without the step (built before it) still runs its one-offs at boot, so it is skipped, never booted as a worker.
   local steps; steps="$(deploy_steps "$1")" || return 1
-  if [[ " $steps " != *" migrate "* ]]; then echo "$1 has no migrate step; skipped"; return 0; fi
+  if [[ " $steps " != *" migrate "* ]]; then say "$1 has no migrate step; skipped"; return 0; fi
   # The worker's own env and volume: a migration may read the data directories. A failure is reduced to no row data.
   run_step "$1" migrate --env-file "$ENV_FILE" -e APP=worker -e NODE_ENV=production -v /srv/qhhoj:/srv/qhhoj
 }
@@ -152,12 +157,13 @@ login_registry() { # --token-stdin: the registry token arrives on stdin and is o
 
 deploy_backend() { # <tag> [--force] [--token-stdin]
   local tag=$1 previous authfile="$AUTHFILE"
+  trap '' PIPE HUP # a closed session must not kill a deploy between the switch and its restore
   FORCE=0 TOKEN_STDIN=0
   parse_backend_flags "${@:2}"
   valid_tag "$tag"
   if [ "$FORCE" = 0 ]; then
     local contest; contest="$(running_contest)"
-    [ -z "$contest" ] || defer "contest $contest"
+    [ -z "$contest" ] || defer "a contest is running; retry after $contest"
   fi
   if [ "$TOKEN_STDIN" = 1 ]; then login_registry; authfile="$TMP/auth.json"; fi
   podman pull --authfile "$authfile" "$IMAGE:$tag"
@@ -165,13 +171,13 @@ deploy_backend() { # <tag> [--force] [--token-stdin]
   build_indexes "$tag" || die "index build of $tag failed; ${previous:-nothing} stays live"
   run_migrations "$tag" || die "migrations of $tag failed; ${previous:-nothing} stays live"
   if switch_backend "$tag" && backend_healthy; then
-    record backend "$tag"; prune_images; echo "deployed backend $tag"; return
+    record backend "$tag"; prune_images; say "deployed backend $tag"; return
   fi
-  echo "qhhoj-deploy: backend $tag failed; restoring ${previous:-nothing}" >&2
+  warn "qhhoj-deploy: backend $tag failed; restoring ${previous:-nothing}"
   [ -n "$previous" ] || exit 1
   switch_backend "$previous" || die "restoring $previous failed; live backend state unknown"
-  if backend_healthy; then echo "previous version $previous restored and healthy"
-  else echo "previous version $previous restored but UNHEALTHY"; fi
+  if backend_healthy; then say "previous version $previous restored and healthy"
+  else say "previous version $previous restored but UNHEALTHY"; fi
   exit 1
 }
 
@@ -198,7 +204,7 @@ rollback() { # backend|frontend: history moves only after the target is confirme
     point_frontend "$target"; drop_last frontend
     frontend_healthy "$target" || die "frontend $target unhealthy after rollback"
   fi
-  echo "rolled back $app to $target"
+  say "rolled back $app to $target"
 }
 
 status() {
@@ -217,7 +223,7 @@ point_frontend() { # <version>
 frontend_healthy() { # <version>: nginx serves that release's index.html (loopback is exempt from the preview gate)
   local host got
   if ! grep -rqsF /var/www/qhhoj/current "$ROOT/etc/nginx"; then
-    echo "nginx does not serve v2 yet: file check only"
+    say "nginx does not serve v2 yet: file check only"
     cmp -s "$WWW/current/index.html" "$WWW/releases/$1/index.html"; return
   fi
   host="$(env_value SITE_URL)"; host="${host#https://}"; host="${host%%/*}"
@@ -273,7 +279,7 @@ carry_old_assets() { # <version>: tabs on a previous build still request its has
     # Hashed names never collide, so no overwrite. Files keep their build mtime: the age filter drops
     # chunks older than ASSET_MAX_AGE_DAYS, and they never reach the next release either.
     (cd "$WWW/releases/$old/assets" && find . -type f -mtime "-$ASSET_MAX_AGE_DAYS" -print0 \
-      | xargs -0 -r cp -a --update=none --parents -t "$target") || echo "qhhoj-deploy: could not carry assets of $old" >&2
+      | xargs -0 -r cp -a --update=none --parents -t "$target") || warn "qhhoj-deploy: could not carry assets of $old"
   done
   chmod -R a+rX "$target"
 }
@@ -288,6 +294,7 @@ prune_releases() {
 
 deploy_frontend() { # <version>
   local version=$1 previous
+  trap '' PIPE HUP # as in deploy_backend
   valid_tag "$version"
   unpack_frontend "$version"
   previous="$(live frontend)"
@@ -296,9 +303,9 @@ deploy_frontend() { # <version>
   if frontend_healthy "$version"; then
     record frontend "$version"; prune_releases
     rm -f "$INCOMING/frontend-dist-$version.tar.gz" "$INCOMING/frontend-dist-$version.tar.gz.sha256"
-    echo "deployed frontend $version"; return
+    say "deployed frontend $version"; return
   fi
-  echo "qhhoj-deploy: frontend $version not served; restoring ${previous:-nothing}" >&2
+  warn "qhhoj-deploy: frontend $version not served; restoring ${previous:-nothing}"
   if [ -n "$previous" ]; then point_frontend "$previous"; fi
   exit 1
 }

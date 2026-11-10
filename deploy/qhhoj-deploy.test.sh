@@ -76,11 +76,11 @@ grep -q "podman run .* ghcr.io/qhhoj/backend-v2:v2.1.2 indexes" "$calls" || fail
 set +e; deploy backend latest >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 64 ] || fail "bad tag must exit 64, got $code"
 
-: > "$calls"; set +e; STUB_CONTEST="r42 2026-10-10T12:00:00.000Z" deploy backend v2.2.0 >/dev/null; code=$?; set -e
+: > "$calls"; set +e; STUB_CONTEST="2026-10-10T12:00:00.000Z" deploy backend v2.2.0 >/dev/null; code=$?; set -e
 [ "$code" = 75 ] || fail "running contest must defer (75), got $code"
 grep -q 'mongodb://x' "$calls" && fail "MONGO_URL (password) must not be a mongosh argument"
 grep -q "systemctl restart" "$calls" && fail "deferred deploy restarted"
-STUB_CONTEST="r42 2026-10-10T12:00:00.000Z" deploy backend v2.2.0 --force >/dev/null || fail "--force overrides the contest guard"
+STUB_CONTEST="2026-10-10T12:00:00.000Z" deploy backend v2.2.0 --force >/dev/null || fail "--force overrides the contest guard"
 [ "$(hist | tail -1)" = v2.2.0 ] || fail "forced deploy recorded"
 
 : > "$calls"; set +e; STUB_HEALTH=fail deploy backend v2.3.0 >/dev/null 2>&1; code=$?; set -e
@@ -339,5 +339,28 @@ fresh_frontend
 for v in v2.1.0 v2.2.0 v2.2.0; do tarball "$v"; deploy frontend "$v" >/dev/null || fail "frontend $v"; done
 [ "$(ls "$www/releases")" = "$(printf 'v2.1.0\nv2.2.0')" ] || fail "a frontend redeploy keeps the rollback target: $(ls "$www/releases" | tr '\n' ' ')"
 [ "$(fhist)" = "$(printf 'v2.1.0\nv2.2.0')" ] || fail "a frontend redeploy adds no history entry"
+
+# W5B-1: the session output is gone when the health check fails: the previous version must still be restored,
+# history and status stay on it, and the next rollback goes to the entry before it
+lost_link() { PATH="$bin:$PATH" QHHOJ_DEPLOY_ROOT="$root" QHHOJ_DEPLOY_HEALTH_TRIES=2 bash "$here/qhhoj-deploy" "$@" 2>&1 | true; return "${PIPESTATUS[0]}"; }
+fresh; deploy backend v2.0.0 >/dev/null; deploy backend v2.1.0 >/dev/null; : > "$calls"
+set +e; STUB_DEAD_UNIT=qhhoj-worker lost_link backend v2.2.0; code=$?; set -e
+[ "$code" = 1 ] || fail "unhealthy deploy with a lost link must exit 1, got $code"
+[ "$(grep 'podman tag' "$calls" | tail -1 | awk '{print $3}')" = ghcr.io/qhhoj/backend-v2:v2.1.0 ] || fail "lost link: v2.1.0 not restored"
+grep -q "backend v2.2.0 failed; restoring v2.1.0" "$root/var/lib/qhhoj-deploy/deploy.log" || fail "restoring message not in the deploy log"
+[ "$(deploy status | head -1)" = "backend: v2.1.0" ] || fail "status after a restore"
+: > "$calls"; deploy rollback backend >/dev/null || fail "rollback after a restore"
+[ "$(hist)" = v2.0.0 ] || fail "rollback after a restore must land on v2.0.0: $(hist | tr '\n' ' ')"
+fresh_frontend; tarball v2.1.0; deploy frontend v2.1.0 >/dev/null; tarball v2.2.0
+set +e; STUB_HEALTH=fail lost_link frontend v2.2.0; set -e
+[ "$(readlink "$www/current")" = releases/v2.1.0 ] || fail "lost link: frontend v2.1.0 not restored"
+
+# W5B-2: the deferral names no contest key or title: only the end time reaches the log
+fresh; : > "$calls"
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs
+stub mongosh 'echo "$*" >> "$QHHOJ_DEPLOY_ROOT/mongosh.args"; echo "2026-10-10T12:00:00.000Z"'
+set +e; out="$(deploy backend v2.1.0 2>&1)"; code=$?; set -e
+[ "$code" = 75 ] && [ "$out" = "deferred: a contest is running; retry after 2026-10-10T12:00:00.000Z" ] || fail "deferral message: $out"
+grep -qE 'key|name' "$root/mongosh.args" && fail "the contest query must not read key or name"
 
 echo "qhhoj-deploy backend ok"
