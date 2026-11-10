@@ -13,6 +13,9 @@ import type { Job, Queue } from 'bullmq';
 import { JobFailure, SITE_TIME_ZONE } from './job-contract';
 import type { JobContract, JobSchedule } from './job-contract';
 
+/** BullMQ's failed reason for a job that stalled more often than `maxStalledCount` allows. */
+const STALLED_OUT = 'job stalled more than allowable limit';
+
 export abstract class ContractProcessor<Payload, Result>
   extends WorkerHost
   implements OnApplicationBootstrap
@@ -63,6 +66,13 @@ export abstract class ContractProcessor<Payload, Result>
           name,
           opts: options,
         });
+    // Not awaited: Nest runs bootstrap hooks module after module, so an index build here would hold every later queue back. A failed build is an unhandled rejection and ends the process, as a failed boot did.
+    void this.runWhenIndexed(served);
+  }
+
+  private async runWhenIndexed(
+    served: readonly JobContract<never>[],
+  ): Promise<void> {
     await Promise.all(
       served
         .flatMap(({ needsIndexes }) => needsIndexes)
@@ -85,7 +95,45 @@ export abstract class ContractProcessor<Payload, Result>
     this.logger.error(
       `${sweep ? sweep.describe() : this.contractOf(job).describe(job.data)} failed: ${error.message}`,
     );
-    if (!sweep && this.onFailure) await this.onFailure(job.data, error);
+    if (sweep) return;
+    if (
+      error.message === STALLED_OUT &&
+      this.contractOf(job).requeueWhenStalledOut
+    )
+      await this.requeueStalled(job);
+    if (this.onFailure) await this.onFailure(job.data, error);
+  }
+
+  /**
+   * BullMQ fails a job that stalled again after its one allowed redelivery (a worker killed twice mid-run) without spending an attempt, and a plain retry would fail at once on the stored stall count. A job with attempts left is added again as a fresh job under the same id, with the attempts it has left, so the limit still holds. Only for contracts with `requeueWhenStalledOut`, whose `run` is safe when two runs overlap: a run that lost its lock may still be live beside the new job. The remove then add is not atomic (the add must wait for the remove, or BullMQ ignores the id), so the payload is logged before the remove: if the process dies in between, the log line is the record.
+   */
+  private async requeueStalled(job: Job<Payload>): Promise<void> {
+    const attempts = (job.opts.attempts ?? 1) - job.attemptsMade;
+    if (attempts < 1) return;
+    try {
+      this.logger.error(
+        `${this.contractOf(job).describe(job.data)} stalled out; queueing it again (payload ${JSON.stringify(job.data)})`,
+      );
+      await job.remove();
+      await this.resolve<Queue>(getQueueToken(this.contract.queue)).add(
+        job.name,
+        job.data,
+        {
+          ...job.opts,
+          attempts,
+          delay: undefined,
+          deduplication: undefined,
+          repeat: undefined,
+        },
+      );
+      this.logger.warn(
+        `${this.contractOf(job).describe(job.data)} queued again after it stalled out`,
+      );
+    } catch (requeueError) {
+      this.logger.error(
+        `${this.contractOf(job).describe(job.data)} not queued again: ${(requeueError as Error).message}`,
+      );
+    }
   }
 
   /** Without a listener a worker error (e.g. Redis flushed under a running job) is an unhandled event and throws. */

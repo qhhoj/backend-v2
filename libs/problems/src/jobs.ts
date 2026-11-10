@@ -1,3 +1,4 @@
+import { Submission } from '@libs/database';
 import type {
   Checker,
   PolygonPackageType,
@@ -188,7 +189,7 @@ const POLYGON_IMPORT_FAILURE = 'polygon-import: ';
 /** A failed render or package build is kept this long: polls answer 503 meanwhile, then a request builds again. */
 const ON_DEMAND_FAIL_WINDOW_SECONDS = 10 * 60;
 
-/** The problems' jobs. None waits for indexes, and none is limited across worker processes. */
+/** The problems' jobs. Only the solvers recompute waits for indexes, and none is limited across worker processes. */
 export const problemJobs = {
   /** One render per problem and language at a time (`onDemandState`). */
   pdf: defineJob<PdfRenderJob>({
@@ -246,6 +247,7 @@ export const problemJobs = {
     options: { ...JOB_RETRY, ...JOB_RETENTION },
     describe: ({ problemId, reason }) =>
       `Recompute for the solvers of problem ${problemId} (${reason})`,
+    needsIndexes: [Submission],
   }),
   /** One job per problem at a time (`addReplacingFailed`). One purge at a time per worker process: it deletes directories and thousands of rows. */
   purge: defineJob<ProblemPurgeJob>({
