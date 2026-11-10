@@ -1,7 +1,9 @@
-import { readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getQueueToken } from '@nestjs/bullmq';
 import { Queue, Worker } from 'bullmq';
+import type Redis from 'ioredis';
+import { REDIS } from '@libs/common';
 import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import { EMPTY_TEST_CASE, emptyProblemData } from '@libs/database';
 import type { Problem } from '@libs/database';
@@ -21,7 +23,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
-import { errorCode, setupApiTest } from './setup';
+import { errorCode, issueCodes, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 import { dataOf } from './submission-fixtures';
 
@@ -170,10 +172,22 @@ afterAll(() => api.teardown());
       await requestPackage('editor', problem.code).expect(202);
     });
 
-    it('reports a build over the size cap as 409 and any other failed build as 503', async () => {
+    it('reports a build over the size cap as 409 and any other failed build as 503; a build refused for the test data gives the request back', async () => {
       const tooLarge = await editable();
       const crashed = await editable();
-      const reasons = new Map([[tooLarge.code, 'problem-package: too_large']]);
+      const writing = await editable();
+      const unsaved = await editable();
+      const reasons = new Map([
+        [tooLarge.code, 'problem-package: too_large'],
+        [writing.code, 'problem-package: data_writing'],
+        [unsaved.code, 'problem-package: data_unsaved'],
+      ]);
+      const spent = async (code: string) =>
+        Number(
+          await api.app
+            .get<Redis>(REDIS)
+            .get(`rate:package:user:${ids.editor}:${code}`),
+        );
       const failing = new Worker<ProblemPackageJob>(
         problemJobs.package.queue,
         (job) =>
@@ -184,7 +198,7 @@ afterAll(() => api.teardown());
       );
       await failing.waitUntilReady();
       try {
-        for (const problem of [tooLarge, crashed]) {
+        for (const problem of [tooLarge, crashed, writing, unsaved]) {
           await requestPackage('editor', problem.code).expect(202);
           const key = await keyOf(problem._id);
           await waitUntil(
@@ -204,9 +218,28 @@ afterAll(() => api.teardown());
           503,
         );
         expect(unavailable.headers['retry-after']).toBeDefined();
+        await fetchPackage('editor', writing.code).expect(503);
+        await fetchPackage('editor', unsaved.code)
+          .expect(409)
+          .expect(errorCode('package_data_unsaved'));
+        expect(
+          await Promise.all(
+            [crashed, writing, unsaved].map(({ code }) => spent(code)),
+          ),
+        ).toEqual([1, 0, 0]);
       } finally {
         await failing.close();
       }
+      const stampBehind = await editable({ dataVersion: 2 });
+      mkdirSync(join(api.problemDataRoot, stampBehind.code));
+      writeFileSync(
+        join(api.problemDataRoot, stampBehind.code, '.data-version'),
+        '1\n',
+      );
+      await requestPackage('editor', stampBehind.code)
+        .expect(409)
+        .expect(issueCodes(['data_save_unfinished']));
+      expect(await spent(stampBehind.code)).toBe(0);
     });
 
     it('drops the cached zips of both codes when a problem is renamed', async () => {

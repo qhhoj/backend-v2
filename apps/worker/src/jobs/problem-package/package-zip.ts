@@ -8,10 +8,15 @@ import { ARCHIVE_MAX_BYTES } from '@libs/problems';
 export interface PackageLimits {
   /** Total uncompressed bytes of all entries. */
   maxBytes: number;
+  /** Builds tried while a data write is under way (its marker is up for milliseconds to seconds), `dataWaitMs` apart. */
+  dataWaitAttempts: number;
+  dataWaitMs: number;
 }
 export const PACKAGE_LIMITS = Symbol('PACKAGE_LIMITS');
 export const DEFAULT_PACKAGE_LIMITS: PackageLimits = {
   maxBytes: ARCHIVE_MAX_BYTES,
+  dataWaitAttempts: 5,
+  dataWaitMs: 1000,
 };
 
 /** The package would pass the size cap; raised before any file is written. */

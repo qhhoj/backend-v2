@@ -8,7 +8,9 @@ import { REDIS } from '@libs/common';
 import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
 import { ProblemDataFilesService, QuotaLedger } from '@libs/problems';
 import { buildZip, setStorageBackfilled } from '@libs/problems/testing';
+import { UPLOAD_LIMIT } from '../src/modules/problems/core/rate-limits';
 import { CHUNK_BYTES } from '../src/modules/problems/data/chunked/chunked-upload.limits';
+import * as partsStore from '../src/modules/problems/data/chunked/upload-parts.store';
 import { UploadPartsSweeper } from '../src/modules/problems/data/chunked/upload-parts.sweeper';
 import { UploadSessionsStore } from '../src/modules/problems/data/chunked/upload-sessions.store';
 import { createOrganization } from './organization-fixtures';
@@ -173,6 +175,84 @@ describe('chunked data upload', () => {
     expect(existsSync(partsDirectory(session.id))).toBe(false);
   });
 
+  it('refuses an upload, a complete or a settings write that a rename overtook, leaving no directory at the old code', async () => {
+    const dataFiles = api.app.get(ProblemDataFilesService);
+    const renameBefore = (
+      step: 'stageUpload' | 'withDataWrite',
+      code: string,
+    ) => {
+      const original = dataFiles[step].bind(dataFiles) as (
+        ...args: unknown[]
+      ) => Promise<unknown>;
+      jest
+        .spyOn(dataFiles, step)
+        .mockImplementationOnce(async (...args: unknown[]) => {
+          await authed(api.http().patch(`${PROBLEMS}/${code}`), editor)
+            .send({ code: `${code}_moved` })
+            .expect(200);
+          return original(...args);
+        });
+    };
+    const single = await newProblem();
+    renameBefore('stageUpload', single.code);
+    const source = await authed(
+      api.http().post(`${PROBLEMS}/${single.code}/data/files/customChecker`),
+      editor,
+    ).attach('file', Buffer.from('int main(){}'), {
+      filename: 'checker.cpp',
+    });
+
+    const chunked = await newProblem();
+    const session = sessionOf(await create(chunked.code, smallZip).expect(201));
+    await putChunk(chunked.code, { id: session.id, index: 0 }, smallZip).expect(
+      200,
+    );
+    renameBefore('stageUpload', chunked.code);
+    const completed = await complete(chunked.code, session.id);
+
+    const settings = await newProblem();
+    renameBefore('withDataWrite', settings.code);
+    const written = await authed(
+      api.http().put(`${PROBLEMS}/${settings.code}/data`),
+      editor,
+    ).send({ checker: 'standard', grader: 'standard', cases: [] });
+
+    for (const { code } of [single, chunked, settings])
+      expect(existsSync(join(api.problemDataRoot, code))).toBe(false);
+    for (const refused of [source, completed, written])
+      expect(refused).toMatchObject({
+        status: 409,
+        body: {
+          error: { issues: [{ code: 'problem_renamed' }] },
+        },
+      });
+    await status(`${chunked.code}_moved`, session.id).expect(404);
+  });
+
+  it('reads the stored archive only for a session holding every chunk, within the upload budget', async () => {
+    const { code } = await newProblem();
+    const first = sessionOf(await create(code, smallZip).expect(201));
+    await putChunk(code, { id: first.id, index: 0 }, smallZip).expect(200);
+    await complete(code, first.id).expect(201);
+    const lookalike = sessionOf(
+      await create(code, smallZip, editor, 'a'.repeat(64)).expect(201),
+    );
+    const hashed = jest.spyOn(partsStore, 'sha256OfFile');
+    for (let attempt = 0; attempt < 3; attempt += 1)
+      await complete(code, lookalike.id)
+        .expect(409)
+        .expect(issueCodes(['chunks_missing']));
+    await putChunk(code, { id: lookalike.id, index: 0 }, smallZip).expect(200);
+    const budget = `rate:upload:user:${editorIds[0]}`;
+    const redis = api.app.get<Redis>(REDIS);
+    await redis.set(budget, UPLOAD_LIMIT, 'EX', 60);
+    await complete(code, lookalike.id).expect(429);
+    await redis.del(budget);
+    expect(hashed).not.toHaveBeenCalled();
+    hashed.mockRestore();
+    await cancel(code, lookalike.id).expect(204);
+  });
+
   describe('quota', () => {
     let usage: Model<OrganizationUsage>;
     let ledger: Model<OrganizationCreditEntry>;
@@ -325,12 +405,15 @@ describe('chunked data upload', () => {
       const stored = await complete(code, next.id).expect(201);
       const repeated = await complete(code, next.id).expect(201);
       expect(repeated.body).toEqual(stored.body);
-      await api.app
-        .get<Redis>(REDIS)
-        .hdel(`chunked-upload:${next.id}`, 'completed');
-      await cancel(code, next.id).expect(404);
+      const redis = api.app.get<Redis>(REDIS);
+      const budget = () => redis.get(`rate:upload:user:${editorIds[0]}`);
+      await redis.hdel(`chunked-upload:${next.id}`, 'completed');
+      const budgetBefore = await budget();
       const afterLostMarker = await complete(code, next.id).expect(201);
       expect(afterLostMarker.body).toEqual(stored.body);
+      expect(await budget()).toBe(budgetBefore);
+      await redis.hdel(`chunked-upload:${next.id}`, 'completed');
+      await cancel(code, next.id).expect(404);
       expect(await creditsOf(organizationId!)).toBe(1);
       expect(await ledgerOf(organizationId!)).toEqual([['upload', 1]]);
     });

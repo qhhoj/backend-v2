@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -440,6 +441,7 @@ afterAll(() => api.teardown());
 
       await withData('raced');
       mkdirSync(directoryOf('raced_new'));
+      writeFileSync(join(directoryOf('raced_new'), '.data-version'), '1\n');
       const checkedBeforeTheLock = jest
         .spyOn(dataFiles, 'exists')
         .mockResolvedValueOnce(false);
@@ -472,7 +474,7 @@ afterAll(() => api.teardown());
         true,
       );
     });
-    it('refuses to create, suggest or clone a problem onto a leftover data directory, keeping its files', async () => {
+    it('refuses to create, suggest or clone a problem onto a leftover data directory, keeping its files, and frees an empty one', async () => {
       const leftover = join(api.problemDataRoot, 'leftover');
       mkdirSync(leftover, { recursive: true });
       writeFileSync(join(leftover, '.data-version'), '7\n');
@@ -497,6 +499,23 @@ afterAll(() => api.teardown());
       expect(await api.problems.countDocuments({ code: 'leftover' })).toBe(0);
       expect(readFileSync(join(leftover, '.data-version'), 'utf8')).toBe('7\n');
       rmSync(leftover, { recursive: true, force: true });
+      for (const code of ['emptied', 'emptied_clone'])
+        mkdirSync(join(api.problemDataRoot, code));
+      await authed(api.http().post(PROBLEMS), setter)
+        .send({ ...valid, code: 'emptied' })
+        .expect(201);
+      await authed(api.http().post(`${PROBLEMS}/origin/clone`), admin)
+        .send({ code: 'emptied_clone' })
+        .expect(201);
+      mkdirSync(join(api.problemDataRoot, 'link_target'));
+      symlinkSync(
+        join(api.problemDataRoot, 'link_target'),
+        join(api.problemDataRoot, 'linked'),
+      );
+      const ontoLink = await authed(api.http().post(PROBLEMS), setter)
+        .send({ ...valid, code: 'linked' })
+        .expect(400);
+      expect(issueCodesOf(ontoLink)).toEqual(['data_directory_taken']);
     });
     it('emits publicityChanged with the suggester and renders statement text unsanitized only from a problem_full_markup writer', async () => {
       const problem = await createProblem(api, catalog, {

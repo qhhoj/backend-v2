@@ -13,7 +13,10 @@ const issueCodesOf = async (promise: Promise<void>): Promise<string[]> => {
 const available = (hasProblem: boolean, hasDirectory: boolean) =>
   assertCodeAvailable(
     { idByCode: () => Promise.resolve(hasProblem ? 'id' : null) },
-    { exists: () => Promise.resolve(hasDirectory) },
+    {
+      exists: () => Promise.resolve(hasDirectory),
+      removeEmptyDirectory: () => Promise.resolve(),
+    },
     'code',
   );
 

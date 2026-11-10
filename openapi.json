@@ -37157,7 +37157,7 @@
     },
     "/api/internal/problems/{code}/package": {
       "get": {
-        "description": "Needs edit rights on the problem. 200 returns the cached zip as an\nattachment named `<code>.zip`; 202 `{ data: { status: 'building' } }` with\n`Retry-After` means the build is still running. Other outcomes: 404\n`package_not_built` when no package was requested for the current data, 409\n`package_too_large`, 503 `package_unavailable` with `Retry-After` when the\nbuild failed. Polling is free of rate limits.",
+        "description": "Needs edit rights on the problem. 200 returns the cached zip as an\nattachment named `<code>.zip`; 202 `{ data: { status: 'building' } }` with\n`Retry-After` means the build is still running. Other outcomes: 404\n`package_not_built` when no package was requested for the current data, 409\n`package_too_large`, 409 `package_data_unsaved` when the last test-data\nsave did not finish (save it again), 503 `package_unavailable` with\n`Retry-After` when the build failed (including a data write that outlasted\nthe build's wait). Polling is free of rate limits.",
         "operationId": "ProblemPackageController_download",
         "parameters": [
           {
@@ -37227,7 +37227,7 @@
         "x-enveloped": true
       },
       "post": {
-        "description": "Needs edit rights on the problem. Asks for a zip of the problem as it is now\n(statement and test data). 200 `{ data: { status: 'ready', key } }` means\nthe package is cached and `GET` on the same path returns it; 202\n`{ data: { status: 'building', key } }` means a build is queued or running,\nso poll `GET`. Every request counts against 3 per problem and 10 in total\nper user per hour (429 `rate_limited`). Responds 409 `package_too_large`\nwhen the package is over the size limit.",
+        "description": "Needs edit rights on the problem. Asks for a zip of the problem as it is now\n(statement and test data). 200 `{ data: { status: 'ready', key } }` means\nthe package is cached and `GET` on the same path returns it; 202\n`{ data: { status: 'building', key } }` means a build is queued or running,\nso poll `GET`. Every request counts against 3 per problem and 10 in total\nper user per hour (429 `rate_limited`); a build later refused for the test\ndata's state gives the request back. Responds 409 `package_too_large` when\nthe package is over the size limit, and 409 `conflict` (issue\n`data_save_unfinished`, nothing spent) when the last test-data save did not\nfinish: save the test data again.",
         "operationId": "ProblemPackageController_request",
         "parameters": [
           {

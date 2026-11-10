@@ -8,7 +8,7 @@ import {
   invalidField,
   RateLimitService,
 } from '@libs/common';
-import { ProblemDataFilesService } from '@libs/problems';
+import { isProblemRenamed } from '@libs/problems';
 import { rejectFile, saveMultipartFile } from '../../core/multipart';
 import type { ProblemDocument } from '../../core/problems.repository';
 import {
@@ -49,7 +49,6 @@ export class ChunkedUploadsService {
     private readonly store: ProblemDataStore,
     private readonly data: ProblemDataService,
     private readonly uploads: ProblemDataUploadService,
-    private readonly dataFiles: ProblemDataFilesService,
     private readonly sessions: UploadSessionsStore,
     private readonly parts: UploadPartsStore,
     private readonly sweeper: UploadPartsSweeper,
@@ -125,12 +124,13 @@ export class ChunkedUploadsService {
 
   /**
    * Answers like the single archive upload. Already stored (see `storedState`) answers the stored data and charges
-   * nothing, so a complete retried after a lost answer, a lost marker or a restart never stores twice. Otherwise it gives
-   * back a charge a previous complete still holds (the process died inside its write), spends one upload of the budget,
-   * joins and checks the chunks, and stores them pinned to the data version it read: a write that lands meanwhile,
-   * including a second complete after a lost lock, makes this one 409 `conflict` (refunded if it had spent). A size or
-   * sha256 mismatch, or a refused zip, drops the session (nothing charged); any other refusal keeps the chunks, so
-   * complete can be retried.
+   * nothing, so a complete retried after a lost answer, a lost marker or a restart never stores twice. Every chunk must
+   * be received and one upload of the budget spent before the stored check, which may hash the stored archive; the hit
+   * is given back when the answer is "stored". Otherwise it gives back a charge a previous complete still holds (the
+   * process died inside its write), joins and checks the chunks, and stores them pinned to the data version it read: a
+   * write that lands meanwhile, including a second complete after a lost lock, makes this one 409 `conflict` (refunded
+   * if it had spent). A size or sha256 mismatch, or a refused zip, drops the session (nothing charged); any other
+   * refusal keeps the chunks, so complete can be retried.
    */
   async complete(
     auth: AuthContext,
@@ -138,15 +138,18 @@ export class ChunkedUploadsService {
   ): Promise<ProblemDataResponse> {
     const { problem, session } = await this.ownSession(auth, target);
     const answer = await this.sessions.withSessionLock(session.id, async () => {
+      const { completed } = await this.currentSession(session.id);
+      if (!completed) await this.assertAllReceived(session);
+      const giveBackUpload = completed
+        ? null
+        : await this.uploads.reserveUpload(auth);
       const { stored, version } = await this.storedState(problem, session);
       if (stored) {
-        await this.charges.settleStored(session.id);
-        await this.sessions.markCompleted(session);
+        await this.markStored(session);
+        await this.giveBackQuietly(giveBackUpload);
         return this.data.get(auth, problem.code);
       }
-      await this.assertAllReceived(session);
       await this.charges.giveBack(session.id);
-      await this.uploads.reserveUpload(auth);
       const staged = await this.assembleVerified(problem, session);
       await this.assertStillOpen(session, staged);
       const answered = await this.commitVerified(auth, problem, {
@@ -161,19 +164,39 @@ export class ChunkedUploadsService {
     return answer;
   }
 
-  /** Under the session's lock: a chunk or complete running is 409 `busy`, so a cancel never answers while a complete may still store. A stored upload (the same durable check as complete) can no longer be cancelled (404); dropping it gives back a charge a crashed complete still holds. */
+  /** Under the session's lock: a chunk or complete running is 409 `busy`, so a cancel never answers while a complete may still store. A stored upload (the same durable check as complete, made only when every chunk is received) can no longer be cancelled (404) and is marked completed, so a repeated cancel reads no file; dropping it gives back a charge a crashed complete still holds. */
   async cancel(
     auth: AuthContext,
     target: { code: string; id: string },
   ): Promise<void> {
     const { problem, session } = await this.ownSession(auth, target);
     await this.sessions.withSessionLock(session.id, async () => {
-      if ((await this.storedState(problem, session)).stored) {
-        await this.charges.settleStored(session.id);
+      const { completed } = await this.currentSession(session.id);
+      const mayBeStored = completed || (await this.isAllReceived(session));
+      if (mayBeStored && (await this.storedState(problem, session)).stored) {
+        await this.markStored(session);
         throw noSuchUpload();
       }
       await this.drop(session);
     });
+  }
+
+  /** The upload is stored already: a failed release is logged, not answered (the hit only lapses with its window). */
+  private async giveBackQuietly(
+    giveBack: (() => Promise<void>) | null,
+  ): Promise<void> {
+    try {
+      await giveBack?.();
+    } catch (error) {
+      this.logger.warn(
+        `Giving back an upload hit failed: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  private async markStored(session: UploadSession): Promise<void> {
+    await this.charges.settleStored(session.id);
+    await this.sessions.markCompleted(session);
   }
 
   /** Under the session's lock: whether the upload is stored (marked completed, or durably: `isStored`), and the data version read for it. */
@@ -235,12 +258,17 @@ export class ChunkedUploadsService {
     }
   }
 
-  /** The chunks in one `stageUpload` file, refused (and the session dropped) unless they are the announced file; a part lost on disk is 409 `chunks_missing` and must be sent again. */
+  /** The chunks in one `stageUpload` file, refused (and the session dropped) unless they are the announced file; a part lost on disk is 409 `chunks_missing` and must be sent again. A problem renamed meanwhile also drops the session (409 issue `problem_renamed`): it can only be resumed under the old code. */
   private async assembleVerified(
     problem: ProblemDocument,
     session: UploadSession,
   ): Promise<string> {
-    const staged = await this.dataFiles.stageUpload(problem.code);
+    const staged = await this.store
+      .stageUpload(problem)
+      .catch(async (error: unknown) => {
+        if (isProblemRenamed(error)) await this.drop(session);
+        throw error;
+      });
     try {
       const { bytes, sha256 } = await this.parts.assemble(
         session.id,
@@ -272,6 +300,11 @@ export class ChunkedUploadsService {
       'chunks_missing',
       `Chunk ${error.index} is missing; send it again.`,
     );
+  }
+
+  private async isAllReceived(session: UploadSession): Promise<boolean> {
+    const received = await this.sessions.received(session.id);
+    return received.length >= session.chunkCount;
   }
 
   private async assertAllReceived(session: UploadSession): Promise<void> {
