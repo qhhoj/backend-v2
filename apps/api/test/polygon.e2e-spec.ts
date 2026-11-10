@@ -11,7 +11,10 @@ import type { PolygonLink } from '@libs/database';
 import { POLYGON_FETCH, syncJobId, problemJobs } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { buildZip, FakePolygon } from '@libs/problems/testing';
-import { POLYGON_LINK_LIMIT } from '../src/modules/problems/core/rate-limits';
+import {
+  CONNECTION_TEST_LIMIT,
+  POLYGON_LINK_LIMIT,
+} from '../src/modules/problems/core/rate-limits';
 import { softDelete, tombstone } from './deleted-problem-fixtures';
 import {
   authed,
@@ -242,6 +245,16 @@ describe('Polygon routes', () => {
     await post(`${POLYGON}/test`, {}, admin)
       .expect(503)
       .expect(errorCode('polygon_unavailable'));
+  });
+
+  it('limits connection tests per user', async () => {
+    sharedProblems();
+    const keys = await redis.keys('rate:polygon-test:*');
+    if (keys.length) await redis.del(...keys);
+    for (let used = 0; used < CONNECTION_TEST_LIMIT; used += 1)
+      await post(`${POLYGON}/test`, {}, admin).expect(200);
+    await post(`${POLYGON}/test`, {}, admin).expect(429);
+    await redis.del(...(await redis.keys('rate:polygon-test:*')));
   });
 
   describe('a pasted link', () => {

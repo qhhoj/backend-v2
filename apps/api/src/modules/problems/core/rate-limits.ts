@@ -17,3 +17,6 @@ export const POLYGON_LINK_WINDOW_SECONDS = 10 * 60;
 /** Per user, every search or verify on the external judge: each is a request to the remote service. */
 export const EXTERNAL_JUDGE_LOOKUP_LIMIT = 30;
 export const EXTERNAL_JUDGE_LOOKUP_WINDOW_SECONDS = 60;
+/** Per user, every connection test of the Polygon account or the external judge: each is a request to the remote service. */
+export const CONNECTION_TEST_LIMIT = 10;
+export const CONNECTION_TEST_WINDOW_SECONDS = 60;

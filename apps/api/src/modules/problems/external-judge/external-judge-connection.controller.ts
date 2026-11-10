@@ -1,6 +1,12 @@
 import { Controller, HttpCode, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { RequirePermission } from '@libs/auth';
+import { CurrentAuth, RequirePermission } from '@libs/auth';
+import type { AuthContext } from '@libs/auth';
+import { RateLimitService } from '@libs/common';
+import {
+  CONNECTION_TEST_LIMIT,
+  CONNECTION_TEST_WINDOW_SECONDS,
+} from '../core/rate-limits';
 import { ExternalJudgeClient } from '@libs/judging';
 import { ExternalJudgeTestResponse } from './dto/external-judge.response';
 import { askExternalJudge } from './external-judge-errors';
@@ -9,7 +15,10 @@ import { askExternalJudge } from './external-judge-errors';
 @RequirePermission('judge.change_settings')
 @Controller('api/internal/external-judge')
 export class ExternalJudgeConnectionController {
-  constructor(private readonly client: ExternalJudgeClient) {}
+  constructor(
+    private readonly client: ExternalJudgeClient,
+    private readonly rateLimit: RateLimitService,
+  ) {}
 
   /**
    * Test the external judge connection
@@ -19,11 +28,18 @@ export class ExternalJudgeConnectionController {
    * saved base URL and token and answers the OJ ids it serves. Errors: 409
    * `external_judge_not_configured`, 502 `external_judge_unauthorized`, 404
    * `external_judge_not_found`, 502 `external_judge_rejected`, 503
-   * `external_judge_unavailable`. Messages never carry the URL or the token.
+   * `external_judge_unavailable`, 429 `rate_limited` (10 tests per user per minute). Messages never carry the URL or the token.
    */
   @Post('test')
   @HttpCode(200)
-  async test(): Promise<ExternalJudgeTestResponse> {
+  async test(
+    @CurrentAuth() auth: AuthContext,
+  ): Promise<ExternalJudgeTestResponse> {
+    await this.rateLimit.reserve(
+      [`external-judge-test:user:${auth.principal.userId}`],
+      CONNECTION_TEST_LIMIT,
+      CONNECTION_TEST_WINDOW_SECONDS,
+    );
     const ojs = await askExternalJudge(() => this.client.ojs());
     return { ok: true, ojs: ojs.map(({ oj }) => oj) };
   }

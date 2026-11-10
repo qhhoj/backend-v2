@@ -96,11 +96,29 @@ export class AuthService {
       );
     this.assertLoginAllowed(user);
     const passwordPwned = await this.pwned.isPwned(password);
-    await this.upgradeWeakHash(user, password, ip);
-    return this.startSession(user, {
+    const verifiedHash = await this.upgradeWeakHash(user, password, ip);
+    const opened = await this.startSession(user, {
       isPasswordPwned: passwordPwned,
       previousSessionId,
     });
+    await this.assertCredentialsUnchanged(opened.sessionId, user, verifiedHash);
+    return opened;
+  }
+
+  /** A password change, reset or deactivation signs every session out; one opened by a login that verified the old password just before must not survive it. */
+  private async assertCredentialsUnchanged(
+    sessionId: string,
+    user: UserDocument,
+    verifiedHash: string,
+  ): Promise<void> {
+    const current = await this.users.findById(user._id);
+    if (current?.password === verifiedHash && current.isActive) return;
+    await this.sessions.destroy(sessionId);
+    throw new AppError(
+      'invalid_credentials',
+      401,
+      'Invalid username or password',
+    );
   }
 
   /**
@@ -146,18 +164,21 @@ export class AuthService {
     user: UserDocument,
     password: string,
     ip: string,
-  ): Promise<void> {
-    if (!needsRehash(user.password)) return;
+  ): Promise<string> {
+    if (!needsRehash(user.password)) return user.password;
     try {
-      await this.users.updatePasswordIfUnchanged(
+      const upgraded = await hashPassword(password, { requester: ip });
+      const swapped = await this.users.updatePasswordIfUnchanged(
         user._id,
         user.password,
-        await hashPassword(password, { requester: ip }),
+        upgraded,
       );
+      return swapped ? upgraded : user.password;
     } catch (error) {
       this.logger.warn(
         `Password rehash skipped: ${error instanceof Error ? error.name : 'unknown error'}`,
       );
+      return user.password;
     }
   }
 

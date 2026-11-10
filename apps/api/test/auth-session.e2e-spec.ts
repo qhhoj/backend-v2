@@ -175,7 +175,7 @@ describe('auth session endpoints', () => {
         expect((await api.users.findOne({ username }))!.password).toBe(before);
       }
     });
-    it('keeps a password changed between verify and rehash', async () => {
+    it('keeps a password changed between verify and rehash, and refuses that login', async () => {
       await createUser(api.users, {
         username: 'rex',
         email: 'rex@example.com',
@@ -194,7 +194,7 @@ describe('auth session endpoints', () => {
           .http()
           .post(LOGIN)
           .send({ username: 'rex', password: 'correct horse battery' })
-          .expect(200);
+          .expect(401);
       } finally {
         spy.mockRestore();
       }
