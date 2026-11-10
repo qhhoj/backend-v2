@@ -1,5 +1,6 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { ENV, EnvModule } from '@libs/common';
 import {
   DatabaseModule,
   newId,
@@ -33,9 +34,11 @@ describe('ProblemAccess.visibleFilter', () => {
 
   beforeAll(async () => {
     replSet = await startMongo();
-    process.env.MONGO_URL = replSet.getUri('qhhoj');
     testingModule = await Test.createTestingModule({
-      imports: [DatabaseModule],
+      imports: [
+        EnvModule.forValues({ mongoUrl: replSet.getUri('qhhoj') }),
+        DatabaseModule.forRoot(ENV),
+      ],
     }).compile();
     problems = testingModule.get(getModelToken(Problem.name));
     const roles: Array<Partial<ProblemAccessView>> = [

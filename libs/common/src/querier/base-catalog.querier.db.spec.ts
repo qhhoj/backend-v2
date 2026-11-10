@@ -11,6 +11,8 @@ import { startMongo } from '@libs/database/testing';
 import type { TestMongo } from '@libs/database/testing';
 import type { ChangeStream } from 'mongodb';
 import { Model } from 'mongoose';
+import { ENV } from '../env/env';
+import { EnvModule } from '../env/env.module';
 import { BaseCatalogQuerier } from './base-catalog.querier';
 
 const waitFor = async (check: () => boolean, timeoutMs = 5000) => {
@@ -68,9 +70,12 @@ describe('BaseCatalogQuerier', () => {
 
   beforeAll(async () => {
     replSet = await startMongo();
-    process.env.MONGO_URL = replSet.getUri('qhhoj');
     testingModule = await Test.createTestingModule({
-      imports: [ScheduleModule.forRoot(), DatabaseModule],
+      imports: [
+        ScheduleModule.forRoot(),
+        EnvModule.forValues({ mongoUrl: replSet.getUri('qhhoj') }),
+        DatabaseModule.forRoot(ENV),
+      ],
       providers: [WindowedQuerier],
     }).compile();
     languages = testingModule.get(getModelToken(Language.name));

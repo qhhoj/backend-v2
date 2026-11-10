@@ -9,7 +9,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createServer } from 'node:net';
 import type { AddressInfo, Server as NetServer, Socket } from 'node:net';
 import { ENV } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { BridgeConfig } from '@libs/common';
 import { JudgeLinkService } from '@libs/judge-proto';
 import type { UploadReceipt } from '@libs/judge-proto';
 import { BRIDGE_TIMINGS } from '../bridge-timings';
@@ -103,7 +103,7 @@ export class JudgeLinkServer {
   private readonly revokedAt = new Map<string, number>();
 
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: BridgeConfig,
     @Inject(BRIDGE_TIMINGS) timings: BridgeTimings,
     @Inject(ACCEPT_CLOCK) acceptClock: AcceptClock,
     @Inject(HANDSHAKE_CLOCK) handshakeClock: HandshakeClock,

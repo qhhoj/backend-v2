@@ -4,7 +4,7 @@ import type Redis from 'ioredis';
 import { hasPermission } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, ENV, InjectJob, REDIS } from '@libs/common';
-import type { Env, JobProducer } from '@libs/common';
+import type { ApiConfig, JobProducer } from '@libs/common';
 import {
   contestJobs,
   contestDataPath,
@@ -36,7 +36,7 @@ export class ContestRemovalService {
     @InjectJob(contestJobs.publish)
     private readonly publishes: JobProducer<ContestPublishJob>,
     @Inject(REDIS) private readonly redis: Redis,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
   ) {}
 
   /** Editors only, with the key typed again (`confirm`); a visible, rated or still-judging contest, and one with live or virtual participations unless the caller has `judge.edit_all_contest`, is refused with 409 `contest_not_deletable`. */

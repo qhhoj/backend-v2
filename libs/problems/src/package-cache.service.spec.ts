@@ -10,12 +10,11 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Env } from '@libs/common';
 import { PackageCacheService } from './package-cache.service';
 
 describe('PackageCacheService', () => {
   const root = mkdtempSync(join(tmpdir(), 'qhhoj-package-cache-'));
-  const cache = new PackageCacheService({ pdfCacheRoot: root } as Env);
+  const cache = new PackageCacheService({ pdfCacheRoot: root });
   const packages = join(root, 'packages');
   const KEY_A = '3.aaaaaaaaaaaa';
   const KEY_B = '4.bbbbbbbbbbbb';
@@ -111,7 +110,7 @@ describe('PackageCacheService', () => {
 
   it('counts a cache hit as use, so the least recently used zip is evicted first', async () => {
     const small = mkdtempSync(join(tmpdir(), 'qhhoj-package-lru-'));
-    const bounded = new PackageCacheService({ pdfCacheRoot: small } as Env);
+    const bounded = new PackageCacheService({ pdfCacheRoot: small });
     for (const code of ['lru_a', 'lru_b'])
       await bounded.write(code, KEY_A, (temporary) =>
         Promise.resolve(writeFileSync(temporary, '12345')),

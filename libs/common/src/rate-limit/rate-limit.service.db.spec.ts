@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import Redis from 'ioredis';
 import { AppError } from '../errors/app.error';
+import { EnvModule } from '../env/env.module';
 import { REDIS, RedisModule } from '../redis/redis.module';
 import { TEST_REDIS_URL } from '../testing';
 import { RateLimitService } from './rate-limit.service';
@@ -11,9 +12,8 @@ describe('RateLimitService', () => {
   let redis: Redis;
 
   beforeAll(async () => {
-    process.env.REDIS_URL = TEST_REDIS_URL;
     testingModule = await Test.createTestingModule({
-      imports: [RedisModule],
+      imports: [EnvModule.forValues({ redisUrl: TEST_REDIS_URL }), RedisModule],
       providers: [RateLimitService],
     }).compile();
     limiter = testingModule.get(RateLimitService);

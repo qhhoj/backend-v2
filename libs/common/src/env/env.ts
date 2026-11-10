@@ -1,176 +1,47 @@
-import { PINO_LEVELS } from '../log-levels';
-import { checkDataRoots } from './data-roots';
-import { parseIpList } from './ip-allowlist';
+import type { ConfigPart } from './config-parts';
+import { EnvReader } from './env-reader';
+import type { EnvSource } from './env-reader';
 
-export interface Env {
-  mongoUrl: string;
-  redisUrl: string;
-  encryptionKey: string;
-  tokenSecret: string;
-  /** Keys and signs the Redis session records; at least 32 bytes, checked where sessions are built (api only). Rotating it ends every session. */
-  sessionSecret: string;
-  siteUrl: string;
-  /** Interface the api listens on: loopback in production (nginx is the edge), all interfaces otherwise (dev servers, containers). */
-  host: string;
-  port: number;
-  logLevel: string;
-  /** false, or a comma-separated list of proxy addresses (IPs/CIDRs/`loopback`) whose forwarding headers are trusted. */
-  trustProxy: false | string;
-  /** Client IPs/CIDRs (IPv4 or IPv6) that may hold more live event streams than `perIp` (a school lab behind one NAT); empty means none. */
-  sseIpAllowlist: string[];
-  cookieSecure: boolean;
-  /** Directory of uploaded files (images, PDF statements, materials); nginx serves it at `mediaUrl`. */
-  mediaRoot: string;
-  /** Public URL prefix of `mediaRoot`, without a trailing slash. */
-  mediaUrl: string;
-  /** Shared judge volume: `<root>/<code>/` holds init.yml, the archive and checker/grader sources. */
-  problemDataRoot: string;
-  /** Rendered statement PDFs, `<root>/<code>.<lang>.pdf`; shared between api and worker. */
-  pdfCacheRoot: string;
-  /** Worker: PDF renders running at once. */
-  pdfConcurrency: number;
-  /** Bridge: judges connect to this port (gRPC `qhhoj.judge.v1`); 0 picks a free port (tests). */
-  judgeBridgePort: number;
-  /** Bridge: interface the judge port listens on; loopback by default. Any other address needs the TLS pair below. */
-  judgeBridgeHost: string;
-  /** Bridge: PEM certificate chain and private key of the judge port; both or neither. Without them the bridge serves only on loopback. */
-  judgeBridgeTlsCert: string | null;
-  judgeBridgeTlsKey: string | null;
-  /** Contest data zips, shared by the api (serves) and the worker (writes); null disables data download. Not under MEDIA_ROOT (served publicly). */
-  contestDataRoot: string | null;
-  /** Exported user data zips, shared by the api (serves) and the worker (writes); null disables the export. Not under MEDIA_ROOT (served publicly). */
-  userDataRoot: string | null;
-}
-
+/** The loaded config of the running process (`EnvModule.forRoot`); a consumer types it as the parts it reads. */
 export const ENV = Symbol('ENV');
 
-/** Typed reads from `source` that collect every problem instead of throwing, so one boot reports them all. */
-class EnvReader {
-  readonly problems: string[] = [];
+type IntersectionOf<Union> = (
+  Union extends unknown ? (value: Union) => void : never
+) extends (value: infer Intersection) => void
+  ? Intersection
+  : never;
 
-  constructor(private readonly source: Record<string, string | undefined>) {}
+type PartConfig<Part> = Part extends ConfigPart<infer Config> ? Config : never;
 
-  /** The raw value, `fallback` only when unset (a blank stays blank). */
-  textOr(name: string, fallback: string): string {
-    return this.source[name] ?? fallback;
-  }
-
-  /** Blank counts as unset. */
-  nonBlankOr<Fallback>(name: string, fallback: Fallback): string | Fallback {
-    return this.source[name] || fallback;
-  }
-
-  required(name: string): string {
-    return this.source[name] || (this.problems.push(`${name} is required`), '');
-  }
-
-  booleanFrom(name: string, fallback: boolean): boolean {
-    const value = this.source[name];
-    if (value === undefined) return fallback;
-    if (value !== 'true' && value !== 'false')
-      this.problems.push(`${name} must be true or false`);
-    return value === 'true';
-  }
-
-  proxyList(name: string): false | string {
-    const value = this.source[name];
-    if (value === undefined || value === 'false') return false;
-    if (value === 'true' || /^\s*\d*\s*$/.test(value)) {
-      this.problems.push(
-        `${name} must be false or a comma-separated list of proxy addresses`,
-      );
-      return false;
-    }
-    return value;
-  }
-
-  /** Blank or unset is an empty list; each entry must be an IP or a CIDR. */
-  ipList(name: string): string[] {
-    const { entries, invalid } = parseIpList(this.source[name] ?? '');
-    if (invalid.length)
-      this.problems.push(
-        `${name} must be a comma-separated list of IPs or CIDRs, got ${invalid.join(', ')}`,
-      );
-    return invalid.length ? [] : entries;
-  }
-
-  positiveInteger(name: string, fallback: number): number {
-    const value = Number(this.source[name] ?? fallback);
-    if (!Number.isInteger(value) || value < 1)
-      this.problems.push(`${name} must be a positive integer`);
-    return value;
-  }
-
-  /** Blank counts as unset; `min` 0 allows "any free port". */
-  portNumber(name: string, fallback: number, min: number): number {
-    const raw = this.source[name]?.trim();
-    const value = raw ? Number(raw) : fallback;
-    if (!Number.isInteger(value) || value < min || value > 65535)
-      this.problems.push(`${name} must be ${min}-65535`);
-    return value;
-  }
+/** What a process declares: its parts, and the loader that reads them. */
+export interface ProcessConfig<Config> {
+  load(source?: EnvSource): Config;
 }
 
-function defaultListenHost(reader: EnvReader): string {
-  return reader.textOr('NODE_ENV', '') === 'production'
-    ? '127.0.0.1'
-    : '0.0.0.0';
-}
+export type ConfigOf<Process> =
+  Process extends ProcessConfig<infer Config> ? Config : never;
 
-/** Every field, read in this order so problems are reported in it. */
-function readEnv(reader: EnvReader): Env {
+/**
+ * A process's config from its parts. `load` reads only the variables those parts name and ignores every other one,
+ * so one env file serves all three processes. It reports every problem at once: read problems, then each part's check.
+ */
+export function processConfig<Parts extends ConfigPart<object>[]>(
+  ...parts: Parts
+): ProcessConfig<IntersectionOf<PartConfig<Parts[number]>>> {
   return {
-    mongoUrl: reader.required('MONGO_URL'),
-    redisUrl: reader.required('REDIS_URL'),
-    encryptionKey: reader.textOr('ENCRYPTION_KEY', ''),
-    tokenSecret: reader.textOr('TOKEN_SECRET', ''),
-    sessionSecret: reader.textOr('SESSION_SECRET', ''),
-    siteUrl: reader.required('SITE_URL'),
-    host: reader.nonBlankOr('LISTEN_HOST', defaultListenHost(reader)),
-    port: reader.portNumber('PORT', 3000, 1),
-    logLevel: reader.textOr('LOG_LEVEL', 'info'),
-    trustProxy: reader.proxyList('TRUST_PROXY'),
-    sseIpAllowlist: reader.ipList('SSE_IP_ALLOWLIST'),
-    cookieSecure: reader.booleanFrom('COOKIE_SECURE', true),
-    mediaRoot: reader.required('MEDIA_ROOT'),
-    mediaUrl: reader.nonBlankOr('MEDIA_URL', '/media').replace(/\/+$/, ''),
-    problemDataRoot: reader.required('PROBLEM_DATA_ROOT'),
-    pdfCacheRoot: reader.required('PDF_CACHE_ROOT'),
-    pdfConcurrency: reader.positiveInteger('PDF_CONCURRENCY', 2),
-    judgeBridgePort: reader.portNumber('JUDGE_BRIDGE_PORT', 9999, 0),
-    judgeBridgeHost: reader.nonBlankOr('JUDGE_BRIDGE_HOST', '127.0.0.1'),
-    judgeBridgeTlsCert: reader.nonBlankOr('JUDGE_BRIDGE_TLS_CERT', null),
-    judgeBridgeTlsKey: reader.nonBlankOr('JUDGE_BRIDGE_TLS_KEY', null),
-    contestDataRoot: reader.nonBlankOr('CONTEST_DATA_ROOT', null),
-    userDataRoot: reader.nonBlankOr('USER_DATA_ROOT', null),
+    load(source = process.env) {
+      const reader = new EnvReader(source);
+      const config = parts.reduce<object>(
+        (read, part) => ({ ...read, ...part.read(reader) }),
+        {},
+      );
+      const problems = [
+        ...reader.problems,
+        ...parts.flatMap((part) => part.check?.(config) ?? []),
+      ];
+      if (problems.length)
+        throw new Error(`Invalid environment: ${problems.join('; ')}`);
+      return config as IntersectionOf<PartConfig<Parts[number]>>;
+    },
   };
-}
-
-/** Values that parse but are unusable: a malformed key, a short secret, an unknown log level. */
-function checkValues(env: Env): string[] {
-  const problems: string[] = [];
-  if (!/^[0-9a-f]{64}$/i.test(env.encryptionKey))
-    problems.push('ENCRYPTION_KEY must be 64 hex chars');
-  if (env.tokenSecret.length < 32)
-    problems.push('TOKEN_SECRET must be at least 32 chars');
-  if (!PINO_LEVELS.includes(env.logLevel))
-    problems.push(`LOG_LEVEL must be one of ${PINO_LEVELS.join('|')}`);
-  if ((env.judgeBridgeTlsCert === null) !== (env.judgeBridgeTlsKey === null))
-    problems.push('JUDGE_BRIDGE_TLS_CERT and JUDGE_BRIDGE_TLS_KEY go together');
-  return problems;
-}
-
-export function loadEnv(
-  source: Record<string, string | undefined> = process.env,
-): Env {
-  const reader = new EnvReader(source);
-  const env = readEnv(reader);
-  const problems = [
-    ...reader.problems,
-    ...checkValues(env),
-    ...checkDataRoots(env),
-  ];
-  if (problems.length)
-    throw new Error(`Invalid environment: ${problems.join('; ')}`);
-  return env;
 }

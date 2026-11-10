@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ENV, JobProcessor } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { WorkerConfig } from '@libs/common';
 import { problemJobs } from '@libs/problems';
 import type { PdfRenderJob } from '@libs/problems';
 import { PdfRenderService } from './pdf-render.service';
@@ -15,7 +15,7 @@ export class PdfRenderProcessor extends JobProcessor<
 >(problemJobs.pdf) {
   constructor(
     private readonly render: PdfRenderService,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: WorkerConfig,
   ) {
     super();
   }

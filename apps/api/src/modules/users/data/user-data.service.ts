@@ -6,7 +6,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, ENV, InjectJob, RateLimitService } from '@libs/common';
-import type { Env, JobProducer } from '@libs/common';
+import type { ApiConfig, JobProducer } from '@libs/common';
 import {
   canPrepareUserData,
   communityJobs,
@@ -29,7 +29,7 @@ const dailyKey = (userId: string) => `user-data:user:${userId}`;
 @Injectable()
 export class UserDataService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
     private readonly users: UsersRepository,
     private readonly rateLimits: RateLimitService,
     @InjectJob(communityJobs.userData)

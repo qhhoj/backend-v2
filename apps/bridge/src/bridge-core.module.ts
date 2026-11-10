@@ -1,5 +1,12 @@
 import { Module } from '@nestjs/common';
-import { EnvModule, JobsModule, QueueModule, RedisModule } from '@libs/common';
+import {
+  bridgeConfig,
+  ENV,
+  EnvModule,
+  JobsModule,
+  QueueModule,
+  RedisModule,
+} from '@libs/common';
 import { DatabaseModule } from '@libs/database';
 import { judgingJobs, SubmissionEventsService } from '@libs/judging';
 import { BRIDGE_TIMINGS, DEFAULT_BRIDGE_TIMINGS } from './bridge-timings';
@@ -21,8 +28,8 @@ import { SubmissionsRepository } from './submissions/submissions.repository';
 /** The judge side of the bridge: the gRPC link, dispatch and the run writes. `BridgeModule` adds the api's commands and the start/stop/resync loop. */
 @Module({
   imports: [
-    EnvModule,
-    DatabaseModule,
+    EnvModule.forRoot(bridgeConfig),
+    DatabaseModule.forRoot(ENV),
     QueueModule,
     RedisModule,
     JobsModule.register(judgingJobs.graded),

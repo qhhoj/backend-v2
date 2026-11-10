@@ -1,5 +1,6 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ENV, EnvModule } from '@libs/common';
 import { DatabaseModule, newId, Problem } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
 import type { TestMongo } from '@libs/database/testing';
@@ -25,9 +26,11 @@ describe('ProblemsRepository', () => {
 
   beforeAll(async () => {
     replSet = await startMongo();
-    process.env.MONGO_URL = replSet.getUri('qhhoj');
     testingModule = await Test.createTestingModule({
-      imports: [DatabaseModule],
+      imports: [
+        EnvModule.forValues({ mongoUrl: replSet.getUri('qhhoj') }),
+        DatabaseModule.forRoot(ENV),
+      ],
       providers: [ProblemsRepository],
     }).compile();
     repository = testingModule.get(ProblemsRepository);

@@ -5,7 +5,7 @@ import Redis from 'ioredis';
 import { PrincipalService, SessionService, UsersRepository } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, ENV, ipMatcher, limiterAddress } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import { HEARTBEAT_FRAME, openEventStream, sseFrame } from './sse';
 import type { EventStream } from './sse';
 import { STREAM_LIMITS } from './stream-limits';
@@ -58,7 +58,7 @@ export class EventStreamHubService implements OnModuleInit, OnModuleDestroy {
   private rechecking = false;
 
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
     @Inject(STREAM_LIMITS) private readonly limits: StreamLimits,
     private readonly sessions: SessionService,
     private readonly users: UsersRepository,

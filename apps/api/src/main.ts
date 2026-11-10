@@ -1,12 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { configureApp, fastifyAdapter, loadEnv } from '@libs/common';
+import { apiConfig, configureApp, fastifyAdapter } from '@libs/common';
 import { setupApiDocs } from './api-docs';
 import { AppModule } from './app.module';
 import { setupOpenApi } from './openapi';
 
 async function bootstrap() {
-  const env = loadEnv();
+  const env = apiConfig.load();
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     fastifyAdapter(env),

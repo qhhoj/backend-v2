@@ -79,8 +79,6 @@ export async function setupBridgeTest({
   Object.assign(process.env, TEST_ENV, {
     MONGO_URL: replSet.getUri('qhhoj'),
     MEDIA_ROOT: tmpdir(),
-    PROBLEM_DATA_ROOT: tmpdir(),
-    PDF_CACHE_ROOT: tmpdir(),
     JUDGE_BRIDGE_HOST: '127.0.0.1',
     JUDGE_BRIDGE_PORT: '0',
     JUDGE_BRIDGE_TLS_CERT: '',

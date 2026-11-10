@@ -8,12 +8,13 @@ import { Reflector } from '@nestjs/core';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import {
   AppError,
-  type Env,
   ENV,
   limiterAddress,
   matchesAnyCidr,
   RateLimitService,
+  type SiteConfig,
   STREAM_ROUTE,
+  type WebConfig,
 } from '@libs/common';
 import { uuidStr, type IntegrationScope } from '@libs/database';
 import {
@@ -63,7 +64,7 @@ export class AuthGuard implements CanActivate {
     private readonly principals: PrincipalService,
     private readonly clients: IntegrationClientsRepository,
     private readonly rateLimit: RateLimitService,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: SiteConfig & WebConfig,
   ) {
     this.siteOrigin = new URL(env.siteUrl).origin;
   }

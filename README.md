@@ -20,7 +20,7 @@ cp .env.example .env   # fill ENCRYPTION_KEY (32 bytes hex), TOKEN_SECRET and SE
 set -a; . ./.env; set +a   # the apps read process.env; they do not load .env themselves
 ```
 
-`.env.example` lists every variable with a comment; [CONTRIBUTING.md](CONTRIBUTING.md#env-and-deploy) explains the shared volumes and deploy requirements. Each app validates its env at boot and fails fast.
+`.env.example` lists every variable with a comment; [CONTRIBUTING.md](CONTRIBUTING.md#env-and-deploy) explains the shared volumes and deploy requirements. Each app reads and validates only its own variables (`libs/common/src/env/process-configs.ts`) at boot and fails fast.
 
 Env holds only infrastructure and key material (database, Redis, secrets, paths, ports). Everything an operator may want to change at runtime (SMTP and mail sender, social login clients, Discord webhooks, the breach-check URL, PDF limits, official contest mode, the disqualification ban threshold, the site time zone) is an admin setting, edited without a restart: `GET /api/internal/admin/settings` lists them, `PATCH /api/internal/admin/settings/<key>` with `{ "value": ... }` changes one (permission `judge.change_settings`, grant it to superusers only; secrets are never returned, every change is recorded). How to add one: [CONTRIBUTING.md](CONTRIBUTING.md#runtime-settings).
 

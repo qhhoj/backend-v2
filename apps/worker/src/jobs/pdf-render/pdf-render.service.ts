@@ -4,7 +4,7 @@ import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ENV } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { WorkerConfig } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Problem, StatementLanguage } from '@libs/database';
 import { PdfCacheService, statementFor } from '@libs/problems';
@@ -30,7 +30,7 @@ export class PdfRenderService {
     private readonly repository: PdfRenderRepository,
     private readonly browser: BrowserService,
     private readonly pdfCache: PdfCacheService,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: WorkerConfig,
   ) {}
 
   /** Renders `<code>.<lang>.pdf` into the cache from the stored statement HTML; a problem deleted meanwhile is skipped (visibility was checked by the api), and a render whose template input changed before it was cached is discarded (the next request renders the new text). */

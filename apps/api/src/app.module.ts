@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import {
+  apiConfig,
+  ENV,
   EnvModule,
   QueueModule,
   RedisModule,
@@ -37,8 +39,8 @@ import { HealthController } from './health.controller';
 
 @Module({
   imports: [
-    EnvModule,
-    DatabaseModule,
+    EnvModule.forRoot(apiConfig),
+    DatabaseModule.forRoot(ENV),
     RedisModule,
     SettingsModule,
     QueueModule,

@@ -1,10 +1,10 @@
 import { join, resolve } from 'node:path';
 import { SAFE_SEGMENT, SUBMISSION_FILE_DIR } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { BridgeConfig } from '@libs/common';
 
 /** The file under `MEDIA_ROOT/submission_file/` of a source stored as `${MEDIA_URL}/submission_file/<code>/<user>/<name>`; null for any other URL (legacy `/submission_file/...` rows the migrator has not rewritten) or an unsafe segment. */
 export function submissionFilePath(
-  { mediaRoot, mediaUrl }: Pick<Env, 'mediaRoot' | 'mediaUrl'>,
+  { mediaRoot, mediaUrl }: Pick<BridgeConfig, 'mediaRoot' | 'mediaUrl'>,
   url: string,
 ): string | null {
   const prefix = `${mediaUrl}/${SUBMISSION_FILE_DIR}/`;

@@ -1,5 +1,5 @@
 import { isInsideReal } from '../storage/paths';
-import type { Env } from './env';
+import type { DataRootsConfig } from './config-parts';
 
 /** Unset roots (null) are never inside anything. */
 function isSetAndInside(child: string | null, parent: string | null): boolean {
@@ -11,7 +11,10 @@ export function checkDataRoots({
   mediaRoot,
   contestDataRoot,
   userDataRoot,
-}: Pick<Env, 'mediaRoot' | 'contestDataRoot' | 'userDataRoot'>): string[] {
+}: Pick<
+  DataRootsConfig,
+  'mediaRoot' | 'contestDataRoot' | 'userDataRoot'
+>): string[] {
   const rules: [violated: boolean, problem: string][] = [
     [
       isSetAndInside(contestDataRoot, mediaRoot),

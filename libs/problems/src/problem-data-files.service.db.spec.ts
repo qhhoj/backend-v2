@@ -12,14 +12,13 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Env } from '@libs/common';
 import Redis from 'ioredis';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { ProblemDataFilesService } from './problem-data-files.service';
 
 describe('ProblemDataFilesService', () => {
   const root = mkdtempSync(join(tmpdir(), 'qhhoj-problem-data-'));
-  const env = { problemDataRoot: root } as Env;
+  const env = { problemDataRoot: root };
   const redis = new Redis(TEST_REDIS_URL);
   const otherProcessRedis = new Redis(TEST_REDIS_URL);
   const files = new ProblemDataFilesService(env, redis);

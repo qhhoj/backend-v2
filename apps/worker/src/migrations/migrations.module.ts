@@ -1,5 +1,11 @@
 import { Module } from '@nestjs/common';
-import { EnvModule, RedisModule, StorageModule } from '@libs/common';
+import {
+  ENV,
+  EnvModule,
+  RedisModule,
+  StorageModule,
+  workerConfig,
+} from '@libs/common';
 import { DatabaseModule } from '@libs/database';
 import { ProblemFilesModule } from '@libs/problems';
 import { ContestFieldsMigration } from './contest-fields/contest-fields.migration';
@@ -40,8 +46,8 @@ const IN_ORDER = [
 /** What `worker migrate` boots: data access only, no queue, processor or schedule, so nothing but the migrations touches the live site. */
 @Module({
   imports: [
-    EnvModule,
-    DatabaseModule,
+    EnvModule.forRoot(workerConfig),
+    DatabaseModule.forRoot(ENV),
     RedisModule,
     StorageModule,
     ProblemFilesModule,

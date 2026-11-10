@@ -1,13 +1,13 @@
 import { ServerCredentials } from '@grpc/grpc-js';
 import { readFile } from 'node:fs/promises';
-import type { Env } from '@libs/common';
+import type { BridgeConfig } from '@libs/common';
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
 
 /** TLS with the bridge's certificate, or plaintext on loopback only (dev, e2e): judge keys never cross a network in clear. */
 export async function serverCredentials(
   env: Pick<
-    Env,
+    BridgeConfig,
     'judgeBridgeHost' | 'judgeBridgeTlsCert' | 'judgeBridgeTlsKey'
   >,
 ): Promise<ServerCredentials> {

@@ -7,7 +7,7 @@ import { open, realpath } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { ENV, MAX_UPLOAD_BYTES, SUBMISSION_FILE_DIR } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { BridgeConfig } from '@libs/common';
 import { isUuid } from '@libs/database';
 import type {
   AssignmentRef,
@@ -52,7 +52,7 @@ export class SourceFetch {
   private readonly logger = new Logger(SourceFetch.name);
 
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: BridgeConfig,
     private readonly submissions: SubmissionsRepository,
   ) {}
 

@@ -9,7 +9,6 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Env } from '@libs/common';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import Redis from 'ioredis';
 import { ProblemDataFilesService } from './problem-data-files.service';
@@ -17,10 +16,7 @@ import { ProblemDataFilesService } from './problem-data-files.service';
 describe('ProblemDataFilesService.removeDirectory', () => {
   const root = mkdtempSync(join(tmpdir(), 'qhhoj-problem-data-'));
   const redis = new Redis(TEST_REDIS_URL);
-  const files = new ProblemDataFilesService(
-    { problemDataRoot: root } as Env,
-    redis,
-  );
+  const files = new ProblemDataFilesService({ problemDataRoot: root }, redis);
   afterAll(async () => {
     await redis.quit();
     rmSync(root, { recursive: true, force: true });

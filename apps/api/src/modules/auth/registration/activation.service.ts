@@ -11,7 +11,7 @@ import {
   MAILER,
   RateLimitService,
 } from '@libs/common';
-import type { Env, MailMessage, Mailer } from '@libs/common';
+import type { ApiConfig, MailMessage, Mailer } from '@libs/common';
 import { ActivationKey } from '@libs/database';
 import { Model } from 'mongoose';
 import {
@@ -33,7 +33,7 @@ export class ActivationService {
     @InjectModel(ActivationKey.name)
     private readonly activationKeys: Model<ActivationKey>,
     @Inject(MAILER) private readonly mailer: Mailer,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
   ) {}
 
   /** Stores the hash of a fresh key and returns the key itself. */

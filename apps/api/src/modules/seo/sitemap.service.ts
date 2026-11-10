@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { AppError, ENV, REDIS } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import { SITEMAP_PAGE_SIZE, SeoRepository } from './seo.repository';
 import type { Lister } from './seo.repository';
 import { sitemapIndex, urlSet } from './sitemap-xml';
@@ -37,7 +37,7 @@ export class SitemapService {
   private readonly listers: Record<SitemapKind, Lister>;
 
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
     @Inject(REDIS) private readonly redis: Redis,
     repository: SeoRepository,
   ) {

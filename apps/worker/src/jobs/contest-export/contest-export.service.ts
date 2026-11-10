@@ -1,7 +1,7 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { Inject, Injectable } from '@nestjs/common';
 import { ENV } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { WorkerConfig } from '@libs/common';
 import { contestExportPath } from '@libs/contests';
 import type { ContestExportJob } from '@libs/contests';
 import { chunkedSources, writeZipInPlace } from '../lazy-zip';
@@ -21,7 +21,7 @@ const safeSuffix = (extension: string) =>
 export class ContestExportService {
   constructor(
     private readonly repository: ContestExportRepository,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: WorkerConfig,
     @Inject(CONTEST_EXPORT_LIMITS) private readonly limits: ContestExportLimits,
   ) {}
 

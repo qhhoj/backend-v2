@@ -1,6 +1,7 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
+import { ENV, EnvModule } from '@libs/common';
 import { Contest, DatabaseModule, newId } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
 import type { TestMongo } from '@libs/database/testing';
@@ -24,9 +25,11 @@ describe('ContestAccess.visibleFilter and editableFilter', () => {
 
   beforeAll(async () => {
     replSet = await startMongo();
-    process.env.MONGO_URL = replSet.getUri('qhhoj');
     testingModule = await Test.createTestingModule({
-      imports: [DatabaseModule],
+      imports: [
+        EnvModule.forValues({ mongoUrl: replSet.getUri('qhhoj') }),
+        DatabaseModule.forRoot(ENV),
+      ],
     }).compile();
     contests = testingModule.get(getModelToken(Contest.name));
     const roles: Array<Partial<ContestAccessView>> = [

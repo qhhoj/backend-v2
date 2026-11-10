@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import {
+  workerConfig,
+  ENV,
   EnvModule,
   QueueModule,
   RedisModule,
@@ -37,8 +39,8 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
 
 @Module({
   imports: [
-    EnvModule,
-    DatabaseModule,
+    EnvModule.forRoot(workerConfig),
+    DatabaseModule.forRoot(ENV),
     StorageModule,
     QueueModule,
     // Keep RedisModule before the job modules: Nest runs shutdown hooks in module order, and running jobs still use REDIS (test/shutdown-order.e2e-spec.ts pins it).

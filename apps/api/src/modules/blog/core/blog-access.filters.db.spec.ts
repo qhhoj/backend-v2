@@ -2,6 +2,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import type { Permission, Principal } from '@libs/auth';
+import { ENV, EnvModule } from '@libs/common';
 import { BlogPost, DatabaseModule, newId } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
 import type { TestMongo } from '@libs/database/testing';
@@ -39,9 +40,11 @@ describe('BlogAccess list filters against stored posts', () => {
 
   beforeAll(async () => {
     mongo = await startMongo();
-    process.env.MONGO_URL = mongo.getUri('qhhoj');
     testingModule = await Test.createTestingModule({
-      imports: [DatabaseModule],
+      imports: [
+        EnvModule.forValues({ mongoUrl: mongo.getUri('qhhoj') }),
+        DatabaseModule.forRoot(ENV),
+      ],
     }).compile();
     posts = testingModule.get(getModelToken(BlogPost.name));
     for (const author of [ME, OTHER])

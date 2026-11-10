@@ -23,7 +23,7 @@ import {
 } from '@libs/common';
 import { secondFactorMethods } from '../two-factor/second-factor-methods';
 import { BannedError } from './banned.error';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import {
   FAILURE_IP_LIMIT,
   FAILURE_LIMIT,
@@ -54,7 +54,7 @@ export class AuthService {
     private readonly principals: PrincipalService,
     private readonly pwned: PwnedPasswordService,
     private readonly rateLimit: RateLimitService,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
   ) {}
 
   async login(

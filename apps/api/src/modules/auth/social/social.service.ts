@@ -10,7 +10,7 @@ import {
   RateLimitService,
   REDIS,
 } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import Redis from 'ioredis';
 import { AuthService } from '../core/auth.service';
 import type { SocialCompleteDto } from './dto/social-complete.dto';
@@ -61,7 +61,7 @@ export class SocialService {
     private readonly registration: RegistrationService,
     private readonly rateLimit: RateLimitService,
     @Inject(REDIS) private readonly redis: Redis,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
   ) {}
 
   enabledProviders(): Array<OAuthProvider['slug']> {

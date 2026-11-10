@@ -10,7 +10,7 @@ import {
 } from '@libs/auth';
 import type { AuthContext, UserDocument } from '@libs/auth';
 import { AppError, decrypt, ENV, encrypt, encryptionKey } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { ApiConfig } from '@libs/common';
 import { AuthService } from '../core/auth.service';
 import { isTotpEnrolled } from './second-factor-methods';
 import { SecondFactorService } from './second-factor.service';
@@ -46,7 +46,7 @@ export class TotpService {
     private readonly sessions: SessionService,
     private readonly secondFactor: SecondFactorService,
     private readonly authService: AuthService,
-    @Inject(ENV) env: Env,
+    @Inject(ENV) env: ApiConfig,
   ) {
     this.key = encryptionKey(env.encryptionKey);
   }

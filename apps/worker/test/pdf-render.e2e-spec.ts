@@ -13,7 +13,7 @@ import { crc32, deflateSync } from 'node:zlib';
 import type { Job } from 'bullmq';
 import { chromium } from 'playwright';
 import { ENV } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { WorkerConfig } from '@libs/common';
 import { newId } from '@libs/database';
 import { renderMarkdown } from '@libs/render';
 import type { PdfRenderJob } from '@libs/problems';
@@ -208,7 +208,7 @@ describeWithChromium('PdfRenderProcessor (Chromium)', () => {
   });
   it('relaunches Chromium after a failed launch', async () => {
     const browser = new BrowserService(
-      worker.module.get<Env>(ENV),
+      worker.module.get<WorkerConfig>(ENV),
       worker.module.get(SettingsService),
     );
     const htmlPath = join(worker.pdfCacheRoot, 'launch.html');
@@ -226,7 +226,7 @@ describeWithChromium('PdfRenderProcessor (Chromium)', () => {
   });
   it('tolerates shutdown after a failed launch', async () => {
     const browser = new BrowserService(
-      worker.module.get<Env>(ENV),
+      worker.module.get<WorkerConfig>(ENV),
       worker.module.get(SettingsService),
     );
     jest.spyOn(chromium, 'launch').mockRejectedValueOnce(new Error('boom'));

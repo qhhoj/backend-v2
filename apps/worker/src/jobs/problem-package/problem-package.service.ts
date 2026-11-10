@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { Inject, Injectable } from '@nestjs/common';
 import { assertRealPathInside, ENV, StorageService } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { WorkerConfig } from '@libs/common';
 import { DATA_FILE_KINDS } from '@libs/database';
 import type { DataFileKind, Problem } from '@libs/database';
 import {
@@ -42,7 +42,7 @@ export class ProblemPackageService {
     private readonly packages: PackageCacheService,
     private readonly storage: StorageService,
     @Inject(PACKAGE_LIMITS) private readonly limits: PackageLimits,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: WorkerConfig,
   ) {}
 
   /** Builds `<code>.<key>.zip` for the problem as it is now (the key in the job only says what the api saw; an edit since then simply produces the newer key). Returns the key written. */

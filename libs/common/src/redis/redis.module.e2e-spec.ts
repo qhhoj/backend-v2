@@ -5,6 +5,7 @@ import { HttpAdapterHost } from '@nestjs/core';
 import type { FastifyInstance } from 'fastify';
 import Redis from 'ioredis';
 import { createTestApp, TEST_REDIS_URL } from '../testing';
+import { EnvModule } from '../env/env.module';
 import { REDIS, RedisModule } from './redis.module';
 
 const KEY = 'redis-module-spec:written-on-close';
@@ -28,15 +29,12 @@ class WritesOnServerClose implements OnModuleInit {
 
 describe('RedisModule shutdown', () => {
   const observer = new Redis(TEST_REDIS_URL);
-  beforeAll(() => {
-    process.env.REDIS_URL = TEST_REDIS_URL;
-  });
   afterAll(() => observer.quit());
 
   it('keeps the shared client open until the HTTP server has closed, then quits it', async () => {
     await observer.del(KEY);
     const app = await createTestApp({
-      imports: [RedisModule],
+      imports: [EnvModule.forValues({ redisUrl: TEST_REDIS_URL }), RedisModule],
       providers: [WritesOnServerClose],
     });
     const shared = app.get<Redis>(REDIS);

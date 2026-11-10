@@ -1,7 +1,7 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { Inject, Injectable } from '@nestjs/common';
 import { ENV } from '@libs/common';
-import type { Env } from '@libs/common';
+import type { WorkerConfig } from '@libs/common';
 import { contestDataPath, matchesGlob } from '@libs/contests';
 import type { ContestDataJob } from '@libs/contests';
 import { ContestDataRepository } from './contest-data.repository';
@@ -13,7 +13,7 @@ import { chunkedSources, writeZipInPlace } from '../lazy-zip';
 export class ContestDataService {
   constructor(
     private readonly repository: ContestDataRepository,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: WorkerConfig,
     @Inject(CONTEST_DATA_LIMITS) private readonly limits: ContestDataLimits,
   ) {}
 

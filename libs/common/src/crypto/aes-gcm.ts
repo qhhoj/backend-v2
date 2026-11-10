@@ -1,10 +1,14 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
-export function encryptionKey(hex = process.env.ENCRYPTION_KEY ?? ''): Buffer {
-  const key = Buffer.from(hex, 'hex');
-  if (!/^[0-9a-f]{64}$/i.test(hex) || key.length !== 32)
-    throw new Error('ENCRYPTION_KEY must be 32 bytes (64 hex chars)');
-  return key;
+export const ENCRYPTION_KEY_PROBLEM =
+  'ENCRYPTION_KEY must be 32 bytes (64 hex chars)';
+
+export const isEncryptionKey = (hex: string): boolean =>
+  /^[0-9a-f]{64}$/i.test(hex);
+
+export function encryptionKey(hex: string): Buffer {
+  if (!isEncryptionKey(hex)) throw new Error(ENCRYPTION_KEY_PROBLEM);
+  return Buffer.from(hex, 'hex');
 }
 
 export function encrypt(plain: string, key: Buffer): string {

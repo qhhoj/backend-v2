@@ -19,7 +19,7 @@ import {
   RateLimitService,
   ValidationFailedError,
 } from '@libs/common';
-import type { Env, Mailer } from '@libs/common';
+import type { ApiConfig, Mailer } from '@libs/common';
 import {
   PASSWORD_RESET_EMAIL_LIMIT,
   PASSWORD_RESET_IP_LIMIT,
@@ -44,7 +44,7 @@ export class PasswordResetService {
     private readonly pwned: PwnedPasswordService,
     private readonly rateLimit: RateLimitService,
     @Inject(MAILER) private readonly mailer: Mailer,
-    @Inject(ENV) private readonly env: Env,
+    @Inject(ENV) private readonly env: ApiConfig,
   ) {}
 
   /** Also serves active accounts with an unusable (`!`) hash: the reset sets their first password. Always resolves the same way whether or not the email is known; mails go out in the background so timing does not reveal it. */

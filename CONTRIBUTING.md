@@ -176,7 +176,7 @@ user-activity/
 
 ## Runtime settings
 
-- Env keeps infrastructure and key material: `MONGO_URL`, `REDIS_URL`, `ENCRYPTION_KEY`, `TOKEN_SECRET`, `SESSION_SECRET`, `SITE_URL`, `PORT`, `LOG_LEVEL`, `TRUST_PROXY`, `SSE_IP_ALLOWLIST`, `COOKIE_SECURE`, `MEDIA_ROOT`, `MEDIA_URL`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT`, `PDF_CONCURRENCY`, `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT`, `JUDGE_BRIDGE_TLS_CERT`, `JUDGE_BRIDGE_TLS_KEY`, `TEST_REDIS_URL`
+- Env keeps infrastructure and key material. The variables are not listed here: `deploy/env.production.example` and `.env.example` are the templates, and each process's config (`libs/common/src/env/process-configs.ts`, built from the parts in `config-parts.ts`) is checked against them by `libs/common/src/env/process-configs.spec.ts`. Add a variable to a part, then to the templates; the spec fails until both agree
 - Settings (the admin edits them, no restart): every key is one entry in `libs/settings/src/registry.ts`; read the list there, it is the only copy
 - Add one: a `define({ type, default, description, secret, combine? })` entry in `SETTINGS` (`libs/settings/src/registry.ts`), `type` from `setting-types.ts` (add a type there when none fits); no other file changes, the admin API and revisions pick it up. `secret: true` encrypts the whole value, `secret: ['clientSecret']` those top-level fields; `combine` merges a PATCH into the stored object (the `auth.*` clients), without it the patch replaces the value
 - Read: inject `SettingsService` and call `settings.get('<key>')` where the value is used, never cache it (it is a synchronous read of an in-memory snapshot kept fresh by change stream plus a one-minute resync, so a change reaches api, worker and bridge within seconds); a consumer that builds something expensive keys it by the value (the mailer keeps its SMTP transport per URL)
@@ -596,8 +596,10 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 ## Env and deploy
 
 - Production install, nginx, podman quadlets, env template, rollback: `deploy/RUNBOOK.md`
-- `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api, the worker and the bridge (all validate env)
-- The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
+- Each process reads only its own variables (`apiConfig`, `workerConfig`, `bridgeConfig` in `libs/common/src/env/process-configs.ts`, built from the parts in `config-parts.ts`) and ignores the rest, so one env file serves all three. A new variable goes into a part, `.env.example` and `deploy/env.production.example`; `process-configs.spec.ts` fails until the template lists exactly what the processes read and `scripts/fullstack/up.sh` sets each required one
+- What each process cannot boot without is the `REQUIRED` table of `process-configs.spec.ts`: the deploy contract, so changing it is a host env change
+- The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT` (both declare the `dataRoots` part)
+- `LISTEN_HOST` (api) defaults to `127.0.0.1` whatever `NODE_ENV` is; `.env.example` sets `0.0.0.0`
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly); boot checks only `CONTEST_DATA_ROOT` against it, the others are the operator's to keep apart
 - `CONTEST_DATA_ROOT` is shared by the api and the worker and must not be under `MEDIA_ROOT`
 - `USER_DATA_ROOT` is shared by the api and the worker; boot rejects it under `MEDIA_ROOT` or overlapping `CONTEST_DATA_ROOT`
