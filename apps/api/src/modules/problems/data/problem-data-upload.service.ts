@@ -1,12 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { rm, stat } from 'node:fs/promises';
+import { rm, stat, writeFile } from 'node:fs/promises';
 import type { AuthContext } from '@libs/auth';
-import {
-  RateLimitService,
-  ValidationFailedError,
-  atomicWrite,
-} from '@libs/common';
+import { RateLimitService, ValidationFailedError } from '@libs/common';
 import { dataFileNamesOf } from '@libs/database';
 import type { DataFileKind, ProblemData } from '@libs/database';
 import type { ChargeRequest, SpentCharge } from '@libs/problems';
@@ -105,7 +101,7 @@ export class ProblemDataUploadService {
   ): Promise<ProblemDataResponse> {
     const problem = await this.store.writableProblem(auth.principal, code);
     await this.reserveUpload(auth);
-    const staged = await this.dataFiles.stageUpload(problem.code);
+    const staged = await this.store.stageUpload(problem);
     let name: string;
     try {
       const { filename } = await saveMultipartFile(
@@ -239,9 +235,10 @@ export class ProblemDataUploadService {
         `Allowed extensions for ${kind}: ${SOURCE_EXTENSIONS[kind].join(', ')}`,
         'extension_not_allowed',
       );
-    const staged = await this.dataFiles.stageUpload(problem.code);
+    const staged = await this.store.stageUpload(problem);
     try {
-      await atomicWrite(staged, content);
+      // `wx` and no mkdir: a rename that moved the directory meanwhile fails this write instead of recreating `<old code>/`.
+      await writeFile(staged, content, { flag: 'wx' });
       return await this.storeSource(auth, problem, {
         kind,
         name,

@@ -15,6 +15,7 @@ import { basename, dirname, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
 import type Redis from 'ioredis';
 import {
+  AppError,
   assertRealPathInside,
   atomicWrite,
   DAY_MS,
@@ -43,6 +44,17 @@ const STALE_UPLOAD_MS = HOUR_MS;
 const STAGE_DIRECTORY_LOCK_SECONDS = 10;
 /** The worker removes a package when its job ends; one left past a failed job's retention (a day) belongs to a lost job. */
 const STALE_IMPORT_MS = 2 * DAY_MS;
+
+/** Whether the problem a write was started for still has the code it read; run under that code's data lock, where no rename can change it. */
+export type HoldsCode = () => Promise<boolean>;
+
+/** A write whose problem was renamed after it read the code (409 `conflict`): it must not create a directory at the old code. */
+const codeChanged = () =>
+  new AppError(
+    'conflict',
+    409,
+    'The problem was renamed meanwhile; reload and try again',
+  );
 
 /** Redis lock held for the whole of one data change of `code` (the judge's marker is up meanwhile); the bridge reads it to hold a submission waiting for that problem's data. */
 export const problemDataLockKey = (code: string): string =>
@@ -104,11 +116,14 @@ export class ProblemDataFilesService {
     return this.removeFile(code, INIT_FILE);
   }
 
-  /** Runs one data change under the problem's cross-process lock (api and worker both write data) and the judge's marker; the marker is removed on success and on every error path. A writer that finds the lock taken gets the 409 `busy` conflict, at once unless it waits up to `waitSeconds`. */
+  /** Runs one data change under the problem's cross-process lock (api and worker both write data) and the judge's marker; the marker is removed on success and on every error path. A writer that finds the lock taken gets the 409 `busy` conflict, at once unless it waits up to `waitSeconds`. With `holdsCode`, a problem renamed since the caller read its code is the 409 `conflict` before the marker, so no marker write recreates the old code's directory. */
   withDataWrite<T>(
     code: string,
     work: () => Promise<T>,
-    { waitSeconds = 0 }: { waitSeconds?: number } = {},
+    {
+      waitSeconds = 0,
+      holdsCode,
+    }: { waitSeconds?: number; holdsCode?: HoldsCode } = {},
   ): Promise<T> {
     const marker = this.markerPath(code);
     return withRedisLock(
@@ -121,6 +136,7 @@ export class ProblemDataFilesService {
         waitSeconds,
       },
       async () => {
+        await assertHoldsCode(holdsCode);
         await atomicWrite(marker, Buffer.alloc(0), this.root);
         try {
           return await work();
@@ -172,6 +188,16 @@ export class ProblemDataFilesService {
     }
   }
 
+  /** Whether a data write's marker is up: the write has started and its stamp is not written yet (judges wait meanwhile). */
+  async isWriting(code: string): Promise<boolean> {
+    const marker = this.markerPath(code);
+    await assertRealPathInside(this.root, marker);
+    return access(marker).then(
+      () => true,
+      () => false,
+    );
+  }
+
   private lockKey(code: string): string {
     return problemDataLockKey(code);
   }
@@ -202,6 +228,25 @@ export class ProblemDataFilesService {
     await rmdir(directory).catch((error: NodeJS.ErrnoException) => {
       if (error.code !== 'ENOENT' && error.code !== 'ENOTEMPTY') throw error;
     });
+  }
+
+  /** Frees a code a refused write left an empty `<code>/` at: the empty directory is removed under the code's data lock; one that holds anything (a stamp, data a failed rename stranded) stays. */
+  async removeEmptyDirectory(code: string): Promise<void> {
+    const isPresent = await access(this.directoryOf(code)).then(
+      () => true,
+      () => false,
+    );
+    if (!isPresent) return;
+    await withRedisLock(
+      this.redis,
+      {
+        key: this.lockKey(code),
+        ttlSeconds: STAGE_DIRECTORY_LOCK_SECONDS,
+        busyMessage:
+          "Another change to this problem's data is in progress, try again",
+      },
+      () => this.removeDirectoryIfEmpty(code),
+    );
   }
 
   /** Drops a problem's whole directory (the purge) under the data lock and the judges' writing marker, so no upload or judge read interleaves; a missing directory is nothing to do. A symlinked directory is refused even when it points inside the root: the marker would be written into, and left on, the link's target. */
@@ -261,9 +306,9 @@ export class ProblemDataFilesService {
     await rm(this.markerPath(newCode), { force: true });
   }
 
-  /** A fresh temporary path inside the problem directory, for streaming uploads before they are validated. */
-  async stageUpload(code: string): Promise<string> {
-    await this.ensureDirectory(code);
+  /** A fresh temporary path inside the problem directory, for streaming uploads before they are validated. With `holdsCode`, a missing directory is created only while the problem still has `code` (see `ensureDirectory`). */
+  async stageUpload(code: string, holdsCode?: HoldsCode): Promise<string> {
+    await this.ensureDirectory(code, holdsCode);
     const stagedPath = this.resolveInside(
       `${this.codeOf(code)}/${UPLOAD_PREFIX}${randomUUID()}`,
     );
@@ -272,8 +317,11 @@ export class ProblemDataFilesService {
     return stagedPath;
   }
 
-  /** A missing directory is created under the data lock, so it is never recreated behind a rename that moved it away (its move back would find the name taken); waits out a rename, a longer data write gets the 409 `busy` conflict. An existing directory needs no lock: staging a file never creates its directory. */
-  private async ensureDirectory(code: string): Promise<void> {
+  /** A missing directory is created under the data lock, and only while the problem still has `code` (`holdsCode`, else 409 `conflict`), so it is never recreated behind a rename that moved it away; waits out a rename, a longer data write gets the 409 `busy` conflict. An existing directory needs no lock (judges' submissions are not held): staging a file never creates its directory. */
+  private async ensureDirectory(
+    code: string,
+    holdsCode?: HoldsCode,
+  ): Promise<void> {
     if (await this.exists(code)) return;
     await withRedisLock(
       this.redis,
@@ -284,7 +332,10 @@ export class ProblemDataFilesService {
         busyMessage:
           "Another change to this problem's data is in progress, try again",
       },
-      () => mkdir(this.directoryOf(code), { recursive: true }),
+      async () => {
+        await assertHoldsCode(holdsCode);
+        await mkdir(this.directoryOf(code), { recursive: true });
+      },
     );
   }
 
@@ -361,4 +412,8 @@ export class ProblemDataFilesService {
   private resolveInside(relativePath: string): string {
     return resolveInside(this.root, relativePath, 'PROBLEM_DATA_ROOT');
   }
+}
+
+async function assertHoldsCode(holdsCode?: HoldsCode): Promise<void> {
+  if (holdsCode && !(await holdsCode())) throw codeChanged();
 }

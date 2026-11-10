@@ -9,7 +9,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { StorageService } from '@libs/common';
-import { PackageCacheService } from '@libs/problems';
+import { PackageCacheService, ProblemDataFilesService } from '@libs/problems';
 import {
   PACKAGE_LIMITS,
   DEFAULT_PACKAGE_LIMITS,
@@ -234,6 +234,32 @@ describe('problem package build', () => {
     await expect(
       service.build({ code: problem.code, key: 'x' }),
     ).rejects.toThrow('problem not found');
+  });
+
+  it('builds only finished data: never during a data write, nor after a write that stopped before its stamp', async () => {
+    const problem = await seedPackageProblem('pkg_midwrite');
+    const { code } = problem;
+    const dataFiles = worker.module.get(ProblemDataFilesService);
+    await dataFiles.writeDataVersion(code, 3);
+    await dataFiles.withDataWrite(code, async () => {
+      await worker.problems.updateOne(
+        { _id: problem._id },
+        { $inc: { dataVersion: 1 } },
+      );
+      await expect(service.build({ code, key: 'x' })).rejects.toThrow();
+      writeFileSync(join(dataDirectory(code), 'tests.zip'), 'NEW-ARCHIVE');
+    });
+    await expect(service.build({ code, key: 'x' })).rejects.toThrow();
+    expect(
+      readdirSync(packagesDirectory()).filter((name) =>
+        name.startsWith(`${code}.`),
+      ),
+    ).toEqual([]);
+    await dataFiles.writeDataVersion(code, 4);
+    const key = await service.build({ code, key: 'x' });
+    expect((await readZip(cache.pathOf(code, key)))['data/tests.zip']).toBe(
+      'NEW-ARCHIVE',
+    );
   });
 
   it('sweeps cached packages older than a day', async () => {

@@ -13,6 +13,7 @@ import {
   ProblemDataFilesService,
   ZipError,
 } from '@libs/problems';
+import type { HoldsCode } from '@libs/problems';
 import { ProblemDataResponse } from './dto/problem-data.response';
 import { maxTestcasesFor } from '../core/dto/limits';
 import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
@@ -82,12 +83,24 @@ export class ProblemDataStore {
     return problem;
   }
 
-  /** Runs a data change under the judge's writing marker (see `ProblemDataFilesService.withDataWrite`). */
+  /** Runs a data change under the judge's writing marker (see `ProblemDataFilesService.withDataWrite`); a problem renamed since it was read is the 409 `conflict`, before anything is written. */
   withDataWrite<T>(
     problem: ProblemDocument,
     work: () => Promise<T>,
   ): Promise<T> {
-    return this.dataFiles.withDataWrite(problem.code, work);
+    return this.dataFiles.withDataWrite(problem.code, work, {
+      holdsCode: this.holdsCode(problem),
+    });
+  }
+
+  /** A staged upload path in the problem's directory; a problem renamed since it was read is the 409 `conflict` instead of a directory recreated at its old code. */
+  stageUpload(problem: ProblemDocument): Promise<string> {
+    return this.dataFiles.stageUpload(problem.code, this.holdsCode(problem));
+  }
+
+  private holdsCode(problem: ProblemDocument): HoldsCode {
+    return async () =>
+      (await this.repository.idByCode(problem.code)) === problem._id;
   }
 
   /** Last step of every data change, after init.yml and every file move or removal: stamps `<code>/.data-version` with the version `compileAndStore` wrote (`expected + 1`), the judges' cache key, then records `dataBytes` from the directory (the storage quota's meter). If a step fails after the Mongo write the stamp stays old, so judges wait and the problem fails closed until the next save. Call it inside `withDataWrite`, so the measured directory is not changing. */

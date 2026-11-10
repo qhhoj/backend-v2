@@ -91,12 +91,13 @@ export async function withCodeTaken<Result>(
   }
 }
 
-/** A live problem already has `code` (`code_taken`), or else its data directory is left on disk (`data_directory_taken`); the live problem is named first because its directory exists too. */
+/** A live problem already has `code` (`code_taken`), or else its data directory is left on disk (`data_directory_taken`); the live problem is named first because its directory exists too. An empty leftover directory holds nothing to adopt and is removed first, so a code a refused write left one at is free again without shell access. */
 export async function assertCodeAvailable(
   repository: Pick<ProblemsRepository, 'idByCode'>,
-  dataFiles: Pick<ProblemDataFilesService, 'exists'>,
+  dataFiles: Pick<ProblemDataFilesService, 'exists' | 'removeEmptyDirectory'>,
   code: string,
 ): Promise<void> {
   if (await repository.idByCode(code)) throw codeTakenError();
+  await dataFiles.removeEmptyDirectory(code);
   await assertNoDataDirectory(dataFiles, code);
 }

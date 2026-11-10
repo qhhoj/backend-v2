@@ -52,14 +52,30 @@ export class ProblemPackageService {
     const pdfs = await this.pdfCache.listing(problem.code);
     const key = packageKey(problem, pdfs);
     if (await this.packages.has(problem.code, key)) return key;
+    await this.assertDataFinished(problem);
     const entries = await this.entriesOf(problem, pdfs);
-    await this.packages.write(problem.code, key, (temporaryPath) =>
-      writePackageZip(entries, {
+    await this.packages.write(problem.code, key, async (temporaryPath) => {
+      await writePackageZip(entries, {
         path: temporaryPath,
         maxBytes: this.limits.maxBytes,
-      }),
-    );
+      });
+      await this.assertDataFinished(problem);
+    });
     return key;
+  }
+
+  /**
+   * Checked before the files are read and again before the zip takes its name, so a data write that overlaps the build
+   * never leaves its files cached under the key: refused while the judges' writing marker is up, or when the stamp is not
+   * the `dataVersion` read (a write landed meanwhile, or one stopped after its Mongo write). An unstamped directory is
+   * read as it is, as judges do. The failed job is built again on the editor's next request. No data lock is taken: the
+   * bridge would hold the problem's submissions for the whole build.
+   */
+  private async assertDataFinished(problem: Problem): Promise<void> {
+    const isWriting = await this.dataFiles.isWriting(problem.code);
+    const stamp = await this.dataFiles.readDataVersion(problem.code);
+    if (isWriting || (stamp !== null && stamp !== (problem.dataVersion ?? 0)))
+      throw new Error(`the data of ${problem.code} is being written`);
   }
 
   /** The daily sweep: packages nobody asked for in a day. */
