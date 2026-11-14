@@ -5,6 +5,15 @@ import { COALESCE_TTL_SECONDS, runCoalesced } from './redis-coalesce';
 const sleep = (milliseconds: number) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+/** A promise and the function that resolves it: orders steps without sleeping. */
+function signal() {
+  let fire: () => void = () => undefined;
+  const fired = new Promise<void>((resolve) => {
+    fire = resolve;
+  });
+  return { fired, fire };
+}
+
 describe('runCoalesced', () => {
   const redis = new Redis(TEST_REDIS_URL);
   /** A second client stands for a second worker process. */
@@ -46,19 +55,20 @@ describe('runCoalesced', () => {
 
   it('returns at once while another process owns the key, which then runs again for it', async () => {
     let ownerRuns = 0;
-    let open: () => void = () => undefined;
-    const gate = new Promise<void>((resolve) => {
-      open = resolve;
-    });
+    const ownerRunning = signal();
+    const gate = signal();
     const owner = runCoalesced(redis, key, async () => {
       ownerRuns += 1;
-      if (ownerRuns === 1) await gate;
+      if (ownerRuns > 1) return;
+      ownerRunning.fire();
+      await gate.fired;
     });
-    await sleep(20);
+    // The owner's run has taken its own mark: the visitor's mark is a new one.
+    await ownerRunning.fired;
     const visitorWork = jest.fn(() => Promise.resolve());
     await runCoalesced(otherProcess, key, visitorWork);
     expect(visitorWork).not.toHaveBeenCalled();
-    open();
+    gate.fire();
     await owner;
     expect(ownerRuns).toBe(2);
   });
@@ -89,15 +99,17 @@ describe('runCoalesced', () => {
     let running = 0;
     let maxRunning = 0;
     let runs = 0;
+    const ownerRunning = signal();
     const work = async () => {
       running += 1;
       runs += 1;
       maxRunning = Math.max(maxRunning, running);
+      if (runs === 1) ownerRunning.fire();
       await sleep(runs === 1 ? 2500 : 10);
       running -= 1;
     };
     const owner = runCoalesced(redis, key, work, 1);
-    await sleep(500);
+    await ownerRunning.fired;
     await runCoalesced(otherProcess, key, work, 1);
     await owner;
     expect(maxRunning).toBe(1);
