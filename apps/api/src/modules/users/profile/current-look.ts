@@ -28,12 +28,11 @@ export function currentAppearance(
   look: User['appearance'],
 ): AppearanceResponse | null {
   if (!look) return null;
-  const { accent, mode, contrast, background } = look;
+  const { accent, contrast, background } = look;
   const current = {
     accent: Object.hasOwn(LEGACY_ACCENTS, accent)
       ? LEGACY_ACCENTS[accent]
       : accent,
-    mode,
     contrast,
     background,
   };

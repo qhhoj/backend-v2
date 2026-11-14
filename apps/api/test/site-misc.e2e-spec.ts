@@ -294,7 +294,6 @@ describe('profile', () => {
 
     const look = {
       accent: 'teal',
-      mode: 'dark',
       contrast: 'high',
       background: 'contour',
     };
@@ -319,7 +318,7 @@ describe('profile', () => {
     // Unknown values are refused and change nothing.
     for (const appearance of [
       { accent: 'crimson' },
-      { accent: 'teal', mode: 'sepia' },
+      { accent: 'teal', mode: 'dark' }, // the mode is siteTheme
       { accent: 'teal', contrast: 'max' },
       { accent: 'teal', background: 'plaid' },
       { accent: 'teal', glass: 101 },

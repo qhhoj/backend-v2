@@ -4,7 +4,6 @@ import type {
   AppearanceAccent,
   AppearanceBackground,
   AppearanceContrast,
-  AppearanceMode,
 } from './profile.dto';
 import type { OrganizationSummaryResponse } from '../../../organizations/core/dto/organization.response';
 
@@ -26,8 +25,6 @@ export class ProfileOrganizationResponse implements OrganizationSummaryResponse 
 export class AppearanceResponse {
   /** Accent preset. */
   accent!: AppearanceAccent;
-  /** Colour mode; absent means `siteTheme` decides. */
-  mode?: AppearanceMode;
   /** Contrast level; absent means `standard`. */
   contrast?: AppearanceContrast;
   /** Page background style; absent means the default (`blueprint`). */

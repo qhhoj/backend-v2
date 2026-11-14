@@ -50,9 +50,6 @@ const ACCEPTED_ACCENTS = [
   ...APPEARANCE_ACCENTS,
   ...Object.keys(LEGACY_APPEARANCE_ACCENTS),
 ];
-/** Light, dark, or the device's scheme; absent in a look means `siteTheme` decides. */
-export const APPEARANCE_MODES = ['light', 'dark', 'auto'] as const;
-export type AppearanceMode = (typeof APPEARANCE_MODES)[number];
 /** Standard or the high-contrast palette; absent in a look means `standard`. */
 export const APPEARANCE_CONTRASTS = ['standard', 'high'] as const;
 export type AppearanceContrast = (typeof APPEARANCE_CONTRASTS)[number];
@@ -82,8 +79,6 @@ export const PERCENT_SCHEMA = {
 export class AppearanceDto {
   /** Accent preset; a retired Clay or Glass id is stored as its successor. */
   @IsIn(ACCEPTED_ACCENTS) accent!: AppearanceAccent | LegacyAppearanceAccent;
-  /** Colour mode; omit to leave it to `siteTheme`. */
-  @IsOptional() @IsIn(APPEARANCE_MODES) mode?: AppearanceMode;
   /** Contrast level; omit for `standard`. */
   @IsOptional() @IsIn(APPEARANCE_CONTRASTS) contrast?: AppearanceContrast;
   /** Page background style; omit for the default (`blueprint`). */

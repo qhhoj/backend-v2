@@ -57,11 +57,10 @@ export class User {
   @Prop({ default: 0 }) problemCount!: number;
   @Prop({ default: 'auto' }) aceTheme!: string;
   @Prop({ default: 'auto' }) siteTheme!: string;
-  /** The user's own look (accent, optional mode, contrast and page background); null = the site's look. Validated by `AppearanceDto`; looks stored before 2026-11-15 may hold a retired accent and the Glass levels `glass` and `glow`, read through `currentAppearance`. */
+  /** The user's own look (accent, optional contrast and page background; the mode is `siteTheme`); null = the site's look. Validated by `AppearanceDto`; looks stored before 2026-11-15 may hold a retired accent and the Glass levels `glass` and `glow`, read through `currentAppearance`. */
   @Prop({ type: Object, default: null })
   appearance!: {
     accent: string;
-    mode?: string;
     contrast?: string;
     background?: string;
     glass?: number;

@@ -448,15 +448,6 @@
             "maximum": 100,
             "minimum": 0,
             "type": "integer"
-          },
-          "mode": {
-            "description": "Colour mode; omit to leave it to `siteTheme`.",
-            "enum": [
-              "auto",
-              "dark",
-              "light"
-            ],
-            "type": "string"
           }
         },
         "required": [
@@ -497,15 +488,6 @@
             "enum": [
               "high",
               "standard"
-            ],
-            "type": "string"
-          },
-          "mode": {
-            "description": "Colour mode; absent means `siteTheme` decides.",
-            "enum": [
-              "auto",
-              "dark",
-              "light"
             ],
             "type": "string"
           }
