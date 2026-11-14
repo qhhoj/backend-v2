@@ -161,12 +161,9 @@ export class ParticipationAdminService {
       : defaultStart(contest, dto.kind, now);
     return dto.kind === 'live'
       ? this.participationRows.insertLive(contest._id, userId, { realStart })
-      : this.participationRows.createVirtual(
-          contest._id,
-          userId,
-          realStart,
-          null,
-        );
+      : this.participationRows.createVirtual(contest._id, userId, realStart, {
+          acceptance: null,
+        });
   }
 
   private async target(

@@ -248,20 +248,28 @@ export class ParticipationsRepository {
     }
   }
 
-  /** Legacy: the next virtual number, retried while concurrent joins take it. */
+  /** Legacy: the next virtual number, retried while concurrent joins take it. The user's latest run is returned instead when the optional `isLive` says it is unfinished (checked again on every retry, so the loser of a race gets the winner's row). */
   async createVirtual(
     contestId: string,
     userId: string,
     now: Date,
-    acceptance: RulesAcceptance | null,
+    {
+      acceptance,
+      isLive,
+    }: {
+      acceptance: RulesAcceptance | null;
+      isLive?: (latest: ParticipationDocument) => boolean;
+    },
   ): Promise<ParticipationDocument> {
     try {
       return await retryOnDuplicateKey(async () => {
         const [highest] = await this.participations
-          .find({ contest: contestId, user: userId }, { virtual: 1 })
+          .find({ contest: contestId, user: userId })
           .sort({ virtual: -1 })
           .limit(1)
-          .lean();
+          .exec();
+        if (highest && highest.virtual > LIVE && isLive?.(highest))
+          return highest;
         return this.participations.create({
           contest: contestId,
           user: userId,

@@ -66,6 +66,8 @@ import type {
 import {
   ACCESS_CODE_IP_LIMIT,
   ACCESS_CODE_USER_LIMIT,
+  JOIN_USER_LIMIT,
+  JOIN_WINDOW_SECONDS,
   ACCESS_CODE_WINDOW_SECONDS,
 } from '../core/rate-limits';
 
@@ -193,6 +195,11 @@ export class ContestParticipationService {
     credentials: JoinCredentials,
     now = new Date(),
   ): Promise<ParticipationSummaryResponse> {
+    await this.rateLimit.reserve(
+      [`contest-join:user:${principal.userId}`],
+      JOIN_USER_LIMIT,
+      JOIN_WINDOW_SECONDS,
+    );
     const contest = await this.contestsService.visibleContest(principal, key);
     const phase = contestPhase(contest, now);
     const isSpectatorOnly = this.isEditorOrTester(principal, contest);
@@ -233,7 +240,10 @@ export class ContestParticipationService {
       contest._id,
       principal.userId,
       now,
-      this.acceptanceFor(contest, credentials, now),
+      {
+        acceptance: this.acceptanceFor(contest, credentials, now),
+        isLive: (latest) => !hasParticipationEnded(contest, latest, now),
+      },
     );
   }
 

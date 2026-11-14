@@ -230,6 +230,11 @@ afterAll(() => api.teardown());
         acceptRulesRevision: 1,
       }).expect(201);
       await api.contests.updateOne({ _id: contest._id }, { rulesRevision: 2 });
+      // The first run must be over, or the join returns it instead of a new one.
+      await api.participations.updateMany(
+        { contest: contest._id },
+        { realStart: hoursFromNow(-5) },
+      );
       await post('alice', contest.key, 'join')
         .expect(400)
         .expect(errorCode('rules_not_accepted'));
