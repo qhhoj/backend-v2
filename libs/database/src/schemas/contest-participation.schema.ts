@@ -36,6 +36,8 @@ export class ContestParticipation {
   @Prop({ default: false }) isRegistered!: boolean;
   /** When the user accepted the contest rules for this participation; null: none were asked. */
   @Prop({ type: Date, default: null }) rulesAcceptedAt!: Date | null;
+  /** When the user left this virtual run; a later join starts a new one. */
+  @Prop({ type: Date, default: null }) leftAt!: Date | null;
   /** `Contest.rulesRevision` the user saw. */
   @Prop({ type: Number, default: null }) rulesAcceptedRevision!: number | null;
 }

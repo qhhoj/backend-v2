@@ -100,7 +100,9 @@ export class ContestParticipationController {
    * Makes the contest the viewer's current one and returns the participation.
    * Before the contest ends this is the live participation (created or re-
    * entered, which starts the clock after registering); after it ends it
-   * creates a virtual participation unless the contest forbids it. Editors and
+   * creates a virtual participation unless the contest forbids it; a user whose
+   * latest virtual run is unfinished gets that run back. Joins are rate limited
+   * per user (429 `rate_limited`). Editors and
    * testers join as spectators. Refusals include 409 `contest_not_started`,
    * `virtual_disallowed` and `not_registered`, 403 `banned_from_contest` and
    * the access-code and rules errors listed for registering.

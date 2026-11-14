@@ -90,7 +90,7 @@ describe('contest participation', () => {
       ).toBe(joined.id);
     });
 
-    it('creates one live participation for concurrent joins and numbers concurrent virtual joins 1..n', async () => {
+    it('creates one live participation for concurrent joins', async () => {
       const running = await createContest(api);
       const responses = await Promise.all(
         Array.from({ length: 5 }, () => post('bob', running.key, 'join')),
@@ -99,21 +99,92 @@ describe('contest participation', () => {
         201, 201, 201, 201, 201,
       ]);
       expect(await participationsOf(running._id, 'bob')).toHaveLength(1);
+    });
+
+    it('gives a live virtual run back instead of a new row, also for concurrent joins', async () => {
       const ended = await createContest(api, {
         startTime: hoursFromNow(-5),
         endTime: hoursFromNow(-1),
       });
-      const virtuals = await Promise.all(
+      const responses = await Promise.all(
         Array.from({ length: 5 }, () => post('bob', ended.key, 'join')),
       );
-      expect(virtuals.map((response) => response.status)).toEqual([
+      expect(responses.map((response) => response.status)).toEqual([
         201, 201, 201, 201, 201,
       ]);
-      const numbers = (await participationsOf(ended._id, 'bob')).map(
-        (row) => row.virtual,
+      expect(await participationsOf(ended._id, 'bob')).toHaveLength(1);
+      const [first] = await participationsOf(ended._id, 'bob');
+      const again = dataOf<ParticipationSummaryResponse>(
+        await post('bob', ended.key, 'join').expect(201),
       );
-      expect(new Set(numbers).size).toBe(5);
-      expect(numbers.every((number) => number >= 1)).toBe(true);
+      expect(again.id).toBe(uuidStr(first._id));
+      expect(await participationsOf(ended._id, 'bob')).toHaveLength(1);
+      // A run whose time ran out is finished: the next join numbers a new one.
+      await api.participations.updateOne(
+        { _id: first._id },
+        { realStart: hoursFromNow(-5) },
+      );
+      await post('bob', ended.key, 'join').expect(201);
+      expect(
+        (await participationsOf(ended._id, 'bob')).map((row) => row.virtual),
+      ).toEqual([1, 2]);
+    });
+
+    it('starts a new run when the user joins again after leaving the live one', async () => {
+      const ended = await createContest(api, {
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+      });
+      const first = dataOf<ParticipationSummaryResponse>(
+        await post('carol', ended.key, 'join').expect(201),
+      );
+      await post('carol', ended.key, 'leave').expect(204);
+      const second = dataOf<ParticipationSummaryResponse>(
+        await post('carol', ended.key, 'join').expect(201),
+      );
+      expect(second.id).not.toBe(first.id);
+      expect(second.virtual).toBe(first.virtual + 1);
+    });
+
+    it('ends the virtual run when the user switches to another contest', async () => {
+      const options = {
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+      };
+      const first = await createContest(api, options);
+      const other = await createContest(api, options);
+      const run = dataOf<ParticipationSummaryResponse>(
+        await post('erin', first.key, 'join').expect(201),
+      );
+      await post('erin', other.key, 'join').expect(201);
+      const back = dataOf<ParticipationSummaryResponse>(
+        await post('erin', first.key, 'join').expect(201),
+      );
+      expect(back.id).not.toBe(run.id);
+    });
+
+    it('caps new virtual runs per user per day', async () => {
+      const ended = await createContest(api, {
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+      });
+      await api.app
+        .get<Redis>(REDIS)
+        .set(`rate:contest-virtual:user:${users.dave._id}`, 50);
+      await post('dave', ended.key, 'join')
+        .expect(429)
+        .expect(errorCode('rate_limited'));
+      expect(await participationsOf(ended._id, 'dave')).toHaveLength(0);
+    });
+
+    it('limits joins per user, every kind, and still lets a normal join through', async () => {
+      const running = await createContest(api);
+      for (let attempt = 0; attempt < 30; attempt += 1)
+        await post('frank', running.key, 'join').expect(201);
+      await post('frank', running.key, 'join')
+        .expect(429)
+        .expect(errorCode('rate_limited'));
+      await post('alice', running.key, 'join').expect(201);
     });
 
     it('lets only editors and testers in before the start, as spectators', async () => {

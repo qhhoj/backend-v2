@@ -165,6 +165,13 @@ export class ParticipationsRepository {
       : null;
   }
 
+  /** Ends the user's claim on a virtual run: a later join starts a new one. */
+  async markLeft(id: string, now: Date): Promise<void> {
+    await this.participations
+      .updateOne({ _id: id, virtual: { $gt: LIVE } }, { leftAt: now })
+      .exec();
+  }
+
   async currentIdOf(userId: string): Promise<string | null> {
     const user = await this.users
       .findById(userId, { currentParticipation: 1 })
@@ -174,13 +181,21 @@ export class ParticipationsRepository {
       : null;
   }
 
-  async setCurrent(userId: string, participationId: string): Promise<void> {
-    await this.users
-      .updateOne(
+  /** Returns the id the pointer held before, null when it was empty. */
+  async setCurrent(
+    userId: string,
+    participationId: string,
+  ): Promise<string | null> {
+    const before = await this.users
+      .findOneAndUpdate(
         { _id: userId },
         { $set: { currentParticipation: participationId } },
+        { projection: { currentParticipation: 1 } },
       )
-      .exec();
+      .lean();
+    return before?.currentParticipation
+      ? uuidStr(before.currentParticipation)
+      : null;
   }
 
   /** Compare-and-set: a join that replaced the pointer meanwhile is never undone. */
@@ -248,20 +263,40 @@ export class ParticipationsRepository {
     }
   }
 
-  /** Legacy: the next virtual number, retried while concurrent joins take it. */
+  /**
+   * Legacy: the next virtual number, retried while concurrent joins take it.
+   * With `reuse`, the user's latest run is returned instead of a new row when it is unfinished (`isLive`) and the user
+   * has not left it; the check repeats on every retry, so the loser of an insert race gets the winner's row.
+   * `beforeInsert` runs before each insert.
+   */
   async createVirtual(
     contestId: string,
     userId: string,
     now: Date,
-    acceptance: RulesAcceptance | null,
+    {
+      acceptance,
+      reuse,
+      beforeInsert,
+    }: {
+      acceptance: RulesAcceptance | null;
+      reuse?: { isLive: (latest: ParticipationDocument) => boolean };
+      beforeInsert?: () => Promise<void>;
+    },
   ): Promise<ParticipationDocument> {
     try {
       return await retryOnDuplicateKey(async () => {
         const [highest] = await this.participations
-          .find({ contest: contestId, user: userId }, { virtual: 1 })
+          .find({ contest: contestId, user: userId })
           .sort({ virtual: -1 })
           .limit(1)
-          .lean();
+          .exec();
+        const isReusable =
+          highest &&
+          highest.virtual > LIVE &&
+          !highest.leftAt &&
+          reuse?.isLive(highest);
+        if (isReusable) return highest;
+        await beforeInsert?.();
         return this.participations.create({
           contest: contestId,
           user: userId,

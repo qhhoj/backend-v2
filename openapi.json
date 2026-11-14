@@ -27070,7 +27070,7 @@
     },
     "/api/internal/contests/{key}/join": {
       "post": {
-        "description": "Makes the contest the viewer's current one and returns the participation.\nBefore the contest ends this is the live participation (created or re-\nentered, which starts the clock after registering); after it ends it\ncreates a virtual participation unless the contest forbids it. Editors and\ntesters join as spectators. Refusals include 409 `contest_not_started`,\n`virtual_disallowed` and `not_registered`, 403 `banned_from_contest` and\nthe access-code and rules errors listed for registering.",
+        "description": "Makes the contest the viewer's current one and returns the participation.\nBefore the contest ends this is the live participation (created or re-\nentered, which starts the clock after registering); after it ends it\ncreates a virtual participation unless the contest forbids it; a user whose\nlatest virtual run is unfinished gets that run back. Joins are rate limited\nper user (429 `rate_limited`). Editors and\ntesters join as spectators. Refusals include 409 `contest_not_started`,\n`virtual_disallowed` and `not_registered`, 403 `banned_from_contest` and\nthe access-code and rules errors listed for registering.",
         "operationId": "ContestParticipationController_join",
         "parameters": [
           {

@@ -66,6 +66,10 @@ import type {
 import {
   ACCESS_CODE_IP_LIMIT,
   ACCESS_CODE_USER_LIMIT,
+  JOIN_USER_LIMIT,
+  JOIN_WINDOW_SECONDS,
+  VIRTUAL_RUN_DAILY_LIMIT,
+  VIRTUAL_RUN_WINDOW_SECONDS,
   ACCESS_CODE_WINDOW_SECONDS,
 } from '../core/rate-limits';
 
@@ -193,6 +197,11 @@ export class ContestParticipationService {
     credentials: JoinCredentials,
     now = new Date(),
   ): Promise<ParticipationSummaryResponse> {
+    await this.rateLimit.reserve(
+      [`contest-join:user:${principal.userId}`],
+      JOIN_USER_LIMIT,
+      JOIN_WINDOW_SECONDS,
+    );
     const contest = await this.contestsService.visibleContest(principal, key);
     const phase = contestPhase(contest, now);
     const isSpectatorOnly = this.isEditorOrTester(principal, contest);
@@ -208,10 +217,12 @@ export class ContestParticipationService {
             { isSpectatorOnly, credentials },
             now,
           );
-    await this.participationRows.setCurrent(
+    const previous = await this.participationRows.setCurrent(
       principal.userId,
       participation._id,
     );
+    if (previous && previous !== uuidStr(participation._id))
+      await this.participationRows.markLeft(previous, now);
     await this.refreshCounts(contest._id);
     return ParticipationSummaryResponse.from(participation, contest);
   }
@@ -233,7 +244,19 @@ export class ContestParticipationService {
       contest._id,
       principal.userId,
       now,
-      this.acceptanceFor(contest, credentials, now),
+      {
+        acceptance: this.acceptanceFor(contest, credentials, now),
+        reuse: {
+          isLive: (latest) => !hasParticipationEnded(contest, latest, now),
+        },
+        beforeInsert: async () => {
+          await this.rateLimit.reserve(
+            [`contest-virtual:user:${principal.userId}`],
+            VIRTUAL_RUN_DAILY_LIMIT,
+            VIRTUAL_RUN_WINDOW_SECONDS,
+          );
+        },
+      },
     );
   }
 
@@ -488,6 +511,7 @@ export class ContestParticipationService {
     )
       throw refusal('not_in_contest');
     await this.participationRows.clearCurrent(principal.userId, pointer);
+    await this.participationRows.markLeft(pointer, new Date());
   }
 
   async current(
