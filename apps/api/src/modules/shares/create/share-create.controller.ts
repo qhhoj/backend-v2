@@ -22,8 +22,8 @@ import { ShareCreateService } from './share-create.service';
 const LIMITS =
   `Both kinds share the budgets: ${CREATE_BURST_LIMIT} per ${windowName(CREATE_BURST_WINDOW_SECONDS)} and ` +
   `${CREATE_DAILY_LIMIT} per ${windowName(CREATE_DAILY_WINDOW_SECONDS)} per user (429 \`rate_limited\`), and at most ` +
-  `${ACTIVE_SHARE_LIMIT} unexpired links per user (409 \`conflict\`, issue \`share_limit\`). Muted users get 403 ` +
-  '`forbidden` (issue `muted`), and so is a superuser impersonating someone. The link is `/c/<code>`: anyone with it can read it, without signing in.';
+  `${ACTIVE_SHARE_LIMIT} unexpired links per user (409 \`conflict\`, issue \`share_limit\`; issue \`busy\` when another create of the same user holds its lock too long). Muted users get 403 ` +
+  '`forbidden` (issue `muted`), and so does a superuser impersonating someone. The link is `/c/<code>`: anyone with it can read it, without signing in.';
 
 @ApiTags('Shares')
 @Controller('api/internal/shares')

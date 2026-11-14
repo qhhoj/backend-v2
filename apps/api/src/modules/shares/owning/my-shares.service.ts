@@ -27,12 +27,12 @@ import { cleanTitle } from '../core/share-title';
 import { activeFilter, SharesRepository } from '../core/shares.repository';
 import type { EditShareDto, ShareListQueryDto } from './dto/my-shares.dto';
 
-/** The owner may not remove what staff took down: it stays for their review. */
+/** The owner may not edit or remove what staff took down: it stays for their review (a short expiry would delete it). */
 const takenDownError = () =>
   new AppError(
     'conflict',
     409,
-    'Staff took this link down; it stays for their review and only staff can delete it',
+    'Staff took this link down; it stays for their review and its owner cannot change or delete it',
   );
 
 /** A user's own shares: list, edit, delete; staff list and delete everyone's. */
@@ -80,7 +80,7 @@ export class MySharesService {
     );
   }
 
-  /** The owner's title and expiry (the new expiry counts from now); someone else's code is a 404, as an unknown one. */
+  /** The owner's title and expiry (the new expiry counts from now), unless taken down; someone else's code is a 404, as an unknown one. */
   async edit(
     principal: Principal,
     code: string,
@@ -89,6 +89,7 @@ export class MySharesService {
     const now = new Date();
     const share = await this.managed(principal, code, now);
     if (uuidStr(share.createdBy) !== principal.userId) throw shareNotFound();
+    if (share.takenDown && !canManageShares(principal)) throw takenDownError();
     const fields = {
       ...(title !== undefined ? { title: cleanTitle(title) } : {}),
       ...(expiry !== undefined ? { expiresAt: expiresAtOf(expiry, now) } : {}),

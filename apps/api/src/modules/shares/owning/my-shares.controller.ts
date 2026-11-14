@@ -45,7 +45,7 @@ export class MySharesController {
    * Change a share's title or expiry
    *
    * @remarks
-   * The owner only, not while impersonating. A new `expiry` counts from now. 404 `not_found` for an unknown or expired code and for someone else's, alike. Counts against a per-user budget shared with deletes (429 `rate_limited`).
+   * The owner only, not while impersonating. A new `expiry` counts from now. 404 `not_found` for an unknown or expired code and for someone else's, alike. A link staff took down stays for their review: 409 `conflict`. Counts against a per-user budget shared with deletes (429 `rate_limited`).
    */
   @NoImpersonation()
   @Patch(':code')

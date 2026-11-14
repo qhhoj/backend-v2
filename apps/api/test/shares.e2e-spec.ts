@@ -315,6 +315,9 @@ describe('share links', () => {
     await read(code).expect(404);
     await read(code, owner).expect(404);
     await authed(api.http().delete(`${SHARES}/${code}`), owner).expect(409);
+    await authed(api.http().patch(`${SHARES}/${code}`), owner)
+      .send({ expiry: '1d' })
+      .expect(409);
     await authed(api.http().post(`${SHARES}/${code}/restore`), staff).expect(
       204,
     );
