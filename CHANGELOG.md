@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.38.2
+
+### Patch Changes
+
+- cd45585: Security update (GHSA-6cg3-4q79-8hq3).
+
 ## 2.38.1
 
 ### Patch Changes
