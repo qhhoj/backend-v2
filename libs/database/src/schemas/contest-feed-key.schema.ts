@@ -19,6 +19,8 @@ export class ContestFeedKey {
   mode!: FeedKeyMode;
   /** The editor who minted it; the key stops working when this user can no longer edit the contest. */
   @Prop({ type: UUID, required: true }) createdBy!: string;
+  /** The minter's credential epoch when the key was minted; the key stops working once it moves on. Keys from before the field read 0. */
+  @Prop({ default: 0 }) credentialEpoch!: number;
   @Prop({ type: Date, required: true }) expiresAt!: Date;
   @Prop({ type: Date, default: null }) revokedAt!: Date | null;
   /** "Release to resolver": from then on the feed is not cut at the freeze. */

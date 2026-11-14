@@ -12,6 +12,7 @@ const owner = {
   id: newId(),
   password: 'hash-1',
   lastLogin: null as Date | null,
+  credentialEpoch: 0,
 };
 const parse = (token: string) => readPasswordResetToken(token)!;
 
@@ -25,7 +26,7 @@ describe('password reset token', () => {
     );
   });
 
-  it('is invalid under another secret, password or lastLogin', () => {
+  it('is invalid under another secret, password, lastLogin or credential epoch', () => {
     const parsed = parse(createPasswordResetToken(owner, SECRET, NOW));
     expect(passwordResetTokenValid(parsed, owner, 'b'.repeat(32), NOW)).toBe(
       false,
@@ -42,6 +43,14 @@ describe('password reset token', () => {
       passwordResetTokenValid(
         parsed,
         { ...owner, lastLogin: new Date(NOW) },
+        SECRET,
+        NOW,
+      ),
+    ).toBe(false);
+    expect(
+      passwordResetTokenValid(
+        parsed,
+        { ...owner, credentialEpoch: 1 },
         SECRET,
         NOW,
       ),

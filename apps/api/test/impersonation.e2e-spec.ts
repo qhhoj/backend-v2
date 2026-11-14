@@ -176,6 +176,15 @@ describe('impersonation', () => {
     }
   });
 
+  it('ends the impersonation when the impersonator signs out everywhere, and refuses to stop back', async () => {
+    const alice = await impersonate(aliceId);
+    await post(`${AUTH}/logout-all`, await login('admin')).expect(204);
+    await post(`${IMPERSONATE}/stop`, alice)
+      .expect(401)
+      .expect(errorCode('unauthorized'));
+    await me(alice).expect(401);
+  });
+
   it('refuses every account-security and personal-data route while impersonating', async () => {
     const alice = await impersonate(aliceId);
     const routes = [

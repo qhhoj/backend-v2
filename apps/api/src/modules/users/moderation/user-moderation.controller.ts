@@ -53,7 +53,7 @@ export class UserModerationController {
    * Reset a user's two-factor sign-in
    *
    * @remarks
-   * Requires `judge.ban_user` and a browser session (API tokens get 403), not while impersonating, like the other staff credential routes. Removes the user's authenticator app and all security keys so a locked-out user can sign in again, signs them out everywhere and records a `user` revision for audit. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`. Returns 204.
+   * Requires `judge.ban_user` and a browser session (API tokens get 403), not while impersonating, like the other staff credential routes. Removes the user's authenticator app and all security keys so a locked-out user can sign in again, signs them out everywhere, revokes their API token and records a `user` revision for audit. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`. Returns 204.
    */
   @SessionOnly()
   @NoImpersonation()

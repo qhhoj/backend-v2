@@ -79,11 +79,13 @@ export async function loginAs(
   userId: string,
   flags: Partial<{ twoFaPassed: boolean; passwordPwned: boolean }> = {},
 ): Promise<TestSession> {
+  const user = await api.users.findById(userId, { credentialEpoch: 1 }).lean();
   const { id, session } = await api.sessions.create({
     userId,
     twoFaPassed: true,
     passwordPwned: false,
     impersonatorId: null,
+    credentialEpoch: user?.credentialEpoch ?? 0,
     ...flags,
   });
   return { cookie: sessionCookie(id), csrf: session.csrf };

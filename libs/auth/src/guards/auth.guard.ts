@@ -38,10 +38,10 @@ import { Permission } from '../principal/permissions';
 import { hasPermission } from '../principal/principal';
 import { PrincipalService } from '../principal/principal.service';
 import { SESSION_COOKIE, setSessionCookie } from '../session/session-cookie';
+import { sessionCurrent } from '../session/session-current';
 import { COOKIE_REFRESH_MS, SessionService } from '../session/session.service';
 import { apiTokenMatches, parseApiToken } from '../token/api-token';
 import { isServiceKey, SERVICE_KEY_PREFIX } from '../token/service-key';
-import { isActiveSuperuser } from '../users/active-superuser';
 import { UsersRepository } from '../users/users.repository';
 import { AuthContext } from './auth-context';
 
@@ -278,11 +278,6 @@ export class AuthGuard implements CanActivate {
     await this.sessions.update(auth.sessionId, { cookieIssuedAt: Date.now() });
   }
 
-  /** An impersonation ends as soon as the impersonator stops being an active superuser. */
-  private async impersonatorValid(impersonatorId: string) {
-    return isActiveSuperuser(await this.users.findById(impersonatorId));
-  }
-
   private async fromBearer(
     request: FastifyRequest,
   ): Promise<AuthContext | null> {
@@ -314,11 +309,7 @@ export class AuthGuard implements CanActivate {
     const session = sessionId ? await this.sessions.get(sessionId) : null;
     const user = session && (await this.users.findById(session.userId));
     if (!sessionId || !session) return null;
-    if (
-      !user?.isActive ||
-      (session.impersonatorId &&
-        !(await this.impersonatorValid(session.impersonatorId)))
-    ) {
+    if (!user || !(await sessionCurrent(this.users, session, user))) {
       await this.sessions.destroy(sessionId);
       return null;
     }

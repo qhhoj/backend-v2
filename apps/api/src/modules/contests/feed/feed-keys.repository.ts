@@ -10,6 +10,7 @@ export interface FeedKeyRecord {
   keyHash: string;
   mode: FeedKeyMode;
   createdBy: string;
+  credentialEpoch: number;
   expiresAt: Date;
   revokedAt: Date | null;
   releasedAt: Date | null;
@@ -39,7 +40,7 @@ export class FeedKeysRepository {
     contestId: string,
     fields: Pick<
       ContestFeedKey,
-      'keyHash' | 'mode' | 'createdBy' | 'expiresAt'
+      'keyHash' | 'mode' | 'createdBy' | 'credentialEpoch' | 'expiresAt'
     >,
     now: Date,
   ): Promise<void> {
@@ -63,7 +64,7 @@ export class FeedKeysRepository {
     return modifiedCount;
   }
 
-  /** Every unrevoked key `userId` minted, in any contest: a ban ends them, so an unban does not bring them back. */
+  /** Every unrevoked key `userId` minted, in any contest, marked revoked after a ban or deactivation (the credential epoch already refuses them). */
   async revokeMintedBy(userId: string, now: Date): Promise<void> {
     await this.keys
       .updateMany(
@@ -95,6 +96,7 @@ export class FeedKeysRepository {
       keyHash: row.keyHash,
       mode: row.mode,
       createdBy: uuidStr(row.createdBy),
+      credentialEpoch: row.credentialEpoch ?? 0,
       expiresAt: row.expiresAt,
       revokedAt: row.revokedAt,
       releasedAt: row.releasedAt,

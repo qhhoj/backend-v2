@@ -175,7 +175,7 @@ export class RegistrationService {
     );
     let key: string;
     try {
-      key = await this.activation.createKey(user._id);
+      key = await this.activation.createKey(user._id, user.credentialEpoch);
     } catch (error) {
       await this.rollback(user._id, error);
       throw error;
@@ -272,7 +272,7 @@ export class RegistrationService {
     }
   }
 
-  /** Single-use: the key is consumed atomically, and only unexpired keys match. */
+  /** Single-use: the key is consumed atomically, and only unexpired keys issued at the user's current credential epoch match. */
   async activate(key: string): Promise<void> {
     const record = await this.activationKeys
       .findOneAndDelete({
@@ -280,7 +280,13 @@ export class RegistrationService {
         expiresAt: { $gt: new Date() },
       })
       .exec();
-    if (!record || !(await this.users.activate(uuidStr(record.userId))))
+    if (
+      !record ||
+      !(await this.users.activate(
+        uuidStr(record.userId),
+        record.credentialEpoch,
+      ))
+    )
       throw new AppError(
         'invalid_token',
         400,

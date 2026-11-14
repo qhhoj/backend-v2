@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { sha256, UsersRepository } from '@libs/auth';
-import type { Principal } from '@libs/auth';
+import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, RateLimitService } from '@libs/common';
 import { isFrozen } from '@libs/contests';
 import { ContestViewerService } from '../core/contest-viewer.service';
@@ -54,9 +54,9 @@ export class FeedKeysService {
     };
   }
 
-  /** The key is returned here and nowhere else; only its sha256 is stored. Earlier keys of the contest stop working. */
+  /** The key is returned here and nowhere else; only its sha256 is stored. Earlier keys of the contest stop working. The key carries the credential epoch the minter's session was checked at, so any later revocation by the minter ends it. */
   async mint(
-    principal: Principal,
+    { principal, session }: AuthContext,
     key: string,
     dto: MintFeedKeyDto,
     now = new Date(),
@@ -72,7 +72,13 @@ export class FeedKeysService {
     const expiresAt = feedKeyExpiry(now, dto.expiresInDays);
     await this.keys.mint(
       contest._id,
-      { keyHash: sha256(secret), mode, createdBy: principal.userId, expiresAt },
+      {
+        keyHash: sha256(secret),
+        mode,
+        createdBy: principal.userId,
+        credentialEpoch: session!.credentialEpoch,
+        expiresAt,
+      },
       now,
     );
     this.logger.log({

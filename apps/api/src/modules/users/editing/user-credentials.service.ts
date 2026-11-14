@@ -59,10 +59,14 @@ export class UserCredentialsService {
     await this.confirmAdmin(auth, currentPassword);
     await this.assertAcceptable(user, newPassword);
     if (
-      !(await this.users.updatePasswordIfUnchanged(
+      !(await this.users.revokeCredentials(
         user._id,
-        user.password,
-        await this.passwords.hash(newPassword, auth.ip),
+        {
+          password: await this.passwords.hash(newPassword, auth.ip),
+          apiTokenHash: null,
+          passwordSetBeforeVerification: false,
+        },
+        { password: user.password },
       ))
     )
       throw new AppError(
@@ -70,10 +74,6 @@ export class UserCredentialsService {
         409,
         'Password was changed by another request',
       );
-    await this.users.update(user._id, {
-      apiTokenHash: null,
-      passwordSetBeforeVerification: false,
-    });
     await this.sessions.destroyAllForUser(user._id);
     await this.audit(auth, user, {
       action: 'staff_set_password',

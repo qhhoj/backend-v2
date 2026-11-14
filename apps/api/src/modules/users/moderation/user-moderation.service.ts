@@ -27,14 +27,18 @@ export class UserModerationService {
       });
     const user = await this.target(principal, username);
     if (
-      !(await this.users.updateIfBanReason(user._id, null, {
-        banReason: reason,
-        displayRank: 'banned',
-        isUnlisted: true,
-        isActive: false,
-        isActiveBeforeBan: user.isActive,
-        apiTokenHash: null,
-      }))
+      !(await this.users.revokeCredentials(
+        user._id,
+        {
+          banReason: reason,
+          displayRank: 'banned',
+          isUnlisted: true,
+          isActive: false,
+          isActiveBeforeBan: user.isActive,
+          apiTokenHash: null,
+        },
+        { banReason: null },
+      ))
     )
       throw new AppError('conflict', 409, 'That user is already banned');
     await this.sessions.destroyAllForUser(user._id);
@@ -83,10 +87,11 @@ export class UserModerationService {
     });
   }
 
-  /** Recovery for a locked-out user: removes TOTP and every security key, then signs the user out everywhere. Audit-logged as a `user` revision. */
+  /** Recovery for a locked-out user: removes TOTP and every security key and the API token, then signs the user out everywhere. Audit-logged as a `user` revision. */
   async resetTwoFactor(principal: Principal, username: string): Promise<void> {
     const user = await this.target(principal, username);
-    await this.users.update(user._id, {
+    await this.users.revokeCredentials(user._id, {
+      apiTokenHash: null,
       isTotpEnabled: false,
       totpKey: null,
       scratchCodes: null,

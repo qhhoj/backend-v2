@@ -110,7 +110,7 @@ export class FeedAuthService {
     return this.qualified(contest, feedKey, now);
   }
 
-  /** Not expired or revoked, and its owner is still an active editor of the contest. */
+  /** Not expired or revoked, and its owner is still an active editor of the contest who has revoked no credential since the mint. */
   private async qualified(
     contest: ContestDocument,
     feedKey: FeedKeyRecord,
@@ -118,7 +118,8 @@ export class FeedAuthService {
   ): Promise<FeedContext> {
     if (!isFeedKeyUsable(feedKey, now)) throw unauthorized();
     const owner = await this.users.findById(feedKey.createdBy);
-    if (!owner?.isActive) throw unauthorized();
+    if (!owner?.isActive || owner.credentialEpoch !== feedKey.credentialEpoch)
+      throw unauthorized();
     const view = ContestAccess.accessView(contest);
     if (!ContestAccess.canEdit(this.principals.build(owner), view))
       throw unauthorized();

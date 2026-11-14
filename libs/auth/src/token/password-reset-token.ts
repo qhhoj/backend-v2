@@ -8,6 +8,7 @@ export interface ResetTokenOwner {
   id: string;
   password: string;
   lastLogin: Date | null;
+  credentialEpoch: number;
 }
 
 export interface ParsedResetToken {
@@ -23,11 +24,11 @@ const resetMac = (
 ) =>
   createHmac('sha256', tokenSecret)
     .update(
-      `password-reset:${owner.id}:${owner.password}:${owner.lastLogin?.getTime() ?? ''}:${issuedAt}`,
+      `password-reset:${owner.id}:${owner.password}:${owner.lastLogin?.getTime() ?? ''}:${owner.credentialEpoch}:${issuedAt}`,
     )
     .digest();
 
-/** Stateless token bound to the current password hash and last login, so a password change or a login invalidates it. */
+/** Stateless token bound to the current password hash, last login and credential epoch, so a password change, a login or a credential revocation (such as a staff e-mail change) invalidates it. */
 export function createPasswordResetToken(
   owner: ResetTokenOwner,
   tokenSecret: string,

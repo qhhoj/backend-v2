@@ -457,14 +457,18 @@ export class ContestParticipationService {
   /** Signs the user out only when this ban won the compare-and-set on the ban reason. */
   private async banForCheating(user: UserDocument): Promise<void> {
     if (
-      await this.users.updateIfBanReason(user._id, null, {
-        banReason: CONTEST_CHEATING_BAN_REASON,
-        displayRank: 'banned',
-        isUnlisted: true,
-        isActive: false,
-        isActiveBeforeBan: user.isActive,
-        apiTokenHash: null,
-      })
+      await this.users.revokeCredentials(
+        user._id,
+        {
+          banReason: CONTEST_CHEATING_BAN_REASON,
+          displayRank: 'banned',
+          isUnlisted: true,
+          isActive: false,
+          isActiveBeforeBan: user.isActive,
+          apiTokenHash: null,
+        },
+        { banReason: null },
+      )
     ) {
       await this.sessions.destroyAllForUser(user._id);
       await this.feedKeys.revokeMintedBy(user._id, new Date());

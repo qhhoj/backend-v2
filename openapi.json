@@ -21592,7 +21592,7 @@
         ]
       },
       "patch": {
-        "description": "Requires `judge.change_profile` and a browser session; changing `email` or `isActive` also needs `auth.change_user` (403 `forbidden`, issue `email_not_editable` or `activation_not_editable`), and an `email` change also your own `currentPassword` (400 `validation_failed` issue `password_required`, 400 `invalid_credentials`) and spends the credential budget shared with password sets (10 per admin per hour). An e-mail change removes the user's social sign-in links (they were granted for the old address) but keeps their sessions and reset links already sent: to recover a hijacked account, set a password. Not on yourself. Absent fields stay unchanged, `null` is refused; every check runs before the first write (a write that loses a race keeps the earlier ones, all audited). `organizations` replaces the whole ordered list (staff bypass the open-organization cap); deactivating signs the user out everywhere and revokes the API token and the contest feed keys the user minted. Every change is recorded as a `user` revision `staff_edit`.\nErrors: 400 `validation_failed` with issues `email_invalid`, `password_required`, `email_taken`, `organization_unknown`, `organization_admin_member` (the user administers a dropped organization); 403 `forbidden` for yourself or a superuser unless you are one; 404 `not_found`; 409 `conflict` with issue `user_banned` (a banned account keeps its rank and unlisting and is reactivated by unbanning), or when the memberships changed meanwhile or the e-mail is being registered.",
+        "description": "Requires `judge.change_profile` and a browser session; changing `email` or `isActive` also needs `auth.change_user` (403 `forbidden`, issue `email_not_editable` or `activation_not_editable`), and an `email` change also your own `currentPassword` (400 `validation_failed` issue `password_required`, 400 `invalid_credentials`) and spends the credential budget shared with password sets (10 per admin per hour). An e-mail change removes the user's social sign-in links (they were granted for the old address), voids reset links and activation keys already sent, signs the user out everywhere and revokes the API token. Not on yourself. Absent fields stay unchanged, `null` is refused; every check runs before the first write (a write that loses a race keeps the earlier ones, all audited). `organizations` replaces the whole ordered list (staff bypass the open-organization cap); deactivating signs the user out everywhere and revokes the API token and the contest feed keys the user minted. Every change is recorded as a `user` revision `staff_edit`.\nErrors: 400 `validation_failed` with issues `email_invalid`, `password_required`, `email_taken`, `organization_unknown`, `organization_admin_member` (the user administers a dropped organization); 403 `forbidden` for yourself or a superuser unless you are one; 404 `not_found`; 409 `conflict` with issue `user_banned` (a banned account keeps its rank and unlisting and is reactivated by unbanning), or when the memberships changed meanwhile or the e-mail is being registered.",
         "operationId": "UserEditingController_update",
         "parameters": [
           {
@@ -26730,7 +26730,7 @@
         ]
       },
       "post": {
-        "description": "Contest editors only, with a browser session (no API tokens, no\nimpersonation). Creates a key and returns it once with the Basic user name\n`feed`; earlier keys stop working. The mode is `frozen-until-release` by\ndefault or `live`, and it expires after `expiresInDays` (at most 30).\nLimited to a few per hour.",
+        "description": "Contest editors only, with a browser session (no API tokens, no\nimpersonation). Creates a key and returns it once with the Basic user name\n`feed`; earlier keys stop working. The mode is `frozen-until-release` by\ndefault or `live`, and it expires after `expiresInDays` (at most 30).\nIt stops working once its minter changes or resets their password, signs\nout everywhere, is banned or deactivated.\nLimited to a few per hour.",
         "operationId": "FeedKeysController_mint",
         "parameters": [
           {
@@ -42305,7 +42305,7 @@
     },
     "/api/internal/users/{username}/reset-two-factor": {
       "post": {
-        "description": "Requires `judge.ban_user` and a browser session (API tokens get 403), not while impersonating, like the other staff credential routes. Removes the user's authenticator app and all security keys so a locked-out user can sign in again, signs them out everywhere and records a `user` revision for audit. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`. Returns 204.",
+        "description": "Requires `judge.ban_user` and a browser session (API tokens get 403), not while impersonating, like the other staff credential routes. Removes the user's authenticator app and all security keys so a locked-out user can sign in again, signs them out everywhere, revokes their API token and records a `user` revision for audit. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`. Returns 204.",
         "operationId": "UserModerationController_resetTwoFactor",
         "parameters": [
           {
