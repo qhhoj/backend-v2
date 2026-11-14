@@ -192,7 +192,7 @@ export class SubmissionCreateService {
     );
   }
 
-  /** Not banned, a chosen judge only for editors and only when online with the problem; then the contest's submission cap and the unfinished-submission limit. */
+  /** Not banned, a chosen judge only for editors and only when online with the problem; then the contest's submission cap and the unfinished-submission limit. The row is dated with the instant the contest window was checked against, so a submission is a contest submission exactly when its date is inside the window, however long the lock and the limits take. */
   private async create(
     principal: Principal,
     draft: SubmissionDraft,
@@ -209,13 +209,14 @@ export class SubmissionCreateService {
         draft.judgeId,
         draft.language.key,
       );
+    const now = new Date();
     const plan = this.contestPlan(
       principal,
-      await this.currentContest.current(principal),
+      await this.currentContest.current(principal, now),
       draft.problem._id,
-      new Date(),
+      now,
     );
-    const id = await this.insertWithinLimits(principal, draft, plan);
+    const id = await this.insertWithinLimits(principal, { draft, plan, now });
     if (!plan?.finalOnly) await this.announceQueued(id, principal, draft);
     return { id };
   }
@@ -223,8 +224,11 @@ export class SubmissionCreateService {
   /** Spam-permitted users skip the per-user lock unless a contest cap applies; everyone else counts under it, so two parallel submits cannot both pass a limit. */
   private insertWithinLimits(
     principal: Principal,
-    draft: SubmissionDraft,
-    plan: ContestPlan | null,
+    {
+      draft,
+      plan,
+      now,
+    }: { draft: SubmissionDraft; plan: ContestPlan | null; now: Date },
   ): Promise<string> {
     const insertRow = () =>
       this.insert(
@@ -233,6 +237,7 @@ export class SubmissionCreateService {
           problem: draft.problem._id,
           language: draft.language._id,
           pinnedJudge: draft.judgeId ?? null,
+          date: now,
           ...plan?.fields,
         },
         draft.source,

@@ -218,11 +218,16 @@ function applyCaseOptions(
   else testCase.checkerArgs = null;
 }
 
-/** The cases grouped so far: top-level entries, the batch still open, and the points counted. */
+/** Every scored row is a plain pretest: the judge's full run grades those at 0 (decision 185, judge-v2 `Pass::FullRunPretest`), so a full run could never score. */
+export const ALL_PLAIN_PRETESTS_MESSAGE =
+  'A full run would score 0: plain pretest cases are worth 0 outside a pretest run. Give points to a non-pretest case or to a batch.';
+
+/** The cases grouped so far: top-level entries, the batch still open, the points written, and the points a full run scores (plain pretests left out; a pretest batch keeps its points). */
 interface Grouping {
   topLevel: InitCase[];
   openBatch: Batch | null;
   totalPoints: number;
+  fullRunPoints: number;
 }
 interface CaseFiles {
   hasGenerator: boolean;
@@ -290,6 +295,7 @@ function addPlainCase(
   if (testCase.points !== null) {
     entry.points = testCase.points;
     grouping.totalPoints += testCase.points;
+    if (!testCase.isPretest) grouping.fullRunPoints += testCase.points;
   }
   applyCaseOptions(entry, testCase, index);
   (batch ? batch.batched : grouping.topLevel).push(entry);
@@ -305,6 +311,7 @@ function startBatch(
   if (testCase.points === null)
     throw new ProblemDataError(`Batch start case #${index} requires points.`);
   grouping.totalPoints += testCase.points;
+  grouping.fullRunPoints += testCase.points;
   const batch: Batch = {
     points: testCase.points,
     batched: [],
@@ -338,9 +345,14 @@ function endBatch(
   closeBatch(grouping, batch);
 }
 
-/** Legacy row walk: C, S and E rows become top-level cases and batches; the total is checked before a trailing batch is closed. */
+/** Legacy row walk: C, S and E rows become top-level cases and batches; the totals (written, and what a full run scores) are checked before a trailing batch is closed. */
 function groupCases(cases: ProblemTestCase[], files: CaseFiles): InitCase[] {
-  const grouping: Grouping = { topLevel: [], openBatch: null, totalPoints: 0 };
+  const grouping: Grouping = {
+    topLevel: [],
+    openBatch: null,
+    totalPoints: 0,
+    fullRunPoints: 0,
+  };
   cases.forEach((testCase, position) => {
     const index = position + 1;
     integerOrNull(testCase.points, `Case #${index}: points`);
@@ -350,6 +362,8 @@ function groupCases(cases: ProblemTestCase[], files: CaseFiles): InitCase[] {
   });
   if (grouping.totalPoints <= 0)
     throw new ProblemDataError('Total points must be greater than 0.');
+  if (grouping.fullRunPoints <= 0)
+    throw new ProblemDataError(ALL_PLAIN_PRETESTS_MESSAGE);
   if (grouping.openBatch) closeBatch(grouping, grouping.openBatch);
   return grouping.topLevel;
 }

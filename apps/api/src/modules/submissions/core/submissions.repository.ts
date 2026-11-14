@@ -56,6 +56,7 @@ export type NewSubmission = Pick<Submission, 'user' | 'problem' | 'language'> &
       | 'lockedAfter'
       | 'isPretested'
       | 'pinnedJudge'
+      | 'date'
     >
   >;
 export type NewContestSubmission = Pick<
