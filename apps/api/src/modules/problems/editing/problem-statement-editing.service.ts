@@ -32,7 +32,7 @@ export class ProblemStatementEditingService {
     private readonly rateLimit: RateLimitService,
   ) {}
 
-  /** Saves the translation; its trust (see `markupTrustAfterSave`) picks the render style. Sending the stored text again writes nothing, unless a trusted writer vouches for untrusted text. */
+  /** Saves the translation; its trust (see `markupTrustAfterSave`) picks the render style. Sending the stored text again writes nothing, unless the request changes its trust; every write, a trust-only one included, leaves a revision. */
   async putTranslation(
     auth: AuthContext,
     code: string,
@@ -52,6 +52,7 @@ export class ProblemStatementEditingService {
       isWriterTrusted: isTrustedMarkupWriter(principal),
       isTextChanged: isDescriptionChanged,
       wasTrusted,
+      requested: dto.isMarkupTrusted,
     });
     const isTextChanged = isDescriptionChanged || previous?.name !== dto.name;
     if (!isTextChanged && isMarkupTrusted === wasTrusted) return;
@@ -66,11 +67,10 @@ export class ProblemStatementEditingService {
         'description',
       ),
     });
-    if (isTextChanged)
-      await this.recordTranslationEdit(principal.userId, problem._id, lang, {
-        previous,
-        dto,
-      });
+    await this.recordTranslationEdit(principal.userId, problem._id, lang, {
+      previous,
+      after: { name: dto.name, description: dto.description, isMarkupTrusted },
+    });
     this.events.emit('statementChanged', problem._id);
   }
 
@@ -80,8 +80,14 @@ export class ProblemStatementEditingService {
     lang: StatementLanguage,
     {
       previous,
-      dto,
-    }: { previous: ProblemTranslation | undefined; dto: PutTranslationDto },
+      after,
+    }: {
+      previous: ProblemTranslation | undefined;
+      after: Pick<
+        ProblemTranslation,
+        'name' | 'description' | 'isMarkupTrusted'
+      >;
+    },
   ) {
     return this.revisions.append({
       entity: 'problem',
@@ -91,9 +97,13 @@ export class ProblemStatementEditingService {
       changes: {
         [`translations.${lang}`]: {
           before: previous
-            ? { name: previous.name, description: previous.description }
+            ? {
+                name: previous.name,
+                description: previous.description,
+                isMarkupTrusted: previous.isMarkupTrusted ?? false,
+              }
             : null,
-          after: { name: dto.name, description: dto.description },
+          after,
         },
       },
       comment: `Translation ${lang} edited from site`,

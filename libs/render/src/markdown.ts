@@ -13,7 +13,10 @@ import { compactHeadingRule } from './compact-heading';
 import { separateFencesFromHtml } from './fences';
 import { renderHtmlBlockMath } from './html-block-math';
 import { MATH_SLOT_ATTRIBUTE, sanitizeBlogHtml } from './blog-sanitizer';
-import { sanitizeStatementHtml } from './sanitizer';
+import {
+  sanitizeStatementAuthorHtml,
+  sanitizeStatementHtml,
+} from './sanitizer';
 import { rewriteHtmlSpoilers, spoilerRule } from './spoiler';
 import {
   allowsRawHtml,
@@ -35,7 +38,7 @@ export { renderMath } from './math';
 /** markdown-it `env` of one render. */
 type RenderEnv = {
   budget: MathBudget;
-  /** The `blog` style only: formulas wait here (KaTeX HTML is trusted) while the author's HTML is sanitized. */
+  /** Sanitized styles: formulas wait here while the author's HTML is sanitized under its own rules. */
   deferredMath?: { nonce: string; formulas: string[] };
   /** `#C` problem references; absent, `#C` stays text. */
   problemLinks?: ProblemLinks;
@@ -61,6 +64,19 @@ function spliceMath(
     new RegExp(`<span ${MATH_SLOT_ATTRIBUTE}="${nonce}-(\\d+)"></span>`, 'g'),
     (slot, index: string) => formulas[Number(index)] ?? slot,
   );
+}
+
+/** Author HTML and formulas of a sanitized style, each under its own rules: blog formulas are trusted as KaTeX made them; statement formulas keep the statement allow-list they always had. */
+function sanitizeWithMath(
+  rendered: string,
+  style: RenderStyle,
+  deferred: { nonce: string; formulas: string[] },
+): string {
+  if (style === 'blog') return spliceMath(sanitizeBlogHtml(rendered), deferred);
+  return spliceMath(sanitizeStatementAuthorHtml(rendered), {
+    nonce: deferred.nonce,
+    formulas: deferred.formulas.map(sanitizeStatementHtml),
+  });
 }
 
 const MAX_HEADER_LEVEL = 6;
@@ -150,7 +166,7 @@ const assertWithinMarkupLimits = (html: string): void => {
     );
 };
 
-/** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. The `blog` style sanitizes the author's HTML with formulas held aside (KaTeX output is trusted and spliced in afterwards, never sharing the author's sanitizer pass). Throws `RenderLimitError` when the markup is too large or too deeply nested. `problemLinks` turns `#C` into an anchor for the problem labelled C. */
+/** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. Sanitized styles sanitize the author's HTML with formulas held aside and spliced in afterwards, never sharing the author's sanitizer pass. Throws `RenderLimitError` when the markup is too large or too deeply nested. `problemLinks` turns `#C` into an anchor for the problem labelled C. */
 export function renderMarkdown(
   text: string,
   style: RenderStyle,
@@ -159,7 +175,7 @@ export function renderMarkdown(
   const env: RenderEnv = {
     budget: createMathBudget(isUserAuthored(style)),
     problemLinks,
-    ...(style === 'blog'
+    ...(isSanitizedStyle(style)
       ? {
           deferredMath: {
             nonce: randomBytes(12).toString('hex'),
@@ -177,12 +193,11 @@ export function renderMarkdown(
     ),
   );
   assertWithinMarkupLimits(rendered);
-  let html: string;
+  let html = rendered;
   if (env.deferredMath) {
-    html = spliceMath(sanitizeBlogHtml(rendered), env.deferredMath);
+    html = sanitizeWithMath(rendered, style, env.deferredMath);
     assertWithinMarkupLimits(html);
-  } else
-    html = isSanitizedStyle(style) ? sanitizeStatementHtml(rendered) : rendered;
+  }
   if (Buffer.byteLength(html) > MAX_HTML_BYTES)
     throw new RenderLimitError('Rendered HTML is too large');
   return html;

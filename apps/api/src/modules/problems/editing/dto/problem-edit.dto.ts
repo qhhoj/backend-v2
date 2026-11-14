@@ -61,7 +61,7 @@ export class CreateProblemDto {
   @IsOptional() @IsString() @MaxLength(200) source?: string;
   /** Short summary for previews, up to 1000 characters. Needs `judge.edit_all_problem`. */
   @IsOptional() @IsString() @MaxLength(1000) summary?: string;
-  /** Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set and its writer holds `judge.problem_full_markup`. */
+  /** Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set and the text is trusted (see `isDescriptionMarkupTrusted` on `PATCH`). */
   @IsOptional()
   @IsStatementText()
   @MaxLength(MAX_MARKDOWN_LENGTH)
@@ -123,7 +123,7 @@ export class CreateProblemDto {
   @IsOptional() @IsBoolean() isPublic?: boolean;
   /** Whether test data is managed outside the site, turning the data editor off. Changing it needs `judge.change_manually_managed`. */
   @IsOptional() @IsBoolean() isManuallyManaged?: boolean;
-  /** Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`. Only text written by a holder of `judge.problem_full_markup` renders unsanitized; other text stays sanitized. */
+  /** Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`. Only text a holder of `judge.problem_full_markup` marked trusted renders unsanitized; other text stays sanitized. */
   @IsOptional() @IsBoolean() isFullMarkup?: boolean;
   /** Author user ids. This field and the ones below up to `date` need `judge.edit_all_problem` (the organization fields only on create, see `organizations`). */
   @IsOptional()
@@ -167,4 +167,6 @@ export class UpdateProblemDto extends PartialType(CreateProblemDto) {
   @IsString()
   @MaxLength(MAX_CHANGE_MESSAGE_LENGTH)
   changeMessage?: string;
+  /** Sets whether `description` (required with this field) is trusted: on a full-markup problem trusted text renders unsanitized. Changing it needs `judge.problem_full_markup`; left out, a save never raises the trust. */
+  @IsOptional() @IsBoolean() isDescriptionMarkupTrusted?: boolean;
 }

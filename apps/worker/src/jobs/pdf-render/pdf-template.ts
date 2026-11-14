@@ -95,7 +95,8 @@ tr { page-break-inside: avoid; }
 .problem-info-entry { display: inline-block; vertical-align: top; padding: 0.6em; text-align: left; }
 .lang-limit { margin-left: 1.5em; }
 .lang-name:after { content: ': '; }
-.content-description { line-height: 1.5; }
+/* The statement's own box: positioned author HTML is clipped above and below it, while wide formulas, tables and code keep their width; overflow, unlike containment, still breaks across pages. */
+.content-description { line-height: 1.5; position: relative; overflow-x: visible; overflow-y: clip; }
 .content-description pre { background: #f6f6f6; border: 1px solid #ddd; padding: 0.5em; white-space: pre-wrap; }
 .content-description table.table { border-collapse: collapse; }
 .content-description table.table td, .content-description table.table th { border: 1px solid #999; padding: 0.3em 0.6em; }

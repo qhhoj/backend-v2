@@ -201,6 +201,32 @@ describe('renderMarkdown', () => {
       '<div style="color:red">raw <b>html</b></div>',
     );
   });
+  it.each(['problem', 'solution'] as const)(
+    'keeps %s author HTML in its own box: no fixed or sticky position, z-index, id or site class; formulas unchanged',
+    (style) => {
+      const raw =
+        '<div id="app" class="fixed inset-0 z-50 table" style="position:fixed;z-index:99999;color:red">a</div>' +
+        '<p style="position:-webkit-sticky">b</p><p style="position:relative;top:1px">c $x^2$</p>';
+      const html = renderMarkdown(raw, style);
+      expect(html).toMatch(
+        /^<div class="user-fixed user-inset-0 user-z-50 table" style="color:red">a<\/div><p>b<\/p><p style="position:relative;top:1px">c <span class="katex">/,
+      );
+      expect(html).toContain(
+        renderMarkdown('$x^2$', style).replace(/^<p>|<\/p>\n$/g, ''),
+      );
+    },
+  );
+  it.each(['problem', 'solution'] as const)(
+    'keeps %s author HTML from taking a pinned position from an attribute',
+    (style) => {
+      const raw =
+        '<div data="fixed" style="position:attr(data type(<custom-ident>));top:0;left:0;width:100vw;height:100vh">a</div>' +
+        '<p><abbr title="sticky" style="position:attr(title type(<custom-ident>))">b</abbr></p>';
+      expect(renderMarkdown(raw, style)).toBe(
+        '<div data="fixed" style="top:0;left:0;width:100vw;height:100vh">a</div><p><abbr title="sticky">b</abbr></p>',
+      );
+    },
+  );
 
   it('does not close a math span on an escaped dollar, but does after an even run of backslashes', () => {
     expect(full('a $x\\\\$ b')).toMatch(KATEX_INLINE);

@@ -4519,7 +4519,7 @@
             "type": "string"
           },
           "description": {
-            "description": "Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set and its writer holds `judge.problem_full_markup`.",
+            "description": "Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set and the text is trusted (see `isDescriptionMarkupTrusted` on `PATCH`).",
             "maxLength": 200000,
             "type": "string"
           },
@@ -4529,7 +4529,7 @@
             "type": "string"
           },
           "isFullMarkup": {
-            "description": "Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`. Only text written by a holder of `judge.problem_full_markup` renders unsanitized; other text stays sanitized.",
+            "description": "Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`. Only text a holder of `judge.problem_full_markup` marked trusted renders unsanitized; other text stays sanitized.",
             "type": "boolean"
           },
           "isManuallyManaged": {
@@ -10436,6 +10436,10 @@
             "description": "Problem group id.",
             "type": "string"
           },
+          "isDescriptionMarkupTrusted": {
+            "description": "Whether a holder of `judge.problem_full_markup` trusted `description`: only trusted text renders unsanitized on a full-markup problem.",
+            "type": "boolean"
+          },
           "licenseId": {
             "description": "License id; null when none.",
             "nullable": true,
@@ -10497,6 +10501,7 @@
         "required": [
           "baseName",
           "description",
+          "isDescriptionMarkupTrusted",
           "translations",
           "solution",
           "curators",
@@ -10828,6 +10833,10 @@
             "description": "Translated statement in markdown.",
             "type": "string"
           },
+          "isMarkupTrusted": {
+            "description": "Whether a holder of `judge.problem_full_markup` trusted this text: only trusted text renders unsanitized on a full-markup problem.",
+            "type": "boolean"
+          },
           "language": {
             "allOf": [
               {
@@ -10844,7 +10853,8 @@
         "required": [
           "language",
           "name",
-          "description"
+          "description",
+          "isMarkupTrusted"
         ],
         "type": "object"
       },
@@ -11302,6 +11312,10 @@
             "description": "Translated statement in markdown.",
             "maxLength": 200000,
             "type": "string"
+          },
+          "isMarkupTrusted": {
+            "description": "Sets whether the sent description is trusted: on a full-markup problem trusted text renders unsanitized. Changing it needs `judge.problem_full_markup`; left out, a save never raises the trust.",
+            "type": "boolean"
           },
           "name": {
             "description": "Translated title, 1 to 100 characters.",
@@ -17335,7 +17349,7 @@
             "type": "string"
           },
           "description": {
-            "description": "Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set and its writer holds `judge.problem_full_markup`.",
+            "description": "Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set and the text is trusted (see `isDescriptionMarkupTrusted` on `PATCH`).",
             "maxLength": 200000,
             "type": "string"
           },
@@ -17344,8 +17358,12 @@
             "format": "uuid",
             "type": "string"
           },
+          "isDescriptionMarkupTrusted": {
+            "description": "Sets whether `description` (required with this field) is trusted: on a full-markup problem trusted text renders unsanitized. Changing it needs `judge.problem_full_markup`; left out, a save never raises the trust.",
+            "type": "boolean"
+          },
           "isFullMarkup": {
-            "description": "Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`. Only text written by a holder of `judge.problem_full_markup` renders unsanitized; other text stays sanitized.",
+            "description": "Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`. Only text a holder of `judge.problem_full_markup` marked trusted renders unsanitized; other text stays sanitized.",
             "type": "boolean"
           },
           "isManuallyManaged": {

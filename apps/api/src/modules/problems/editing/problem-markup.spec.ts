@@ -1,5 +1,5 @@
 import { AppError } from '@libs/common';
-import { renderField } from './problem-markup';
+import { markupTrustAfterSave, renderField } from './problem-markup';
 
 describe('renderField', () => {
   // 2000 formulas and 68k empty headings: small input, past the 2 MiB rendered-HTML cap.
@@ -20,5 +20,19 @@ describe('renderField', () => {
         'description',
       ]);
     },
+  );
+});
+
+describe('markupTrustAfterSave', () => {
+  const holder = { isWriterTrusted: true };
+  it.each([
+    [{ ...holder, isTextChanged: false, wasTrusted: false }, false],
+    [{ ...holder, isTextChanged: true, wasTrusted: false }, false],
+    [{ ...holder, isTextChanged: true, wasTrusted: true }, true],
+    [{ isWriterTrusted: false, isTextChanged: true, wasTrusted: true }, false],
+    [{ isWriterTrusted: false, isTextChanged: false, wasTrusted: true }, true],
+  ])(
+    'a save without a trust request keeps untrusted text untrusted (%o)',
+    (save, expected) => expect(markupTrustAfterSave(save)).toBe(expected),
   );
 });
