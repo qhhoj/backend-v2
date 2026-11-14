@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.38.4
+
+### Patch Changes
+
+- d2438d8: Activating an account reports `passwordVoided` even when the password-reset mail fails, so clients can tell the signup password no longer works.
+
 ## 2.38.3
 
 ### Patch Changes
