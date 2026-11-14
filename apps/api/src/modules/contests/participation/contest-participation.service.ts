@@ -217,10 +217,12 @@ export class ContestParticipationService {
             { isSpectatorOnly, credentials },
             now,
           );
-    await this.participationRows.setCurrent(
+    const previous = await this.participationRows.setCurrent(
       principal.userId,
       participation._id,
     );
+    if (previous && previous !== uuidStr(participation._id))
+      await this.participationRows.markLeft(previous, now);
     await this.refreshCounts(contest._id);
     return ParticipationSummaryResponse.from(participation, contest);
   }

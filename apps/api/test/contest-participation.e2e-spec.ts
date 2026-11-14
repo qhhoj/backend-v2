@@ -146,6 +146,23 @@ describe('contest participation', () => {
       expect(second.virtual).toBe(first.virtual + 1);
     });
 
+    it('ends the virtual run when the user switches to another contest', async () => {
+      const options = {
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+      };
+      const first = await createContest(api, options);
+      const other = await createContest(api, options);
+      const run = dataOf<ParticipationSummaryResponse>(
+        await post('erin', first.key, 'join').expect(201),
+      );
+      await post('erin', other.key, 'join').expect(201);
+      const back = dataOf<ParticipationSummaryResponse>(
+        await post('erin', first.key, 'join').expect(201),
+      );
+      expect(back.id).not.toBe(run.id);
+    });
+
     it('caps new virtual runs per user per day', async () => {
       const ended = await createContest(api, {
         startTime: hoursFromNow(-5),

@@ -181,13 +181,21 @@ export class ParticipationsRepository {
       : null;
   }
 
-  async setCurrent(userId: string, participationId: string): Promise<void> {
-    await this.users
-      .updateOne(
+  /** Returns the id the pointer held before, null when it was empty. */
+  async setCurrent(
+    userId: string,
+    participationId: string,
+  ): Promise<string | null> {
+    const before = await this.users
+      .findOneAndUpdate(
         { _id: userId },
         { $set: { currentParticipation: participationId } },
+        { projection: { currentParticipation: 1 } },
       )
-      .exec();
+      .lean();
+    return before?.currentParticipation
+      ? uuidStr(before.currentParticipation)
+      : null;
   }
 
   /** Compare-and-set: a join that replaced the pointer meanwhile is never undone. */
