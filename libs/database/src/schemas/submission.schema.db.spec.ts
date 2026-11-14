@@ -43,7 +43,7 @@ describe('Submission schemas', () => {
   it.each([
     [{ status: 'XX' }],
     [{ result: 'XX' }],
-    [{ priority: 4 }],
+    [{ priority: 5 }],
     [{ cases: [{ ...acceptedCase, status: 'RJ' }] }],
     [
       {
