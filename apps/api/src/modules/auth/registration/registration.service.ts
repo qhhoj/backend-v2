@@ -276,7 +276,7 @@ export class RegistrationService {
     }
   }
 
-  /** Single-use: the key is consumed atomically, and only unexpired keys issued at the user's current credential epoch match. Activation proves the mailbox, not a password chosen before it: such a password is voided in the activating write (`UsersRepository.activate`), and the owner is mailed a reset link to set one (`passwordResetSent`; a mail that fails is logged, and the owner can ask for a link with the reset form). */
+  /** Single-use: the key is consumed atomically, and only unexpired keys issued at the user's current credential epoch match. Activation proves the mailbox, not a password chosen before it: such a password is voided in the activating write (`UsersRepository.activate`), and the owner is mailed a reset link to set one (`passwordResetSent`; `passwordVoided` is true whenever the password was voided, mail or not; a mail that fails is logged, and the owner can ask for a link with the reset form). */
   async activate(key: string): Promise<ActivationResponse> {
     const record = await this.activationKeys
       .findOneAndDelete({
@@ -298,15 +298,15 @@ export class RegistrationService {
         'Activation link is invalid or expired',
       );
     if (!user.passwordSetBeforeVerification)
-      return { passwordResetSent: false };
+      return { passwordResetSent: false, passwordVoided: false };
     try {
       await this.passwordReset.sendTo(user);
-      return { passwordResetSent: true };
+      return { passwordResetSent: true, passwordVoided: true };
     } catch (error) {
       this.logger.error(
         `Reset mail at activation of ${user._id} failed: ${(error as Error).message}`,
       );
-      return { passwordResetSent: false };
+      return { passwordResetSent: false, passwordVoided: true };
     }
   }
 

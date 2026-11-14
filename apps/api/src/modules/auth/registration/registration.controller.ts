@@ -48,7 +48,7 @@ export class RegistrationController {
    * Activate an account
    *
    * @remarks
-   * Public. Consumes the single-use key from the activation mail and turns the account on. A password chosen at signup stops working in the same write (sessions and API token end with it), and a password-reset link is mailed to set one: `passwordResetSent` says whether it went out (when false for such an account, the reset form sends one). Errors: 400 `invalid_token` for an unknown, used or expired key. Returns 200.
+   * Public. Consumes the single-use key from the activation mail and turns the account on. A password chosen at signup stops working in the same write (sessions and API token end with it), and a password-reset link is mailed to set one: `passwordResetSent` says whether it went out and `passwordVoided` whether the password was voided (when voided but not sent, the reset form sends a link). Errors: 400 `invalid_token` for an unknown, used or expired key. Returns 200.
    */
   @Post('activate')
   @HttpCode(200)

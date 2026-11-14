@@ -1,5 +1,5 @@
 export class QueuePriorityResponse {
-  /** 0 contest, 1 normal, 2 rejudge, 3 batch rejudge. */
+  /** 0 contest, 1 normal, 2 rejudge, 3 batch rejudge, 4 backlog (older pending rows of a final-submission contest). */
   priority!: number;
   /** Queued submissions at this priority. */
   count!: number;
