@@ -86,6 +86,11 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
     await person('member', ORG_ADMIN_RIGHTS);
     await person('staff', ['judge.edit_own_problem', 'judge.edit_all_problem']);
     await person('adder', ['judge.add_problem', 'judge.edit_own_problem']);
+    await person('curator', ['judge.edit_own_problem']);
+    await person('pubeditor', [
+      'judge.edit_own_problem',
+      'judge.edit_public_problem',
+    ]);
     const alpha = await createOrganization(
       api,
       {
@@ -260,6 +265,48 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
       await api.http().get(`/api/internal/problems/${code}`).expect(200);
     },
   );
+
+  it.each([
+    ['its curator', 'curator'],
+    ['a judge.edit_public_problem holder', 'pubeditor'],
+  ])(
+    'keeps the staff gate on making a site problem private to no organization for %s',
+    async (_case, who) => {
+      const code = `site_hidden_${who}`;
+      await createProblem(api, catalog, {
+        code,
+        curators: [ids.curator],
+      });
+      await patch(who, code, { isOrganizationPrivate: true })
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      expect(await stored(code)).toEqual({
+        organizations: [],
+        isOrganizationPrivate: false,
+      });
+      await api.http().get(`/api/internal/problems/${code}`).expect(200);
+    },
+  );
+
+  it('keeps the staff gate on making a site problem private to no organization while leaving an organization', async () => {
+    await createProblem(api, catalog, {
+      code: 'alpha_listed',
+      organizations: [ids.alpha],
+      isOrganizationPrivate: false,
+      curators: [ids.owner],
+    });
+    await patch('owner', 'alpha_listed', {
+      organizations: [],
+      isOrganizationPrivate: true,
+    })
+      .expect(403)
+      .expect(errorCode('forbidden'));
+    expect(await stored('alpha_listed')).toEqual({
+      organizations: [ids.alpha],
+      isOrganizationPrivate: false,
+    });
+    await api.http().get('/api/internal/problems/alpha_listed').expect(200);
+  });
 
   it('judges the visibility, not the organizations: a public problem may leave every organization while it stays private, but not then drop the privacy', async () => {
     await problem('alpha_hidden', [ids.alpha]);

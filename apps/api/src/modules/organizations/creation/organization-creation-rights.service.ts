@@ -191,11 +191,13 @@ export class OrganizationCreationRights {
       .exec();
   }
 
+  /** Whether the rule allows the viewer in every one of these live organizations; false for an empty list. */
   private async allowsInEach(
     principal: Principal,
     organizationIds: readonly string[],
     rule: CreateRule,
   ): Promise<boolean> {
+    if (!organizationIds.length) return false;
     const rows = await this.liveAccessRows(organizationIds);
     return (
       rows.length === new Set(organizationIds).size &&

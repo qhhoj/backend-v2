@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { AuthContext } from '@libs/auth';
+import { hasPermission } from '@libs/auth';
+import type { AuthContext, Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { ExternalJudgeLink } from '@libs/database';
@@ -39,7 +40,7 @@ function linkResponse(link: ExternalJudgeLink): ExternalJudgeLinkResponse {
   };
 }
 
-/** A problem's external judge link: read, replace, remove. Its editors may change it (as on the old site). */
+/** A problem's external judge link: read, replace, remove. Its editors may change it (as on the old site), except as `linkableProblem` says. */
 @Injectable()
 export class ProblemExternalJudgeService {
   constructor(
@@ -64,7 +65,7 @@ export class ProblemExternalJudgeService {
     code: string,
     dto: PutExternalJudgeDto,
   ): Promise<ProblemExternalJudgeResponse> {
-    const problem = await this.policy.editableProblem(auth.principal, code);
+    const problem = await this.linkableProblem(auth.principal, code);
     this.assertMappable(dto);
     const link = this.linkOf(problem.externalJudge, dto);
     const changes: Record<string, unknown> = { externalJudge: link };
@@ -78,8 +79,26 @@ export class ProblemExternalJudgeService {
     auth: AuthContext,
     code: string,
   ): Promise<ProblemExternalJudgeResponse> {
-    const problem = await this.policy.editableProblem(auth.principal, code);
+    const problem = await this.linkableProblem(auth.principal, code);
     return this.write(auth, problem, { externalJudge: null });
+  }
+
+  /** The link decides what the problem is judged against, so on a manually managed or mirror problem, whose test data its editors cannot write (`ProblemDataStore.writableProblem`), only `judge.edit_all_problem` sets or removes it. */
+  private async linkableProblem(
+    principal: Principal,
+    code: string,
+  ): Promise<ProblemDocument> {
+    const problem = await this.policy.editableProblem(principal, code);
+    if (
+      (problem.isManuallyManaged || problem.mirrorOf !== null) &&
+      !hasPermission(principal, 'judge.edit_all_problem')
+    )
+      throw new AppError(
+        'forbidden',
+        403,
+        'Linking a manually managed or mirror problem requires judge.edit_all_problem',
+      );
+    return problem;
   }
 
   private async write(

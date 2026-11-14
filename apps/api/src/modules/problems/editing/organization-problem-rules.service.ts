@@ -65,7 +65,8 @@ export class OrganizationProblemRules {
   /**
    * A change of the organization fields by an editor without `judge.edit_all_problem` (who keeps the staff gate's full
    * rights): the organization creation rule in every organization it adds or removes, and `judge.add_problem` to leave
-   * them all for the site. Returns the staff gates it opens; 403 with an issue code on `organizations` otherwise.
+   * them all for the site. Returns the staff gates it opens; 403 with an issue code on `organizations` otherwise. A
+   * change that makes a problem organization-private with no organization left opens no gate.
    */
   private async authorizeMove(
     principal: Principal,
@@ -79,7 +80,16 @@ export class OrganizationProblemRules {
       return [];
     const needed = organizationsToAuthorize(before, after);
     const isSiteMove = leavesForSite(before, after);
-    if (!(await this.rights.createsProblemsInEach(principal, needed)))
+    if (
+      after.isOrganizationPrivate &&
+      !after.organizations.length &&
+      !before.isOrganizationPrivate
+    )
+      return [];
+    if (
+      needed.length &&
+      !(await this.rights.createsProblemsInEach(principal, needed))
+    )
       throw organizationRightsRefusal(
         ORGANIZATION_RIGHTS_ISSUE,
         'Adding or removing an organization needs the right to create problems in it',
