@@ -394,16 +394,21 @@
       "AppearanceDto": {
         "properties": {
           "accent": {
-            "description": "Accent colour preset.",
+            "description": "Accent preset; a retired Clay or Glass id is stored as its successor.",
             "enum": [
               "clay",
               "gold",
+              "graphite",
               "mint",
               "mono",
               "ocean",
               "orchid",
+              "plum",
               "red",
-              "sunset"
+              "sunset",
+              "teal",
+              "terracotta",
+              "ultramarine"
             ],
             "type": "string"
           },
@@ -422,22 +427,30 @@
             ],
             "type": "string"
           },
+          "contrast": {
+            "description": "Contrast level; omit for `standard`.",
+            "enum": [
+              "high",
+              "standard"
+            ],
+            "type": "string"
+          },
           "glass": {
-            "description": "Glass effect strength, 0-100.",
+            "deprecated": true,
+            "description": "Deprecated (Glass, retired 2026-11-15): accepted from older clients and ignored.",
             "maximum": 100,
             "minimum": 0,
             "type": "integer"
           },
           "glow": {
-            "description": "Glow effect strength, 0-100.",
+            "deprecated": true,
+            "description": "Deprecated (Glass, retired 2026-11-15): accepted from older clients and ignored.",
             "maximum": 100,
             "minimum": 0,
             "type": "integer"
           }
         },
         "required": [
-          "glass",
-          "glow",
           "accent"
         ],
         "type": "object"
@@ -445,29 +458,41 @@
       "AppearanceResponse": {
         "properties": {
           "accent": {
-            "description": "Accent colour preset.",
+            "description": "Accent preset.",
+            "enum": [
+              "graphite",
+              "plum",
+              "teal",
+              "terracotta",
+              "ultramarine"
+            ],
             "type": "string"
           },
           "background": {
             "description": "Page background style; absent means the default (`blueprint`).",
+            "enum": [
+              "blueprint",
+              "contour",
+              "dither",
+              "grainy",
+              "halftone",
+              "landscape",
+              "none",
+              "paper",
+              "stipple"
+            ],
             "type": "string"
           },
-          "glass": {
-            "description": "Glass effect strength, 0-100.",
-            "maximum": 100,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "glow": {
-            "description": "Glow effect strength, 0-100.",
-            "maximum": 100,
-            "minimum": 0,
-            "type": "integer"
+          "contrast": {
+            "description": "Contrast level; absent means `standard`.",
+            "enum": [
+              "high",
+              "standard"
+            ],
+            "type": "string"
           }
         },
         "required": [
-          "glass",
-          "glow",
           "accent"
         ],
         "type": "object"
@@ -10947,7 +10972,7 @@
                 "$ref": "#/components/schemas/AppearanceResponse"
               }
             ],
-            "description": "Custom accent and glass settings; null for the site look.",
+            "description": "The personal look (accent, contrast, page background); null for the site look.",
             "nullable": true,
             "type": "object"
           },
@@ -18294,7 +18319,7 @@
                 "$ref": "#/components/schemas/AppearanceResponse"
               }
             ],
-            "description": "Custom accent and glass settings; null for the site default.",
+            "description": "The personal look (accent, contrast, page background); null for the site default.",
             "nullable": true,
             "type": "object"
           },

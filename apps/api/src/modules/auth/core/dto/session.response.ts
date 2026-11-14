@@ -1,6 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { uuidStr } from '@libs/database';
 import { AppearanceResponse } from '../../../users/profile/dto/profile.response';
+import {
+  currentAppearance,
+  currentSiteTheme,
+} from '../../../users/profile/current-look';
 import { Principal, SessionData, UserDocument } from '@libs/auth';
 
 import {
@@ -60,7 +64,7 @@ export class UserResponse {
   isWebauthnEnabled!: boolean;
   /** Theme id chosen in the profile. */
   siteTheme!: string;
-  /** Custom accent and glass settings; null for the site default. */
+  /** The personal look (accent, contrast, page background); null for the site default. */
   appearance!: AppearanceResponse | null;
   /** Default programming language id; null when none is chosen. */
   languageId!: string | null;
@@ -81,8 +85,8 @@ export class UserResponse {
       adminCapabilities,
       isTotpEnabled: isTotpEnrolled(user),
       isWebauthnEnabled: user.isWebauthnEnabled,
-      siteTheme: user.siteTheme,
-      appearance: user.appearance ?? null,
+      siteTheme: currentSiteTheme(user.siteTheme),
+      appearance: currentAppearance(user.appearance ?? null),
       languageId: user.languageId === null ? null : uuidStr(user.languageId),
     };
   }

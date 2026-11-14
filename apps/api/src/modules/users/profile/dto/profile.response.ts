@@ -1,5 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { BIT_ROAM_COUNT_SCHEMA, PERCENT_SCHEMA } from './profile.dto';
+import { BIT_ROAM_COUNT_SCHEMA } from './profile.dto';
+import type {
+  AppearanceAccent,
+  AppearanceBackground,
+  AppearanceContrast,
+} from './profile.dto';
 import type { OrganizationSummaryResponse } from '../../../organizations/core/dto/organization.response';
 
 export class ProfileOrganizationResponse implements OrganizationSummaryResponse {
@@ -18,14 +23,12 @@ export class ProfileOrganizationResponse implements OrganizationSummaryResponse 
 }
 
 export class AppearanceResponse {
-  /** Accent colour preset. */
-  accent!: string;
-  /** Glass effect strength, 0-100. */
-  @ApiProperty(PERCENT_SCHEMA) glass!: number;
-  /** Glow effect strength, 0-100. */
-  @ApiProperty(PERCENT_SCHEMA) glow!: number;
+  /** Accent preset. */
+  accent!: AppearanceAccent;
+  /** Contrast level; absent means `standard`. */
+  contrast?: AppearanceContrast;
   /** Page background style; absent means the default (`blueprint`). */
-  background?: string;
+  background?: AppearanceBackground;
 }
 
 export class BitRoamResponse {
@@ -46,7 +49,7 @@ export class ProfileResponse {
   languageId!: string | null;
   /** Site theme id. */
   siteTheme!: string;
-  /** Custom accent and glass settings; null for the site look. */
+  /** The personal look (accent, contrast, page background); null for the site look. */
   appearance!: AppearanceResponse | null;
   /** Roaming Bits: off with one Bit until the user turns them on. */
   bitRoam!: BitRoamResponse;
