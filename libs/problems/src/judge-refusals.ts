@@ -21,7 +21,12 @@ export interface JudgedSettings extends CheckerChoice {
   generator: string | null;
   nobigmath: boolean;
   outputLimit: number | null;
-  cases: (CheckerChoice & { type: CaseType; outputLimit: number | null })[];
+  cases: (CheckerChoice & {
+    type: CaseType;
+    outputLimit: number | null;
+    points: number | null;
+    isPretest: boolean;
+  })[];
 }
 
 export interface JudgeRefusal {
@@ -81,10 +86,33 @@ function checkerRefusal(data: JudgedSettings): JudgeRefusal | null {
   };
 }
 
+/** Every scored row is a plain pretest: the judge's full run grades those at 0 (decision 185, judge-v2 `Pass::FullRunPretest`), so a full run could never score. */
+export const ALL_PLAIN_PRETESTS_MESSAGE =
+  'A full run would score 0: plain pretest cases are worth 0 outside a pretest run. Give points to a non-pretest case or to a batch.';
+
+/** Points as init.yml writes them (a `C` row outside a batch, or an `S` row) are all on plain pretests. A set with no points at all is left to `compileInitYaml`'s own check. */
+function fullRunPointsRefusal(data: JudgedSettings): JudgeRefusal | null {
+  let inBatch = false;
+  let written = 0;
+  let fullRun = 0;
+  for (const row of data.cases) {
+    if (row.type === 'E') inBatch = false;
+    else if (row.type === 'S') inBatch = true;
+    if (row.type === 'E' || (row.type === 'C' && inBatch)) continue;
+    const points = row.points ?? 0;
+    written += points;
+    if (row.type === 'S' || !row.isPretest) fullRun += points;
+  }
+  return written > 0 && fullRun <= 0
+    ? { field: 'cases', message: ALL_PLAIN_PRETESTS_MESSAGE }
+    : null;
+}
+
 /**
  * A setting judge-v2 refuses, so every submission would be an internal error: a `generator` and `nobigmath`
  * (init.yml `unsupported_feature`), an output limit above 64 MiB (`plan_cases`), and cases graded with
- * different checkers (grader `single_checker`).
+ * different checkers (grader `single_checker`). Also a case set whose points are all on plain pretests: the judge
+ * accepts it, but every full run scores 0.
  */
 export function judgeRefusal(data: JudgedSettings): JudgeRefusal | null {
   if (data.generator)
@@ -97,5 +125,9 @@ export function judgeRefusal(data: JudgedSettings): JudgeRefusal | null {
       field: 'nobigmath',
       message: 'The judge does not support nobigmath; turn it off.',
     };
-  return outputLimitRefusal(data) ?? checkerRefusal(data);
+  return (
+    outputLimitRefusal(data) ??
+    checkerRefusal(data) ??
+    fullRunPointsRefusal(data)
+  );
 }

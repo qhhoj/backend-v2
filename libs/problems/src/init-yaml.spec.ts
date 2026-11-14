@@ -5,7 +5,7 @@ import {
   INTERACTOR_PERCENT_FEATURE,
   requiredJudgeFeatures,
 } from '@libs/judging';
-import { ALL_PLAIN_PRETESTS_MESSAGE, compileInitYaml } from './init-yaml';
+import { compileInitYaml } from './init-yaml';
 import { ProblemDataError } from './problem-data.error';
 
 const testCase = (overrides: Partial<ProblemTestCase>): ProblemTestCase => ({
@@ -145,10 +145,6 @@ describe('compileInitYaml', () => {
     [
       'Total points must be greater than 0.',
       [testCase({ type: 'S', points: 0 })],
-    ],
-    [
-      ALL_PLAIN_PRETESTS_MESSAGE,
-      [plain(1, { isPretest: true }), plain(2, { isPretest: true })],
     ],
     ['Input file for case 1 does not exist: 9.in', [plain(9)]],
     [
