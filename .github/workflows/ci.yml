@@ -2,7 +2,10 @@
 name: ci
 on: { push: { branches: [main] }, pull_request: {}, workflow_dispatch: {} }
 # The test job runs the unit specs (jest.config.js) and the static OpenAPI specs; the db job runs the specs that need
-# MongoDB and Redis (*.db.spec.ts, *.e2e-spec.ts; CONTRIBUTING.md, Testing).
+# MongoDB and Redis (*.db.spec.ts, *.e2e-spec.ts; CONTRIBUTING.md, Testing) only for what the change touches:
+# scripts/ci/select-db-specs.cjs picks the judging, submissions, bridge and auth specs plus those of the changed modules
+# (the whole suite when a changed file belongs to no module). The full DB suite runs nightly on origin/main
+# (.batch/nightly/run.sh). The image job builds on pushes to main and on PRs that change what the image is made of.
 # Third-party actions are pinned by commit SHA (the comment names the tag). `npm ci --ignore-scripts`: no dependency's
 # install script runs; a job rebuilds by name only the native modules it needs (dolos-parsers for the similarity
 # specs, grpc-tools' protoc for judge-proto:check). mongodb-memory-server fetches mongod on first use instead.
@@ -12,7 +15,10 @@ jobs:
   changes:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    outputs: { code: '${{ steps.diff.outputs.code }}' }
+    outputs:
+      code: '${{ steps.diff.outputs.code }}'
+      image: '${{ steps.image.outputs.image }}'
+      db_specs: '${{ steps.specs.outputs.db_specs }}'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { fetch-depth: 0 }
@@ -21,8 +27,22 @@ jobs:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           CI_LIGHT_PATHS: '^(.*[.]md|docs/.*|[.]changeset/.*|deploy/.*)$'
           CI_HEAVY_PATHS: '^deploy/container/'
-        run: bash deploy/ci/code-changed.sh "$BASE" >> "$GITHUB_OUTPUT"
-  checks:
+        # A manual run (the Version Packages branch) compares with main: its changes are what the branch adds.
+        run: |
+          if [ '${{ github.event_name }}' = workflow_dispatch ]; then BASE="$(git merge-base origin/main HEAD)"; fi
+          echo "BASE=$BASE" >> "$GITHUB_ENV"
+          bash deploy/ci/code-changed.sh "$BASE" >> "$GITHUB_OUTPUT"
+      # The image is what Containerfile, the dependencies, the entrypoint and the app entry points make of the code.
+      - id: image
+        run: |
+          if [ '${{ github.event_name }}' != pull_request ] \
+            || git diff --name-only "$BASE" HEAD | grep -qE '^(Containerfile|package(-lock)?[.]json|nest-cli[.]json|deploy/container/|\.github/workflows/|apps/[^/]+/src/main[.]ts)'; then
+            echo image=true >> "$GITHUB_OUTPUT"
+          else echo image=false >> "$GITHUB_OUTPUT"; fi
+      - id: specs
+        run: echo "db_specs=$(node scripts/ci/select-db-specs.cjs "$BASE" | paste -sd' ')" >> "$GITHUB_OUTPUT"
+  # lint, type check and the build run side by side: each is on the PR's critical path
+  static:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -41,6 +61,16 @@ jobs:
       - run: npm run typecheck
       # The vendored judge-v2 proto matches proto.lock.json and the committed TypeScript is current.
       - run: npm run judge-proto:check
+  build:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
       - run: npm run build && npx nest build worker && npx nest build bridge
   test:
     needs: changes
@@ -67,7 +97,7 @@ jobs:
       - run: npm run test:unit -- --forceExit
   db:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.db_specs != ''
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -91,8 +121,9 @@ jobs:
           key: mongodb-binaries-${{ runner.os }}-${{ steps.mms.outputs.version }}
       # --forceExit: jest hangs at exit on leaked handles. In band: the submission-events pub/sub channel is shared
       # across Redis dbs, so concurrent workers would see each other's events.
-      - run: npm run test:db -- --forceExit
-        env: { TEST_REDIS_URL: 'redis://localhost:6379/60' }
+      # Only the selected specs (changes job); the nightly run covers the rest.
+      - run: npm run test:db -- --forceExit --runTestsByPath $SPECS
+        env: { TEST_REDIS_URL: 'redis://localhost:6379/60', SPECS: '${{ needs.changes.outputs.db_specs }}' }
   openapi:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -119,7 +150,7 @@ jobs:
           fi
   image:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.image == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -149,10 +180,11 @@ jobs:
           path: judge-v2
           sparse-checkout: packaging
       - run: bash scripts/judge/check-deploy-copies.sh judge-v2
-  # The required check (with changes): it fails when any job above failed or was cancelled; a skipped job passes.
+  # The required check (with changes): it fails when any job above failed or was cancelled; a skipped job passes
+  # (a job is skipped when the change does not need it: no code, no DB spec selected, no image change).
   ci-ok:
     if: always()
-    needs: [changes, checks, test, db, openapi, image, deploy-scripts]
+    needs: [changes, static, build, test, db, openapi, image, deploy-scripts]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:

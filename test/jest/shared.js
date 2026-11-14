@@ -6,7 +6,7 @@ module.exports = {
     '^.+\\.(t|j)s$': ['ts-jest', { tsconfig: { allowJs: true } }],
   },
   testEnvironment: 'node',
-  roots: ['<rootDir>/apps/', '<rootDir>/libs/', '<rootDir>/scripts/release/'],
+  roots: ['<rootDir>/apps/', '<rootDir>/libs/', '<rootDir>/scripts/release/', '<rootDir>/scripts/ci/'],
   moduleNameMapper: {
     '^@libs/(common|database|auth|render|problems|judging|judge-proto|contests|community|settings)(|/.*)$':
       '<rootDir>/libs/$1/src$2',

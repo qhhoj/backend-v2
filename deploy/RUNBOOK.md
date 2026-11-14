@@ -8,8 +8,8 @@ This host is the shared live old-site box (the production host), v2 goes in plac
 
 1. A PR with a changeset (`.changeset/*.md`, `npm run changeset`; empty for CI or docs) is squash-merged to `main`.
 2. `.github/workflows/release.yml` opens or updates the "chore: version packages" PR (bumps `package.json`, writes `CHANGELOG.md`). Merging it makes the next run tag `vX.Y.Z` (`scripts/release/tag-release.mjs`, `npm run release:tag`) and call `deploy.yml`.
-3. `.github/workflows/deploy.yml` resolves the ref (`deploy/ci/resolve-ref.sh`, `code-changed.sh`), waits for CI (`deploy/ci/wait-for-ci.sh`), then builds the image from `Containerfile` (entrypoint `deploy/container/entrypoint.sh`) and pushes `ghcr.io/qhhoj/backend-v2:vX.Y.Z`.
-4. `deploy/ci/remote-deploy.sh` runs `sudo qhhoj-deploy backend vX.Y.Z` over ssh as `deploy`; exit 75 means deferred (a contest is ending) and is retried.
+3. `.github/workflows/deploy.yml` resolves the ref (`deploy/ci/resolve-ref.sh`, `code-changed.sh`), waits for CI (`deploy/ci/ci-gate.sh`: a version-packages commit, which changes only changesets, the changelog and version lines, gates on its parent's CI; any other commit waits for its own run via `wait-for-ci.sh`), then builds the image from `Containerfile` (entrypoint `deploy/container/entrypoint.sh`) and pushes `ghcr.io/qhhoj/backend-v2:vX.Y.Z`.
+4. `deploy/ci/remote-deploy.sh` runs `sudo qhhoj-deploy backend vX.Y.Z` over ssh as `deploy`; exit 75 means deferred (a contest is ending) and is retried: just after the contest end the helper names (30 s slack, at most every 600 s), else every 600 s.
 5. `deploy/qhhoj-deploy` (installed to `/usr/local/sbin`) moves the `:current` tag and restarts the quadlet units (`deploy/quadlet/qhhoj-{api,worker,bridge}.container`, `qhhoj.target`); `qhhoj-deploy status` shows the live versions, `qhhoj-deploy rollback backend` goes back.
 
 A release swaps only the image. Quadlets, nginx files, `/etc/qhhoj/env` and `deploy/judge/*` do not travel with it: see "Common changes". The frontend deploys by its own workflow (`qhhoj-deploy frontend <version>`).

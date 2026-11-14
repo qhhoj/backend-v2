@@ -37,9 +37,10 @@ jobs:
       - id: ref
         env: { REF: '${{ inputs.ref }}' }
         run: bash deploy/ci/resolve-ref.sh "$REF" >> "$GITHUB_OUTPUT"
-      - name: Wait for CI on this commit
+      # A version-packages commit gates on its parent's CI (ci-gate.sh); any other commit waits for its own run.
+      - name: Wait for CI
         env: { GH_TOKEN: '${{ github.token }}', SHA: '${{ steps.ref.outputs.sha }}' }
-        run: bash deploy/ci/wait-for-ci.sh "$SHA" ci.yml 90
+        run: bash deploy/ci/ci-gate.sh "$SHA" ci.yml 90
       - env: { SHA: '${{ steps.ref.outputs.sha }}' }
         run: git checkout --detach "$SHA"
       - name: Build and push
