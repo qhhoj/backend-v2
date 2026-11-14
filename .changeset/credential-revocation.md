@@ -2,4 +2,4 @@
 'qhhoj-backend': patch
 ---
 
-Tighten credential revocation: accounts carry a credential epoch, raised in the same write as every revocation, and sessions, reset links, activation keys and contest feed keys issued before it are refused.
+Security update (GHSA-898m-vjq8-2jf8).
