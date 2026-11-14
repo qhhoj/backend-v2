@@ -1,5 +1,13 @@
 # qhhoj-backend
 
+## 2.37.10
+
+### Patch Changes
+
+- f72d7b7: Submissions: the contest window is checked against the instant the row is dated with, so a submission accepted as in-contest is always dated inside the window, however long the request then takes.
+- f72d7b7: Problem data: a PUT or upload whose points are all on plain pretest cases is refused with a 400 before anything is written, since a full run grades those at 0 and could never score. The stored data and init.yml stay as they were. Pretest batches keep counting.
+- f72d7b7: Bridge: a Final GRADED is stored only when the run's cases are exactly the positions 1..n its Started announced. A short or holed run stores no verdict and is requeued like a Final that could not be stored (IE once the allowance is spent), with an error logged.
+
 ## 2.37.9
 
 ### Patch Changes
