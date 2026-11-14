@@ -85,6 +85,19 @@ const rankedStandings = (
 };
 
 /** Legacy `ContestRanking`, as JSON (the frontend renders cells from `formatData`). */
+/** Before the start only editors and testers learn the problem set: others get the board without its problem columns or cells. Applied after the shared cache, which keeps the full board. */
+const withoutProblems = (
+  board: RankingResponse,
+  hides: boolean,
+): RankingResponse =>
+  hides
+    ? {
+        ...board,
+        problems: [],
+        rows: board.rows.map((row) => ({ ...row, cells: {} })),
+      }
+    : board;
+
 @Injectable()
 export class ContestRankingService {
   private readonly builds = new Map<string, Promise<RankingResponse>>();
@@ -115,9 +128,17 @@ export class ContestRankingService {
       isFrozenView,
       isCacheable: !canEdit,
     };
+    const hidesProblems = ContestAccess.hidesProblemsBeforeStart(
+      principal,
+      accessView,
+      now,
+    );
     if (rankingAccess) {
       await this.assertRankingCode(contest, rankingAccess);
-      return this.board(contest, boardView);
+      return withoutProblems(
+        await this.board(contest, boardView),
+        hidesProblems,
+      );
     }
     const viewer = await this.viewers.viewerOf(principal, contest, now);
     if (!ContestAccess.canSeeOwnScoreboard(principal, accessView, now, viewer))
@@ -132,7 +153,7 @@ export class ContestRankingService {
         viewer.live ? [viewer.live.toObject()] : [],
         { isFrozenView, isRanked: false },
       );
-    return this.board(contest, boardView);
+    return withoutProblems(await this.board(contest, boardView), hidesProblems);
   }
 
   /**

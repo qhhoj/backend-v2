@@ -72,7 +72,13 @@ export class ContestStatsService {
       this.stats.countsBy(contest._id, contest.startTime, 'problem'),
       this.stats.countsBy(contest._id, contest.startTime, 'language'),
     ]);
-    const ordered = orderedProblems(contest);
+    const ordered = ContestAccess.hidesProblemsBeforeStart(
+      principal,
+      ContestAccess.accessView(contest),
+      now,
+    )
+      ? []
+      : orderedProblems(contest);
     const summaries = new Map(
       (
         await this.problems.findSummaries(

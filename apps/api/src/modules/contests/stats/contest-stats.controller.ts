@@ -17,7 +17,8 @@ export class ContestStatsController {
    * @remarks
    * Returns result counts per problem and per language. Subject to the same
    * rule as the full submission list, so it fails with 403 `forbidden` while
-   * the viewer may not see that list.
+   * the viewer may not see that list. Before the start, `problems` is empty
+   * except for the contest's editors and testers.
    */
   @Public()
   @Get(':key/stats')

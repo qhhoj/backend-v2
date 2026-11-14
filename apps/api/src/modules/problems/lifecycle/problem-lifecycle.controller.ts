@@ -9,7 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { CurrentAuth, RequirePermission } from '@libs/auth';
+import { CurrentAuth, RequirePermission, SessionOnly } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
@@ -58,7 +58,9 @@ export class ProblemLifecycleController {
    * user may delete 10 problems per hour (429 `rate_limited`). Queues a
    * recomputation of the points of everyone who solved it. Failures carry the
    * code in `error.issues[0].code`.
+   * Needs a browser session (API tokens get 403).
    */
+  @SessionOnly()
   @RequirePermission('judge.delete_problem')
   @Delete(':code')
   @HttpCode(204)
@@ -93,13 +95,15 @@ export class ProblemLifecycleController {
    * Purge a deleted problem immediately
    *
    * @remarks
-   * Superuser only (403 `forbidden` otherwise), and the body's `confirmCode`
+   * Superuser only (403 `forbidden` otherwise), from a browser session (API
+   * tokens get 403), and the body's `confirmCode`
    * must repeat the problem code. Queues the purge job without waiting for the
    * grace period and answers 202 `{ queued: true }`; the job deletes the test
    * data and statement files but leaves a tombstone with the code and name, and
    * all submissions. Responds 409 `purged` when the purge already finished and
    * 409 `not_deleted` for a live problem.
    */
+  @SessionOnly()
   @RequirePermission('judge.delete_problem')
   @Post(':code/purge-now')
   @HttpCode(202)

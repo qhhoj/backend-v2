@@ -1,6 +1,6 @@
 import { ApiTags } from '@nestjs/swagger';
 import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
-import { CurrentAuth, RequirePermission } from '@libs/auth';
+import { CurrentAuth, RequirePermission, SessionOnly } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse, RefuseNullFieldsPipe } from '@libs/common';
 import type { Paginated } from '@libs/common';
@@ -58,12 +58,14 @@ export class OrganizationUsageController {
    * Change the quota of an organization
    *
    * @remarks
-   * Requires `judge.edit_all_organization`. Sets the monthly credits cap, the
+   * Requires `judge.edit_all_organization` and a browser session (API tokens
+   * get 403). Sets the monthly credits cap, the
    * monthly judging cap in milliseconds, the storage cap in bytes, or the
    * unlimited flag; `null` clears a cap so the site default applies again,
    * and omitted fields stay as they are. The change is logged. Returns the
    * updated usage.
    */
+  @SessionOnly()
   @RequirePermission('judge.edit_all_organization')
   @Patch(':slug/quota')
   updateQuota(

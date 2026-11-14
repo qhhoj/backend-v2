@@ -23,7 +23,7 @@ export class CurrentContestService {
     private readonly contests: ContestsRepository,
   ) {}
 
-  /** The participation the user is in; an ended or vanished one, one whose contest the user can no longer see, or a spectator row they may no longer hold (`ContestAccess.keepsSpectating`), is cleared (compare-and-set) and reads as none. */
+  /** The participation the user is in; an ended or vanished one, one whose contest the user can no longer see or is banned from, or a spectator row they may no longer hold (`ContestAccess.keepsSpectating`), is cleared (compare-and-set) and reads as none. */
   async current(
     principal: Principal | null,
     now = new Date(),
@@ -54,7 +54,8 @@ export class CurrentContestService {
     const view = ContestAccess.accessView(contest);
     if (
       hasParticipationEnded(contest, participation, now) ||
-      !ContestAccess.canSee(principal, view)
+      !ContestAccess.canSee(principal, view) ||
+      ContestAccess.isBannedFrom(principal, contest)
     )
       return false;
     if (

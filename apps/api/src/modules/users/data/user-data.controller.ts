@@ -2,7 +2,7 @@ import { ApiTags } from '@nestjs/swagger';
 import type { ReadStream } from 'node:fs';
 import { Controller, Get, HttpCode, Post, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
-import { CurrentAuth, NoImpersonation } from '@libs/auth';
+import { CurrentAuth, NoImpersonation, SessionOnly } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiFileResponse, RawResponse } from '@libs/common';
 import type { QueuedResponse } from '../../contests/core/dto/queued.response';
@@ -30,11 +30,12 @@ export class UserDataController {
    * Request an export of my data
    *
    * @remarks
-   * Signed-in callers only, not while impersonating. Queues a background job that builds a zip of the caller's data and answers 202 `{queued: true}`. Allowed once a day while a fresh zip exists, and at most 3 times a day in total.
+   * Signed-in callers only, from a browser session (API tokens get 403), not while impersonating. Queues a background job that builds a zip of the caller's data and answers 202 `{queued: true}`. Allowed once a day while a fresh zip exists, and at most 3 times a day in total.
    * Errors: 409 `conflict` while an export is already being prepared, 429 `rate_limited` when asking again within a day or past the daily cap, 404 `not_found` when exports are unavailable.
    */
   @Post()
   @HttpCode(202)
+  @SessionOnly()
   @NoImpersonation()
   prepare(@CurrentAuth() auth: AuthContext): Promise<QueuedResponse> {
     return this.data.prepare(auth.principal);
@@ -44,10 +45,11 @@ export class UserDataController {
    * Download my data export
    *
    * @remarks
-   * Signed-in callers only, not while impersonating. Streams the prepared zip as an attachment (`application/zip`, `nosniff`). 404 `not_found` when no unexpired export exists.
+   * Signed-in callers only, from a browser session (API tokens get 403), not while impersonating. Streams the prepared zip as an attachment (`application/zip`, `nosniff`). 404 `not_found` when no unexpired export exists.
    */
   @ApiFileResponse('application/zip')
   @RawResponse()
+  @SessionOnly()
   @NoImpersonation()
   @Get('download')
   async download(

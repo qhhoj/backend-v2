@@ -10,7 +10,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CurrentAuth, RequirePermission } from '@libs/auth';
+import { CurrentAuth, RequirePermission, SessionOnly } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import {
   ApiPaginatedResponse,
@@ -99,8 +99,9 @@ export class OrganizationEditingController {
    * organization's problem tags are removed. Recorded in the revision log
    * (its history page is gone with it). Returns 204, also when repeated on
    * a deleted slug (which finishes an interrupted delete); 404 `not_found`
-   * for an unknown slug.
+   * for an unknown slug. Needs a browser session (API tokens get 403).
    */
+  @SessionOnly()
   @Delete(':slug')
   @HttpCode(204)
   remove(

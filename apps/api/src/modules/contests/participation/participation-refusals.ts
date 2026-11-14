@@ -4,6 +4,7 @@ import { AppError } from '@libs/common';
 const REFUSALS = {
   editor_cannot_register: [409, 'Editors and testers cannot register.'],
   banned_from_contest: [403, 'You are banned from joining this contest.'],
+  not_invited: [403, 'You are not invited to take part in this contest.'],
   registration_not_required: [
     409,
     'Registration is not required for this contest.',

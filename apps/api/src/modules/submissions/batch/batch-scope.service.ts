@@ -14,6 +14,11 @@ import type { SubmissionBatchFilterDto } from './dto/submission-batch.dto';
 const notFound = (field: string, message: string): AppError =>
   issueError('not_found', 404, { field, code: 'not_found', message });
 
+const assertMayRunBatch = (principal: Principal, scope: BatchScope): void => {
+  if (!mayRunBatch(principal, scope))
+    throw new AppError('forbidden', 403, 'You cannot manage these submissions');
+};
+
 /** Resolves a batch filter's names to ids and checks the caller may run a batch over that scope. */
 @Injectable()
 export class BatchScopeService {
@@ -24,7 +29,7 @@ export class BatchScopeService {
     private readonly users: UsersRepository,
   ) {}
 
-  /** 404 for an unknown contest, user or (outside a contest) invisible problem; 403 `forbidden` without the rights `mayRunBatch` asks for. */
+  /** 404 for an unknown contest, user or problem (outside a contest: an invisible one too); 403 `forbidden` without the rights `mayRunBatch` asks for, checked on a contest before its problem is looked up. */
   async authorize(
     principal: Principal,
     dto: SubmissionBatchFilterDto,
@@ -32,12 +37,7 @@ export class BatchScopeService {
     const { refs, scope } = dto.contest
       ? await this.contestScope(principal, dto.contest, dto.problem)
       : await this.problemScope(principal, dto.problem);
-    if (!mayRunBatch(principal, scope))
-      throw new AppError(
-        'forbidden',
-        403,
-        'You cannot manage these submissions',
-      );
+    assertMayRunBatch(principal, scope);
     return { ...refs, ...(await this.userRef(dto.user)) };
   }
 
@@ -51,11 +51,16 @@ export class BatchScopeService {
     const view = contest && ContestAccess.accessView(contest);
     if (!contest || !view || !ContestAccess.canSee(principal, view))
       throw notFound('contest', 'No such contest');
+    const scope: BatchScope = {
+      kind: 'contest',
+      canEdit: ContestAccess.canEdit(principal, view),
+    };
+    // Rights first: the problem lookup answers only callers who may run the batch.
+    assertMayRunBatch(principal, scope);
     const problem = problemCode
       ? await this.problemRows.findByCode(problemCode)
       : null;
     if (problemCode && !problem) throw notFound('problem', 'No such problem');
-    const canEdit = ContestAccess.canEdit(principal, view);
     return {
       refs: {
         contestId: contest._id,
@@ -63,7 +68,7 @@ export class BatchScopeService {
           ? { problemId: problem._id }
           : { deletedProblemIds: await this.problemRows.deletedIds() }),
       },
-      scope: { kind: 'contest', canEdit },
+      scope,
     };
   }
 

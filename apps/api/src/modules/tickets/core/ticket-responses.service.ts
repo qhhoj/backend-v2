@@ -4,7 +4,11 @@ import type { Principal } from '@libs/auth';
 import { mergeTimeline } from '@libs/community';
 import { unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
-import type { TicketMessage, TicketTimelineEvent } from '@libs/database';
+import type {
+  TicketMessage,
+  TicketTimelineEvent,
+  TicketTimelineType,
+} from '@libs/database';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import type {
   TicketDetailResponse,
@@ -20,6 +24,12 @@ import type { TicketSubject } from './ticket-context.service';
 import type { TicketDocument } from './tickets.repository';
 
 type People = Map<string, UserSummaryResponse>;
+
+/** Good-contribution marks: in the timeline only for readers who may set them (`can.markGood`). */
+const GOOD_MARK_EVENTS: ReadonlySet<TicketTimelineType> = new Set([
+  'marked-good',
+  'unmarked-good',
+]);
 
 /** Builds the wire shapes: one users lookup and one links lookup per response, however many tickets. */
 @Injectable()
@@ -63,7 +73,13 @@ export class TicketResponsesService {
       notes: can.editNotes ? ticket.notes : null,
       can,
       messages,
-      timeline: this.timeline(messages, ticket.events ?? [], people),
+      timeline: this.timeline(
+        messages,
+        (ticket.events ?? []).filter(
+          (event) => can.markGood || !GOOD_MARK_EVENTS.has(event.type),
+        ),
+        people,
+      ),
     };
   }
 

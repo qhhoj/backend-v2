@@ -3,7 +3,7 @@ import { ENV, excerpt, InjectJob } from '@libs/common';
 import type { JobProducer, SiteConfig } from '@libs/common';
 import type { Problem } from '@libs/database';
 import { SettingsService } from '@libs/settings';
-import { discordWebhookUrl } from './discord';
+import { discordText, discordWebhookUrl } from './discord';
 import type { DiscordEvent, DiscordMessage } from './discord';
 import { communityJobs } from './jobs';
 import type { DiscordWebhookJob } from './jobs';
@@ -54,8 +54,8 @@ export class DiscordWebhooksService {
       {
         title: `New ${suggested ? 'suggested' : 'organization'} problem ${url}`,
         description: [
-          `Title: ${problem.name}`,
-          `Statement: ${excerpt(problem.description ?? '', 100)}...\n`,
+          `Title: ${discordText(problem.name)}`,
+          `Statement: ${discordText(excerpt(problem.description ?? '', 100))}...\n`,
           `Time limit: ${problem.timeLimit}`,
           `Memory limit (MB): ${problem.memoryLimit / 1024}`,
           `Points: ${problem.points}`,

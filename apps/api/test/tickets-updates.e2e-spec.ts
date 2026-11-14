@@ -119,6 +119,21 @@ describe('ticket updates', () => {
     );
   });
 
+  it('shows the good-contribution timeline only to those who may mark it', async () => {
+    const ticket = await createTicket(api, { creator: people.creator.id });
+    await patch('staff', ticket._id, { isContributive: true }).expect(200);
+    await patch('staff', ticket._id, { isContributive: false }).expect(200);
+    const eventTypes = async (who: string) =>
+      dataOf<TicketDetailResponse>(
+        await authed(
+          api.http().get(ticketUrl(ticket._id)),
+          people[who].session,
+        ).expect(200),
+      ).timeline.flatMap((entry) => entry.event?.type ?? []);
+    expect(await eventTypes('creator')).toEqual([]);
+    expect(await eventTypes('staff')).toEqual(['marked-good', 'unmarked-good']);
+  });
+
   it('never lets staff mark their own ticket good, and refuses everyone else', async () => {
     const own = await createTicket(api, { creator: people.staffCreator.id });
     await patch('staffCreator', own._id, { isContributive: true })

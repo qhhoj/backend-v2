@@ -38,6 +38,16 @@ const FIXED_NOTE_KINDS: ReadonlySet<string> = new Set([
   'setting',
 ]);
 
+/** The permission that lets a viewer read the label of a record of this kind: these labels name objects that can be private or hidden (a private problem's code, a hidden contest's key, an unlisted organization's slug, a draft post's title, a share code). Other kinds name public things (usernames, catalog entries, pages, setting keys). */
+const LABEL_PERMISSION: Partial<Record<string, Permission>> = {
+  problem: 'judge.edit_all_problem',
+  contest: 'judge.edit_all_contest',
+  contestParticipation: 'judge.edit_all_contest',
+  organization: 'judge.edit_all_organization',
+  blogPost: 'judge.edit_all_post',
+  share: 'judge.manage_share',
+};
+
 const EMPTY: AuditFeedResponse = { items: [], nextBefore: null };
 
 @Injectable()
@@ -102,10 +112,11 @@ export class AuditFeedService {
         : null,
       type: record.type,
       action: record.action,
-      object: {
-        id: record.objectId,
-        ...labels.get(`${record.type}:${record.objectId}`)!,
-      },
+      object: labelFor(
+        record,
+        labels.get(`${record.type}:${record.objectId}`)!,
+        viewer,
+      ),
       changedFields: record.changedFields,
       comment: noteFor(record, viewer),
     }));
@@ -117,4 +128,19 @@ function noteFor(record: AuditRecord, viewer: Principal): string {
   if (FIXED_NOTE_KINDS.has(record.type)) return record.comment;
   const needed = NOTE_PERMISSION[record.type];
   return needed && hasPermission(viewer, needed) ? record.comment : '';
+}
+
+/** The object's label, or null when its kind needs a permission the viewer lacks. */
+function labelFor(
+  record: AuditRecord,
+  found: { label: string | null; deleted: boolean },
+  viewer: Principal,
+): AuditEntryResponse['object'] {
+  const needed = LABEL_PERMISSION[record.type];
+  const shown = !needed || hasPermission(viewer, needed);
+  return {
+    id: record.objectId,
+    label: shown ? found.label : null,
+    deleted: found.deleted,
+  };
 }

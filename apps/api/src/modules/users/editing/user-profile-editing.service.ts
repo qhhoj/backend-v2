@@ -1,5 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { hasPermission, SessionService, UsersRepository } from '@libs/auth';
+import {
+  hasPermission,
+  PrincipalService,
+  SessionService,
+  UsersRepository,
+} from '@libs/auth';
 import type { AuthContext, Principal, UserDocument } from '@libs/auth';
 import {
   AppError,
@@ -17,7 +22,7 @@ import { withEmailLock } from '../core/email-lock';
 import type { UpdateUserByStaffDto } from './dto/user-edit.dto';
 import { UserEditResponse } from './dto/user-edit.response';
 import { asCurrentSuperuser } from '../access/superuser-lock';
-import { editableTarget } from './editable-target';
+import { changeableTarget, editableTarget } from './editable-target';
 import { UserCredentialsService } from './user-credentials.service';
 import { fieldChanges } from './user-field-changes';
 import type { Changes } from './user-field-changes';
@@ -59,6 +64,7 @@ export class UserProfileEditingService {
     private readonly credentials: UserCredentialsService,
     @Inject(REDIS) private readonly redis: Redis,
     private readonly feedKeys: FeedKeysRepository,
+    private readonly principals: PrincipalService,
   ) {}
 
   async get(principal: Principal, username: string): Promise<UserEditResponse> {
@@ -72,9 +78,12 @@ export class UserProfileEditingService {
     dto: UpdateUserByStaffDto,
   ): Promise<UserEditResponse> {
     const { principal } = auth;
-    const user = await editableTarget(this.users, principal, username, {
-      notSelf: true,
-    });
+    const user = await changeableTarget(
+      this.users,
+      this.principals,
+      principal,
+      username,
+    );
     const email = this.emailChange(principal, user, dto.email);
     const isActive = this.activationChange(principal, user, dto.isActive);
     this.assertBanKept(user, dto);

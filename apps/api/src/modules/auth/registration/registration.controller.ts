@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { Public } from '@libs/auth';
+import { ActivationResponse } from './dto/activation.response';
 import { RegisterDto } from './dto/register.dto';
 import { ResendActivationDto } from './dto/resend-activation.dto';
 import { TokenDto } from './dto/token.dto';
@@ -47,11 +48,11 @@ export class RegistrationController {
    * Activate an account
    *
    * @remarks
-   * Public. Consumes the single-use key from the activation mail and turns the account on. Errors: 400 `invalid_token` for an unknown, used or expired key. Returns 204.
+   * Public. Consumes the single-use key from the activation mail and turns the account on. A password chosen at signup stops working in the same write (sessions and API token end with it), and a password-reset link is mailed to set one: `passwordResetSent` says whether it went out (when false for such an account, the reset form sends one). Errors: 400 `invalid_token` for an unknown, used or expired key. Returns 200.
    */
   @Post('activate')
-  @HttpCode(204)
-  activate(@Body() body: TokenDto): Promise<void> {
+  @HttpCode(200)
+  activate(@Body() body: TokenDto): Promise<ActivationResponse> {
     return this.registration.activate(body.token);
   }
 

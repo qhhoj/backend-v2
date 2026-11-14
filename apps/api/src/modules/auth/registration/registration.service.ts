@@ -6,6 +6,7 @@ import {
   PWNED_PASSWORD_PROBLEM,
   PwnedPasswordService,
   sha256,
+  unusablePassword,
   UsersRepository,
 } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
@@ -24,6 +25,8 @@ import { ActivationKey, Language, Organization, uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
+import { PasswordResetService } from '../password-reset/password-reset.service';
+import type { ActivationResponse } from './dto/activation.response';
 import { withMemberSlotsLock } from '../../organizations/core/member-slots-lock';
 import { OrganizationMembersRepository } from '../../organizations/core/organization-members.repository';
 import { OrganizationPointsService } from '../../organizations/core/organization-points.service';
@@ -64,6 +67,7 @@ export class RegistrationService {
     private readonly organizations: Model<Organization>,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(MAILER) private readonly mailer: Mailer,
+    private readonly passwordReset: PasswordResetService,
   ) {}
 
   register(body: RegisterDto, ip: string): Promise<void> {
@@ -272,26 +276,38 @@ export class RegistrationService {
     }
   }
 
-  /** Single-use: the key is consumed atomically, and only unexpired keys issued at the user's current credential epoch match. */
-  async activate(key: string): Promise<void> {
+  /** Single-use: the key is consumed atomically, and only unexpired keys issued at the user's current credential epoch match. Activation proves the mailbox, not a password chosen before it: such a password is voided in the activating write (`UsersRepository.activate`), and the owner is mailed a reset link to set one (`passwordResetSent`; a mail that fails is logged, and the owner can ask for a link with the reset form). */
+  async activate(key: string): Promise<ActivationResponse> {
     const record = await this.activationKeys
       .findOneAndDelete({
         keyHash: sha256(key),
         expiresAt: { $gt: new Date() },
       })
       .exec();
-    if (
-      !record ||
-      !(await this.users.activate(
+    const user =
+      record &&
+      (await this.users.activate(
         uuidStr(record.userId),
         record.credentialEpoch,
-      ))
-    )
+        unusablePassword(),
+      ));
+    if (!user)
       throw new AppError(
         'invalid_token',
         400,
         'Activation link is invalid or expired',
       );
+    if (!user.passwordSetBeforeVerification)
+      return { passwordResetSent: false };
+    try {
+      await this.passwordReset.sendTo(user);
+      return { passwordResetSent: true };
+    } catch (error) {
+      this.logger.error(
+        `Reset mail at activation of ${user._id} failed: ${(error as Error).message}`,
+      );
+      return { passwordResetSent: false };
+    }
   }
 
   /** Hashes the password (queued under the client `ip`) and inserts the user; a username that lost a race maps to the same error as the up-front check. */

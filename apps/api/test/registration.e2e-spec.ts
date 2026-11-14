@@ -1,15 +1,16 @@
-import { UsersRepository, hashPassword } from '@libs/auth';
+import { UsersRepository, hashPassword, hasUsablePassword } from '@libs/auth';
 import { getModelToken } from '@nestjs/mongoose';
 import { REDIS } from '@libs/common';
 import { ActivationKey, CI, uuidStr } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
-import { createUser, errorCode, setupApiTest } from './setup';
+import { createUser, errorCode, sessionCookie, setupApiTest } from './setup';
 import { getQueueToken } from '@nestjs/bullmq';
 import { communityJobs } from '@libs/community';
 import type { Queue } from 'bullmq';
 import { ActivationService } from '../src/modules/auth/registration/activation.service';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
+import { dataOf } from './submission-fixtures';
 import type { ApiTest } from './setup';
 
 let api: ApiTest;
@@ -63,7 +64,7 @@ describe('registration', () => {
       .send({ username: 'newbie', password: PASSWORD })
       .expect(403)
       .expect(errorCode('account_not_activated'));
-    await activate(key).expect(204);
+    await activate(key).expect(200);
     expect((await api.users.findOne({ username: 'newbie' }))!.siteTheme).toBe(
       'auto',
     );
@@ -72,7 +73,68 @@ describe('registration', () => {
       .http()
       .post(`${AUTH}/login`)
       .send({ username: 'newbie', password: PASSWORD })
+      .expect(401)
+      .expect(errorCode('invalid_credentials'));
+  });
+
+  it('voids the signup password at activation, ends its sessions and mails a reset link that sets a new one', async () => {
+    await register('presigned', 'presigned@example.com').expect(204);
+    const key = activationKeyFrom(api.mailer.sent.at(-1)!.text);
+    const user = (await api.users.findOne({ username: 'presigned' }).lean())!;
+    const { id: sessionId } = await api.sessions.create({
+      userId: user._id,
+      twoFaPassed: true,
+      passwordPwned: false,
+      impersonatorId: null,
+    });
+    api.mailer.sent.length = 0;
+    expect(dataOf(await activate(key).expect(200))).toEqual({
+      passwordResetSent: true,
+    });
+    await api
+      .http()
+      .get(`${AUTH}/me`)
+      .set('Cookie', sessionCookie(sessionId))
+      .expect(401);
+    expect(api.mailer.sent).toHaveLength(1);
+    expect(api.mailer.sent[0]).toMatchObject({
+      to: 'presigned@example.com',
+      subject: 'Reset your QHHOJ password',
+    });
+    const token = /\/reset-password\/([A-Za-z0-9_-]+)/.exec(
+      api.mailer.sent[0].text,
+    )![1];
+    await api
+      .http()
+      .post(`${AUTH}/password/reset/confirm`)
+      .send({ token, newPassword: 'purple monkey dishwasher' })
+      .expect(204);
+    await api
+      .http()
+      .post(`${AUTH}/login`)
+      .send({ username: 'presigned', password: 'purple monkey dishwasher' })
       .expect(200);
+  });
+
+  it('voids the signup password in the activating write, whatever happens to the reset mail', async () => {
+    await register('nomail', 'nomail@example.com').expect(204);
+    const key = activationKeyFrom(api.mailer.sent.at(-1)!.text);
+    const before = (await api.users.findOne({ username: 'nomail' }).lean())!;
+    jest
+      .spyOn(api.mailer, 'send')
+      .mockRejectedValueOnce(new Error('smtp down'));
+    expect(dataOf(await activate(key).expect(200))).toEqual({
+      passwordResetSent: false,
+    });
+    const after = (await api.users.findOne({ username: 'nomail' }).lean())!;
+    expect(after.isActive).toBe(true);
+    expect(hasUsablePassword(after.password)).toBe(false);
+    expect(after.credentialEpoch).toBe((before.credentialEpoch ?? 0) + 1);
+    await api
+      .http()
+      .post(`${AUTH}/login`)
+      .send({ username: 'nomail', password: PASSWORD })
+      .expect(401);
   });
 
   it('rejects taken usernames and emails case-insensitively, bad usernames and weak passwords', async () => {
@@ -128,7 +190,7 @@ describe('registration', () => {
     const responses = await Promise.all(
       Array.from({ length: 8 }, () => activate(key)),
     );
-    expect(responses.filter(({ status }) => status === 204)).toHaveLength(1);
+    expect(responses.filter(({ status }) => status === 200)).toHaveLength(1);
     expect(responses.filter(({ status }) => status === 400)).toHaveLength(7);
   });
 
@@ -365,7 +427,7 @@ describe('registration extras', () => {
         .http()
         .post(`${AUTH}/activate`)
         .send({ token: newKey })
-        .expect(204);
+        .expect(200);
     });
 
     it('answers 204 and sends nothing for unknown, active and banned emails', async () => {
@@ -394,7 +456,7 @@ describe('registration extras', () => {
         .http()
         .post(`${AUTH}/activate`)
         .send({ token: key })
-        .expect(204);
+        .expect(200);
       const staff = await createUserWith(api, 'pending', {
         permissions: ['judge.change_profile', 'auth.change_user'],
       });

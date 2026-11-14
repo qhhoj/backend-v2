@@ -1,10 +1,11 @@
-import { randomBytes, randomInt } from 'node:crypto';
+import { randomInt } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   passwordIssues,
   passwordProblems,
   Passwords,
   PwnedPasswordService,
+  unusablePassword,
   UsersRepository,
 } from '@libs/auth';
 import type { Principal, UserDocument } from '@libs/auth';
@@ -193,7 +194,7 @@ export class UserCreationService {
         email,
         firstName: row.fullName ?? '',
         password: row.invite
-          ? `!${randomBytes(20).toString('hex')}`
+          ? unusablePassword()
           : await this.passwords.hash(row.password ?? generatedPassword!),
         isActive: true,
         passwordSetBeforeVerification: true,

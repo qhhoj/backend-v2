@@ -75,6 +75,11 @@ interface SubmissionFacts {
   isContestEditor: boolean;
 }
 
+type ContestRuleFacts = Pick<
+  SubmissionFacts,
+  'contest' | 'ownerId' | 'canEdit' | 'isContestEditor'
+>;
+
 /** A submission whose result page the viewer may open, with what they may read of its source. */
 export interface ReadableSubmission {
   submission: SubmissionDocument;
@@ -468,7 +473,7 @@ export class SubmissionsService {
     };
   }
 
-  /** The source rule (source, its raw and download links, similarity pairs: anything that shows code): 403 `hidden` when `detailAccess` denies it, then the contest gate, then 403 `solve_first` until an `if-solved` viewer solved the problem. Solving would not help while the contest list is closed, so that reason wins over `solve_first`; a denied viewer hears `hidden` either way. */
+  /** The source rule (source, its raw and download links, similarity pairs: anything that shows code): 403 `hidden` when `detailAccess` denies it, then the contest gate, then 403 `contest_running` for another user's contest source until the contest ends (`isUnfinishedContestSource`), then 403 `solve_first` until an `if-solved` viewer solved the problem. Solving would not help while the contest is on, so that reason wins over `solve_first`; a denied viewer hears `hidden` either way. */
   async viewable(
     principal: Principal,
     id: string,
@@ -482,6 +487,12 @@ export class SubmissionsService {
     if (this.detailAccessOf(principal, facts) === 'denied')
       throw new AppError('hidden', 403, 'You cannot see this submission');
     await this.assertResultOpen(principal, facts);
+    if (this.isUnfinishedContestSource(principal, facts))
+      throw new AppError(
+        'contest_running',
+        403,
+        'You cannot see this submission yet',
+      );
     if ((await this.sourceAccessFor(principal, facts)) === 'solve_first')
       throw new AppError(
         'solve_first',
@@ -562,6 +573,7 @@ export class SubmissionsService {
     facts: SubmissionFacts,
   ): Promise<SourceAccess> {
     if (!principal) return sourceAccessOf(null, 'denied', false);
+    if (this.isUnfinishedContestSource(principal, facts)) return 'hidden';
     const access = this.detailAccessOf(principal, facts);
     const hasSolved =
       access === 'if-solved' &&
@@ -579,30 +591,41 @@ export class SubmissionsService {
     );
   }
 
-  /** Another user's contest submission stays closed until the contest's full list is open to this viewer. */
-  private async isContestListClosed(
+  /** Outside a contest, the owner, the problem's or the contest's editors and `judge.view_all_submission`: the contest rules below never close a submission to them. */
+  private seesPastContestRules(
     principal: Principal | null,
-    {
-      contest,
-      ownerId,
-      canEdit,
-      isContestEditor,
-    }: {
-      contest: ContestDocument | null;
-      ownerId: string;
-      canEdit: boolean;
-      isContestEditor: boolean;
-    },
-  ): Promise<boolean> {
-    if (
+    { contest, ownerId, canEdit, isContestEditor }: ContestRuleFacts,
+  ): boolean {
+    return (
       contest === null ||
       ownerId === principal?.userId ||
       canEdit ||
       isContestEditor ||
       (principal !== null &&
         hasPermission(principal, 'judge.view_all_submission'))
-    )
-      return false;
+    );
+  }
+
+  /** Another user's contest source stays closed to everyone but the contest's testers until the contest ends, whatever the problem's source visibility and even when the contest shows its submission list. */
+  private isUnfinishedContestSource(
+    principal: Principal | null,
+    facts: ContestRuleFacts,
+  ): boolean {
+    if (this.seesPastContestRules(principal, facts)) return false;
+    const contest = facts.contest!;
+    return (
+      contestPhase(contest, new Date()) !== 'ended' &&
+      !ContestAccess.isTester(principal, ContestAccess.accessView(contest))
+    );
+  }
+
+  /** Another user's contest submission stays closed until the contest's full list is open to this viewer. */
+  private async isContestListClosed(
+    principal: Principal | null,
+    facts: ContestRuleFacts,
+  ): Promise<boolean> {
+    if (this.seesPastContestRules(principal, facts)) return false;
+    const contest = facts.contest!;
     const now = new Date();
     return !ContestAccess.canSeeFullSubmissionList(
       principal,

@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { SessionService, UsersRepository } from '@libs/auth';
+import { PrincipalService, SessionService, UsersRepository } from '@libs/auth';
 import type { Principal, UserDocument } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { CONTEST_CHEATING_BAN_REASON } from '../../contests/participation/contest-participation.service';
 import { FeedKeysRepository } from '../../contests/feed/feed-keys.repository';
+import { assertHoldsRightsOf } from '../editing/editable-target';
 
 @Injectable()
 export class UserModerationService {
@@ -13,6 +14,7 @@ export class UserModerationService {
     private readonly sessions: SessionService,
     private readonly revisions: RevisionsRepository,
     private readonly feedKeys: FeedKeysRepository,
+    private readonly principals: PrincipalService,
   ) {}
 
   /** Legacy `Profile.ban_user`, plus every session, the API token and the contest feed keys the user minted revoked (the guard also rejects inactive users on the next request), so an unban brings none of them back; the active flag is remembered for `unban`. Audit-logged as a `user` revision. */
@@ -116,7 +118,7 @@ export class UserModerationService {
     });
   }
 
-  /** Legacy `can_be_banned_by`. */
+  /** Legacy `can_be_banned_by`, plus: only a user whose permissions the moderator holds too. */
   private async target(
     principal: Principal,
     username: string,
@@ -125,6 +127,7 @@ export class UserModerationService {
     if (!user) throw new AppError('not_found', 404, 'No such user');
     if (user._id === principal.userId || user.isSuperuser)
       throw new AppError('forbidden', 403, 'You cannot moderate this user');
+    assertHoldsRightsOf(this.principals, principal, user);
     return user;
   }
 }

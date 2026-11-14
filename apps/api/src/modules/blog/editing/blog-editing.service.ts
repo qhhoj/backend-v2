@@ -13,7 +13,7 @@ import type { BlogPost } from '@libs/database';
 import { SettingsService } from '@libs/settings';
 import { fieldDiff } from '@libs/problems';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
-import { DiscordWebhooksService } from '@libs/community';
+import { discordText, DiscordWebhooksService } from '@libs/community';
 import { OrganizationAccess } from '../../organizations/core/organization-access';
 import type { OrganizationDocument } from '../../organizations/core/organizations.repository';
 import { OrganizationsService } from '../../organizations/core/organizations.service';
@@ -360,7 +360,7 @@ export class BlogEditingService {
   private announce(post: BlogPost, username: string): Promise<void> {
     return this.discord.notify('on_new_blogpost', {
       title: `New blog post ${this.discord.link(pagePath('blog', uuidStr(post._id)))}`,
-      description: `Title: ${post.title}\nDescription: ${excerpt(post.content, 200)}`,
+      description: `Title: ${discordText(post.title)}\nDescription: ${discordText(excerpt(post.content, 200))}`,
       author: this.discord.author(username),
     });
   }

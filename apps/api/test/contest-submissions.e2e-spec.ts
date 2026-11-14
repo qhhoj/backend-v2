@@ -349,6 +349,27 @@ describe('contest submissions and the freeze', () => {
     ).toEqual([aliceId, bobId].sort());
   });
 
+  it("keeps another contestant's source to editors and testers until the contest ends, though the list is shown", async () => {
+    users.tester = await createUserWith(api, 'contestTester');
+    sessions.tester = await loginAs(api, users.tester._id);
+    const { contest, bobId } = await frozenScene('live_source_p', {
+      frozenLastMinutes: 0,
+      testers: [users.tester._id],
+    });
+    const source = (who: string) =>
+      get(`/api/internal/submissions/${bobId}/source`, who);
+    await get(`/api/internal/submissions/${bobId}`, 'alice').expect(200);
+    await source('alice').expect(403).expect(errorCode('contest_running'));
+    await source('author').expect(200);
+    await source('tester').expect(200);
+    await source('bob').expect(200);
+    await api.contests.updateOne(
+      { _id: contest._id },
+      { startTime: hoursFromNow(-5), endTime: hoursFromNow(-1) },
+    );
+    await source('alice').expect(200);
+  });
+
   const endedUnfrozen = {
     frozenLastMinutes: 0,
     startTime: hoursFromNow(-5),
