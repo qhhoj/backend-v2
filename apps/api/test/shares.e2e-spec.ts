@@ -27,6 +27,7 @@ interface ShareView {
     result: string;
     points: number;
     cases: Array<Record<string, unknown>> | null;
+    batches: unknown[] | null;
   } | null;
 }
 
@@ -168,8 +169,11 @@ describe('share links', () => {
       'AC',
       'WA',
     ]);
+    expect(view.copy!.batches).toBeNull();
     const stored = await api.shares.findOne({ code }).lean<Share>();
     expect(JSON.stringify(stored)).not.toMatch(/expected 42|printed 41/);
+    await api.problems.updateOne({ _id: problem._id }, { isPublic: false });
+    expect(dataOf<ShareView>(await read(code).expect(200)).problem).toBeNull();
     const raw = await read(`${code}/download`).expect(200);
     expect(raw.headers['content-type']).toBe('text/plain; charset=utf-8');
     expect(raw.headers['content-disposition']).toBe(
@@ -222,6 +226,52 @@ describe('share links', () => {
     await paste(full)
       .expect(409)
       .expect(issueCodes(['share_limit']));
+  });
+
+  it('lets the owner retitle, re-expire, find and delete a share, and readers report it once for staff to settle', async () => {
+    const problem = await newProblem();
+    const submission = await submissionOf(problem._id);
+    const { code } = dataOf<{ code: string }>(
+      await shareSubmission(owner, submission._id).expect(201),
+    );
+    const at = (suffix = '') => `${SHARES}/${code}${suffix}`;
+    await authed(api.http().patch(at()), reader)
+      .send({ title: 'mine now' })
+      .expect(403);
+    const edited = dataOf<{ title: string; expiresAt: string | null }>(
+      await authed(api.http().patch(at()), owner)
+        .send({ title: 'Sum\nof a range', expiry: '7d' })
+        .expect(200),
+    );
+    expect(edited.title).toBe('Sum of a range');
+    expect(new Date(edited.expiresAt!).getTime()).toBeGreaterThan(
+      Date.now() + 6 * 86_400_000,
+    );
+    const listed = dataOf<Array<{ code: string }>>(
+      await authed(
+        api.http().get(`${SHARES}?submissionId=${submission._id}`),
+        owner,
+      ).expect(200),
+    );
+    expect(listed.map((row) => row.code)).toEqual([code]);
+    const report = (session: TestSession) =>
+      authed(api.http().post(at('/reports')), session).send({
+        reason: 'contest',
+      });
+    await report(reader).expect(204);
+    await report(reader).expect(409);
+    await report(owner).expect(403);
+    await authed(api.http().get(`${SHARES}/reports`), reader).expect(403);
+    const queue = dataOf<Array<{ share: { code: string }; reason: string }>>(
+      await authed(api.http().get(`${SHARES}/reports`), staff).expect(200),
+    );
+    expect(queue[0]).toMatchObject({ share: { code }, reason: 'contest' });
+    await authed(api.http().post(at('/reports/settle')), staff)
+      .send({ outcome: 'dismissed' })
+      .expect(204);
+    await authed(api.http().delete(at()), reader).expect(403);
+    await authed(api.http().delete(at()), owner).expect(204);
+    await read(code).expect(404);
   });
 
   it("takes a link down for everyone until staff restore it, logs both, and hides a banned author's links", async () => {

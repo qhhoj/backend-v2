@@ -22,7 +22,7 @@ import type {
 import { copyCaseUnit, frozenCopyOf, isShareable } from './frozen-copy';
 import { pasteSourceError } from './paste-source';
 
-/** 409 `conflict` with issue `submission_not_shareable`: what `actions.canShare` tells the SPA ahead of time. */
+/** 409 `conflict` with issue `submission_not_shareable`: what the submission detail's `viewer.canShare` tells the SPA ahead of time. */
 const notShareable = (message: string) =>
   issueError('conflict', 409, {
     field: 'submissionId',
