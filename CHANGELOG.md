@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.38.1
+
+### Patch Changes
+
+- 9f5dc46: Security update (GHSA-hr2c-g5mj-w95j).
+
 ## 2.38.0
 
 ### Minor Changes
