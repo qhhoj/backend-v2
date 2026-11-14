@@ -2,4 +2,4 @@
 'qhhoj-backend': patch
 ---
 
-Bound contest joins
+Security update (GHSA-mh3m-3rhj-pqff).
