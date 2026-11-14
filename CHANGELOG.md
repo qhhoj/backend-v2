@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.39.0
+
+### Minor Changes
+
+- 9c9c347: Appearance for palette A: `appearance` takes `contrast` and the five accents (ultramarine, teal, plum, terracotta, graphite); Clay/Glass theme ids and the old accents are answered as their successors.
+
 ## 2.38.5
 
 ### Patch Changes
