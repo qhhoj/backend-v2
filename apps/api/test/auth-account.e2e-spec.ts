@@ -247,6 +247,11 @@ describe('account endpoints', () => {
       username: 'dora',
       email: 'dora@example.com',
     });
+    // Accounts from before the epoch have no field.
+    await api.users.updateOne(
+      { username: 'dora' },
+      { $unset: { credentialEpoch: 1 } },
+    );
     const [current, other] = [
       await login(undefined, 'dora'),
       await login(undefined, 'dora'),

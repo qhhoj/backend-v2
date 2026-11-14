@@ -240,13 +240,14 @@ export class EventStreamHubService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** The session still exists (logout, password change and impersonation end destroy it), the user is still active, and an API token was not regenerated. */
+  /** The session still exists (logout, password change and impersonation end destroy it) and predates no credential revocation, the user is still active, and an API token was not regenerated. */
   private async currentPrincipal(auth: AuthContext): Promise<Principal | null> {
-    if (auth.sessionId !== null && !(await this.sessions.get(auth.sessionId)))
-      return null;
+    const session = auth.sessionId && (await this.sessions.get(auth.sessionId));
+    if (auth.sessionId !== null && !session) return null;
     const user = await this.users.findById(auth.user._id);
     if (
       !user?.isActive ||
+      (session && session.credentialEpoch !== user.credentialEpoch) ||
       (auth.viaToken && user.apiTokenHash !== auth.user.apiTokenHash)
     )
       return null;
