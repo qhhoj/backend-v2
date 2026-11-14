@@ -5,6 +5,8 @@ import {
   iframeAttributes,
   LEGACY_ATTRIBUTES,
   LEGACY_TAGS,
+  MATH_SLOT_ATTRIBUTE,
+  prefixedClasses,
   STATEMENT_OPTIONS,
   STYLE_VALUE,
 } from './sanitizer';
@@ -61,25 +63,8 @@ const cappedStyle = (style: string): string =>
     ? style
     : style.slice(0, style.lastIndexOf(';', MAX_STYLE_ATTRIBUTE_LENGTH) + 1);
 
-/** Every author class gets `user-` (so `user-x` becomes `user-user-x`) and cannot hit the site's stylesheet; only the exact names the Markdown pipeline emits stay. KaTeX classes never reach this pass. */
-const PIPELINE_CLASSES = new Set([
-  'spoiler',
-  'table',
-  'h-scrollable-table',
-  'user-reference',
-  'user-rating',
-]);
-const isPipelineClass = (name: string) =>
-  PIPELINE_CLASSES.has(name) || name.startsWith('language-');
-const prefixedClasses = (classes: string): string =>
-  classes
-    .split(/\s+/)
-    .filter((name) => /^[\w-]+$/.test(name))
-    .map((name) => (isPipelineClass(name) ? name : `user-${name}`))
-    .join(' ');
-
-/** Attribute of the placeholder element `renderMarkdown` leaves for each formula; its value carries a per-render nonce, so only the renderer can address a slot. */
-export const MATH_SLOT_ATTRIBUTE = 'data-math';
+/** Attribute of the placeholder element `renderMarkdown` leaves for each formula (see `sanitizer.ts`). */
+export { MATH_SLOT_ATTRIBUTE };
 
 /** Author HTML only: no MathML (`mpadded`/`mspace` position without CSS; KaTeX's own MathML is spliced in), no svg, no `id` (it would clobber page elements), no `aria-hidden` (KaTeX's is spliced in). Raw-text tags are dropped whole so a formula slot inside never survives as escaped text. */
 const BLOG_OPTIONS: sanitizeHtml.IOptions = {

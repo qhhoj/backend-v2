@@ -4,6 +4,7 @@ import {
   MATHML_ATTRIBUTES,
   MATHML_TAGS,
 } from './legacy-allow-list';
+import { PROBLEM_REFERENCE_CLASS } from './problem-reference';
 
 /** Legacy BLEACH_USER_SAFE_TAGS minus `style` and `object` (CSS/plugin injection; available through `problem-full`). */
 export const LEGACY_TAGS = [
@@ -120,9 +121,19 @@ const KATEX_ATTRIBUTES: Record<string, string[]> = {
   svg: ['xmlns', 'width', 'height', 'viewBox', 'preserveAspectRatio'],
   path: ['d'],
 };
-/** A style value must not smuggle script or an external fetch. */
-export const STYLE_VALUE =
+/** No script, external fetch or escape (any backslash) in a style value. */
+const STATIC_STYLE_VALUE =
   /^(?![\s\S]*(expression|url\s*\(|image-set\s*\(|src\s*\(|javascript|behavior|@import|\\))[^;{}\n\r]*$/i;
+/** A CSS comment, closed or running to the end of the value. */
+const CSS_COMMENT = /\/\*[\s\S]*?(?:\*\/|$)/g;
+/** Functions whose result is chosen outside the declaration (an attribute, a custom property, the environment). */
+const COMPUTED_VALUE_FUNCTION = /(?:attr|var|env|expression)\s*\(/i;
+/** A style value must not smuggle script or an external fetch, nor take its value from anywhere but the declaration itself (checked with comments removed). */
+export const STYLE_VALUE = {
+  test: (value: string) =>
+    STATIC_STYLE_VALUE.test(value) &&
+    !COMPUTED_VALUE_FUNCTION.test(value.replace(CSS_COMMENT, '')),
+} as RegExp;
 
 /** Video players an embed may come from (path-checked, not just host-checked). */
 export const EMBED_SOURCE =
@@ -184,9 +195,83 @@ export const STATEMENT_OPTIONS: sanitizeHtml.IOptions = {
   },
 };
 
-/** Statement/editorial HTML for the sanitized styles: the legacy bleach allow-list plus KaTeX output. */
+/** Formula (KaTeX) HTML of the sanitized statement styles: the legacy bleach allow-list plus KaTeX output. Author HTML goes through `sanitizeStatementAuthorHtml`, which narrows these rules. */
 export const sanitizeStatementHtml = (html: string): string =>
   sanitizeHtml(html, STATEMENT_OPTIONS);
+
+/** Attribute of the placeholder element `renderMarkdown` leaves for each formula; its value carries a per-render nonce, so only the renderer can address a slot. */
+export const MATH_SLOT_ATTRIBUTE = 'data-math';
+
+/** The exact class names the Markdown pipeline emits; every other author class is prefixed. */
+export const PIPELINE_CLASSES: ReadonlySet<string> = new Set([
+  'spoiler',
+  'table',
+  'h-scrollable-table',
+  'user-reference',
+  'user-rating',
+]);
+const isKeptClass = (name: string, kept: ReadonlySet<string>) =>
+  kept.has(name) || name.startsWith('language-');
+/** Every author class except the `kept` ones gets `user-` (so `user-x` becomes `user-user-x`) and cannot hit the site's stylesheet. */
+export const prefixedClasses = (
+  classes: string,
+  kept: ReadonlySet<string> = PIPELINE_CLASSES,
+): string =>
+  classes
+    .split(/\s+/)
+    .filter((name) => isKeptClass(name, kept) || /^[\w-]+$/.test(name))
+    .map((name) => (isKeptClass(name, kept) ? name : `user-${name}`))
+    .join(' ');
+
+/** Statements also keep the class of their `#C` problem references. */
+const STATEMENT_CLASSES = new Set([
+  ...PIPELINE_CLASSES,
+  PROBLEM_REFERENCE_CLASS,
+]);
+/** The `position` values author HTML keeps: none pins a box to the viewport or the scroll container. */
+const KEPT_POSITION = /^\s*(?:static|relative|absolute)\s*$/i;
+const POSITION_VALUE = {
+  test: (value: string) => KEPT_POSITION.test(value),
+} as RegExp;
+const STATEMENT_AUTHOR_STYLES = Object.fromEntries(
+  LEGACY_STYLE_PROPERTIES.filter((property) => property !== 'z-index').map(
+    (property) => [
+      property,
+      [property === 'position' ? POSITION_VALUE : STYLE_VALUE],
+    ],
+  ),
+);
+
+/** Author HTML of a statement, editorial or contest text (formulas are spliced in afterwards): the statement allow-list, kept in its own box: `position` only static, relative or absolute, no `z-index`, no `id` (it would clobber page elements), author classes prefixed. Raw-text tags are dropped whole so a formula slot inside never survives as escaped text. */
+const STATEMENT_AUTHOR_OPTIONS: sanitizeHtml.IOptions = {
+  ...STATEMENT_OPTIONS,
+  allowedAttributes: {
+    ...STATEMENT_OPTIONS.allowedAttributes,
+    span: [...MATHML_ATTRIBUTES.span, 'title', MATH_SLOT_ATTRIBUTE],
+  },
+  nonTextTags: ['script', 'style', 'textarea', 'option', 'title', 'xmp'],
+  allowedStyles: { '*': STATEMENT_AUTHOR_STYLES },
+  transformTags: {
+    ...STATEMENT_OPTIONS.transformTags,
+    '*': (tagName, attributes) => ({
+      tagName,
+      attribs: Object.fromEntries(
+        Object.entries(attributes)
+          .filter(([name]) => name !== 'id')
+          .map(([name, value]) => [
+            name,
+            name === 'class'
+              ? prefixedClasses(value, STATEMENT_CLASSES)
+              : value,
+          ]),
+      ),
+    }),
+  },
+};
+
+/** Author HTML of the sanitized statement styles; see `STATEMENT_AUTHOR_OPTIONS`. */
+export const sanitizeStatementAuthorHtml = (html: string): string =>
+  sanitizeHtml(html, STATEMENT_AUTHOR_OPTIONS);
 
 const SVG_TAGS = [
   'svg',

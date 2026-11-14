@@ -21,7 +21,7 @@ export function renderField(
   }
 }
 
-/** The one place that maps a statement text to its render style: unsanitized (`problem-full`) only on a full-markup problem and only for text whose writer held `judge.problem_full_markup` (`isMarkupTrusted`). */
+/** The one place that maps a statement text to its render style: unsanitized (`problem-full`) only on a full-markup problem and only for text a holder of `judge.problem_full_markup` trusted (`isMarkupTrusted`, see `markupTrustAfterSave`). */
 export function styleOf(
   problem: Pick<Problem, 'isFullMarkup'>,
   isMarkupTrusted: boolean,
@@ -29,19 +29,32 @@ export function styleOf(
   return problem.isFullMarkup && isMarkupTrusted ? 'problem-full' : 'problem';
 }
 
-/** Text written by a holder of `judge.problem_full_markup` is trusted: it may render unsanitized. */
+/** A holder of `judge.problem_full_markup` may set a statement text's trust (see `markupTrustAfterSave`). */
 export const isTrustedMarkupWriter = (principal: Principal): boolean =>
   hasPermission(principal, 'judge.problem_full_markup');
 
-/** Whether a statement text is trusted after a save: changed text takes its writer's permission; unchanged text stays trusted, and a writer holding the permission who saves it vouches for it. */
+/**
+ * Whether a statement text is trusted after a save. Trust changes only on request (`requested`), and only a holder of
+ * `judge.problem_full_markup` may change it (anyone else gets 403); a save without a request never raises it: text changed
+ * by a writer without the permission becomes untrusted, any other save keeps the stored trust.
+ */
 export function markupTrustAfterSave({
   isWriterTrusted,
   isTextChanged,
   wasTrusted,
+  requested,
 }: {
   isWriterTrusted: boolean;
   isTextChanged: boolean;
   wasTrusted: boolean;
+  requested?: boolean;
 }): boolean {
-  return isTextChanged ? isWriterTrusted : wasTrusted || isWriterTrusted;
+  if (requested !== undefined && requested !== wasTrusted && !isWriterTrusted)
+    throw new AppError(
+      'forbidden',
+      403,
+      'Trusting statement markup requires judge.problem_full_markup',
+    );
+  if (isWriterTrusted && requested !== undefined) return requested;
+  return isTextChanged && !isWriterTrusted ? false : wasTrusted;
 }

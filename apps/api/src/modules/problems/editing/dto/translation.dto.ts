@@ -1,7 +1,13 @@
 import { STATEMENT_LANGUAGES } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, Length, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  Length,
+  MaxLength,
+} from 'class-validator';
 import { ProblemCodeParamDto } from '../../core/dto/problem-params.dto';
 import { IsStatementText } from '../../core/dto/statement-text';
 import { MAX_MARKDOWN_LENGTH } from '../../core/dto/limits';
@@ -18,4 +24,6 @@ export class PutTranslationDto {
   @IsStatementText() @Length(1, 100) name!: string;
   /** Translated statement in markdown. */
   @IsStatementText() @MaxLength(MAX_MARKDOWN_LENGTH) description!: string;
+  /** Sets whether the sent description is trusted: on a full-markup problem trusted text renders unsanitized. Changing it needs `judge.problem_full_markup`; left out, a save never raises the trust. */
+  @IsOptional() @IsBoolean() isMarkupTrusted?: boolean;
 }

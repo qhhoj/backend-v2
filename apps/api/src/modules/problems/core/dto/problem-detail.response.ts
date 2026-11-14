@@ -70,6 +70,8 @@ export class ProblemTranslationResponse {
   name!: string;
   /** Translated statement in markdown. */
   description!: string;
+  /** Whether a holder of `judge.problem_full_markup` trusted this text: only trusted text renders unsanitized on a full-markup problem. */
+  isMarkupTrusted!: boolean;
 }
 
 export class ProblemEditorialDraftResponse {
@@ -88,6 +90,8 @@ export class ProblemEditorResponse {
   baseName!: string;
   /** Base-language statement in markdown. */
   description!: string;
+  /** Whether a holder of `judge.problem_full_markup` trusted `description`: only trusted text renders unsanitized on a full-markup problem. */
+  isDescriptionMarkupTrusted!: boolean;
   /** Statement translations. */
   translations!: ProblemTranslationResponse[];
   /** The editorial draft; null when none. */
@@ -139,8 +143,14 @@ export class ProblemEditorResponse {
     return {
       baseName: problem.name,
       description: problem.description,
+      isDescriptionMarkupTrusted: problem.isDescriptionMarkupTrusted ?? false,
       translations: problem.translations.map(
-        ({ language, name, description }) => ({ language, name, description }),
+        ({ language, name, description, isMarkupTrusted }) => ({
+          language,
+          name,
+          description,
+          isMarkupTrusted: isMarkupTrusted ?? false,
+        }),
       ),
       solution: solution && {
         isPublic: solution.isPublic,

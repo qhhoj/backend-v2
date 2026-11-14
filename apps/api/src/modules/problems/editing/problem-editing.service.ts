@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { hasPermission } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, unique } from '@libs/common';
+import { AppError, unique, ValidationFailedError } from '@libs/common';
 import { BASE_STATEMENT_LANGUAGE, uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
 import { fieldDiff, ProblemDataFilesService } from '@libs/problems';
@@ -62,11 +62,17 @@ interface ProblemEdit {
   isStatementRerendered: boolean;
 }
 
+/** What the edit says about the description's trust: who writes, and the trust it asks for (undefined: none). */
+interface DescriptionTrustRequest {
+  isWriterTrusted: boolean;
+  requested: boolean | undefined;
+}
+
 /** The description's trust after this edit (see `markupTrustAfterSave`); a description left out keeps its trust. */
 function descriptionTrustAfterEdit(
   fields: ProblemFields,
   original: ProblemDocument,
-  isWriterTrusted: boolean,
+  { isWriterTrusted, requested }: DescriptionTrustRequest,
 ): boolean {
   const wasTrusted = original.isDescriptionMarkupTrusted ?? false;
   if (fields.description === undefined) return wasTrusted;
@@ -74,7 +80,23 @@ function descriptionTrustAfterEdit(
     isWriterTrusted,
     isTextChanged: fields.description !== original.description,
     wasTrusted,
+    requested,
   });
+}
+
+/** A trust request applies to the text it was sent with, never to whatever is stored. */
+function assertTrustSentWithDescription(dto: UpdateProblemDto): void {
+  if (
+    dto.isDescriptionMarkupTrusted !== undefined &&
+    dto.description === undefined
+  )
+    throw new ValidationFailedError('Trust needs the description', [
+      {
+        field: 'isDescriptionMarkupTrusted',
+        code: 'description_required',
+        message: 'Send the description this trust applies to.',
+      },
+    ]);
 }
 
 /** Every translation rendered again for the markup `mode`, each by its own trust. */
@@ -97,8 +119,8 @@ function renderStatementsInto(
   original: ProblemDocument,
   {
     translations,
-    isWriterTrusted,
-  }: { translations: Problem['translations']; isWriterTrusted: boolean },
+    trust,
+  }: { translations: Problem['translations']; trust: DescriptionTrustRequest },
 ): boolean {
   const isMarkupFlipped =
     fields.isFullMarkup !== undefined &&
@@ -109,7 +131,7 @@ function renderStatementsInto(
   const isDescriptionTrusted = descriptionTrustAfterEdit(
     fields,
     original,
-    isWriterTrusted,
+    trust,
   );
   const wasTrusted = original.isDescriptionMarkupTrusted ?? false;
   if (
@@ -261,7 +283,8 @@ export class ProblemEditingService {
     code: string,
     dto: UpdateProblemDto,
   ): Promise<EditOutcome> {
-    const { changeMessage, ...problemDto } = dto;
+    assertTrustSentWithDescription(dto);
+    const { changeMessage, isDescriptionMarkupTrusted, ...problemDto } = dto;
     const original = await this.policy.editableProblem(principal, code);
     const originalJson = original.toJSON() as unknown as Record<
       string,
@@ -281,7 +304,10 @@ export class ProblemEditingService {
     await this.assertDataDirectoryFree(fields, original);
     const isStatementRerendered = renderStatementsInto(fields, original, {
       translations: originalJson.translations as Problem['translations'],
-      isWriterTrusted: isTrustedMarkupWriter(principal),
+      trust: {
+        isWriterTrusted: isTrustedMarkupWriter(principal),
+        requested: isDescriptionMarkupTrusted,
+      },
     });
     const updated = await this.save(principal, original, fields);
     const changes = fieldDiff(

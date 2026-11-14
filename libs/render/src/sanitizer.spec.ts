@@ -1,5 +1,9 @@
 import katex from 'katex';
-import { sanitizeStatementHtml, sanitizeSvg } from './sanitizer';
+import {
+  sanitizeStatementAuthorHtml,
+  sanitizeStatementHtml,
+  sanitizeSvg,
+} from './sanitizer';
 
 const MATHML_N =
   '<math xmlns="http://www.w3.org/1998/Math/MathML">\n<semantics>\n<mi>N</mi>\n<annotation encoding="application/x-tex">N</annotation>\n</semantics>\n</math>\n';
@@ -88,12 +92,20 @@ describe('sanitizeStatementHtml', () => {
     ],
     ['<img data-src="javascript:x">', '<img />'],
     [
+      '<p style="color:var(--accent);margin:1px">p</p>',
+      '<p style="margin:1px">p</p>',
+    ],
+    ['<p style="padding:env(safe-area-inset-top)">p</p>', '<p>p</p>'],
+    ['<p style="width:at/**/tr(data-w px)">p</p>', '<p>p</p>'],
+    ['<p style="color:ATTR (title color)">p</p>', '<p>p</p>'],
+    [
       '<span style="height:1.08em;margin-right:-0.25em;top:-0.5em">k</span>',
       '<span style="height:1.08em;margin-right:-0.25em;top:-0.5em">k</span>',
     ],
-  ])('cleans %s', (input, expected) =>
-    expect(sanitizeStatementHtml(input)).toBe(expected),
-  );
+  ])('cleans %s, in formulas and in author HTML', (input, expected) => {
+    expect(sanitizeStatementHtml(input)).toBe(expected);
+    expect(sanitizeStatementAuthorHtml(input)).toBe(expected);
+  });
   it('keeps the legacy MathML sample unchanged', () =>
     expect(sanitizeStatementHtml(MATHML_N)).toBe(MATHML_N));
   it.each([

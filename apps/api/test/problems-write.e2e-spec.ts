@@ -517,7 +517,7 @@ afterAll(() => api.teardown());
         .expect(400);
       expect(issueCodesOf(ontoLink)).toEqual(['data_directory_taken']);
     });
-    it('emits publicityChanged with the suggester and renders statement text unsanitized only from a problem_full_markup writer', async () => {
+    it('emits publicityChanged with the suggester and renders statement text unsanitized only once a problem_full_markup holder trusts it', async () => {
       const problem = await createProblem(api, catalog, {
         code: 'flip',
         isPublic: false,
@@ -536,6 +536,7 @@ afterAll(() => api.teardown());
         .send({
           isFullMarkup: true,
           description: 'a <script>1</script>',
+          isDescriptionMarkupTrusted: true,
           isPublic: true,
         })
         .expect(200);
@@ -548,11 +549,63 @@ afterAll(() => api.teardown());
       expect(stored.descriptionHtml).toContain('<script>');
       // Stored without a writer holding the permission: the flip keeps it sanitized.
       expect(stored.translations[0].descriptionHtml).not.toContain('<script>');
-      await authed(api.http().put(`${PROBLEMS}/flip/translations/vi`), admin)
-        .send({ name: 'Lật', description: '<script>1</script>' })
+      const vi = `${PROBLEMS}/flip/translations/vi`;
+      // A holder's save without an explicit trust request keeps the slot sanitized.
+      await authed(api.http().put(vi), admin)
+        .send({ name: 'Lật lại', description: '<script>1</script>' })
+        .expect(204);
+      stored = (await api.problems.findOne({ code: 'flip' }))!;
+      expect(stored.translations[0].descriptionHtml).not.toContain('<script>');
+      const suggester = await loginAs(api, suggesterId);
+      await authed(api.http().put(vi), suggester)
+        .send({
+          name: 'Lật lại',
+          description: '<script>1</script>',
+          isMarkupTrusted: true,
+        })
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      await authed(api.http().put(vi), admin)
+        .send({
+          name: 'Lật lại',
+          description: '<script>1</script>',
+          isMarkupTrusted: true,
+        })
         .expect(204);
       stored = (await api.problems.findOne({ code: 'flip' }))!;
       expect(stored.translations[0].descriptionHtml).toContain('<script>');
+      const { editor } = detailOf(
+        await authed(api.http().get(`${PROBLEMS}/flip`), admin).expect(200),
+      );
+      expect(editor).toMatchObject({
+        isDescriptionMarkupTrusted: true,
+        translations: [{ language: 'vi', isMarkupTrusted: true }],
+      });
+      await authed(api.http().patch(`${PROBLEMS}/flip`), admin)
+        .send({ isDescriptionMarkupTrusted: false })
+        .expect(400);
+      // A trust-only change leaves a revision, on a translation and on the description.
+      const [trusted] = await api.revisions
+        .find({ entityId: problem._id, action: 'translation' })
+        .sort({ _id: -1 })
+        .limit(1);
+      expect(trusted.changes['translations.vi']).toMatchObject({
+        before: { name: 'Lật lại', isMarkupTrusted: false },
+        after: { name: 'Lật lại', isMarkupTrusted: true },
+      });
+      await authed(api.http().patch(`${PROBLEMS}/flip`), admin)
+        .send({
+          description: 'a <script>1</script>',
+          isDescriptionMarkupTrusted: false,
+        })
+        .expect(200);
+      const [untrusted] = await api.revisions
+        .find({ entityId: problem._id, action: 'edit' })
+        .sort({ _id: -1 })
+        .limit(1);
+      expect(untrusted.changes).toEqual({
+        isDescriptionMarkupTrusted: { before: true, after: false },
+      });
       await authed(api.http().patch(`${PROBLEMS}/flip`), admin)
         .send({ isFullMarkup: false })
         .expect(200);
