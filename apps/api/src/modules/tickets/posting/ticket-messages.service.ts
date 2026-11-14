@@ -75,7 +75,7 @@ export class TicketMessagesService {
         throw new AppError(
           'conflict',
           409,
-          'This ticket reached its limit of 500 messages',
+          'This ticket is full (500 messages or its size limit); open a new ticket',
         );
       return message;
     } catch (error) {

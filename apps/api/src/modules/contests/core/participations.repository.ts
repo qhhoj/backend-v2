@@ -97,6 +97,21 @@ export class ParticipationsRepository {
       : 0;
   }
 
+  /** The participation's pending (`PD`) submissions to the problem: `{participation, problem}` index, then an `_id` count. */
+  async countPending(
+    participationId: string,
+    problemId: string,
+  ): Promise<number> {
+    const ids = await this.contestSubmissions
+      .distinct('_id', { participation: participationId, problem: problemId })
+      .exec();
+    return ids.length
+      ? this.submissions
+          .countDocuments({ _id: { $in: ids }, status: 'PD' })
+          .exec()
+      : 0;
+  }
+
   /** Every submission of the participation with its problem and status: `{participation, problem}` index, then `_id` reads of only those submissions. */
   async submissionStatusesOf(
     participationId: string,

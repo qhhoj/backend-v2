@@ -238,12 +238,17 @@ describe('KaTeX in user-authored styles', () => {
         expect(html).not.toContain('katex-html');
       }
       const cell = `\\begin{array}{${'c'.repeat(10)}}${'a&'.repeat(9)}a\\\\${'a&'.repeat(9)}a\\end{array}`;
+      const nearCapDef = `$\\def\\X{${cell}}${'\\X'.repeat(48)}$`;
       for (const tex of [
         `$$\\begin{array}{c}${Array(150).fill('a').join('\\\\')}\\end{array}$$`,
-        `$\\def\\X{${cell}}${'\\X'.repeat(48)}$`,
+        nearCapDef,
         `$${'x^{y_{z}}'.repeat(110)}$`,
       ]) {
-        const rendered = renderMarkdown(tex, style);
+        // nearCapDef renders to ~400 KB, past the user style's output budget (markdown.spec.ts).
+        const rendered = renderMarkdown(
+          tex,
+          tex === nearCapDef ? 'blog' : style,
+        );
         expect(rendered).toContain('katex-html');
         expect(rendered).not.toContain('math-error');
       }

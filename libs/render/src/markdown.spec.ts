@@ -319,6 +319,20 @@ describe('renderMarkdown', () => {
         }),
       ).toContain('Formula limit exceeded');
     });
+    it('keeps user-style HTML within a multiple of its source: formulas past the budget stay source, oversized markup is refused', () => {
+      const fill = (unit: string, bytes: number) =>
+        unit.repeat(Math.ceil(bytes / unit.length)).slice(0, bytes);
+      const formulas = fill('$\\frac{a}{b}$ ', 8192);
+      const html = renderMarkdown(formulas, 'user');
+      expect(Buffer.byteLength(html)).toBeLessThanOrEqual(320 * 1024);
+      expect(html).toContain('class="katex"');
+      expect(html).toContain('Formula limit exceeded');
+      const wideTable = `${fill('|a', 2048)}|\n${fill('|-', 2048)}|\n${fill('|\n', 4092)}`;
+      expect(() => renderMarkdown(wideTable, 'user')).toThrow(RenderLimitError);
+      expect(renderMarkdown('$x^2$ and a short *note*', 'user')).toContain(
+        'class="katex"',
+      );
+    });
     it('throws RenderLimitError when the output exceeds 2 MB', () => {
       expect(() => full('a '.repeat(1100000))).toThrow(RenderLimitError);
     });

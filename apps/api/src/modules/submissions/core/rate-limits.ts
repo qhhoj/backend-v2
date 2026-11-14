@@ -5,6 +5,8 @@ export const SUBMIT_LIMIT = 20;
 export const SUBMIT_WINDOW_SECONDS = 60;
 /** Legacy `DMOJ_SUBMISSION_LIMIT`: unfinished (QU/P/G, not rejudged) submissions a user may have without `judge.spam_submission`. */
 export const UNFINISHED_LIMIT = 2;
+/** Pending (`PD`) rows one participation may hold per problem while a final-submission contest runs; each is judged after the contest, so this bounds the judging one contestant can queue. */
+export const FINAL_PENDING_LIMIT = 50;
 /** Per-user lock around the unfinished count and the insert; outlives one transaction. */
 export const USER_LOCK_SECONDS = 10;
 

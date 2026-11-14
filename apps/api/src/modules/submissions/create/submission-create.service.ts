@@ -38,6 +38,7 @@ import type { SubmitDto } from './dto/submit.dto';
 import type { SubmitResponse } from './dto/submit.response';
 import { submittedFile } from './submission-file';
 import {
+  FINAL_PENDING_LIMIT,
   SUBMIT_LIMIT,
   SUBMIT_WINDOW_SECONDS,
   UNFINISHED_LIMIT,
@@ -54,10 +55,8 @@ interface ContestPlan {
   fields: Omit<NewSubmission, 'user' | 'problem' | 'language'>;
   entry: NewContestSubmission;
   maxSubmissions: number | null;
-  /** A running FSO contest: stored PD, judged at its end. */
+  /** A running FSO contest: stored PD, judged at its end; these skip the unfinished limit (PD rows are not unfinished) and are capped per participation and problem instead. */
   finalOnly: boolean;
-  /** Any FSO contest, running or not (legacy `in_fso_contest`): its submissions skip the unfinished limit. */
-  isFinalFormat: boolean;
 }
 
 /** Typed text, or an upload that is saved to media just before its row is written and removed again if the row is not. */
@@ -245,7 +244,7 @@ export class SubmissionCreateService {
       );
     const canSpam = hasPermission(principal, 'judge.spam_submission');
     const contestCap = plan?.maxSubmissions ?? null;
-    if (canSpam && contestCap === null) return insertRow();
+    if (canSpam && contestCap === null && !plan?.finalOnly) return insertRow();
     return withRedisLock(
       this.redis,
       {
@@ -260,7 +259,12 @@ export class SubmissionCreateService {
             draft.problem._id,
             contestCap,
           );
-        if (!canSpam && !plan?.isFinalFormat)
+        if (plan?.finalOnly)
+          await this.assertUnderPendingLimit(
+            plan.entry.participation,
+            draft.problem._id,
+          );
+        else if (!canSpam)
           await this.assertUnderUnfinishedLimit(principal.userId);
         return insertRow();
       },
@@ -280,6 +284,21 @@ export class SubmissionCreateService {
         'contest_submission_limit',
         403,
         'You have used every submission allowed for this problem',
+      );
+  }
+
+  private async assertUnderPendingLimit(
+    participationId: string,
+    problemId: string,
+  ): Promise<void> {
+    if (
+      (await this.participations.countPending(participationId, problemId)) >=
+      FINAL_PENDING_LIMIT
+    )
+      throw new AppError(
+        'final_pending_limit',
+        429,
+        `You have ${FINAL_PENDING_LIMIT} submissions to this problem waiting for the final judging`,
       );
   }
 
@@ -349,8 +368,9 @@ export class SubmissionCreateService {
       return null;
     }
     const isPretest = contest.runPretestsOnly && entry.isPretested;
-    const isFinalFormat = contest.formatName === 'final_submission';
-    const finalOnly = isFinalFormat && contestPhase(contest, now) !== 'ended';
+    const finalOnly =
+      contest.formatName === 'final_submission' &&
+      contestPhase(contest, now) !== 'ended';
     return {
       fields: {
         priority: SUBMISSION_PRIORITY.contest,
@@ -368,7 +388,6 @@ export class SubmissionCreateService {
       },
       maxSubmissions: entry.maxSubmissions,
       finalOnly,
-      isFinalFormat,
     };
   }
 

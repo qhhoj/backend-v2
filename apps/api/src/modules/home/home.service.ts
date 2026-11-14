@@ -14,6 +14,7 @@ import { OrganizationSummaryResponse } from '../organizations/core/dto/organizat
 import { LeaderboardsRepository } from '../users/leaderboards/leaderboards.repository';
 import type { HomeResponse, HomeUserResponse } from './dto/home.response';
 import { HomeRepository } from './home.repository';
+import { listHtml } from './list-html';
 
 /** Legacy `DMOJ_BLOG_NEW_PROBLEM_COUNT` and `VNOJ_HOMEPAGE_TOP_USERS_COUNT`. */
 const HOME_NEW_PROBLEMS = 7;
@@ -66,7 +67,10 @@ export class HomeService {
         await this.recentComments.newest(principal, {
           limit: RECENT_COMMENTS_COUNT,
         })
-      ).items;
+      ).items.map((comment) => ({
+        ...comment,
+        bodyHtml: listHtml(comment.bodyHtml),
+      }));
     if (principal || officialModeLocks(this.settings, null)) return newest();
     const cached = await this.redis.get(ANONYMOUS_RECENT_COMMENTS_KEY);
     if (cached !== null) return JSON.parse(cached) as RecentCommentResponse[];

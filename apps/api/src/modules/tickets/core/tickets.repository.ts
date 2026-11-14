@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { isDocumentTooLarge } from '@libs/common';
 import {
   TICKET_MESSAGE_CAP,
   TICKET_TIMELINE_CAP,
@@ -172,8 +173,21 @@ export class TicketsRepository {
     return matchedCount === 1;
   }
 
-  /** The cap is part of the filter, so parallel posts can never pass it; false = the ticket is full (or gone). `byStaff` is stored: staff status changes over time. */
+  /** The cap is part of the filter, so parallel posts can never pass it; false = the ticket is full: at the cap, or a document Mongo refuses to grow past 16 MB (or gone). `byStaff` is stored: staff status changes over time. */
   async pushMessage(
+    ticketId: string,
+    message: TicketMessage,
+    byStaff: boolean,
+  ): Promise<boolean> {
+    try {
+      return await this.appendMessage(ticketId, message, byStaff);
+    } catch (error) {
+      if (isDocumentTooLarge(error)) return false;
+      throw error;
+    }
+  }
+
+  private async appendMessage(
     ticketId: string,
     message: TicketMessage,
     byStaff: boolean,

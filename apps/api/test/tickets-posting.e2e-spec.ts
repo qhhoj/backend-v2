@@ -4,7 +4,7 @@ import Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { communityJobs, TICKET_EVENTS_CHANNEL } from '@libs/community';
 import type { DiscordWebhookJob, TicketEvent } from '@libs/community';
-import { newId } from '@libs/database';
+import { newId, toUuid, uuidStr } from '@libs/database';
 import type {
   TicketDetailResponse,
   TicketMessageResponse,
@@ -225,6 +225,45 @@ describe('filing tickets and posting messages', () => {
     expect(stored.messages).toHaveLength(500);
     expect(stored.messageCount).toBe(500);
     await post('filer', ticketUrl(ticket._id, '/messages'), { body: 'over' })
+      .expect(409)
+      .expect(errorCode('conflict'));
+  });
+
+  it('answers a reply that would take the ticket past the 16 MB document limit as a full ticket', async () => {
+    const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
+    const filler = (length: number) => ({
+      _id: newId(),
+      user: people.contestAuthor.id,
+      body: 'x',
+      bodyHtml: 'y'.repeat(length),
+      createdAt: new Date(),
+    });
+    const ticket = await createTicket(api, {
+      creator: people.contestAuthor.id,
+      messages: [filler(16_000_000)],
+    });
+    const sizeOf = async () =>
+      (
+        await api.tickets.aggregate<{ size: number }>([
+          { $match: { _id: toUuid(uuidStr(ticket._id)) } },
+          { $project: { size: { $bsonSize: '$$ROOT' } } },
+        ])
+      )[0].size;
+    // 64 bytes short of the limit: any reply lands just past it.
+    await api.tickets.updateOne(
+      { _id: ticket._id },
+      {
+        $set: {
+          messages: [
+            filler(16_000_000 + MAX_DOCUMENT_BYTES - 64 - (await sizeOf())),
+          ],
+        },
+      },
+    );
+    expect(await sizeOf()).toBe(MAX_DOCUMENT_BYTES - 64);
+    await post('contestAuthor', ticketUrl(ticket._id, '/messages'), {
+      body: 'one more',
+    })
       .expect(409)
       .expect(errorCode('conflict'));
   });

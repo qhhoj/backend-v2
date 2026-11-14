@@ -8,6 +8,7 @@ import { windowName } from '@libs/common';
 import {
   SUBMIT_LIMIT,
   SUBMIT_WINDOW_SECONDS,
+  FINAL_PENDING_LIMIT,
   UNFINISHED_LIMIT,
 } from '../core/rate-limits';
 import { ProblemCodeParamDto } from '../../problems/core/dto/problem-params.dto';
@@ -35,7 +36,9 @@ export class SubmissionCreateController {
       'ends (403 `spectator_cannot_submit`). Other errors: 403 `banned_from_problem`, 429',
       `\`rate_limited\` (${SUBMIT_LIMIT} per ${windowName(SUBMIT_WINDOW_SECONDS)} per user) and 429`,
       `\`unfinished_submission_limit\` (${UNFINISHED_LIMIT} unfinished submissions, waived by`,
-      '`judge.spam_submission`). Queues the submission for judging and returns its',
+      '`judge.spam_submission`; not applied in a running final-submission contest,',
+      `where 429 \`final_pending_limit\` caps pending submissions at ${FINAL_PENDING_LIMIT} per problem).`,
+      'Queues the submission for judging and returns its',
       '`id`.',
     ].join('\n'),
   })

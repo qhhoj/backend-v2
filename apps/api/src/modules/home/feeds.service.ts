@@ -11,6 +11,7 @@ import type { FeedFormat, FeedKind } from './dto/feed-params.dto';
 import { atomFeed, rssFeed, textExcerpt } from './feed-xml';
 import type { FeedChannel, FeedItem } from './feed-xml';
 import { HomeRepository } from './home.repository';
+import { listHtml } from './list-html';
 
 const FEED_ITEMS = 25;
 const FEED_CACHE_SECONDS = 300;
@@ -91,7 +92,7 @@ export class FeedsService {
                 title: `${comment.author?.username ?? 'unknown'} -> ${comment.page.title}`,
                 link: `${site}${path}`,
                 published: comment.createdAt,
-                html: comment.bodyHtml,
+                html: listHtml(comment.bodyHtml),
               },
             ];
       });
