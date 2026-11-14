@@ -73,6 +73,7 @@ export class ContestParticipationController {
    * to the user when the contest has rules.
    * Refusals are 409 `editor_cannot_register`, `registration_not_required`,
    * `registration_closed`, `contest_ended` or `already_registered`; 403
+   * `not_invited` (a private contest's staff listed only to watch it),
    * `banned_from_contest`, `access_code_required` or `wrong_access_code`; 400
    * `rules_not_accepted`; and 409 `rules_changed` when the revision is missing or the rules were saved
    * after the user read them. Wrong access codes are rate limited per user and
@@ -104,7 +105,8 @@ export class ContestParticipationController {
    * latest virtual run is unfinished gets that run back. Joins are rate limited
    * per user (429 `rate_limited`). Editors and
    * testers join as spectators. Refusals include 409 `contest_not_started`,
-   * `virtual_disallowed` and `not_registered`, 403 `banned_from_contest` and
+   * `virtual_disallowed` and `not_registered`, 403 `not_invited`,
+   * `banned_from_contest` and
    * the access-code and rules errors listed for registering.
    */
   @Post(':key/join')

@@ -10,7 +10,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CurrentAuth, RequirePermission } from '@libs/auth';
+import { CurrentAuth, RequirePermission, SessionOnly } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { RefuseNullFieldsPipe } from '@libs/common';
 import { ContestActionsService } from './contest-actions.service';
@@ -90,7 +90,9 @@ export class ContestEditingController {
    * Its participations, announcements, ranking link, ghosts, balloons, feed
    * keys, replay and official ranking are deleted; its submissions are kept
    * outside any contest. Returns 204.
+   * Needs a browser session (API tokens get 403).
    */
+  @SessionOnly()
   @Delete(':key')
   @HttpCode(204)
   remove(

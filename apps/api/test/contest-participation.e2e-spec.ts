@@ -246,6 +246,23 @@ describe('contest participation', () => {
       await post('root', contest.key, 'join').expect(201);
     });
 
+    it('lets into a private contest only those invited, not staff listed only to watch it', async () => {
+      await newUser('watcher');
+      await newUser('volunteer');
+      await newUser('invited');
+      const contest = await createContest(api, {
+        isPrivate: true,
+        privateContestants: [users.invited._id],
+        viewContestScoreboard: [users.watcher._id],
+        balloonStaff: [users.volunteer._id],
+      });
+      for (const who of ['watcher', 'volunteer'])
+        await post(who, contest.key, 'join')
+          .expect(403)
+          .expect(errorCode('not_invited'));
+      await post('invited', contest.key, 'join').expect(201);
+    });
+
     it('moves a live participant whose time ran out to spectating', async () => {
       const contest = await createContest(api, { timeLimit: 600 });
       await joinParticipation(api, contest._id, users.dave._id, {
@@ -501,6 +518,45 @@ describe('contest participation', () => {
           ).expect(200),
         ).problems,
       ).toBeNull();
+    });
+
+    it('shows a user banned from the contest as out of it while the pointer is still set', async () => {
+      await newUser('bannedviewer');
+      const contest = await createContest(api);
+      const joined = dataOf<ParticipationSummaryResponse>(
+        await post('bannedviewer', contest.key, 'join').expect(201),
+      );
+      await api.contests.updateOne(
+        { _id: contest._id },
+        { bannedUsers: [users.bannedviewer._id] },
+      );
+      const detail = dataOf<ContestDetailResponse>(
+        await authed(
+          api.http().get(contestUrl(contest.key)),
+          sessions.bannedviewer,
+        ).expect(200),
+      );
+      expect(detail.viewer.inContest).toBe(false);
+      expect(await pointerOf('bannedviewer')).toBe(joined.id);
+    });
+
+    it('clears the current participation of a user banned from the contest', async () => {
+      await newUser('banned');
+      const contest = await createContest(api);
+      await post('banned', contest.key, 'join').expect(201);
+      await api.contests.updateOne(
+        { _id: contest._id },
+        { bannedUsers: [users.banned._id] },
+      );
+      expect(
+        dataOf<CurrentParticipationResponse | null>(
+          await authed(
+            api.http().get('/api/internal/contests/current'),
+            sessions.banned,
+          ).expect(200),
+        ),
+      ).toBeNull();
+      expect(await pointerOf('banned')).toBeNull();
     });
 
     it('reports the current participation and clears it once it ended or became invisible', async () => {

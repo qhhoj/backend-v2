@@ -63,7 +63,7 @@ export class UserEditingController {
    *
    * @remarks
    * Requires `judge.change_profile` and a browser session; changing `email` or `isActive` also needs `auth.change_user` (403 `forbidden`, issue `email_not_editable` or `activation_not_editable`), and an `email` change also your own `currentPassword` (400 `validation_failed` issue `password_required`, 400 `invalid_credentials`) and spends the credential budget shared with password sets (10 per admin per hour). An e-mail change removes the user's social sign-in links (they were granted for the old address), voids reset links and activation keys already sent, signs the user out everywhere and revokes the API token. Not on yourself. Absent fields stay unchanged, `null` is refused; every check runs before the first write (a write that loses a race keeps the earlier ones, all audited). `organizations` replaces the whole ordered list (staff bypass the open-organization cap); deactivating signs the user out everywhere and revokes the API token and the contest feed keys the user minted. Every change is recorded as a `user` revision `staff_edit`.
-   * Errors: 400 `validation_failed` with issues `email_invalid`, `password_required`, `email_taken`, `organization_unknown`, `organization_admin_member` (the user administers a dropped organization); 403 `forbidden` for yourself or a superuser unless you are one; 404 `not_found`; 409 `conflict` with issue `user_banned` (a banned account keeps its rank and unlisting and is reactivated by unbanning), or when the memberships changed meanwhile or the e-mail is being registered.
+   * Errors: 400 `validation_failed` with issues `email_invalid`, `password_required`, `email_taken`, `organization_unknown`, `organization_admin_member` (the user administers a dropped organization); 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack; 404 `not_found`; 409 `conflict` with issue `user_banned` (a banned account keeps its rank and unlisting and is reactivated by unbanning), or when the memberships changed meanwhile or the e-mail is being registered.
    */
   @Patch('profile')
   @RequirePermission('judge.change_profile')
@@ -81,7 +81,7 @@ export class UserEditingController {
    * @remarks
    * Requires `auth.change_user`, a browser session, and your own current password (`currentPassword`; wrong attempts share the 10 in 15 minutes budget with other password confirmations: 400 `invalid_credentials`, then 429 `rate_limited`). At most 10 credential changes (password sets and e-mail changes) per admin per hour (429 `rate_limited`).
    * The new password must pass the signup policy and not appear in a known breach (400 `validation_failed`, issues on `newPassword`). Signs the user out everywhere and revokes their API token; recorded as a `user` revision `staff_set_password` without the password.
-   * Errors: 403 `forbidden` for yourself or a superuser unless you are one, 404 `not_found`, 409 `conflict` on a concurrent change. Returns 204.
+   * Errors: 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack, 404 `not_found`, 409 `conflict` on a concurrent change. Returns 204.
    */
   @Post('password')
   @HttpCode(204)
@@ -99,7 +99,7 @@ export class UserEditingController {
    *
    * @remarks
    * Requires `auth.change_user` and a browser session. Mails the user the same link as the public reset form, sharing its per-address budget (3 per hour, then 429 `rate_limited`); recorded as a `user` revision `staff_send_reset_link`.
-   * Errors: 403 `forbidden` for yourself or a superuser unless you are one, 404 `not_found`, 409 `conflict` with issue `account_inactive` or `email_missing`, 503 `mail_unavailable` when mail is not configured. Returns 204.
+   * Errors: 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack, 404 `not_found`, 409 `conflict` with issue `account_inactive` or `email_missing`, 503 `mail_unavailable` when mail is not configured. Returns 204.
    */
   @Post('password-reset')
   @HttpCode(204)
@@ -116,7 +116,7 @@ export class UserEditingController {
    *
    * @remarks
    * Requires `auth.change_user` and a browser session. No Google, GitHub or Facebook identity signs in to the account any more (a provider can link again only through a verified e-mail matching the account's current one). Sessions already open stay: set a password to end them. Recorded as a `user` revision `staff_remove_social_links`.
-   * Errors: 403 `forbidden` for yourself or a superuser unless you are one, 404 `not_found`. Returns 204.
+   * Errors: 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack, 404 `not_found`. Returns 204.
    */
   @Delete('social-links')
   @HttpCode(204)
@@ -133,7 +133,7 @@ export class UserEditingController {
    *
    * @remarks
    * Requires `auth.change_user` and a browser session; not yourself. Changes the login name (a case-only change is allowed); the old name keeps opening the profile while no account holds it. Recorded as a `user` revision `staff_rename`.
-   * Errors: 400 `validation_failed` with issue `username_invalid_characters` or `username_taken`; 403 `forbidden` for yourself or a superuser unless you are one; 404 `not_found`; 409 `conflict` when renamed meanwhile.
+   * Errors: 400 `validation_failed` with issue `username_invalid_characters` or `username_taken`; 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack; 404 `not_found`; 409 `conflict` when renamed meanwhile.
    */
   @Post('rename')
   @HttpCode(200)

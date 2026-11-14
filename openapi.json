@@ -1,6 +1,18 @@
 {
   "components": {
     "schemas": {
+      "ActivationResponse": {
+        "properties": {
+          "passwordResetSent": {
+            "description": "A password-reset link was mailed: the password chosen at signup no longer works, and the account sets one through that link. False when the account had no such password, or the mail could not be sent (the reset form sends another).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "passwordResetSent"
+        ],
+        "type": "object"
+      },
       "ActivityCountResponse": {
         "properties": {
           "count": {
@@ -597,7 +609,7 @@
             "type": "string"
           },
           "label": {
-            "description": "What to call the object: problem code, contest key, username, organization slug, page url, post title, setting key, catalog name. Null when the kind has no name (comment, submission) or the object is gone.",
+            "description": "What to call the object: problem code, contest key, username, organization slug, page url, post title, setting key, catalog name. Null when the kind has no name (comment, submission) or the object is gone, and for a problem, contest, contest participation, organization, blog post or share unless you also hold `judge.edit_all_problem`, `judge.edit_all_contest`, `judge.edit_all_organization`, `judge.edit_all_post` or `judge.manage_share` respectively.",
             "nullable": true,
             "type": "string"
           }
@@ -16164,7 +16176,7 @@
             "type": "string"
           },
           "timeline": {
-            "description": "Messages and state changes by time (equal instants: message first).",
+            "description": "Messages and state changes by time (equal instants: message first); `marked-good` and `unmarked-good` only for those who may mark the ticket good (`can.markGood`).",
             "items": {
               "$ref": "#/components/schemas/TicketTimelineEntryResponse"
             },
@@ -18534,7 +18546,7 @@
   "paths": {
     "/api/internal/admin/audit": {
       "get": {
-        "description": "Requires `judge.change_settings`. The global change log: every write that already leaves a record (the `revisions` rows of problems, contests, users, organizations, posts, comments, pages, catalogs, submission locks and batch rejudges, and setting changes), newest first, 50 per page (`limit` 1-50). Each entry names the actor, the action, the object (with a label and whether it still exists) and the changed field names; values are never returned, and the note (`comment`) of a `user`, `problem`, `contest`, `contestParticipation` or `submission` record is empty unless you also hold `auth.change_user`, `judge.edit_all_problem`, `judge.edit_all_contest` or `judge.change_submission` respectively, and so is the note of any kind not known to carry only fixed notes. Records of superuser-only settings (decision 416) are left out unless you are a superuser. Filters: `actor` (exact username; unknown gives an empty page), `type`, and a `from`/`to` time range. Page with `before` = the previous page's `nextBefore`. Reads are not logged.",
+        "description": "Requires `judge.change_settings`. The global change log: every write that already leaves a record (the `revisions` rows of problems, contests, users, organizations, posts, comments, pages, catalogs, submission locks and batch rejudges, and setting changes), newest first, 50 per page (`limit` 1-50). Each entry names the actor, the action, the object (with a label, null for a problem, contest, contest participation, organization, blog post or share unless you hold the matching edit-all or share permission, and whether it still exists) and the changed field names; values are never returned, and the note (`comment`) of a `user`, `problem`, `contest`, `contestParticipation` or `submission` record is empty unless you also hold `auth.change_user`, `judge.edit_all_problem`, `judge.edit_all_contest` or `judge.change_submission` respectively, and so is the note of any kind not known to carry only fixed notes. Records of superuser-only settings (decision 416) are left out unless you are a superuser. Filters: `actor` (exact username; unknown gives an empty page), `type`, and a `from`/`to` time range. Page with `before` = the previous page's `nextBefore`. Reads are not logged.",
         "operationId": "AuditController_list",
         "parameters": [
           {
@@ -20951,7 +20963,7 @@
         "x-enveloped": true
       },
       "post": {
-        "description": "Requires `flatpages.add_flatpage`. Stores a page and renders its Markdown to sanitised HTML. The URL is canonicalised (`about/` becomes `/about`). Records a revision. Errors: 400 `invalid_url`, 409 `conflict` when the URL is taken.",
+        "description": "Requires `flatpages.add_flatpage`. Stores a page and renders its Markdown to sanitised HTML. The URL is canonicalised (`about/` becomes `/about`). Records a revision. Errors: 400 `invalid_url`, 409 `conflict` when the URL is taken.\nNeeds a browser session (API tokens get 403).",
         "operationId": "FlatpagesAdminController_create",
         "parameters": [],
         "requestBody": {
@@ -21142,7 +21154,7 @@
     },
     "/api/internal/admin/site/pages/{id}": {
       "delete": {
-        "description": "Requires `flatpages.delete_flatpage`. Removes the page; its history stays readable and the deletion is recorded. 404 `not_found`. Returns 204.",
+        "description": "Requires `flatpages.delete_flatpage`. Removes the page; its history stays readable and the deletion is recorded. 404 `not_found`. Returns 204.\nNeeds a browser session (API tokens get 403).",
         "operationId": "FlatpagesAdminController_delete",
         "parameters": [
           {
@@ -21243,7 +21255,7 @@
         ]
       },
       "patch": {
-        "description": "Requires `flatpages.change_flatpage`. Partial update; null values are refused. Last write wins. Records a revision when something changed. Errors: 404 `not_found`, 400 `invalid_url`, 409 `conflict` when the new URL is taken.",
+        "description": "Requires `flatpages.change_flatpage`. Partial update; null values are refused. Last write wins. Records a revision when something changed. Errors: 404 `not_found`, 400 `invalid_url`, 409 `conflict` when the new URL is taken.\nNeeds a browser session (API tokens get 403).",
         "operationId": "FlatpagesAdminController_update",
         "parameters": [
           {
@@ -21393,7 +21405,7 @@
     },
     "/api/internal/admin/user-activity/anonymous": {
       "delete": {
-        "description": "Requires `judge.can_see_user_activity`. Needs a browser session (API tokens get 403) and not impersonating. Deletes all activity log rows and sessions of signed-out visitors; the deletion is written to the server log and recorded as a `user` revision (`delete_anonymous_activity`) on your account. Returns 204.",
+        "description": "Requires `judge.can_see_user_activity` and a browser session (API tokens get 403), not while impersonating. Deletes all activity log rows and sessions of signed-out visitors; the deletion is written to the server log and recorded as a `user` revision (`delete_anonymous_activity`) on your account. Returns 204.",
         "operationId": "UserActivityStaffController_deleteAnonymous",
         "parameters": [],
         "responses": {
@@ -21428,7 +21440,7 @@
     },
     "/api/internal/admin/user-activity/live": {
       "get": {
-        "description": "Requires `judge.can_see_user_activity`. Returns counts of signed-in users, anonymous visitors and bots seen in the last 30 minutes, plus a page of 50 signed-in users, most recently seen first (`hasMore` tells whether a later page exists).",
+        "description": "Requires `judge.can_see_user_activity` and a browser session (API tokens get 403). Returns counts of signed-in users, anonymous visitors and bots seen in the last 30 minutes, plus a page of 50 signed-in users, most recently seen first (`hasMore` tells whether a later page exists).",
         "operationId": "UserActivityStaffController_liveVisitors",
         "parameters": [
           {
@@ -21491,7 +21503,7 @@
     },
     "/api/internal/admin/user-activity/logs": {
       "get": {
-        "description": "Requires `judge.can_see_user_activity`. Returns request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. `user` is a username fragment or `anonymous`, `ip` an address prefix and `path` a path fragment; a `user` fragment that matches nobody gives an empty page.",
+        "description": "Requires `judge.can_see_user_activity` and a browser session (API tokens get 403). Returns request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. `user` is a username fragment or `anonymous`, `ip` an address prefix and `path` a path fragment; a `user` fragment that matches nobody gives an empty page.",
         "operationId": "UserActivityStaffController_list",
         "parameters": [
           {
@@ -21604,7 +21616,7 @@
     },
     "/api/internal/admin/user-activity/logs/export": {
       "get": {
-        "description": "Requires `judge.can_see_user_activity`. Same filters as the log search, streamed as a `text/csv` attachment named `user-activity.csv` (newest first, at most 100000 rows, cells made spreadsheet-safe).",
+        "description": "Requires `judge.can_see_user_activity` and a browser session (API tokens get 403). Same filters as the log search, streamed as a `text/csv` attachment named `user-activity.csv` (newest first, at most 100000 rows, cells made spreadsheet-safe).",
         "operationId": "UserActivityStaffController_export",
         "parameters": [
           {
@@ -21690,7 +21702,7 @@
     },
     "/api/internal/admin/user-activity/users/{username}": {
       "delete": {
-        "description": "Requires `judge.can_see_user_activity`. Needs a browser session (API tokens get 403) and not impersonating. Deletes the user's activity log rows and their stored sessions; the deletion is written to the server log and recorded as a `user` revision (`delete_activity`) with the counts. 403 `forbidden` when the target is yourself or a superuser and you are not a superuser; 404 `not_found` for an unknown user. Returns 204.",
+        "description": "Requires `judge.can_see_user_activity` and a browser session (API tokens get 403), not while impersonating. Deletes the user's activity log rows and their stored sessions; the deletion is written to the server log and recorded as a `user` revision (`delete_activity`) with the counts. 403 `forbidden` when the target is yourself or a superuser and you are not a superuser; 404 `not_found` for an unknown user. Returns 204.",
         "operationId": "UserActivityStaffController_deleteUser",
         "parameters": [
           {
@@ -21735,7 +21747,7 @@
     },
     "/api/internal/admin/user-activity/users/{username}/logs": {
       "get": {
-        "description": "Requires `judge.can_see_user_activity`. Returns the user's request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. 404 `not_found` for an unknown user.",
+        "description": "Requires `judge.can_see_user_activity` and a browser session (API tokens get 403). Returns the user's request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. 404 `not_found` for an unknown user.",
         "operationId": "UserActivityStaffController_userLogs",
         "parameters": [
           {
@@ -21857,7 +21869,7 @@
     },
     "/api/internal/admin/user-activity/users/{username}/summary": {
       "get": {
-        "description": "Requires `judge.can_see_user_activity`. Returns the number of requests over the last `days` (1-90, default 90), requests per UTC day, the 20 most used IP addresses, the 30 most requested paths and the 50 most recent sessions. 404 `not_found` for an unknown user.",
+        "description": "Requires `judge.can_see_user_activity` and a browser session (API tokens get 403). Returns the number of requests over the last `days` (1-90, default 90), requests per UTC day, the 20 most used IP addresses, the 30 most requested paths and the 50 most recent sessions. 404 `not_found` for an unknown user.",
         "operationId": "UserActivityStaffController_summary",
         "parameters": [
           {
@@ -22230,7 +22242,7 @@
     },
     "/api/internal/admin/users/{username}/password": {
       "post": {
-        "description": "Requires `auth.change_user`, a browser session, and your own current password (`currentPassword`; wrong attempts share the 10 in 15 minutes budget with other password confirmations: 400 `invalid_credentials`, then 429 `rate_limited`). At most 10 credential changes (password sets and e-mail changes) per admin per hour (429 `rate_limited`).\nThe new password must pass the signup policy and not appear in a known breach (400 `validation_failed`, issues on `newPassword`). Signs the user out everywhere and revokes their API token; recorded as a `user` revision `staff_set_password` without the password.\nErrors: 403 `forbidden` for yourself or a superuser unless you are one, 404 `not_found`, 409 `conflict` on a concurrent change. Returns 204.",
+        "description": "Requires `auth.change_user`, a browser session, and your own current password (`currentPassword`; wrong attempts share the 10 in 15 minutes budget with other password confirmations: 400 `invalid_credentials`, then 429 `rate_limited`). At most 10 credential changes (password sets and e-mail changes) per admin per hour (429 `rate_limited`).\nThe new password must pass the signup policy and not appear in a known breach (400 `validation_failed`, issues on `newPassword`). Signs the user out everywhere and revokes their API token; recorded as a `user` revision `staff_set_password` without the password.\nErrors: 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack, 404 `not_found`, 409 `conflict` on a concurrent change. Returns 204.",
         "operationId": "UserEditingController_setPassword",
         "parameters": [
           {
@@ -22285,7 +22297,7 @@
     },
     "/api/internal/admin/users/{username}/password-reset": {
       "post": {
-        "description": "Requires `auth.change_user` and a browser session. Mails the user the same link as the public reset form, sharing its per-address budget (3 per hour, then 429 `rate_limited`); recorded as a `user` revision `staff_send_reset_link`.\nErrors: 403 `forbidden` for yourself or a superuser unless you are one, 404 `not_found`, 409 `conflict` with issue `account_inactive` or `email_missing`, 503 `mail_unavailable` when mail is not configured. Returns 204.",
+        "description": "Requires `auth.change_user` and a browser session. Mails the user the same link as the public reset form, sharing its per-address budget (3 per hour, then 429 `rate_limited`); recorded as a `user` revision `staff_send_reset_link`.\nErrors: 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack, 404 `not_found`, 409 `conflict` with issue `account_inactive` or `email_missing`, 503 `mail_unavailable` when mail is not configured. Returns 204.",
         "operationId": "UserEditingController_sendResetLink",
         "parameters": [
           {
@@ -22388,7 +22400,7 @@
         ]
       },
       "patch": {
-        "description": "Requires `judge.change_profile` and a browser session; changing `email` or `isActive` also needs `auth.change_user` (403 `forbidden`, issue `email_not_editable` or `activation_not_editable`), and an `email` change also your own `currentPassword` (400 `validation_failed` issue `password_required`, 400 `invalid_credentials`) and spends the credential budget shared with password sets (10 per admin per hour). An e-mail change removes the user's social sign-in links (they were granted for the old address), voids reset links and activation keys already sent, signs the user out everywhere and revokes the API token. Not on yourself. Absent fields stay unchanged, `null` is refused; every check runs before the first write (a write that loses a race keeps the earlier ones, all audited). `organizations` replaces the whole ordered list (staff bypass the open-organization cap); deactivating signs the user out everywhere and revokes the API token and the contest feed keys the user minted. Every change is recorded as a `user` revision `staff_edit`.\nErrors: 400 `validation_failed` with issues `email_invalid`, `password_required`, `email_taken`, `organization_unknown`, `organization_admin_member` (the user administers a dropped organization); 403 `forbidden` for yourself or a superuser unless you are one; 404 `not_found`; 409 `conflict` with issue `user_banned` (a banned account keeps its rank and unlisting and is reactivated by unbanning), or when the memberships changed meanwhile or the e-mail is being registered.",
+        "description": "Requires `judge.change_profile` and a browser session; changing `email` or `isActive` also needs `auth.change_user` (403 `forbidden`, issue `email_not_editable` or `activation_not_editable`), and an `email` change also your own `currentPassword` (400 `validation_failed` issue `password_required`, 400 `invalid_credentials`) and spends the credential budget shared with password sets (10 per admin per hour). An e-mail change removes the user's social sign-in links (they were granted for the old address), voids reset links and activation keys already sent, signs the user out everywhere and revokes the API token. Not on yourself. Absent fields stay unchanged, `null` is refused; every check runs before the first write (a write that loses a race keeps the earlier ones, all audited). `organizations` replaces the whole ordered list (staff bypass the open-organization cap); deactivating signs the user out everywhere and revokes the API token and the contest feed keys the user minted. Every change is recorded as a `user` revision `staff_edit`.\nErrors: 400 `validation_failed` with issues `email_invalid`, `password_required`, `email_taken`, `organization_unknown`, `organization_admin_member` (the user administers a dropped organization); 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack; 404 `not_found`; 409 `conflict` with issue `user_banned` (a banned account keeps its rank and unlisting and is reactivated by unbanning), or when the memberships changed meanwhile or the e-mail is being registered.",
         "operationId": "UserEditingController_update",
         "parameters": [
           {
@@ -22458,7 +22470,7 @@
     },
     "/api/internal/admin/users/{username}/rename": {
       "post": {
-        "description": "Requires `auth.change_user` and a browser session; not yourself. Changes the login name (a case-only change is allowed); the old name keeps opening the profile while no account holds it. Recorded as a `user` revision `staff_rename`.\nErrors: 400 `validation_failed` with issue `username_invalid_characters` or `username_taken`; 403 `forbidden` for yourself or a superuser unless you are one; 404 `not_found`; 409 `conflict` when renamed meanwhile.",
+        "description": "Requires `auth.change_user` and a browser session; not yourself. Changes the login name (a case-only change is allowed); the old name keeps opening the profile while no account holds it. Recorded as a `user` revision `staff_rename`.\nErrors: 400 `validation_failed` with issue `username_invalid_characters` or `username_taken`; 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack; 404 `not_found`; 409 `conflict` when renamed meanwhile.",
         "operationId": "UserEditingController_rename",
         "parameters": [
           {
@@ -22528,7 +22540,7 @@
     },
     "/api/internal/admin/users/{username}/social-links": {
       "delete": {
-        "description": "Requires `auth.change_user` and a browser session. No Google, GitHub or Facebook identity signs in to the account any more (a provider can link again only through a verified e-mail matching the account's current one). Sessions already open stay: set a password to end them. Recorded as a `user` revision `staff_remove_social_links`.\nErrors: 403 `forbidden` for yourself or a superuser unless you are one, 404 `not_found`. Returns 204.",
+        "description": "Requires `auth.change_user` and a browser session. No Google, GitHub or Facebook identity signs in to the account any more (a provider can link again only through a verified e-mail matching the account's current one). Sessions already open stay: set a password to end them. Recorded as a `user` revision `staff_remove_social_links`.\nErrors: 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack, 404 `not_found`. Returns 204.",
         "operationId": "UserEditingController_removeSocialLinks",
         "parameters": [
           {
@@ -23217,7 +23229,7 @@
     },
     "/api/internal/auth/activate": {
       "post": {
-        "description": "Public. Consumes the single-use key from the activation mail and turns the account on. Errors: 400 `invalid_token` for an unknown, used or expired key. Returns 204.",
+        "description": "Public. Consumes the single-use key from the activation mail and turns the account on. A password chosen at signup stops working in the same write (sessions and API token end with it), and a password-reset link is mailed to set one: `passwordResetSent` says whether it went out (when false for such an account, the reset form sends one). Errors: 400 `invalid_token` for an unknown, used or expired key. Returns 200.",
         "operationId": "RegistrationController_activate",
         "parameters": [],
         "requestBody": {
@@ -23231,7 +23243,22 @@
           "required": true
         },
         "responses": {
-          "204": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ActivationResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
             "description": ""
           },
           "default": {
@@ -26057,7 +26084,7 @@
     },
     "/api/internal/contests/{key}": {
       "delete": {
-        "description": "Contest editors only, with the key typed again in `confirm` (400\n`confirmation_mismatch` otherwise). Only a hidden contest without ratings\nor pending final submissions can be deleted, and one with live or virtual\nparticipations only with `judge.edit_all_contest` (409\n`contest_not_deletable`).\nIts participations, announcements, ranking link, ghosts, balloons, feed\nkeys, replay and official ranking are deleted; its submissions are kept\noutside any contest. Returns 204.",
+        "description": "Contest editors only, with the key typed again in `confirm` (400\n`confirmation_mismatch` otherwise). Only a hidden contest without ratings\nor pending final submissions can be deleted, and one with live or virtual\nparticipations only with `judge.edit_all_contest` (409\n`contest_not_deletable`).\nIts participations, announcements, ranking link, ghosts, balloons, feed\nkeys, replay and official ranking are deleted; its submissions are kept\noutside any contest. Returns 204.\nNeeds a browser session (API tokens get 403).",
         "operationId": "ContestEditingController_remove",
         "parameters": [
           {
@@ -27866,7 +27893,7 @@
     },
     "/api/internal/contests/{key}/join": {
       "post": {
-        "description": "Makes the contest the viewer's current one and returns the participation.\nBefore the contest ends this is the live participation (created or re-\nentered, which starts the clock after registering); after it ends it\ncreates a virtual participation unless the contest forbids it; a user whose\nlatest virtual run is unfinished gets that run back. Joins are rate limited\nper user (429 `rate_limited`). Editors and\ntesters join as spectators. Refusals include 409 `contest_not_started`,\n`virtual_disallowed` and `not_registered`, 403 `banned_from_contest` and\nthe access-code and rules errors listed for registering.",
+        "description": "Makes the contest the viewer's current one and returns the participation.\nBefore the contest ends this is the live participation (created or re-\nentered, which starts the clock after registering); after it ends it\ncreates a virtual participation unless the contest forbids it; a user whose\nlatest virtual run is unfinished gets that run back. Joins are rate limited\nper user (429 `rate_limited`). Editors and\ntesters join as spectators. Refusals include 409 `contest_not_started`,\n`virtual_disallowed` and `not_registered`, 403 `not_invited`,\n`banned_from_contest` and\nthe access-code and rules errors listed for registering.",
         "operationId": "ContestParticipationController_join",
         "parameters": [
           {
@@ -29095,7 +29122,7 @@
     },
     "/api/internal/contests/{key}/ranking": {
       "get": {
-        "description": "Returns the standings: each row's rank, score and per-problem cells\n(`formatData`), with ties sharing a rank. Set `virtual` to include virtual\nparticipations. Depending on the contest's scoreboard visibility the\nviewer sees the full board, only their own row, or nothing (403\n`forbidden`); non-editors see frozen standings during a freeze. A contest\nranking access code sent as `code` shows the full board whatever those\nrules say, and wrong codes (403) are rate limited per IP. Boards of non-\neditors are cached.",
+        "description": "Returns the standings: each row's rank, score and per-problem cells\n(`formatData`), with ties sharing a rank. Set `virtual` to include virtual\nparticipations. Depending on the contest's scoreboard visibility the\nviewer sees the full board, only their own row, or nothing (403\n`forbidden`); non-editors see frozen standings during a freeze. A contest\nranking access code sent as `code` shows the full board whatever those\nrules say, and wrong codes (403) are rate limited per IP. Before the\nstart, `problems` is empty and rows carry no cells except for editors and\ntesters. Boards of non-editors are cached.",
         "operationId": "ContestRankingController_ranking",
         "parameters": [
           {
@@ -29481,7 +29508,7 @@
     },
     "/api/internal/contests/{key}/register": {
       "post": {
-        "description": "Registers the signed-in user for a contest that requires registration,\nbefore registration closes. Send `accessCode` when the contest has one\n(editors skip it), `acceptRules` true and the `acceptRulesRevision` shown\nto the user when the contest has rules.\nRefusals are 409 `editor_cannot_register`, `registration_not_required`,\n`registration_closed`, `contest_ended` or `already_registered`; 403\n`banned_from_contest`, `access_code_required` or `wrong_access_code`; 400\n`rules_not_accepted`; and 409 `rules_changed` when the revision is missing or the rules were saved\nafter the user read them. Wrong access codes are rate limited per user and\nper IP.",
+        "description": "Registers the signed-in user for a contest that requires registration,\nbefore registration closes. Send `accessCode` when the contest has one\n(editors skip it), `acceptRules` true and the `acceptRulesRevision` shown\nto the user when the contest has rules.\nRefusals are 409 `editor_cannot_register`, `registration_not_required`,\n`registration_closed`, `contest_ended` or `already_registered`; 403\n`not_invited` (a private contest's staff listed only to watch it),\n`banned_from_contest`, `access_code_required` or `wrong_access_code`; 400\n`rules_not_accepted`; and 409 `rules_changed` when the revision is missing or the rules were saved\nafter the user read them. Wrong access codes are rate limited per user and\nper IP.",
         "operationId": "ContestParticipationController_register",
         "parameters": [
           {
@@ -29753,7 +29780,7 @@
     },
     "/api/internal/contests/{key}/stats": {
       "get": {
-        "description": "Returns result counts per problem and per language. Subject to the same\nrule as the full submission list, so it fails with 403 `forbidden` while\nthe viewer may not see that list.",
+        "description": "Returns result counts per problem and per language. Subject to the same\nrule as the full submission list, so it fails with 403 `forbidden` while\nthe viewer may not see that list. Before the start, `problems` is empty\nexcept for the contest's editors and testers.",
         "operationId": "ContestStatsController_get",
         "parameters": [
           {
@@ -32019,7 +32046,7 @@
     },
     "/api/internal/organizations/{slug}": {
       "delete": {
-        "description": "Superusers only (403 `forbidden`; no permission grants it). A soft delete:\nthe organization disappears from every read and its slug stays reserved.\nIts problems and contests are kept and unlinked, keeping their privacy\nflags (an organization-private one left with no organization is visible\nonly to its editors). Its posts are kept, unlinked and hidden. Members\nlose the membership, pending join requests are rejected, and the\norganization's problem tags are removed. Recorded in the revision log\n(its history page is gone with it). Returns 204, also when repeated on\na deleted slug (which finishes an interrupted delete); 404 `not_found`\nfor an unknown slug.",
+        "description": "Superusers only (403 `forbidden`; no permission grants it). A soft delete:\nthe organization disappears from every read and its slug stays reserved.\nIts problems and contests are kept and unlinked, keeping their privacy\nflags (an organization-private one left with no organization is visible\nonly to its editors). Its posts are kept, unlinked and hidden. Members\nlose the membership, pending join requests are rejected, and the\norganization's problem tags are removed. Recorded in the revision log\n(its history page is gone with it). Returns 204, also when repeated on\na deleted slug (which finishes an interrupted delete); 404 `not_found`\nfor an unknown slug. Needs a browser session (API tokens get 403).",
         "operationId": "OrganizationEditingController_remove",
         "parameters": [
           {
@@ -33339,7 +33366,7 @@
     },
     "/api/internal/organizations/{slug}/quota": {
       "patch": {
-        "description": "Requires `judge.edit_all_organization`. Sets the monthly credits cap, the\nmonthly judging cap in milliseconds, the storage cap in bytes, or the\nunlimited flag; `null` clears a cap so the site default applies again,\nand omitted fields stay as they are. The change is logged. Returns the\nupdated usage.",
+        "description": "Requires `judge.edit_all_organization` and a browser session (API tokens\nget 403). Sets the monthly credits cap, the\nmonthly judging cap in milliseconds, the storage cap in bytes, or the\nunlimited flag; `null` clears a cap so the site default applies again,\nand omitted fields stay as they are. The change is logged. Returns the\nupdated usage.",
         "operationId": "OrganizationUsageController_updateQuota",
         "parameters": [
           {
@@ -36117,7 +36144,7 @@
     },
     "/api/internal/problems/{code}": {
       "delete": {
-        "description": "Needs `judge.delete_problem` and edit rights on the problem. The body's\n`confirmCode` must repeat the problem code. The problem is hidden at once;\nit can be restored until the purge job removes its data after the grace\nperiod (setting `problem.deleteGraceDays`), and its submissions are kept. A\nproblem used by a contest is refused with 409 `problem_in_contest`; each\nuser may delete 10 problems per hour (429 `rate_limited`). Queues a\nrecomputation of the points of everyone who solved it. Failures carry the\ncode in `error.issues[0].code`.",
+        "description": "Needs `judge.delete_problem` and edit rights on the problem. The body's\n`confirmCode` must repeat the problem code. The problem is hidden at once;\nit can be restored until the purge job removes its data after the grace\nperiod (setting `problem.deleteGraceDays`), and its submissions are kept. A\nproblem used by a contest is refused with 409 `problem_in_contest`; each\nuser may delete 10 problems per hour (429 `rate_limited`). Queues a\nrecomputation of the points of everyone who solved it. Failures carry the\ncode in `error.issues[0].code`.\nNeeds a browser session (API tokens get 403).",
         "operationId": "ProblemLifecycleController_remove",
         "parameters": [
           {
@@ -38526,7 +38553,7 @@
     },
     "/api/internal/problems/{code}/purge-now": {
       "post": {
-        "description": "Superuser only (403 `forbidden` otherwise), and the body's `confirmCode`\nmust repeat the problem code. Queues the purge job without waiting for the\ngrace period and answers 202 `{ queued: true }`; the job deletes the test\ndata and statement files but leaves a tombstone with the code and name, and\nall submissions. Responds 409 `purged` when the purge already finished and\n409 `not_deleted` for a live problem.",
+        "description": "Superuser only (403 `forbidden` otherwise), from a browser session (API\ntokens get 403), and the body's `confirmCode`\nmust repeat the problem code. Queues the purge job without waiting for the\ngrace period and answers 202 `{ queued: true }`; the job deletes the test\ndata and statement files but leaves a tombstone with the code and name, and\nall submissions. Responds 409 `purged` when the purge already finished and\n409 `not_deleted` for a live problem.",
         "operationId": "ProblemLifecycleController_purgeNow",
         "parameters": [
           {
@@ -39290,7 +39317,7 @@
         ]
       },
       "post": {
-        "description": "Signed-in callers only, not while impersonating. Queues a background job that builds a zip of the caller's data and answers 202 `{queued: true}`. Allowed once a day while a fresh zip exists, and at most 3 times a day in total.\nErrors: 409 `conflict` while an export is already being prepared, 429 `rate_limited` when asking again within a day or past the daily cap, 404 `not_found` when exports are unavailable.",
+        "description": "Signed-in callers only, from a browser session (API tokens get 403), not while impersonating. Queues a background job that builds a zip of the caller's data and answers 202 `{queued: true}`. Allowed once a day while a fresh zip exists, and at most 3 times a day in total.\nErrors: 409 `conflict` while an export is already being prepared, 429 `rate_limited` when asking again within a day or past the daily cap, 404 `not_found` when exports are unavailable.",
         "operationId": "UserDataController_prepare",
         "parameters": [],
         "responses": {
@@ -39340,7 +39367,7 @@
     },
     "/api/internal/profile/data/download": {
       "get": {
-        "description": "Signed-in callers only, not while impersonating. Streams the prepared zip as an attachment (`application/zip`, `nosniff`). 404 `not_found` when no unexpired export exists.",
+        "description": "Signed-in callers only, from a browser session (API tokens get 403), not while impersonating. Streams the prepared zip as an attachment (`application/zip`, `nosniff`). 404 `not_found` when no unexpired export exists.",
         "operationId": "UserDataController_download",
         "parameters": [],
         "responses": {
@@ -41758,7 +41785,7 @@
     },
     "/api/internal/submissions/{id}/score": {
       "put": {
-        "description": "Needs `judge.change_submission` and edit rights on the problem (403\n`forbidden`). Sets `result` (a graded verdict) and `points` on the\nproblem's scale; the case results stay as judged. An internal error's\nmessage moves from the submission to the revision log. User points, problem\nstatistics and contest results are recomputed as after a judging (an\n`ioi16` contest still scores batches from the judged cases). Sending the\nstored score again changes nothing. 400\n`points_above_problem`, `points_not_partial` (a problem without partial\npoints takes 0 or full) or `accepted_needs_full_points`. 409 `conflict`\nwhile the submission is queued or judged, or is a pending final\nsubmission; 409 `problem_deleted` when the problem is deleted. A rejudge\ndiscards the override unless `lock` locks the submission too. Logged as a\nsubmission revision with `comment`. Answers 204.",
+        "description": "Needs `judge.change_submission` and edit rights on the problem (403\n`forbidden`). Sets `result` (a graded verdict) and `points` on the\nproblem's scale; the case results stay as judged. An internal error's\nmessage moves from the submission to the revision log. User points, problem\nstatistics and contest results are recomputed as after a judging (an\n`ioi16` contest still scores batches from the judged cases). Sending the\nstored score again changes nothing. 400\n`points_above_problem`, `points_not_partial` (a problem without partial\npoints takes 0 or full) or `accepted_needs_full_points`. 409 `conflict`\nwhile the submission is queued or judged, or is a pending final\nsubmission; 409 `problem_deleted` when the problem is deleted. A rejudge\ndiscards the override unless `lock` locks the submission too. Logged as a\nsubmission revision with `comment`. Answers 204.\nNeeds a browser session (API tokens get 403).",
         "operationId": "SubmissionActionsController_overrideScore",
         "parameters": [
           {
@@ -43445,7 +43472,7 @@
     },
     "/api/internal/users/{username}/ban": {
       "post": {
-        "description": "Requires `judge.ban_user`. Deactivates the account, hides it from the leaderboards, sets its rank to `banned`, records the reason, signs the user out everywhere and revokes their API token. Errors: 400 `validation_failed` for the reason reserved to automatic contest-cheating bans, 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`, 409 `conflict` when already banned. Returns 204.",
+        "description": "Requires `judge.ban_user` and a browser session (API tokens get 403), not while impersonating. Deactivates the account, hides it from the leaderboards, sets its rank to `banned`, records the reason, signs the user out everywhere and revokes their API token. Errors: 400 `validation_failed` for the reason reserved to automatic contest-cheating bans, 403 `forbidden` when targeting yourself, a superuser or a user holding a permission you lack, 404 `not_found`, 409 `conflict` when already banned. Returns 204.",
         "operationId": "UserModerationController_ban",
         "parameters": [
           {
@@ -43890,7 +43917,7 @@
     },
     "/api/internal/users/{username}/reset-two-factor": {
       "post": {
-        "description": "Requires `judge.ban_user` and a browser session (API tokens get 403), not while impersonating, like the other staff credential routes. Removes the user's authenticator app and all security keys so a locked-out user can sign in again, signs them out everywhere, revokes their API token and records a `user` revision for audit. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`. Returns 204.",
+        "description": "Requires `judge.ban_user` and a browser session (API tokens get 403), not while impersonating, like the other staff credential routes. Removes the user's authenticator app and all security keys so a locked-out user can sign in again, signs them out everywhere, revokes their API token and records a `user` revision for audit. Errors: 403 `forbidden` when targeting yourself, a superuser or a user holding a permission you lack, 404 `not_found`. Returns 204.",
         "operationId": "UserModerationController_resetTwoFactor",
         "parameters": [
           {
@@ -43995,7 +44022,7 @@
     },
     "/api/internal/users/{username}/unban": {
       "post": {
-        "description": "Requires `judge.ban_user`. Restores the account as an active, listed `user`, whatever rank it had before. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`, 409 `conflict` when the user is not banned. Returns 204.",
+        "description": "Requires `judge.ban_user` and a browser session (API tokens get 403), not while impersonating. Restores the account as an active, listed `user`, whatever rank it had before. Errors: 403 `forbidden` when targeting yourself, a superuser or a user holding a permission you lack, 404 `not_found`, 409 `conflict` when the user is not banned. Returns 204.",
         "operationId": "UserModerationController_unban",
         "parameters": [
           {

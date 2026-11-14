@@ -183,7 +183,7 @@ export class ContestParticipationService {
   ): void {
     if (this.isEditorOrTester(principal, contest))
       throw refusal('editor_cannot_register');
-    this.assertNotBanned(principal, contest);
+    this.assertMayCompete(principal, contest);
     if (!requiresRegistration(contest))
       throw refusal('registration_not_required');
     if (!isRegistrationOpen(contest, now)) throw refusal('registration_closed');
@@ -207,7 +207,7 @@ export class ContestParticipationService {
     const isSpectatorOnly = this.isEditorOrTester(principal, contest);
     if (phase === 'upcoming' && !isSpectatorOnly)
       throw refusal('contest_not_started');
-    this.assertNotBanned(principal, contest);
+    this.assertMayCompete(principal, contest);
     const participation =
       phase === 'ended' && !isSpectatorOnly
         ? await this.joinVirtual(principal, contest, credentials, now)
@@ -605,14 +605,14 @@ export class ContestParticipationService {
     return filter;
   }
 
-  private assertNotBanned(
+  /** Invited (`ContestAccess.canCompete`) and not banned. */
+  private assertMayCompete(
     principal: Principal,
     contest: ContestDocument,
   ): void {
-    if (
-      !principal.isSuperuser &&
-      contest.bannedUsers.map(uuidStr).includes(principal.userId)
-    )
+    if (!ContestAccess.canCompete(principal, ContestAccess.accessView(contest)))
+      throw refusal('not_invited');
+    if (ContestAccess.isBannedFrom(principal, contest))
       throw refusal('banned_from_contest');
   }
 

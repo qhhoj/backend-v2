@@ -15,6 +15,10 @@ export const discordWebhookUrl = (
   event: DiscordEvent,
 ): string | null => urls[event] ?? urls.default ?? null;
 
+/** User text shown literally in a Discord embed: the Markdown characters of links, emphasis, code, spoilers and quotes, and the backslash itself, are backslash-escaped. */
+export const discordText = (text: string): string =>
+  text.replace(/[\\[\]()*_~`|>]/g, '\\$&');
+
 export interface DiscordMessage {
   title: string;
   description: string;

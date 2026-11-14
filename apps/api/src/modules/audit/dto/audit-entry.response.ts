@@ -8,7 +8,7 @@ export class AuditActorResponse {
 export class AuditObjectResponse {
   /** Object id, or the key for a setting. */
   id!: string;
-  /** What to call the object: problem code, contest key, username, organization slug, page url, post title, setting key, catalog name. Null when the kind has no name (comment, submission) or the object is gone. */
+  /** What to call the object: problem code, contest key, username, organization slug, page url, post title, setting key, catalog name. Null when the kind has no name (comment, submission) or the object is gone, and for a problem, contest, contest participation, organization, blog post or share unless you also hold `judge.edit_all_problem`, `judge.edit_all_contest`, `judge.edit_all_organization`, `judge.edit_all_post` or `judge.manage_share` respectively. */
   label!: string | null;
   /** The object no longer exists (or is soft-deleted); clients show the label without a link. */
   deleted!: boolean;

@@ -10,7 +10,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CurrentAuth, RequirePermission } from '@libs/auth';
+import { CurrentAuth, RequirePermission, SessionOnly } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import {
   ApiPaginatedResponse,
@@ -125,7 +125,9 @@ export class FlatpagesAdminController {
    *
    * @remarks
    * Requires `flatpages.add_flatpage`. Stores a page and renders its Markdown to sanitised HTML. The URL is canonicalised (`about/` becomes `/about`). Records a revision. Errors: 400 `invalid_url`, 409 `conflict` when the URL is taken.
+   * Needs a browser session (API tokens get 403).
    */
+  @SessionOnly()
   @RequirePermission('flatpages.add_flatpage')
   @Post()
   create(
@@ -140,7 +142,9 @@ export class FlatpagesAdminController {
    *
    * @remarks
    * Requires `flatpages.change_flatpage`. Partial update; null values are refused. Last write wins. Records a revision when something changed. Errors: 404 `not_found`, 400 `invalid_url`, 409 `conflict` when the new URL is taken.
+   * Needs a browser session (API tokens get 403).
    */
+  @SessionOnly()
   @RequirePermission('flatpages.change_flatpage')
   @Patch(':id')
   update(
@@ -156,7 +160,9 @@ export class FlatpagesAdminController {
    *
    * @remarks
    * Requires `flatpages.delete_flatpage`. Removes the page; its history stays readable and the deletion is recorded. 404 `not_found`. Returns 204.
+   * Needs a browser session (API tokens get 403).
    */
+  @SessionOnly()
   @RequirePermission('flatpages.delete_flatpage')
   @Delete(':id')
   @HttpCode(204)

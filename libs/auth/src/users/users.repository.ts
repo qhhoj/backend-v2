@@ -174,10 +174,23 @@ export class UsersRepository {
       .exec();
   }
 
-  /** False when the user is missing, already active, banned, deactivated by staff, or past `credentialEpoch` (the key was mailed before a credential revocation such as an e-mail change). */
-  async activate(userId: string, credentialEpoch: number): Promise<boolean> {
-    const { matchedCount } = await this.users
-      .updateOne(
+  /**
+   * Turns the account on; null when the user is missing, already active, banned, deactivated by staff, or past
+   * `credentialEpoch` (the key was mailed before a credential revocation such as an e-mail change). In the same write, an
+   * account whose password was chosen before the mailbox was proven (`passwordSetBeforeVerification`) gets `unusable`
+   * as its password, loses its API token and moves its credential epoch. Returns the updated row.
+   */
+  activate(
+    userId: string,
+    credentialEpoch: number,
+    unusable: string,
+  ): Promise<UserDocument | null> {
+    const flagged = { $eq: ['$passwordSetBeforeVerification', true] };
+    const ifFlagged = (value: unknown, otherwise: unknown) => ({
+      $cond: [flagged, value, otherwise],
+    });
+    return this.users
+      .findOneAndUpdate(
         {
           _id: userId,
           isActive: false,
@@ -185,10 +198,22 @@ export class UsersRepository {
           deactivatedAt: null,
           ...credentialFilter({ credentialEpoch }),
         },
-        { $set: { isActive: true } },
+        [
+          {
+            $set: {
+              isActive: true,
+              password: ifFlagged({ $literal: unusable }, '$password'),
+              apiTokenHash: ifFlagged(null, '$apiTokenHash'),
+              credentialEpoch: ifFlagged(
+                { $add: [{ $ifNull: ['$credentialEpoch', 0] }, 1] },
+                '$credentialEpoch',
+              ),
+            },
+          },
+        ],
+        { new: true },
       )
       .exec();
-    return matchedCount === 1;
   }
 
   /** Compare-and-set on the ban reason: a ban set meanwhile is never overwritten or cleared; false when the reason was no longer `expectedReason`. */

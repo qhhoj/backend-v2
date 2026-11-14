@@ -201,6 +201,49 @@ afterAll(() => api.teardown());
         .expect(403);
     });
 
+    it('bans and unbans from a browser session only, never with an API token or while impersonating', async () => {
+      const moderator = await createUserWith(api, 'tokenmod', {
+        permissions: ['judge.ban_user'],
+      });
+      await createUserWith(api, 'target3');
+      const { token, hash } = generateApiToken(
+        moderator._id,
+        TEST_ENV.TOKEN_SECRET,
+      );
+      await api.users.updateOne({ _id: moderator._id }, { apiTokenHash: hash });
+      const byToken = (action: 'ban' | 'unban') =>
+        api
+          .http()
+          .post(`/api/internal/users/target3/${action}`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ reason: 'x' });
+      await byToken('ban').expect(403);
+      const root = await createUserWith(api, 'root3', { isSuperuser: true });
+      const { id, session } = await api.sessions.create({
+        userId: moderator._id,
+        twoFaPassed: true,
+        passwordPwned: false,
+        impersonatorId: root._id,
+      });
+      const impersonating = { cookie: sessionCookie(id), csrf: session.csrf };
+      await authed(
+        api.http().post('/api/internal/users/target3/ban'),
+        impersonating,
+      )
+        .send({ reason: 'x' })
+        .expect(403);
+      expect(
+        (await api.users.findOne({ username: 'target3' }).lean())?.banReason,
+      ).toBeNull();
+      await authed(
+        api.http().post('/api/internal/users/target3/ban'),
+        await loginAs(api, moderator._id),
+      )
+        .send({ reason: 'x' })
+        .expect(204);
+      await byToken('unban').expect(403);
+    });
+
     it('resets two-factor for staff only, from a browser session, never a superuser, signs the user out and leaves an audit row', async () => {
       const recovery = await createUserWith(api, 'recovery', {
         permissions: ['judge.ban_user'],
@@ -1037,6 +1080,52 @@ afterAll(() => api.teardown());
         .expect(200);
     });
 
+    it('changes only accounts whose site-wide permissions the admin holds too', async () => {
+      await createUserWith(api, 'operator', {
+        permissions: ['judge.change_settings'],
+        isTotpEnabled: true,
+        totpKey: 'secret',
+      });
+      await createUserWith(api, 'helper', {
+        permissions: [
+          'judge.change_profile',
+          'judge.edit_own_contest',
+          'judge.edit_own_problem',
+          'judge.create_organization_problem',
+          'judge.create_private_contest',
+          'judge.some_legacy_codename',
+        ],
+      });
+      const helpdesk = await loginAs(
+        api,
+        (
+          await createUserWith(api, 'helpdesk', {
+            permissions: [
+              'judge.change_profile',
+              'auth.change_user',
+              'judge.ban_user',
+            ],
+          })
+        )._id,
+      );
+      const body = { currentPassword: OLD, newPassword: 'fresh passphrase 1' };
+      await setPassword('operator', body, helpdesk).expect(403);
+      await authed(
+        api.http().post('/api/internal/users/operator/reset-two-factor'),
+        helpdesk,
+      ).expect(403);
+      await authed(
+        api.http().post('/api/internal/users/operator/ban'),
+        helpdesk,
+      )
+        .send({ reason: 'x' })
+        .expect(403);
+      expect(
+        await api.users.findOne({ username: 'operator' }).lean(),
+      ).toMatchObject({ isTotpEnabled: true, banReason: null });
+      await setPassword('helper', body, helpdesk).expect(204);
+    });
+
     it("requires the admin's own password, then revokes the user's sessions and API token and audits without the secret", async () => {
       const target = await createUserWith(api, 'dave', {
         passwordSetBeforeVerification: true,
@@ -1767,6 +1856,47 @@ afterAll(() => api.teardown());
         actor: null,
         object: { label: null, deleted: true },
       });
+    });
+
+    it('names an organization only to a viewer who may edit every organization', async () => {
+      const organization = await createOrganization(api, {
+        slug: 'quiet-org',
+        isUnlisted: true,
+      });
+      const revisionId = newId();
+      await api.revisions.create({
+        _id: revisionId,
+        entity: 'organization',
+        entityId: organization._id,
+        action: 'edit',
+        userId: null,
+        changes: { name: { before: 'a', after: 'b' } },
+        comment: '',
+      });
+      try {
+        const labelFor = async (session: TestSession) =>
+          dataOf<AuditFeedResponse>(
+            await authed(
+              api.http().get(AUDIT).query({ type: 'organization' }),
+              session,
+            ).expect(200),
+          ).items[0].object.label;
+        expect(await labelFor(admin)).toBeNull();
+        const orgStaff = await loginAs(
+          api,
+          (
+            await createUserWith(api, 'orgauditor', {
+              permissions: [
+                'judge.change_settings',
+                'judge.edit_all_organization',
+              ],
+            })
+          )._id,
+        );
+        expect(await labelFor(orgStaff)).toBe('quiet-org');
+      } finally {
+        await api.revisions.deleteOne({ _id: revisionId });
+      }
     });
 
     it('names a tag problem by its code', async () => {

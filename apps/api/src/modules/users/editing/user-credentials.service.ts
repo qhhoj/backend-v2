@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   passwordIssues,
   Passwords,
+  PrincipalService,
   PwnedPasswordService,
   SessionService,
   UsersRepository,
@@ -21,7 +22,7 @@ import {
   ADMIN_CREDENTIAL_LIMIT,
   ADMIN_CREDENTIAL_WINDOW_SECONDS,
 } from '../core/rate-limits';
-import { editableTarget } from './editable-target';
+import { changeableTarget } from './editable-target';
 import type { Changes } from './user-field-changes';
 
 interface AuditEntry {
@@ -42,6 +43,7 @@ export class UserCredentialsService {
     private readonly auth: AuthService,
     private readonly passwordReset: PasswordResetService,
     private readonly revisions: RevisionsRepository,
+    private readonly principals: PrincipalService,
   ) {}
 
   /** The admin re-enters their own password; the user's sessions and API token are revoked, like a password reset. */
@@ -53,9 +55,12 @@ export class UserCredentialsService {
       newPassword,
     }: { currentPassword: string; newPassword: string },
   ): Promise<void> {
-    const user = await editableTarget(this.users, auth.principal, username, {
-      notSelf: true,
-    });
+    const user = await changeableTarget(
+      this.users,
+      this.principals,
+      auth.principal,
+      username,
+    );
     await this.confirmAdmin(auth, currentPassword);
     await this.assertAcceptable(user, newPassword);
     if (
@@ -83,9 +88,12 @@ export class UserCredentialsService {
 
   /** Mails the user a reset link (the public reset flow's per-e-mail budget applies); the account must be active and have an address. */
   async sendResetLink(auth: AuthContext, username: string): Promise<void> {
-    const user = await editableTarget(this.users, auth.principal, username, {
-      notSelf: true,
-    });
+    const user = await changeableTarget(
+      this.users,
+      this.principals,
+      auth.principal,
+      username,
+    );
     if (!user.isActive)
       throw conflictIssue(
         'user',
@@ -107,9 +115,12 @@ export class UserCredentialsService {
 
   /** Recovery when a provider identity no longer belongs to the user: no provider signs in to the account any more. Sessions already open stay; setting a password ends them. */
   async removeSocialLinks(auth: AuthContext, username: string): Promise<void> {
-    const user = await editableTarget(this.users, auth.principal, username, {
-      notSelf: true,
-    });
+    const user = await changeableTarget(
+      this.users,
+      this.principals,
+      auth.principal,
+      username,
+    );
     await this.users.update(user._id, { socialAuth: [] });
     await this.audit(auth, user, {
       action: 'staff_remove_social_links',

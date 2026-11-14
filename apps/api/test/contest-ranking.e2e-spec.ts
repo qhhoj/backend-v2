@@ -4,6 +4,8 @@ import type Redis from 'ioredis';
 
 import type { Connection } from 'mongoose';
 
+import { sha256 } from '@libs/auth';
+
 import { REDIS } from '@libs/common';
 
 import { rankingCacheKeys } from '@libs/contests';
@@ -15,6 +17,8 @@ import { profileQueries } from '@libs/database/testing';
 import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
 
 import type { RankingResponse } from '../src/modules/contests/ranking/dto/ranking.response';
+
+import type { ContestStatsResponse } from '../src/modules/contests/stats/dto/contest-stats.response';
 
 import {
   contestProblem,
@@ -321,6 +325,40 @@ describe('contest ranking', () => {
     expect(textWithoutIds(frozenBoard)).not.toContain('777');
     // Other tests scan whole boards for leaked numbers: leave the users as they were.
     await api.users.updateMany({}, { rating: null, organizations: [] });
+  });
+
+  it('names no problem before the start except to editors, by ranking code, as a listed scoreboard viewer or in the statistics', async () => {
+    const contest = await createContest(api, {
+      startTime: hoursFromNow(2),
+      endTime: hoursFromNow(5),
+      scoreboardVisibility: 'H',
+      showSubmissionList: true,
+      rankingAccessCodeHash: sha256('board-code'),
+      viewContestScoreboard: [users.carol._id],
+      authors: [users.author._id],
+      problems: [contestProblem(problems[0]._id, 0)],
+    });
+    const codes = async (who?: string, query = '') =>
+      (await ranking(contest.key, who, query)).problems.map(
+        (problem) => problem.code,
+      );
+    expect(await codes(undefined, '?code=board-code')).toEqual([]);
+    expect(await codes('carol')).toEqual([]);
+    expect(await codes('author')).toEqual(['rank_a']);
+    const statsCodes = async (who: string) =>
+      dataOf<ContestStatsResponse>(
+        await authed(
+          api.http().get(contestUrl(contest.key, '/stats')),
+          sessions[who],
+        ).expect(200),
+      ).problems.map((problem) => problem.code);
+    expect(await statsCodes('carol')).toEqual([]);
+    expect(await statsCodes('author')).toEqual(['rank_a']);
+    await api.contests.updateOne(
+      { _id: contest._id },
+      { startTime: hoursFromNow(-1) },
+    );
+    expect(await codes(undefined, '?code=board-code')).toEqual(['rank_a']);
   });
 
   it('serves a cached board until its keys are purged', async () => {

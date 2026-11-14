@@ -1,4 +1,5 @@
 import { excerpt } from '@libs/common';
+import { discordText } from './discord';
 
 export const TICKET_TITLE_MAX_LENGTH = 100;
 /** A message body (new; legacy had no cap). */
@@ -17,15 +18,11 @@ export const problemPath = (code: string): string =>
 export const contestPath = (key: string): string =>
   `/contests/${encodeURIComponent(key)}`;
 
-/** Legacy `Message: ` prefix, then the first 100 code points of the whole line. */
+/** Legacy `Message: ` prefix, then the first 100 code points of the whole line, shown as plain text. */
 export const ticketMessageDescription = (body: string): string =>
-  excerpt(`Message: ${body}`, 100);
+  `Message: ${discordText(excerpt(body, 100 - 'Message: '.length))}`;
 
-/** A title must not close the link text and rewrite the target. */
-const escapeLinkText = (text: string): string =>
-  text.replace(/[[\]()]/g, '\\$&');
-
-/** Legacy `on_new_ticket` description (title brackets escaped): the title line, then the cut message line. */
+/** Legacy `on_new_ticket` description (title shown as plain text, so it cannot close the link text or rewrite the target): the title line, then the cut message line. */
 export const newTicketDescription = ({
   title,
   ticketUrl,
@@ -35,4 +32,4 @@ export const newTicketDescription = ({
   ticketUrl: string;
   body: string;
 }): string =>
-  `Title: [${escapeLinkText(title)}](${ticketUrl})\n${ticketMessageDescription(body)}`;
+  `Title: [${discordText(title)}](${ticketUrl})\n${ticketMessageDescription(body)}`;

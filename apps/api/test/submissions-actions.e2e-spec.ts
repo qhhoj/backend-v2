@@ -473,6 +473,18 @@ describe('submission actions', () => {
       expect([...commanded].sort()).toEqual([...seeded].sort());
     });
 
+    it('answers a contest batch from a caller without rights the same for a hidden and an unknown problem', async () => {
+      const contest = await createContest(api, {});
+      const probe = (problem: string) =>
+        post('other', `${SUBMISSIONS}/rejudge`, {
+          contest: contest.key,
+          problem,
+          dryRun: true,
+        });
+      await probe('hidden').expect(403).expect(errorCode('forbidden'));
+      await probe('nosuch').expect(403).expect(errorCode('forbidden'));
+    });
+
     it('resets and commands in chunks of at most 1000 ids', async () => {
       const template = {
         user: ids.owner,

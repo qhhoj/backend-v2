@@ -36,6 +36,7 @@ import {
   LiveActivityResponse,
 } from './dto/activity.response';
 
+@SessionOnly()
 @RequirePermission('judge.can_see_user_activity')
 @ApiTags('Admin: users')
 @Controller('api/internal/admin/user-activity')
@@ -51,7 +52,7 @@ export class UserActivityStaffController {
    * Search the user activity log
    *
    * @remarks
-   * Requires `judge.can_see_user_activity`. Returns request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. `user` is a username fragment or `anonymous`, `ip` an address prefix and `path` a path fragment; a `user` fragment that matches nobody gives an empty page.
+   * Requires `judge.can_see_user_activity` and a browser session (API tokens get 403). Returns request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. `user` is a username fragment or `anonymous`, `ip` an address prefix and `path` a path fragment; a `user` fragment that matches nobody gives an empty page.
    */
   @ApiHasMoreResponse(ActivityLogResponse)
   @Get('logs')
@@ -65,7 +66,7 @@ export class UserActivityStaffController {
    * Export the user activity log as CSV
    *
    * @remarks
-   * Requires `judge.can_see_user_activity`. Same filters as the log search, streamed as a `text/csv` attachment named `user-activity.csv` (newest first, at most 100000 rows, cells made spreadsheet-safe).
+   * Requires `judge.can_see_user_activity` and a browser session (API tokens get 403). Same filters as the log search, streamed as a `text/csv` attachment named `user-activity.csv` (newest first, at most 100000 rows, cells made spreadsheet-safe).
    */
   @RawResponse()
   @ApiResponse({
@@ -90,7 +91,7 @@ export class UserActivityStaffController {
    * List the activity log of one user
    *
    * @remarks
-   * Requires `judge.can_see_user_activity`. Returns the user's request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. 404 `not_found` for an unknown user.
+   * Requires `judge.can_see_user_activity` and a browser session (API tokens get 403). Returns the user's request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. 404 `not_found` for an unknown user.
    */
   @ApiHasMoreResponse(ActivityLogResponse)
   @Get('users/:username/logs')
@@ -105,7 +106,7 @@ export class UserActivityStaffController {
    * Summarize one user's activity
    *
    * @remarks
-   * Requires `judge.can_see_user_activity`. Returns the number of requests over the last `days` (1-90, default 90), requests per UTC day, the 20 most used IP addresses, the 30 most requested paths and the 50 most recent sessions. 404 `not_found` for an unknown user.
+   * Requires `judge.can_see_user_activity` and a browser session (API tokens get 403). Returns the number of requests over the last `days` (1-90, default 90), requests per UTC day, the 20 most used IP addresses, the 30 most requested paths and the 50 most recent sessions. 404 `not_found` for an unknown user.
    */
   @Get('users/:username/summary')
   summary(
@@ -119,9 +120,8 @@ export class UserActivityStaffController {
    * Delete a user's activity data
    *
    * @remarks
-   * Requires `judge.can_see_user_activity`. Needs a browser session (API tokens get 403) and not impersonating. Deletes the user's activity log rows and their stored sessions; the deletion is written to the server log and recorded as a `user` revision (`delete_activity`) with the counts. 403 `forbidden` when the target is yourself or a superuser and you are not a superuser; 404 `not_found` for an unknown user. Returns 204.
+   * Requires `judge.can_see_user_activity` and a browser session (API tokens get 403), not while impersonating. Deletes the user's activity log rows and their stored sessions; the deletion is written to the server log and recorded as a `user` revision (`delete_activity`) with the counts. 403 `forbidden` when the target is yourself or a superuser and you are not a superuser; 404 `not_found` for an unknown user. Returns 204.
    */
-  @SessionOnly()
   @NoImpersonation()
   @Delete('users/:username')
   @HttpCode(204)
@@ -136,9 +136,8 @@ export class UserActivityStaffController {
    * Delete anonymous activity data
    *
    * @remarks
-   * Requires `judge.can_see_user_activity`. Needs a browser session (API tokens get 403) and not impersonating. Deletes all activity log rows and sessions of signed-out visitors; the deletion is written to the server log and recorded as a `user` revision (`delete_anonymous_activity`) on your account. Returns 204.
+   * Requires `judge.can_see_user_activity` and a browser session (API tokens get 403), not while impersonating. Deletes all activity log rows and sessions of signed-out visitors; the deletion is written to the server log and recorded as a `user` revision (`delete_anonymous_activity`) on your account. Returns 204.
    */
-  @SessionOnly()
   @NoImpersonation()
   @Delete('anonymous')
   @HttpCode(204)
@@ -150,7 +149,7 @@ export class UserActivityStaffController {
    * List who is on the site now
    *
    * @remarks
-   * Requires `judge.can_see_user_activity`. Returns counts of signed-in users, anonymous visitors and bots seen in the last 30 minutes, plus a page of 50 signed-in users, most recently seen first (`hasMore` tells whether a later page exists).
+   * Requires `judge.can_see_user_activity` and a browser session (API tokens get 403). Returns counts of signed-in users, anonymous visitors and bots seen in the last 30 minutes, plus a page of 50 signed-in users, most recently seen first (`hasMore` tells whether a later page exists).
    */
   @Get('live')
   liveVisitors(

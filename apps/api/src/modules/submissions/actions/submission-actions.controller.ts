@@ -8,7 +8,7 @@ import {
   Put,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { CurrentAuth } from '@libs/auth';
+import { CurrentAuth, SessionOnly } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { SubmissionIdParamDto } from '../core/dto/submission-params.dto';
 import { ScoreOverrideDto } from './dto/score-override.dto';
@@ -92,7 +92,9 @@ export class SubmissionActionsController {
    * submission; 409 `problem_deleted` when the problem is deleted. A rejudge
    * discards the override unless `lock` locks the submission too. Logged as a
    * submission revision with `comment`. Answers 204.
+   * Needs a browser session (API tokens get 403).
    */
+  @SessionOnly()
   @Put(':id/score')
   @HttpCode(204)
   overrideScore(

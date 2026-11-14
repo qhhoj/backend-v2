@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { UsersRepository } from '@libs/auth';
+import { PrincipalService, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, isDuplicateKey, ValidationFailedError } from '@libs/common';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { USERNAME_TAKEN } from '../core/dto/username';
-import { editableTarget } from './editable-target';
+import { changeableTarget } from './editable-target';
 
 const usernameTaken = () =>
   new ValidationFailedError('Username taken', [USERNAME_TAKEN]);
@@ -15,6 +15,7 @@ export class UserRenameService {
   constructor(
     private readonly users: UsersRepository,
     private readonly revisions: RevisionsRepository,
+    private readonly principals: PrincipalService,
   ) {}
 
   /** A case-only change of the same account is allowed; a name another account holds is `username_taken`. */
@@ -23,9 +24,12 @@ export class UserRenameService {
     username: string,
     next: string,
   ): Promise<{ username: string }> {
-    const user = await editableTarget(this.users, principal, username, {
-      notSelf: true,
-    });
+    const user = await changeableTarget(
+      this.users,
+      this.principals,
+      principal,
+      username,
+    );
     if (next === user.username) return { username: next };
     const holder = await this.users.findByUsername(next, { _id: 1 });
     if (holder && holder._id !== user._id) throw usernameTaken();

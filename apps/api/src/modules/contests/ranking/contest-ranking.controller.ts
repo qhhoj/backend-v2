@@ -24,8 +24,9 @@ export class ContestRankingController {
    * viewer sees the full board, only their own row, or nothing (403
    * `forbidden`); non-editors see frozen standings during a freeze. A contest
    * ranking access code sent as `code` shows the full board whatever those
-   * rules say, and wrong codes (403) are rate limited per IP. Boards of non-
-   * editors are cached.
+   * rules say, and wrong codes (403) are rate limited per IP. Before the
+   * start, `problems` is empty and rows carry no cells except for editors and
+   * testers. Boards of non-editors are cached.
    */
   @Public()
   @Get(':key/ranking')

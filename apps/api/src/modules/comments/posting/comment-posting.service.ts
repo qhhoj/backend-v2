@@ -13,7 +13,7 @@ import {
 } from '@libs/community';
 import type { CommentPageType } from '@libs/community';
 import { newId, uuidStr } from '@libs/database';
-import { DiscordWebhooksService } from '@libs/community';
+import { discordText, DiscordWebhooksService } from '@libs/community';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
@@ -319,7 +319,7 @@ export class CommentPostingService {
     );
     return this.discord.notify('on_new_comment', {
       title: `New comment${link ? ` ${this.discord.link(link)}` : ''}`,
-      description: excerpt(comment.body, 200),
+      description: discordText(excerpt(comment.body, 200)),
       author: this.discord.author(principal.username),
     });
   }

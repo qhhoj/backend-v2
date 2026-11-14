@@ -1,4 +1,4 @@
-import { newTicketDescription } from './tickets';
+import { newTicketDescription, ticketMessageDescription } from './tickets';
 
 describe('ticket texts', () => {
   it('cuts the message to 100 code points like legacy but never the title', () => {
@@ -22,6 +22,12 @@ describe('ticket texts', () => {
     });
     expect(description.split('\n')[0]).toBe(
       'Title: [a\\]\\(https://evil\\) \\[b](https://oj/ticket/1)',
+    );
+  });
+
+  it('shows a message as plain text, never as Discord markup', () => {
+    expect(ticketMessageDescription('[Verify](https://x) *b* `c` > d')).toBe(
+      'Message: \\[Verify\\]\\(https://x\\) \\*b\\* \\`c\\` \\> d',
     );
   });
 });

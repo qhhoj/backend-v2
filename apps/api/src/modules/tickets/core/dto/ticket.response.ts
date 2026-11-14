@@ -110,7 +110,7 @@ export class TicketDetailResponse extends TicketListItemResponse {
   notes!: string | null;
   /** The ticket's messages, oldest first. */
   messages!: TicketMessageResponse[];
-  /** Messages and state changes by time (equal instants: message first). */
+  /** Messages and state changes by time (equal instants: message first); `marked-good` and `unmarked-good` only for those who may mark the ticket good (`can.markGood`). */
   timeline!: TicketTimelineEntryResponse[];
   /** What the caller may do with the ticket. */
   can!: TicketPermissionsResponse;

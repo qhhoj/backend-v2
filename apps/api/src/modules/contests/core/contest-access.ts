@@ -144,6 +144,22 @@ function canSee(
   );
 }
 
+/** On the contest's ban list; a superuser is never held back by it. */
+function isBannedFrom(
+  principal: Principal,
+  contest: Pick<Contest, 'bannedUsers'>,
+): boolean {
+  return (
+    !principal.isSuperuser &&
+    contest.bannedUsers.map(uuidStr).includes(principal.userId)
+  );
+}
+
+/** Whether a user who sees the contest may also take part in it: staff listed only to watch a private contest (`isListedStaff`) are not contestants unless invited. */
+function canCompete(principal: Principal, contest: ContestAccessView): boolean {
+  return isInsider(principal, contest) || isInvited(principal, contest);
+}
+
 /** Mongo filter with exactly `canSee`'s semantics (legacy `get_visible_contests`), for lists. */
 function visibleFilter(principal: Principal | null): FilterQuery<Contest> {
   if (!principal)
@@ -281,6 +297,20 @@ function isProblemListOpen(
   );
 }
 
+/** Before the start only the contest's authors, curators, editors and testers learn its problem set; the ranking and the statistics leave it out for everyone else. */
+function hidesProblemsBeforeStart(
+  principal: Principal | null,
+  contest: ContestAccessView,
+  now: Date,
+): boolean {
+  return (
+    contestPhase(contest, now) === 'upcoming' &&
+    !isEditor(principal, contest) &&
+    !canEdit(principal, contest) &&
+    !isTester(principal, contest)
+  );
+}
+
 export const ContestAccess = {
   accessView,
   isEditor,
@@ -291,6 +321,8 @@ export const ContestAccess = {
   editorOfFilter,
   canViewBalloons,
   canSee,
+  canCompete,
+  isBannedFrom,
   visibleFilter,
   boardVisible,
   boardReadable,
@@ -299,4 +331,5 @@ export const ContestAccess = {
   canSeeOwnScoreboard,
   canSeeFullSubmissionList,
   isProblemListOpen,
+  hidesProblemsBeforeStart,
 };
