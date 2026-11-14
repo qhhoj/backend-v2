@@ -63,6 +63,8 @@ export class SettleShareReportsDto {
 export class ShareReportResponse {
   /** Report id. */
   id!: string;
+  /** The reported share's code, kept after the share is gone; settle by it. */
+  code!: string;
   /** The reported share; null once it expired or was deleted. */
   share!: ShareSummaryResponse | null;
   /** Who reported; null when the account is gone. */

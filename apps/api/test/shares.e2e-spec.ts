@@ -116,11 +116,21 @@ describe('share links', () => {
       .expect(errorCode('forbidden'));
   });
 
-  it('refuses a problem whose setter shows sources to owners and testers only', async () => {
-    const problem = await newProblem({ submissionSourceVisibility: 'O' });
-    await shareSubmission(owner, (await submissionOf(problem._id))._id)
-      .expect(403)
-      .expect(errorCode('hidden'));
+  it('refuses a problem that is not public or whose setter shows sources to owners and testers only, and a missing source', async () => {
+    for (const fields of [
+      { submissionSourceVisibility: 'O' as const },
+      { isPublic: false, testers: [ownerId] },
+    ]) {
+      const problem = await newProblem(fields);
+      await shareSubmission(owner, (await submissionOf(problem._id))._id)
+        .expect(403)
+        .expect(errorCode('hidden'));
+    }
+    const submission = await submissionOf((await newProblem())._id);
+    await api.submissionSources.deleteOne({ _id: submission._id });
+    await shareSubmission(owner, submission._id)
+      .expect(409)
+      .expect(issueCodes(['submission_not_shareable']));
   });
 
   it('refuses a practice submission to a problem a running contest lists', async () => {
@@ -172,13 +182,18 @@ describe('share links', () => {
     expect(view.copy!.batches).toBeNull();
     const stored = await api.shares.findOne({ code }).lean<Share>();
     expect(JSON.stringify(stored)).not.toMatch(/expected 42|printed 41/);
-    await api.problems.updateOne({ _id: problem._id }, { isPublic: false });
-    expect(dataOf<ShareView>(await read(code).expect(200)).problem).toBeNull();
     const raw = await read(`${code}/download`).expect(200);
-    expect(raw.headers['content-type']).toBe('text/plain; charset=utf-8');
-    expect(raw.headers['content-disposition']).toBe(
-      `attachment; filename="${code}.cpp"`,
-    );
+    expect(raw.headers).toMatchObject({
+      'content-type': 'text/plain; charset=utf-8',
+      'content-disposition': `attachment; filename="${code}.cpp"`,
+      'x-content-type-options': 'nosniff',
+    });
+    expect(raw.headers['content-security-policy']).toContain('sandbox');
+    await api.problems.updateOne({ _id: problem._id }, { isPublic: false });
+    await read(code).expect(403).expect(errorCode('hidden'));
+    expect(
+      dataOf<ShareView>(await read(code, owner).expect(200)).hiddenReason,
+    ).toBe('problem_hidden');
   });
 
   it('sets the expiry from the chosen lifetime, expires by a TTL index, and answers 404 once past it', async () => {
@@ -200,7 +215,7 @@ describe('share links', () => {
     await read(code).expect(404);
   });
 
-  it(`refuses a new share at ${ACTIVE_SHARE_LIMIT} unexpired ones, expired ones not counted`, async () => {
+  it(`refuses a new share at ${ACTIVE_SHARE_LIMIT} unexpired ones, expired ones not counted, even to parallel creates`, async () => {
     const userId = (await createUserWith(api, 'sharefull'))._id;
     const full = await loginAs(api, userId);
     const row = (index: number, expiresAt: Date | null) => ({
@@ -222,7 +237,17 @@ describe('share links', () => {
       ),
       row(ACTIVE_SHARE_LIMIT, new Date(Date.now() - 1000)),
     ]);
-    await paste(full).expect(201);
+    const statuses = (
+      await Promise.all(
+        Array.from({ length: 5 }, () => paste(full, { expiry: 'never' })),
+      )
+    ).map((response) => response.status);
+    expect(statuses.sort((left, right) => left - right)).toEqual([
+      201, 409, 409, 409, 409,
+    ]);
+    expect(
+      await api.shares.countDocuments({ createdBy: userId, expiresAt: null }),
+    ).toBe(ACTIVE_SHARE_LIMIT);
     await paste(full)
       .expect(409)
       .expect(issueCodes(['share_limit']));
@@ -237,7 +262,7 @@ describe('share links', () => {
     const at = (suffix = '') => `${SHARES}/${code}${suffix}`;
     await authed(api.http().patch(at()), reader)
       .send({ title: 'mine now' })
-      .expect(403);
+      .expect(404);
     const edited = dataOf<{ title: string; expiresAt: string | null }>(
       await authed(api.http().patch(at()), owner)
         .send({ title: 'Sum\nof a range', expiry: '7d' })
@@ -254,6 +279,7 @@ describe('share links', () => {
       ).expect(200),
     );
     expect(listed.map((row) => row.code)).toEqual([code]);
+    await authed(api.http().get(`${SHARES}?scope=all`), owner).expect(403);
     const report = (session: TestSession) =>
       authed(api.http().post(at('/reports')), session).send({
         reason: 'contest',
@@ -265,13 +291,17 @@ describe('share links', () => {
     const queue = dataOf<Array<{ share: { code: string }; reason: string }>>(
       await authed(api.http().get(`${SHARES}/reports`), staff).expect(200),
     );
-    expect(queue[0]).toMatchObject({ share: { code }, reason: 'contest' });
+    expect(queue[0]).toMatchObject({
+      code,
+      share: { code },
+      reason: 'contest',
+    });
+    await authed(api.http().delete(at()), reader).expect(404);
+    await authed(api.http().delete(at()), owner).expect(204);
+    await read(code).expect(404);
     await authed(api.http().post(at('/reports/settle')), staff)
       .send({ outcome: 'dismissed' })
       .expect(204);
-    await authed(api.http().delete(at()), reader).expect(403);
-    await authed(api.http().delete(at()), owner).expect(204);
-    await read(code).expect(404);
   });
 
   it("takes a link down for everyone until staff restore it, logs both, and hides a banned author's links", async () => {
@@ -284,6 +314,7 @@ describe('share links', () => {
       .expect(204);
     await read(code).expect(404);
     await read(code, owner).expect(404);
+    await authed(api.http().delete(`${SHARES}/${code}`), owner).expect(409);
     await authed(api.http().post(`${SHARES}/${code}/restore`), staff).expect(
       204,
     );
@@ -300,5 +331,6 @@ describe('share links', () => {
     await api.users.updateOne({ _id: ownerId }, { banReason: 'abuse' });
     await read(code).expect(404);
     await api.users.updateOne({ _id: ownerId }, { banReason: null });
+    await read(code).expect(200);
   });
 });

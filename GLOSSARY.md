@@ -295,7 +295,7 @@ An unlisted public link `/c/<code>` (10 lowercase characters) to code: a Frozen 
 _Avoid_: Snapshot (that is the in-memory reload of a querier), short link (that is `/s/<code>`, a redirect to a site page)
 
 **Frozen copy**:
-What a visitor may see of a Submission when its owner shared it: source, language, verdict, points, time, memory and the case results the problem shows to visitors; never checker feedback, program output or an internal error's text. Stored, not referenced: a later Rejudge changes nothing. A Share of kind `submission`.
+What a visitor may see of a Submission to a public Problem when its owner shared it: source, language, verdict, points, time, memory and the case results the problem shows to visitors; never checker feedback, program output or an internal error's text. Stored, not referenced: a later Rejudge changes nothing. A Share of kind `submission`.
 _Avoid_: Snapshot, freeze (that is the scoreboard's)
 
 **Paste**:

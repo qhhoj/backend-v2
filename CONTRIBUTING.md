@@ -122,8 +122,8 @@ contributions/     flat: vote ledger (votes.repository), vote gates and limit, c
 similarity/        core/ start/ runs/ pairs/: code-similarity runs and pairs (`judge.moss_contest` + edit rights)
 shares/
   shares-api.module.ts
-  core/            ShareAccessService (the one read rule of `/c/<code>`), writer (gates, budgets, fresh code), repository, code, expiry, hidden reasons, revisions, rate-limits, shared dto
-  guard/           ShareGuardService: the setter's source rule and the problem-keyed contest rule (`share-contest-rule`), at create and on every read
+  core/            ShareAccessService (the one read rule of `/c/<code>`), writer (gates, budgets, the per-user create lock, fresh code), repository, code, expiry, hidden reasons, revisions, rate-limits, shared dto
+  guard/           ShareGuardService: public problems only, the setter's source rule and the problem-keyed contest rule (`share-contest-rule`), at create and on every read
   create/          submission copies (`frozen-copy`) and pastes (`paste-source`)
   reading/         public page, raw and download (`@Public`, noindex)
   owning/          list, edit (title, expiry), delete

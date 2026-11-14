@@ -49,7 +49,7 @@ export class ShareCreateService {
     private readonly writer: ShareWriterService,
   ) {}
 
-  /** A frozen copy of the caller's own finished submission, unless a contest or the setter's source rule keeps it closed. */
+  /** A frozen copy of the caller's own finished submission to a public problem, unless a contest or the setter's source rule keeps it closed. */
   async createCopy(
     principal: Principal,
     dto: CreateSubmissionShareDto,
@@ -60,26 +60,20 @@ export class ShareCreateService {
       dto.submissionId,
     );
     const language = this.copiedLanguage(submission);
-    const refusal = await this.guard.refusalOf(
-      {
-        problemId: uuidStr(submission.problem),
-        problem: problem.deletedAt ? null : problem,
-        contestId: submission.contest ? uuidStr(submission.contest) : null,
-      },
-      now,
-    );
-    if (refusal) throw copyRefusalError(refusal);
+    await this.assertGuardAllows(submission, problem, now);
     const [copy, source] = await Promise.all([
       this.copyOf(submission, problem),
       this.submissionRows.findSource(uuidStr(submission._id)),
     ]);
+    if (!source)
+      throw notShareable('This submission has no source text to share');
     const share = await this.writer.insert(
       principal,
       {
         kind: 'submission',
         title: cleanTitle(dto.title),
         language,
-        source: source ?? '',
+        source,
         expiresAt: expiresAtOf(dto.expiry ?? 'never', now),
         copy,
       },
@@ -109,6 +103,23 @@ export class ShareCreateService {
       now,
     );
     return ShareSummaryResponse.from(share);
+  }
+
+  /** The public-problem, setter and contest rules, checked again on every read. */
+  private async assertGuardAllows(
+    submission: SubmissionDocument,
+    problem: ProblemDocument,
+    now: Date,
+  ): Promise<void> {
+    const refusal = await this.guard.refusalOf(
+      {
+        problemId: uuidStr(submission.problem),
+        problem,
+        contestId: submission.contest ? uuidStr(submission.contest) : null,
+      },
+      now,
+    );
+    if (refusal) throw copyRefusalError(refusal);
   }
 
   /** The submission page's visibility rule (404), then ownership: staff may read others' code but never publish it. */

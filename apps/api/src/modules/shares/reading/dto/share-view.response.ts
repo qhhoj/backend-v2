@@ -126,7 +126,7 @@ export class ShareViewerResponse {
   isOwner!: boolean;
   /** The owner may change the title and expiry. */
   canEdit!: boolean;
-  /** The owner, or staff with `judge.manage_share`. */
+  /** The owner unless staff took the share down, or staff with `judge.manage_share`. */
   canDelete!: boolean;
   /** Staff with `judge.manage_share`: take down or restore. */
   canTakeDown!: boolean;

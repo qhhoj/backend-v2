@@ -91,7 +91,7 @@ export class ShareAccessService {
     return this.guard.refusalOf(
       {
         problemId: uuidStr(share.copy.problem),
-        problem: problem?.deletedAt ? null : problem,
+        problem,
         contestId: share.copy.contest ? uuidStr(share.copy.contest) : null,
       },
       now,

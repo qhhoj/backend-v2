@@ -20,7 +20,10 @@ export class ShareReportsRepository {
 
   /** Throws the duplicate-key error when the reporter already reported the share. */
   async create(
-    fields: Pick<ShareReport, 'share' | 'reporter' | 'reason' | 'note'>,
+    fields: Pick<
+      ShareReport,
+      'share' | 'code' | 'reporter' | 'reason' | 'note'
+    >,
   ): Promise<void> {
     await this.reports.create(fields);
   }
@@ -45,15 +48,15 @@ export class ShareReportsRepository {
     return { items, total };
   }
 
-  /** Settles every open report of the share; returns how many. */
+  /** Settles every open report of the code, whether its share still exists or not; returns how many. */
   async settle(
-    shareId: string,
+    code: string,
     status: Exclude<CommentReportStatus, 'open'>,
     { settledBy, now }: { settledBy: string; now: Date },
   ): Promise<number> {
     const { modifiedCount } = await this.reports
       .updateMany(
-        { share: shareId, status: 'open' },
+        { code, status: 'open' },
         { $set: { status, settledBy, settledAt: now } },
       )
       .exec();

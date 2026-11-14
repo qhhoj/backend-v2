@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { uuidStr } from '@libs/database';
 import type { Contest, Problem } from '@libs/database';
 import { ContestAccess } from '../../contests/core/contest-access';
+import { ProblemAccess } from '../../problems/core/problem-access';
 import { ContestsRepository } from '../../contests/core/contests.repository';
 import { sourceVisibilityOf } from '../../submissions/core/submission-access';
 import type { CopyRefusal } from '../core/share-hidden-reason';
@@ -12,8 +13,14 @@ const OWNER_AND_TESTERS_ONLY = 'O';
 
 export interface CopySubject {
   problemId: string;
-  /** Null for a deleted problem's history: no setter rule left to apply. */
-  problem: Pick<Problem, 'submissionSourceVisibility'> | null;
+  /** Deleted ones included; null when the row is gone. */
+  problem: Pick<
+    Problem,
+    | 'submissionSourceVisibility'
+    | 'isPublic'
+    | 'isOrganizationPrivate'
+    | 'deletedAt'
+  > | null;
   /** The contest the submission was made in; a deleted contest counts as open. */
   contestId: string | null;
 }
@@ -23,15 +30,18 @@ export interface CopySubject {
 export class ShareGuardService {
   constructor(private readonly contests: ContestsRepository) {}
 
-  /** Null when the copy may be shown; the setter's rule first, then every contest that lists the problem or holds the submission. */
+  /**
+   * Null when the copy may be shown: the problem is public to signed-out visitors, its setter shows sources, and
+   * every contest that lists the problem or holds the submission has ended with an open board.
+   */
   async refusalOf(
     subject: CopySubject,
     now: Date,
   ): Promise<CopyRefusal | null> {
-    if (
-      subject.problem &&
-      sourceVisibilityOf(subject.problem) === OWNER_AND_TESTERS_ONLY
-    )
+    const { problem } = subject;
+    if (!problem || problem.deletedAt || !ProblemAccess.isSitePublic(problem))
+      return 'problem_hidden';
+    if (sourceVisibilityOf(problem) === OWNER_AND_TESTERS_ONLY)
       return 'source_hidden';
     const contests = await this.contestsOf(subject);
     const isOpen = contests.every((contest) =>

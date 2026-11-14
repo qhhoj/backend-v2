@@ -9,6 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
+import { MANAGE_SHARE } from '../core/share-access.service';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
@@ -46,9 +47,9 @@ export class ShareReportsController {
    * List share reports
    *
    * @remarks
-   * Requires `judge.manage_share`. 20 per page, newest first: `status=open` (the default) or `settled`. Each carries its share while it still exists (expired and deleted shares drop out).
+   * Requires `judge.manage_share`. 20 per page, newest first: `status=open` (the default) or `settled`. Each carries its share's code, and the share while it still exists (`share` is null once it expired or was deleted).
    */
-  @RequirePermission('judge.manage_share')
+  @RequirePermission(MANAGE_SHARE)
   @ApiPaginatedResponse(ShareReportResponse)
   @Get('reports')
   queue(
@@ -61,9 +62,9 @@ export class ShareReportsController {
    * Settle the reports of a share
    *
    * @remarks
-   * Requires `judge.manage_share`. Marks every open report of the share `resolved` or `dismissed`; taking it down is a separate call. 404 `not_found` for an unknown or expired code, or when it has no open reports. Returns 204.
+   * Requires `judge.manage_share`. Marks every open report of the code `resolved` or `dismissed`, also once its share expired or was deleted; taking it down is a separate call. 404 `not_found` when the code has no open reports. Returns 204.
    */
-  @RequirePermission('judge.manage_share')
+  @RequirePermission(MANAGE_SHARE)
   @Post(':code/reports/settle')
   @HttpCode(204)
   settle(

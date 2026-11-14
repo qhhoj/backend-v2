@@ -6,7 +6,7 @@ import { ProblemAccess } from '../../problems/core/problem-access';
 import type { ProblemDocument } from '../../problems/core/problems.repository';
 import { sourceFilename } from '../../submissions/core/source-file';
 import type { SourceFile } from '../../submissions/core/source-file';
-import { readKey, READ_LIMIT, READ_WINDOW_SECONDS } from '../core/rate-limits';
+import { readKeys, READ_LIMIT, READ_WINDOW_SECONDS } from '../core/rate-limits';
 import { ShareAccessService } from '../core/share-access.service';
 import type { ReadableShare } from '../core/share-access.service';
 import {
@@ -32,11 +32,11 @@ const problemLinkFor = (
 
 const viewerOf = (
   principal: Principal | null,
-  { isOwner, canManage }: ReadableShare,
+  { share, isOwner, canManage }: ReadableShare,
 ): ShareViewerResponse => ({
   isOwner,
   canEdit: isOwner,
-  canDelete: isOwner || canManage,
+  canDelete: (isOwner && !share.takenDown) || canManage,
   canTakeDown: canManage,
   canReport: principal !== null && !isOwner,
 });
@@ -78,7 +78,7 @@ export class ShareReadService {
     ip: string,
   ): Promise<ReadableShare> {
     await this.rateLimit.reserve(
-      [readKey(principal, ip)],
+      readKeys(principal, ip),
       READ_LIMIT,
       READ_WINDOW_SECONDS,
     );

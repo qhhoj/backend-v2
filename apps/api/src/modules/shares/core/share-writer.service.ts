@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type Redis from 'ioredis';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import {
@@ -6,8 +7,10 @@ import {
   isDuplicateKey,
   issueError,
   RateLimitService,
+  REDIS,
   retryOnDuplicateKey,
   TUNING,
+  withRedisLock,
 } from '@libs/common';
 import type { Share } from '@libs/database';
 import {
@@ -16,6 +19,8 @@ import {
   CREATE_BURST_WINDOW_SECONDS,
   CREATE_DAILY_LIMIT,
   CREATE_DAILY_WINDOW_SECONDS,
+  CREATE_LOCK_SECONDS,
+  CREATE_LOCK_WAIT_SECONDS,
   MAX_CODE_ATTEMPTS,
 } from './rate-limits';
 import type { ShareCodeTuning } from './share-code';
@@ -43,20 +48,44 @@ export class ShareWriterService {
     private readonly users: UsersRepository,
     private readonly rateLimit: RateLimitService,
     @Inject(TUNING) private readonly tuning: ShareCodeTuning,
+    @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  /** 403 for a muted user, 409 `conflict` (issue `share_limit`) at `ACTIVE_SHARE_LIMIT` unexpired shares, 429 over the create budgets; a create that fails after the claim gives its hits back. */
+  /**
+   * 403 for a muted user, 409 `conflict` (issue `share_limit`) at `ACTIVE_SHARE_LIMIT` unexpired shares, 429 over the
+   * create budgets; a create that fails after the claim gives its hits back. The count and the insert run under the
+   * user's lock, so parallel creates cannot pass the cap together.
+   */
   async insert(
     principal: Principal,
     fields: NewShare,
     now: Date,
   ): Promise<ShareDocument> {
-    await this.assertMayCreate(principal, now);
-    const release = await this.claimCreate(principal.userId);
+    if ((await this.users.signedIn(principal)).mute) throw mutedError();
+    return withRedisLock(
+      this.redis,
+      {
+        key: `share-create-lock:user:${principal.userId}`,
+        ttlSeconds: CREATE_LOCK_SECONDS,
+        waitSeconds: CREATE_LOCK_WAIT_SECONDS,
+        renew: true,
+        busyMessage: 'Another link is being created; try again',
+      },
+      () => this.insertUnderCap(principal.userId, fields, now),
+    );
+  }
+
+  private async insertUnderCap(
+    userId: string,
+    fields: NewShare,
+    now: Date,
+  ): Promise<ShareDocument> {
+    await this.assertUnderCap(userId, now);
+    const release = await this.claimCreate(userId);
     try {
       return await this.insertUnderFreshCode({
         ...fields,
-        createdBy: principal.userId,
+        createdBy: userId,
       });
     } catch (error) {
       await release();
@@ -64,12 +93,8 @@ export class ShareWriterService {
     }
   }
 
-  private async assertMayCreate(
-    principal: Principal,
-    now: Date,
-  ): Promise<void> {
-    if ((await this.users.signedIn(principal)).mute) throw mutedError();
-    const active = await this.shares.countActive(principal.userId, now);
+  private async assertUnderCap(userId: string, now: Date): Promise<void> {
+    const active = await this.shares.countActive(userId, now);
     if (active >= ACTIVE_SHARE_LIMIT)
       throw issueError('conflict', 409, {
         field: '',

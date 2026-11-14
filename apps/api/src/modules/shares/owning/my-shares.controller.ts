@@ -9,7 +9,7 @@ import {
   Patch,
   Query,
 } from '@nestjs/common';
-import { CurrentAuth } from '@libs/auth';
+import { CurrentAuth, NoImpersonation } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
@@ -45,8 +45,9 @@ export class MySharesController {
    * Change a share's title or expiry
    *
    * @remarks
-   * The owner only (403 `forbidden`). A new `expiry` counts from now. 404 `not_found` for an unknown or expired code.
+   * The owner only, not while impersonating. A new `expiry` counts from now. 404 `not_found` for an unknown or expired code and for someone else's, alike. Counts against a per-user budget shared with deletes (429 `rate_limited`).
    */
+  @NoImpersonation()
   @Patch(':code')
   edit(
     @CurrentAuth() auth: AuthContext,
@@ -60,8 +61,9 @@ export class MySharesController {
    * Delete a share
    *
    * @remarks
-   * The owner, or staff with `judge.manage_share` (403 `forbidden` otherwise; a staff delete is audit-logged). Removes the link and its stored code at once. 404 `not_found` for an unknown or expired code. Returns 204.
+   * The owner, or staff with `judge.manage_share` (a staff delete is audit-logged); not while impersonating. Removes the link and its stored code at once. 404 `not_found` for an unknown or expired code and, to anyone but staff, for someone else's. A link staff took down stays for their review: its owner gets 409 `conflict`. Counts against a per-user budget shared with edits (429 `rate_limited`). Returns 204.
    */
+  @NoImpersonation()
   @Delete(':code')
   @HttpCode(204)
   remove(

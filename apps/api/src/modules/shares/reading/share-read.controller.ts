@@ -28,7 +28,7 @@ export class ShareReadController {
    * Read a shared link
    *
    * @remarks
-   * Public, `X-Robots-Tag: noindex, nofollow`. The page of `/c/<code>`: source, language, author, expiry, the frozen copy of a submission share, and the problem's code and name only when the viewer may see the problem. 404 `not_found` (never cached) for an unknown, expired or taken-down code and for a banned, deactivated or deleted author. A submission share is checked again on every read: 403 `contest_running` while a contest that lists its problem is running, not started, frozen or has a hidden board, 403 `hidden` when the setter now shows sources to owners and testers only. The owner passes these with `hiddenReason` set; staff with `judge.manage_share` pass every rule. 120 reads per minute per visitor address or user (429 `rate_limited`).
+   * Public, `X-Robots-Tag: noindex, nofollow`. The page of `/c/<code>`: source, language, author, expiry, the frozen copy of a submission share, and the problem's code and name only when the viewer may see the problem. 404 `not_found` (never cached) for an unknown, expired or taken-down code and for a banned, deactivated or deleted author. A submission share is checked again on every read: 403 `contest_running` while a contest that lists its problem is running, not started, frozen or has a hidden board, 403 `hidden` when a signed-out visitor can no longer see the problem (hidden, organization-private or deleted) or the setter now shows sources to owners and testers only. The owner passes these with `hiddenReason` set; staff with `judge.manage_share` pass every rule. 120 reads per minute per address, and per user as well when signed in (429 `rate_limited`).
    */
   @Get(':code')
   view(

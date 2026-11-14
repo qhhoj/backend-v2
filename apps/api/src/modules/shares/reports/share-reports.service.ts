@@ -56,6 +56,7 @@ export class ShareReportsService {
     try {
       await this.reports.create({
         share: uuidStr(share._id),
+        code: share.code,
         reporter: principal.userId,
         reason,
         note: note.trim(),
@@ -93,6 +94,7 @@ export class ShareReportsService {
         const share = shareOf.get(uuidStr(row.share));
         return {
           id: uuidStr(row._id),
+          code: row.code,
           share: share ? ShareSummaryResponse.from(share) : null,
           reporter: summary(row.reporter),
           reason: row.reason,
@@ -107,20 +109,18 @@ export class ShareReportsService {
     );
   }
 
-  /** Resolves or dismisses every open report of the share; 404 when it has none. */
+  /** Resolves or dismisses every open report of the code, also once its share expired or was deleted; 404 when it has none. */
   async settle(
     principal: Principal,
     code: string,
     outcome: SettledReportStatus,
   ): Promise<void> {
-    const now = new Date();
-    const share = await this.access.live(code, now);
-    const settled = await this.reports.settle(uuidStr(share._id), outcome, {
+    const settled = await this.reports.settle(code, outcome, {
       settledBy: principal.userId,
-      now,
+      now: new Date(),
     });
     if (!settled)
-      throw new AppError('not_found', 404, 'No open reports on this share');
+      throw new AppError('not_found', 404, 'No open reports on this code');
   }
 }
 
