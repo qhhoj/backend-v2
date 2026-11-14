@@ -1,5 +1,17 @@
 # qhhoj-backend
 
+## 2.38.0
+
+### Minor Changes
+
+- 036e6bc: Share links at `/c/<code>`: frozen copies of a submission (owner only, contest-guarded on every read) and pastes, with edit, delete, staff takedown and restore, reports, and `viewer.canShare` on the submission detail.
+
+### Patch Changes
+
+- 736cbe6: Security update (GHSA-mh3m-3rhj-pqff).
+- c495a47: Security update (GHSA-898m-vjq8-2jf8).
+- 8b6ebc9: Security update (GHSA-662g-9vq2-39jx).
+
 ## 2.37.10
 
 ### Patch Changes
