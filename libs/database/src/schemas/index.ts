@@ -50,6 +50,8 @@ export * from './rating.schema';
 export * from './revision.schema';
 export * from './setting-revision.schema';
 export * from './setting.schema';
+export * from './share-report.schema';
+export * from './share.schema';
 export * from './short-link.schema';
 export * from './similarity-pair.schema';
 export * from './similarity-run.schema';

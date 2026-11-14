@@ -320,6 +320,7 @@ const actionFacts = (
   rejudgedDate: null,
   lockedAfter: null,
   canEditProblem: false,
+  isFileOnlyLanguage: false,
   ...extra,
 });
 const EDITOR_PERMISSIONS = [
@@ -341,6 +342,7 @@ describe('submissionActions', () => {
       canReject: false,
       canLock: false,
       canOverrideScore: false,
+      canShare: false,
     }));
 
   it.each([
@@ -354,6 +356,7 @@ describe('submissionActions', () => {
         canReject: false,
         canLock: false,
         canOverrideScore: false,
+        canShare: false,
       },
     },
     {
@@ -370,6 +373,7 @@ describe('submissionActions', () => {
         canReject: false,
         canLock: false,
         canOverrideScore: false,
+        canShare: false,
       },
     },
     {
@@ -383,6 +387,7 @@ describe('submissionActions', () => {
         canReject: false,
         canLock: false,
         canOverrideScore: false,
+        canShare: false,
       },
     },
     {
@@ -396,6 +401,7 @@ describe('submissionActions', () => {
         canReject: true,
         canLock: false,
         canOverrideScore: false,
+        canShare: false,
       },
     },
     {
@@ -412,6 +418,7 @@ describe('submissionActions', () => {
         canReject: true,
         canLock: false,
         canOverrideScore: false,
+        canShare: false,
       },
     },
     {
@@ -424,6 +431,7 @@ describe('submissionActions', () => {
         canReject: true,
         canLock: false,
         canOverrideScore: false,
+        canShare: false,
       },
     },
     {
@@ -436,6 +444,7 @@ describe('submissionActions', () => {
         canReject: false,
         canLock: false,
         canOverrideScore: false,
+        canShare: false,
       },
     },
     {
@@ -449,6 +458,7 @@ describe('submissionActions', () => {
         canReject: false,
         canLock: false,
         canOverrideScore: false,
+        canShare: false,
       },
     },
     {
@@ -461,6 +471,7 @@ describe('submissionActions', () => {
         canReject: false,
         canLock: false,
         canOverrideScore: false,
+        canShare: false,
       },
     },
     {
@@ -473,6 +484,7 @@ describe('submissionActions', () => {
         canReject: false,
         canLock: true,
         canOverrideScore: false,
+        canShare: false,
       },
     },
     {
@@ -485,8 +497,29 @@ describe('submissionActions', () => {
         canReject: false,
         canLock: false,
         canOverrideScore: false,
+        canShare: false,
       },
     },
+    ...(
+      [
+        ['D', false, true],
+        ['CE', false, true],
+        ['D', true, false],
+        ['QU', false, false],
+      ] as const
+    ).map(([status, isFileOnlyLanguage, canShare]) => ({
+      label: `the owner may share a ${status} submission ${isFileOnlyLanguage ? 'in a file-only language' : 'in a text language'}: ${canShare}`,
+      principal: viewer({ userId: 'owner' }),
+      facts: actionFacts({ isOwner: true, status, isFileOnlyLanguage }),
+      expected: {
+        canAbort: status === 'QU',
+        canRejudge: false,
+        canReject: false,
+        canLock: false,
+        canOverrideScore: false,
+        canShare,
+      },
+    })),
     ...(
       [
         ['D', true, true],
@@ -505,6 +538,7 @@ describe('submissionActions', () => {
         canReject: false,
         canLock: false,
         canOverrideScore,
+        canShare: false,
       },
     })),
   ])('$label', ({ principal, facts, expected }) => {

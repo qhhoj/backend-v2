@@ -154,6 +154,8 @@ const MODEL_ACCESSORS = {
   revisions: schemas.Revision,
   settingRevisions: schemas.SettingRevision,
   settings: schemas.Setting,
+  shareReports: schemas.ShareReport,
+  shares: schemas.Share,
   shortLinks: schemas.ShortLink,
   similarityPairs: schemas.SimilarityPair,
   similarityRuns: schemas.SimilarityRun,

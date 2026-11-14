@@ -111,6 +111,8 @@ export class SubmissionViewerResponse implements SubmissionActions {
   canLock!: boolean;
   /** Whether `PUT /submissions/{id}/score` is allowed. */
   canOverrideScore!: boolean;
+  /** Whether `POST /shares/submissions` may be tried: the owner's judged or compile-error submission in a text language. A running contest or the setter's source rule can still refuse it. */
+  canShare!: boolean;
 }
 
 export class SubmissionExternalRunResponse {

@@ -13,6 +13,7 @@ import {
   Problem,
   ProblemGroup,
   ProblemType,
+  Share,
   Submission,
   TagProblem,
   User,
@@ -42,6 +43,7 @@ const LABEL_FIELDS: Record<string, { model: string; field: string | null }> = {
   group: { model: Group.name, field: 'name' },
   submission: { model: Submission.name, field: null },
   judge: { model: Judge.name, field: 'name' },
+  share: { model: Share.name, field: 'code' },
 };
 
 /** Kinds with no name of their own: the id is the reference. */

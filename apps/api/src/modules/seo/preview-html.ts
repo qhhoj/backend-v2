@@ -7,6 +7,8 @@ export interface Preview {
   path: string;
   /** The page's own image (URL or site path); the site image when absent or empty. */
   image?: string;
+  /** Unlisted pages (share links): bots that index must not. */
+  isNoindex?: boolean;
 }
 
 export const SITE_NAME = 'QHHOJ';
@@ -41,6 +43,9 @@ export const previewHtml = (
     '<html><head><meta charset="utf-8">',
     `<title>${title}</title>`,
     `<link rel="canonical" href="${escapeHtml(url)}">`,
+    ...(preview.isNoindex
+      ? ['<meta name="robots" content="noindex, nofollow">']
+      : []),
     ...tags,
     `</head><body><a href="${escapeHtml(url)}">${title}</a></body></html>`,
     '',

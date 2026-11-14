@@ -4386,6 +4386,38 @@
         },
         "type": "object"
       },
+      "CreatePasteDto": {
+        "properties": {
+          "expiry": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareExpiry"
+              }
+            ],
+            "description": "How long the link lives; `30d` by default."
+          },
+          "languageId": {
+            "description": "Language for highlighting and the download's extension; not a file-only one.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "source": {
+            "description": "The code, at most 65536 bytes of UTF-8 (checked by the service, which counts bytes).",
+            "maxLength": 65536,
+            "type": "string"
+          },
+          "title": {
+            "description": "Optional plain-text title; control characters are dropped.",
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
+        "required": [
+          "languageId",
+          "source"
+        ],
+        "type": "object"
+      },
       "CreatePostDto": {
         "properties": {
           "content": {
@@ -4674,6 +4706,32 @@
         },
         "required": [
           "path"
+        ],
+        "type": "object"
+      },
+      "CreateSubmissionShareDto": {
+        "properties": {
+          "expiry": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareExpiry"
+              }
+            ],
+            "description": "How long the link lives; `never` by default."
+          },
+          "submissionId": {
+            "description": "The caller's own finished submission.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": {
+            "description": "Optional plain-text title; control characters are dropped.",
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
+        "required": [
+          "submissionId"
         ],
         "type": "object"
       },
@@ -5190,6 +5248,24 @@
         "required": [
           "disqualified"
         ],
+        "type": "object"
+      },
+      "EditShareDto": {
+        "properties": {
+          "expiry": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareExpiry"
+              }
+            ],
+            "description": "New lifetime, counted from now."
+          },
+          "title": {
+            "description": "New plain-text title; control characters are dropped.",
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "EditorialOutcome": {
@@ -5906,6 +5982,108 @@
           "id",
           "at",
           "editor"
+        ],
+        "type": "object"
+      },
+      "FrozenCopyResponse": {
+        "properties": {
+          "batches": {
+            "description": "Batch summaries, when the problem showed only those.",
+            "items": {
+              "$ref": "#/components/schemas/SubmissionBatchResponse"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "caseCount": {
+            "description": "The problem's case count; null when only totals are shown.",
+            "nullable": true,
+            "type": "number"
+          },
+          "casePoints": {
+            "description": "Points earned over all test cases.",
+            "type": "number"
+          },
+          "caseTotal": {
+            "description": "Points available over all test cases.",
+            "type": "number"
+          },
+          "cases": {
+            "description": "Every case, when the problem showed them to visitors.",
+            "items": {
+              "$ref": "#/components/schemas/ShareCaseResponse"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "compileLog": {
+            "description": "The compiler's output of a `CE`.",
+            "nullable": true,
+            "type": "string"
+          },
+          "judgedAt": {
+            "description": "When it was judged.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "memory": {
+            "description": "Largest memory use in KiB.",
+            "nullable": true,
+            "type": "number"
+          },
+          "points": {
+            "description": "Points awarded.",
+            "nullable": true,
+            "type": "number"
+          },
+          "problemPoints": {
+            "description": "The problem's points at share time.",
+            "type": "number"
+          },
+          "result": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionResult"
+              }
+            ],
+            "description": "Verdict at share time.",
+            "nullable": true
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareableStatus"
+              }
+            ],
+            "description": "`D` judged or `CE` compile error."
+          },
+          "submittedAt": {
+            "description": "When the submission was made.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "time": {
+            "description": "Largest running time in seconds.",
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "status",
+          "result",
+          "points",
+          "problemPoints",
+          "casePoints",
+          "caseTotal",
+          "time",
+          "memory",
+          "submittedAt",
+          "judgedAt",
+          "cases",
+          "batches",
+          "caseCount",
+          "compileLog"
         ],
         "type": "object"
       },
@@ -12063,6 +12241,27 @@
         ],
         "type": "object"
       },
+      "ReportShareDto": {
+        "properties": {
+          "note": {
+            "description": "Optional details for staff.",
+            "maxLength": 500,
+            "type": "string"
+          },
+          "reason": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareReportReason"
+              }
+            ],
+            "description": "Why: `spam`, `abuse`, `contest` (leaks a running contest's solution) or `other`."
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
       "ReportedCommentResponse": {
         "properties": {
           "author": {
@@ -12612,6 +12811,566 @@
           "outcome"
         ],
         "type": "object"
+      },
+      "SettleShareReportsDto": {
+        "properties": {
+          "outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentReportOutcome"
+              }
+            ],
+            "description": "`resolved` when the reports led to action, `dismissed` when they did not."
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "ShareCaseResponse": {
+        "properties": {
+          "batch": {
+            "description": "Batch number, from 1; null for a case outside any batch.",
+            "nullable": true,
+            "type": "number"
+          },
+          "memory": {
+            "description": "Memory used in KiB.",
+            "type": "number"
+          },
+          "points": {
+            "description": "Points earned by the case.",
+            "type": "number"
+          },
+          "position": {
+            "description": "Position of the case in judging order.",
+            "type": "number"
+          },
+          "status": {
+            "description": "Case verdict: `AC`, `WA`, `TLE`, `MLE`, `OLE`, `IR`, `RTE` or `SC`.",
+            "enum": [
+              "AC",
+              "IR",
+              "MLE",
+              "OLE",
+              "RTE",
+              "SC",
+              "TLE",
+              "WA"
+            ],
+            "type": "string"
+          },
+          "time": {
+            "description": "Running time in seconds.",
+            "type": "number"
+          },
+          "total": {
+            "description": "Points available for the case.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "position",
+          "status",
+          "time",
+          "memory",
+          "points",
+          "total",
+          "batch"
+        ],
+        "type": "object"
+      },
+      "ShareExpiry": {
+        "description": "How long the link lives; `never` by default.",
+        "enum": [
+          "1d",
+          "30d",
+          "7d",
+          "never"
+        ],
+        "type": "string"
+      },
+      "ShareHiddenReason": {
+        "description": "Why everyone else is refused it now; only the owner and staff read a share that has one.",
+        "enum": [
+          "author_unavailable",
+          "contest_running",
+          "problem_hidden",
+          "source_hidden",
+          "taken_down"
+        ],
+        "type": "string"
+      },
+      "ShareKind": {
+        "description": "`submission`: a frozen copy of a submission; `paste`: pasted code.",
+        "enum": [
+          "paste",
+          "submission"
+        ],
+        "type": "string"
+      },
+      "ShareLanguageResponse": {
+        "properties": {
+          "extension": {
+            "description": "File extension at share time.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Language key at share time.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Language name at share time.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "extension"
+        ],
+        "type": "object"
+      },
+      "ShareListItemResponse": {
+        "properties": {
+          "author": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "The owner; null when the account is gone.",
+            "nullable": true,
+            "type": "object"
+          },
+          "code": {
+            "description": "The code in `/c/<code>`.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "When the share was made.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "When the link stops working; null if it never expires.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareKind"
+              }
+            ],
+            "description": "`submission`: a frozen copy of a submission; `paste`: pasted code."
+          },
+          "language": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareLanguageResponse"
+              }
+            ],
+            "description": "The language at share time."
+          },
+          "submissionId": {
+            "description": "The copied submission; null for a paste.",
+            "nullable": true,
+            "type": "string"
+          },
+          "takenDown": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareTakedownResponse"
+              }
+            ],
+            "description": "Set while staff keep it taken down.",
+            "nullable": true,
+            "type": "object"
+          },
+          "title": {
+            "description": "The owner's title; may be empty.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "code",
+          "title",
+          "language",
+          "submissionId",
+          "expiresAt",
+          "takenDown",
+          "createdAt",
+          "author"
+        ],
+        "type": "object"
+      },
+      "ShareListScope": {
+        "enum": [
+          "all",
+          "mine"
+        ],
+        "type": "string"
+      },
+      "ShareProblemResponse": {
+        "properties": {
+          "code": {
+            "description": "Problem code, for the link `/problems/<code>`.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Problem name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ShareReportReason": {
+        "description": "Why: `spam`, `abuse`, `contest` (leaks a running contest's solution) or `other`.",
+        "enum": [
+          "abuse",
+          "contest",
+          "other",
+          "spam"
+        ],
+        "type": "string"
+      },
+      "ShareReportResponse": {
+        "properties": {
+          "code": {
+            "description": "The reported share's code, kept after the share is gone; settle by it.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "When it was reported.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "description": "Report id.",
+            "type": "string"
+          },
+          "note": {
+            "description": "The reporter's note; may be empty.",
+            "type": "string"
+          },
+          "reason": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareReportReason"
+              }
+            ]
+          },
+          "reporter": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "Who reported; null when the account is gone.",
+            "nullable": true,
+            "type": "object"
+          },
+          "settledAt": {
+            "description": "When it was settled.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "settledBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "The staff member who settled it; null while open or when the account is gone.",
+            "nullable": true,
+            "type": "object"
+          },
+          "share": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareSummaryResponse"
+              }
+            ],
+            "description": "The reported share; null once it expired or was deleted.",
+            "nullable": true,
+            "type": "object"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentReportStatus"
+              }
+            ],
+            "description": "`open`, `resolved` or `dismissed`."
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "id",
+          "code",
+          "share",
+          "reporter",
+          "note",
+          "createdAt",
+          "settledBy",
+          "settledAt"
+        ],
+        "type": "object"
+      },
+      "ShareSummaryResponse": {
+        "properties": {
+          "code": {
+            "description": "The code in `/c/<code>`.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "When the share was made.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "When the link stops working; null if it never expires.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareKind"
+              }
+            ],
+            "description": "`submission`: a frozen copy of a submission; `paste`: pasted code."
+          },
+          "language": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareLanguageResponse"
+              }
+            ],
+            "description": "The language at share time."
+          },
+          "submissionId": {
+            "description": "The copied submission; null for a paste.",
+            "nullable": true,
+            "type": "string"
+          },
+          "takenDown": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareTakedownResponse"
+              }
+            ],
+            "description": "Set while staff keep it taken down.",
+            "nullable": true,
+            "type": "object"
+          },
+          "title": {
+            "description": "The owner's title; may be empty.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "code",
+          "title",
+          "language",
+          "submissionId",
+          "expiresAt",
+          "takenDown",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "ShareTakedownResponse": {
+        "properties": {
+          "at": {
+            "description": "When staff took it down.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why, as staff wrote it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "ShareViewResponse": {
+        "properties": {
+          "author": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "Who shared it; null only for staff reading a share whose author is gone.",
+            "nullable": true,
+            "type": "object"
+          },
+          "code": {
+            "description": "The code in `/c/<code>`.",
+            "type": "string"
+          },
+          "copy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FrozenCopyResponse"
+              }
+            ],
+            "description": "The submission's result; null for a paste.",
+            "nullable": true,
+            "type": "object"
+          },
+          "createdAt": {
+            "description": "When it was shared.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "When the link stops working; null if never.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "filename": {
+            "description": "What the raw and download links name the file.",
+            "type": "string"
+          },
+          "hiddenReason": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareHiddenReason"
+              }
+            ],
+            "description": "Why everyone else is refused it now; only the owner and staff read a share that has one.",
+            "nullable": true
+          },
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareKind"
+              }
+            ],
+            "description": "`submission`: a frozen copy; `paste`: pasted code."
+          },
+          "language": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareLanguageResponse"
+              }
+            ],
+            "description": "The language at share time."
+          },
+          "problem": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareProblemResponse"
+              }
+            ],
+            "description": "The copied submission's problem, only for viewers who may see the problem.",
+            "nullable": true,
+            "type": "object"
+          },
+          "source": {
+            "description": "The code.",
+            "type": "string"
+          },
+          "submissionId": {
+            "description": "The copied submission; shown to the owner and staff only.",
+            "nullable": true,
+            "type": "string"
+          },
+          "takenDown": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShareTakedownResponse"
+              }
+            ],
+            "description": "The takedown; staff only.",
+            "nullable": true,
+            "type": "object"
+          },
+          "title": {
+            "description": "The owner's title; may be empty.",
+            "type": "string"
+          },
+          "viewer": {
+            "$ref": "#/components/schemas/ShareViewerResponse"
+          }
+        },
+        "required": [
+          "kind",
+          "hiddenReason",
+          "code",
+          "title",
+          "language",
+          "author",
+          "createdAt",
+          "expiresAt",
+          "source",
+          "filename",
+          "copy",
+          "submissionId",
+          "problem",
+          "takenDown",
+          "viewer"
+        ],
+        "type": "object"
+      },
+      "ShareViewerResponse": {
+        "properties": {
+          "canDelete": {
+            "description": "The owner unless staff took the share down, or staff with `judge.manage_share`.",
+            "type": "boolean"
+          },
+          "canEdit": {
+            "description": "The owner may change the title and expiry.",
+            "type": "boolean"
+          },
+          "canReport": {
+            "description": "Signed in and not the owner.",
+            "type": "boolean"
+          },
+          "canTakeDown": {
+            "description": "Staff with `judge.manage_share`: take down or restore.",
+            "type": "boolean"
+          },
+          "isOwner": {
+            "description": "The viewer made it.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "isOwner",
+          "canEdit",
+          "canDelete",
+          "canTakeDown",
+          "canReport"
+        ],
+        "type": "object"
+      },
+      "ShareableStatus": {
+        "description": "`D` judged or `CE` compile error.",
+        "enum": [
+          "CE",
+          "D"
+        ],
+        "type": "string"
       },
       "ShortLinkResponse": {
         "properties": {
@@ -14593,6 +15352,10 @@
           "canRejudge": {
             "description": "Whether `POST /submissions/{id}/rejudge` is allowed.",
             "type": "boolean"
+          },
+          "canShare": {
+            "description": "Whether `POST /shares/submissions` may be tried: the owner's judged or compile-error submission in a text language. A running contest or the setter's source rule can still refuse it.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -14600,7 +15363,8 @@
           "canRejudge",
           "canReject",
           "canLock",
-          "canOverrideScore"
+          "canOverrideScore",
+          "canShare"
         ],
         "type": "object"
       },
@@ -15090,6 +15854,19 @@
           "code",
           "name",
           "groupId"
+        ],
+        "type": "object"
+      },
+      "TakedownShareDto": {
+        "properties": {
+          "reason": {
+            "description": "Why, shown to the owner in their list and kept in the audit log.",
+            "maxLength": 500,
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
         ],
         "type": "object"
       },
@@ -17762,6 +18539,7 @@
                 "problemGroup",
                 "problemType",
                 "setting",
+                "share",
                 "submission",
                 "submission_batch",
                 "tagProblem",
@@ -38907,6 +39685,795 @@
         "x-raw": true
       }
     },
+    "/api/internal/shares": {
+      "get": {
+        "description": "Signed-in callers only. The caller's unexpired shares, newest first, taken-down ones with their takedown. `submissionId` narrows to copies of one submission (the share dialog's \"already shared\"). `scope=all` lists everyone's and needs `judge.manage_share` (403 `forbidden`).",
+        "operationId": "MySharesController_list",
+        "parameters": [
+          {
+            "description": "`mine` lists the caller's shares; `all` lists everyone's and needs `judge.manage_share`.",
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ShareListScope"
+            }
+          },
+          {
+            "description": "Page number, starting at 1.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Shares per page, 1-100.",
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Only the copies of this submission (the share dialog's \"already shared\").",
+            "in": "query",
+            "name": "submissionId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/ShareListItemResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List shares",
+        "tags": [
+          "Shares"
+        ],
+        "x-enveloped": true
+      }
+    },
+    "/api/internal/shares/pastes": {
+      "post": {
+        "description": "Signed-in users. At most 65536 bytes of UTF-8 text without NUL (400 `validation_failed`, issues `source_too_large`, `source_empty`, `source_invalid`) in a known text language (issues `language_unknown`, `language_takes_file`). Pastes cannot be tied to a contest, so they are not contest-guarded; report and takedown cover leaks. Both kinds share the budgets: 5 per minute and 30 per day per user (429 `rate_limited`), and at most 200 unexpired links per user (409 `conflict`, issue `share_limit`; issue `busy` when another create of the same user holds its lock too long). Muted users get 403 `forbidden` (issue `muted`), and so does a superuser impersonating someone. The link is `/c/<code>`: anyone with it can read it, without signing in.",
+        "operationId": "ShareCreateController_createPaste",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePasteDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ShareSummaryResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Paste code behind a link",
+        "tags": [
+          "Shares"
+        ]
+      }
+    },
+    "/api/internal/shares/reports": {
+      "get": {
+        "description": "Requires `judge.manage_share`. 20 per page, newest first: `status=open` (the default) or `settled`. Each carries its share's code, and the share while it still exists (`share` is null once it expired or was deleted).",
+        "operationId": "ShareReportsController_queue",
+        "parameters": [
+          {
+            "description": "1-based page number.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "`open` (the default) or `settled`.",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CommentReportQueue"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/ShareReportResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List share reports",
+        "tags": [
+          "Shares"
+        ],
+        "x-enveloped": true
+      }
+    },
+    "/api/internal/shares/submissions": {
+      "post": {
+        "description": "The submission's owner only (403 `forbidden` for anyone else, 404 when it cannot be seen). Stores what a visitor may see: source, language, verdict, points, time, memory and the case results the problem shows; never checker feedback, program output or an internal error's text. A later rejudge changes nothing. Only `D` and `CE` submissions in a text language with stored source text (409 `conflict`, issue `submission_not_shareable`). Only submissions to public problems: 403 `hidden` when a signed-out visitor cannot see the problem (hidden, organization-private or deleted) or the setter shows sources to owners and testers only, and 403 `contest_running` while any contest that lists the problem (or holds the submission) is running, not started, frozen or has a hidden board. Both kinds share the budgets: 5 per minute and 30 per day per user (429 `rate_limited`), and at most 200 unexpired links per user (409 `conflict`, issue `share_limit`; issue `busy` when another create of the same user holds its lock too long). Muted users get 403 `forbidden` (issue `muted`), and so does a superuser impersonating someone. The link is `/c/<code>`: anyone with it can read it, without signing in.",
+        "operationId": "ShareCreateController_createCopy",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubmissionShareDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ShareSummaryResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Share a frozen copy of a submission",
+        "tags": [
+          "Shares"
+        ]
+      }
+    },
+    "/api/internal/shares/{code}": {
+      "delete": {
+        "description": "The owner, or staff with `judge.manage_share` (a staff delete is audit-logged); not while impersonating. Removes the link and its stored code at once. 404 `not_found` for an unknown or expired code and, to anyone but staff, for someone else's. A link staff took down stays for their review: its owner gets 409 `conflict`. Counts against a per-user budget shared with edits (429 `rate_limited`). Returns 204.",
+        "operationId": "MySharesController_remove",
+        "parameters": [
+          {
+            "description": "Share code from `/c/<code>`; matched case-insensitively.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a share",
+        "tags": [
+          "Shares"
+        ]
+      },
+      "get": {
+        "description": "Public, `X-Robots-Tag: noindex, nofollow`. The page of `/c/<code>`: source, language, author, expiry, the frozen copy of a submission share, and the problem's code and name only when the viewer may see the problem. 404 `not_found` (never cached) for an unknown, expired or taken-down code and for a banned, deactivated or deleted author. A submission share is checked again on every read: 403 `contest_running` while a contest that lists its problem is running, not started, frozen or has a hidden board, 403 `hidden` when a signed-out visitor can no longer see the problem (hidden, organization-private or deleted) or the setter now shows sources to owners and testers only. The owner passes these with `hiddenReason` set; staff with `judge.manage_share` pass every rule. 120 reads per minute per address, and per user as well when signed in (429 `rate_limited`).",
+        "operationId": "ShareReadController_view",
+        "parameters": [
+          {
+            "description": "Share code from `/c/<code>`; matched case-insensitively.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ShareViewResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read a shared link",
+        "tags": [
+          "Shares"
+        ]
+      },
+      "patch": {
+        "description": "The owner only, not while impersonating. A new `expiry` counts from now. 404 `not_found` for an unknown or expired code and for someone else's, alike. A link staff took down stays for their review: 409 `conflict`. Counts against a per-user budget shared with deletes (429 `rate_limited`).",
+        "operationId": "MySharesController_edit",
+        "parameters": [
+          {
+            "description": "Share code from `/c/<code>`; matched case-insensitively.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditShareDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ShareSummaryResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Change a share's title or expiry",
+        "tags": [
+          "Shares"
+        ]
+      }
+    },
+    "/api/internal/shares/{code}/download": {
+      "get": {
+        "description": "Same as the raw form, with `Content-Disposition: attachment` and the filename `<code>.<language extension>` (`Main.java` for Java).",
+        "operationId": "ShareReadController_download",
+        "parameters": [
+          {
+            "description": "Share code from `/c/<code>`; matched case-insensitively.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The code, as an attachment."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Download a shared link's code",
+        "tags": [
+          "Shares"
+        ],
+        "x-raw": true
+      }
+    },
+    "/api/internal/shares/{code}/raw": {
+      "get": {
+        "description": "Same rules, errors and limit as reading the link. Answers `text/plain; charset=utf-8` with `Content-Disposition: inline`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`, `X-Robots-Tag: noindex, nofollow` and `Cache-Control: private, no-store`.",
+        "operationId": "ShareReadController_raw",
+        "parameters": [
+          {
+            "description": "Share code from `/c/<code>`; matched case-insensitively.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The code, shown inline."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Show a shared link's code as plain text",
+        "tags": [
+          "Shares"
+        ],
+        "x-raw": true
+      }
+    },
+    "/api/internal/shares/{code}/reports": {
+      "post": {
+        "description": "Signed-in callers who can read the link (its read errors apply). Flags it for staff with a `reason` (`spam`, `abuse`, `contest`: leaks a running contest's solution, `other`) and an optional `note` (up to 500 characters). Each user reports a share once (409 `conflict`); reporting one's own is 403 `forbidden`. Counts against the read limit before the code is looked up, so unknown codes cost as much as known ones; then 10 reports per hour per user (429 `rate_limited`). Returns 204.",
+        "operationId": "ShareReportsController_report",
+        "parameters": [
+          {
+            "description": "Share code from `/c/<code>`; matched case-insensitively.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportShareDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Report a share",
+        "tags": [
+          "Shares"
+        ]
+      }
+    },
+    "/api/internal/shares/{code}/reports/settle": {
+      "post": {
+        "description": "Requires `judge.manage_share`. Marks every open report of the code `resolved` or `dismissed`, also once its share expired or was deleted; taking it down is a separate call. 404 `not_found` when the code has no open reports. Returns 204.",
+        "operationId": "ShareReportsController_settle",
+        "parameters": [
+          {
+            "description": "Share code from `/c/<code>`; matched case-insensitively.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettleShareReportsDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Settle the reports of a share",
+        "tags": [
+          "Shares"
+        ]
+      }
+    },
+    "/api/internal/shares/{code}/restore": {
+      "post": {
+        "description": "Requires `judge.manage_share`. The link reads again as before (a banned author's links stay down until the ban is lifted). Audit-logged. 404 `not_found` for an unknown or expired code, 409 `conflict` when it is not down. Returns 204.",
+        "operationId": "ShareModerationController_restore",
+        "parameters": [
+          {
+            "description": "Share code from `/c/<code>`; matched case-insensitively.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Restore a taken-down share",
+        "tags": [
+          "Shares"
+        ]
+      }
+    },
+    "/api/internal/shares/{code}/takedown": {
+      "post": {
+        "description": "Requires `judge.manage_share`. Everyone else gets 404 for the link from now on; the owner sees the takedown and its `reason` in their list. Reversible with restore; both are audit-logged. 404 `not_found` for an unknown or expired code, 409 `conflict` when already down. Returns 204.",
+        "operationId": "ShareModerationController_takedown",
+        "parameters": [
+          {
+            "description": "Share code from `/c/<code>`; matched case-insensitively.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TakedownShareDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Take a share down",
+        "tags": [
+          "Shares"
+        ]
+      }
+    },
     "/api/internal/short-links": {
       "get": {
         "description": "Signed-in callers only. Returns the caller's own links, newest first. `scope=all` lists every link and needs `judge.manage_short_link` (403 `forbidden`). Includes hit counts and expiry.",
@@ -42950,6 +44517,10 @@
     {
       "description": "Create, manage and follow short `/s/<code>` links to site pages.",
       "name": "Short links"
+    },
+    {
+      "description": "Unlisted `/c/<code>` links to a frozen copy of a submission or to pasted code: create, read, manage, report and take down.",
+      "name": "Shares"
     }
   ]
 }

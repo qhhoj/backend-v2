@@ -288,6 +288,20 @@ _Avoid_: Static page, article
 Free-form site values staff edit (the SPA reads them from `GET /site`). Public to everyone, so never a secret; secrets are admin settings.
 _Avoid_: Setting (those are runtime settings in the settings registry)
 
+## Sharing
+
+**Share**:
+An unlisted public link `/c/<code>` (10 lowercase characters) to code: a Frozen copy of a Submission, or a Paste. Anyone with the link reads it, signed in or not; it is never indexed. Its owner may retitle it, change its expiry or delete it; staff may take it down and restore it.
+_Avoid_: Snapshot (that is the in-memory reload of a querier), short link (that is `/s/<code>`, a redirect to a site page)
+
+**Frozen copy**:
+What a visitor may see of a Submission to a public Problem when its owner shared it: source, language, verdict, points, time, memory and the case results the problem shows to visitors; never checker feedback, program output or an internal error's text. Stored, not referenced: a later Rejudge changes nothing. A Share of kind `submission`.
+_Avoid_: Snapshot, freeze (that is the scoreboard's)
+
+**Paste**:
+Code a signed-in user pasted to get a Share, with no Problem or Contest. A Share of kind `paste`.
+_Avoid_: Snippet, gist
+
 ## Polygon
 
 **Polygon link**:

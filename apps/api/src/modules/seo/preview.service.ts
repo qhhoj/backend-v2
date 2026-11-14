@@ -19,6 +19,15 @@ const ROUTES: Array<[RegExp, Kind, string]> = [
   [/^\/users?\/([^/]+)\/?$/, 'user', '/users'],
 ];
 
+/** A share link's preview: a neutral title and never its code, since chat apps unfurl links. */
+const SHARE_PATH = /^\/c\/[a-z0-9]+\/?$/i;
+const SHARE_PREVIEW: Preview = {
+  title: 'Code snippet',
+  description: SITE_DESCRIPTION,
+  path: '/',
+  isNoindex: true,
+};
+
 /** Head tags for link-preview bots (Discord, Facebook, ...); a page that is missing or not public gets the site's generic tags, so a preview never confirms a private page exists. */
 @Injectable()
 export class PreviewService {
@@ -43,6 +52,7 @@ export class PreviewService {
   }
 
   private async resolve(path: string): Promise<Preview | null> {
+    if (SHARE_PATH.test(path)) return SHARE_PREVIEW;
     for (const [pattern, kind, prefix] of ROUTES) {
       const key = decodeKey(pattern.exec(path)?.[1]);
       if (key === null) continue;

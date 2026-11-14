@@ -33,6 +33,7 @@ import { SiteApiModule } from './modules/site/site-api.module';
 import { TagsApiModule } from './modules/tags/tags-api.module';
 import { UsersApiModule } from './modules/users/users-api.module';
 import { UserActivityModule } from './modules/user-activity/user-activity.module';
+import { SharesApiModule } from './modules/shares/shares-api.module';
 import { ShortLinksModule } from './modules/short-links/short-links.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { HealthController } from './health.controller';
@@ -71,6 +72,7 @@ import { apiTuning } from './api-tuning';
     SeoApiModule,
     UserActivityModule,
     ShortLinksModule,
+    SharesApiModule,
     SyncModule,
   ],
   controllers: [HealthController],

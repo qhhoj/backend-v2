@@ -22,12 +22,13 @@ export const RESERVED_SHORT_CODES: readonly string[] = [
 export const isReservedShortCode = (code: string): boolean =>
   RESERVED_SHORT_CODES.includes(code);
 
-/** `pick(limit)` returns an integer in `[0, limit)`; the default is cryptographically random. */
-export function randomShortCode(
-  pick: (limit: number) => number = (limit) => randomInt(limit),
-): string {
+/** `length` symbols of the alphabet; `pick(limit)` returns an integer in `[0, limit)`, cryptographically random by default. */
+export function randomShortCode({
+  length = SHORT_CODE_LENGTH,
+  pick = (limit: number) => randomInt(limit),
+}: { length?: number; pick?: (limit: number) => number } = {}): string {
   let code = '';
-  for (let position = 0; position < SHORT_CODE_LENGTH; position += 1)
+  for (let position = 0; position < length; position += 1)
     code += SHORT_CODE_ALPHABET[pick(SHORT_CODE_ALPHABET.length)];
   return code;
 }

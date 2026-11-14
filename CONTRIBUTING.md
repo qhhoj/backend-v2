@@ -120,6 +120,15 @@ settings/          flat: admin settings API (`GET`/`PATCH /api/internal/admin/se
 mail/              flat: `SmtpMailer` behind the `MAILER` token
 contributions/     flat: vote ledger (votes.repository), vote gates and limit, contribution-points enqueuer
 similarity/        core/ start/ runs/ pairs/: code-similarity runs and pairs (`judge.moss_contest` + edit rights)
+shares/
+  shares-api.module.ts
+  core/            ShareAccessService (the one read rule of `/c/<code>`), writer (gates, budgets, the per-user create lock, fresh code), repository, code, expiry, hidden reasons, revisions, rate-limits, shared dto
+  guard/           ShareGuardService: public problems only, the setter's source rule and the problem-keyed contest rule (`share-contest-rule`), at create and on every read
+  create/          submission copies (`frozen-copy`) and pastes (`paste-source`)
+  reading/         public page, raw and download (`@Public`, noindex)
+  owning/          list, edit (title, expiry), delete
+  moderation/      takedown, restore (`judge.manage_share`, audit-logged)
+  reports/         report, staff queue, settle (the comment-report pattern)
 home/              flat: homepage data, RSS/Atom feeds
 audit/             flat: staff change log (`GET /admin/audit`)
 events/            flat: the SSE hub (`EventStreamHub`), stream limits; channels register from their own modules
@@ -226,7 +235,7 @@ user-activity/
 - Login rate limiting is reserve-then-release, per IP plus per resolved account; unknown usernames are limited per NFKC-lowercased name
 - Behind nginx set `TRUST_PROXY` to its address (e.g. the container network CIDR); otherwise every client shares one IP and the per-IP limits (login, streams) become global; `SSE_IP_ALLOWLIST` (IPs/CIDRs, matched against that client IP) raises the live-stream cap from 16 to 512 for a school lab behind one NAT
 - `@fastify/cookie` is pinned at 11.0.2: 11.1.1+ depends on ESM-only `cookie` 2, which breaks Jest CJS; do not bump
-- New permissions: add the codename to `libs/auth/src/principal/permissions.ts`; legacy Django names are kept as they are (`judge.add_language`, `judge.change_language`, `flatpages.change_flatpage`); v2-only codenames so far include `judge.change_contest_tag` (contest tag catalogue), `judge.delete_problem`, `judge.manage_short_link`, `judge.manage_integration`, `judge.change_settings`
+- New permissions: add the codename to `libs/auth/src/principal/permissions.ts`; legacy Django names are kept as they are (`judge.add_language`, `judge.change_language`, `flatpages.change_flatpage`); v2-only codenames so far include `judge.change_contest_tag` (contest tag catalogue), `judge.delete_problem`, `judge.manage_short_link`, `judge.manage_share`, `judge.manage_integration`, `judge.change_settings`
 - 429 from `RateLimitService.reserve` carries `Retry-After`: the longest TTL among the keys over their limit (at least 1 s); under-limit keys never extend it
 - Account flows live in `apps/api/src/modules/auth/<flow>/<flow>.controller.ts` + `<flow>.service.ts` + `dto/` (registration, password-reset, social); totp and webauthn share `auth/two-factor/` (`totp.controller.ts`, `webauthn.controller.ts`, `second-factor.service.ts`) and `impersonation/` has no `dto/`; add new flows the same way and list their paths in `apps/api/test/openapi.e2e-spec.ts`
 - Mail goes through the `MAILER` token (`@libs/common`; `SmtpMailer` in `apps/api/src/modules/mail/`): SMTP from the `mail.smtpUrl` setting, sender `mail.from`, both read per message (a new URL gets a new transport, the old one is closed); `InMemoryMailer` in tests; a send failure, or no `mail.smtpUrl` set, is `mail_unavailable` 503
@@ -630,6 +639,7 @@ The app follows Semantic Versioning (`package.json` `version`, starting at 2.0.0
 ## Short links and the sync API
 
 - Modules: `modules/short-links/` (redirect `/s/:code`, staff list and delete) and `modules/sync/` (`clients/` admin routes, `contests/` the sync routes).
+- Shares (`modules/shares/`) live at `/c/<code>`, a path the SPA renders (no redirect, no nginx location); their codes never mix with `/s/` codes. Do not add `/c/` to `robots.ts`: a blocked crawler cannot read the `noindex` header.
 - A route for external systems is `@ServiceOnly()` + `@RequireScope(...)` under `api/sync/v1`; the guard attaches `request.serviceClient` and never `request.auth`; a missing `@RequireScope` refuses every key.
 - Read official mode only through `isOfficialModeActive` / `officialModeLocks` / `assertNotLockedByOfficialMode` (`libs/community/src/official-mode.ts`); a structural spec fails on any other reader of `contest.officialMode*`.
 - `judge.manage_short_link` and `judge.manage_integration` are granted to staff groups in the admin UI; check one staff user after the groups resync.
