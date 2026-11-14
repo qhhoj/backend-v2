@@ -45,7 +45,9 @@ export interface DetailAccessFacts {
 }
 
 /** A problem's `F` follows the site setting. */
-const sourceVisibilityOf = (problem: SubmissionProblemView): string =>
+export const sourceVisibilityOf = (
+  problem: Pick<SubmissionProblemView, 'submissionSourceVisibility'>,
+): string =>
   problem.submissionSourceVisibility === 'F'
     ? SITE_SOURCE_VISIBILITY
     : problem.submissionSourceVisibility;
@@ -232,6 +234,8 @@ export interface SubmissionActionFacts {
   lockedAfter: Date | null;
   /** `ProblemAccess.canEdit` on the submission's problem (no contest scope). */
   canEditProblem: boolean;
+  /** Its language takes an uploaded file, so it has no source text. */
+  isFileOnlyLanguage: boolean;
 }
 
 export interface SubmissionActions {
@@ -240,6 +244,7 @@ export interface SubmissionActions {
   canReject: boolean;
   canLock: boolean;
   canOverrideScore: boolean;
+  canShare: boolean;
 }
 
 /** Legacy `abort_submission`: `judge.abort_any_submission`, or the owner until an admin rejudges the submission. */
@@ -294,6 +299,14 @@ export const isScoreOverridable = (status: SubmissionStatus): boolean =>
 const isRejudgeableStatus = (status: SubmissionStatus): boolean =>
   status !== 'PD' && !IN_FLIGHT_STATUSES.includes(status);
 
+/** The share route's synchronous rules (owner only, judged or compile error, text source); the contest and source-visibility refusals come from the route itself. */
+const mayShareSubmission = ({
+  isOwner,
+  status,
+  isFileOnlyLanguage,
+}: SubmissionActionFacts): boolean =>
+  isOwner && (status === 'D' || status === 'CE') && !isFileOnlyLanguage;
+
 /** The action flags a viewer may use on one submission; each is the rule its action endpoint checks. A visitor may use none. */
 export function submissionActions(
   principal: Principal | null,
@@ -307,6 +320,7 @@ export function submissionActions(
       canReject: false,
       canLock: false,
       canOverrideScore: false,
+      canShare: false,
     };
   return {
     canAbort:
@@ -323,5 +337,6 @@ export function submissionActions(
     canOverrideScore:
       mayOverrideSubmissionScore(principal, facts.canEditProblem) &&
       isScoreOverridable(facts.status),
+    canShare: mayShareSubmission(facts),
   };
 }

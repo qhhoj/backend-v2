@@ -263,6 +263,10 @@ export const PERMISSION_CATALOG: Record<
   'flatpages.change_flatpage': { category: 'site', label: 'Edit pages' },
   'flatpages.delete_flatpage': { category: 'site', label: 'Delete pages' },
   'judge.manage_short_link': { category: 'site', label: 'Manage short links' },
+  'judge.manage_share': {
+    category: 'community',
+    label: 'Moderate shared code links',
+  },
   'judge.manage_integration': {
     category: 'site',
     label: 'Manage integration clients',

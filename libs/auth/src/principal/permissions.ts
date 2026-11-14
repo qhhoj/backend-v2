@@ -74,6 +74,8 @@ export const PERMISSIONS = [
   'judge.change_miscconfig',
   // VNOI ports: short links and external-system credentials.
   'judge.manage_short_link',
+  // Share links (`/c/<code>`): list every share, take down, restore, delete, settle reports.
+  'judge.manage_share',
   'judge.manage_integration',
   // Languages admin: legacy Django codenames.
   'judge.add_language',

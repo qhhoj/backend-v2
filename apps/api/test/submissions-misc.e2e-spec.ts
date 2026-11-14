@@ -46,6 +46,7 @@ afterAll(() => api.teardown());
       canReject: boolean;
       canLock: boolean;
       canOverrideScore: boolean;
+      canShare: boolean;
     };
   }
 
@@ -55,6 +56,7 @@ afterAll(() => api.teardown());
     canReject: false,
     canLock: false,
     canOverrideScore: false,
+    canShare: false,
   };
 
   describe('submission detail action flags', () => {
@@ -128,9 +130,12 @@ afterAll(() => api.teardown());
       await graded.obliterate({ force: true });
     });
 
-    it('tells the owner of a finished submission that no action applies', async () => {
+    it('tells the owner of a finished submission that only sharing applies', async () => {
       const id = await seed();
-      expect((await detailOf('owner', id)).viewer).toEqual(NO_ACTIONS);
+      expect((await detailOf('owner', id)).viewer).toEqual({
+        ...NO_ACTIONS,
+        canShare: true,
+      });
     });
 
     it('tells the owner of a queued submission it may abort, and the abort then succeeds', async () => {
@@ -151,15 +156,16 @@ afterAll(() => api.teardown());
         canReject: true,
         canLock: true,
         canOverrideScore: false,
+        canShare: false,
       });
       expect(body.lockedAfter).toBeNull();
       await post('manager', `${SUBMISSIONS}/${id}/rejudge`).expect(204);
     });
 
-    it('tells holders of the permissions without edit rights that no action applies', async () => {
+    it('tells holders of the permissions without edit rights that no staff action applies to their own submission', async () => {
       const id = await seed({ user: ids.permitted });
       const body = await detailOf('permitted', id);
-      expect(body.viewer).toEqual(NO_ACTIONS);
+      expect(body.viewer).toEqual({ ...NO_ACTIONS, canShare: true });
       expect(body.lockedAfter).toBeNull();
       await post('permitted', `${SUBMISSIONS}/${id}/reject`).expect(403);
     });
@@ -184,6 +190,7 @@ afterAll(() => api.teardown());
         canReject: true,
         canLock: true,
         canOverrideScore: false,
+        canShare: false,
       });
       await post('manager', `${SUBMISSIONS}/${id}/rejudge`)
         .expect(409)

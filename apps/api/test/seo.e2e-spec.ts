@@ -130,6 +130,13 @@ describe('sitemap and link previews', () => {
     expect(await preview('/contests/opencontest')).toContain('/og-image.png');
   });
 
+  it('gives a share link a neutral, unindexed preview without its code', async () => {
+    const page = await preview('/c/k7m2xq4p9d');
+    expect(page).toContain('<title>Code snippet - QHHOJ</title>');
+    expect(page).toContain('<meta name="robots" content="noindex, nofollow">');
+    expect(page).not.toContain('k7m2xq4p9d');
+  });
+
   it('gives a private or unknown page the same generic tags as no page', async () => {
     const generic = await preview('/nowhere');
     for (const path of [

@@ -351,6 +351,8 @@ export class SubmissionsService {
       rejudgedDate: submission.rejudgedDate,
       lockedAfter: submission.lockedAfter,
       canEditProblem,
+      isFileOnlyLanguage:
+        this.languages.byId(uuidStr(submission.language))?.fileOnly ?? false,
     });
   }
 

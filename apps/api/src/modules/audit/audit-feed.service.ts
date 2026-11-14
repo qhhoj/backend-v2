@@ -19,6 +19,7 @@ const NOTE_PERMISSION: Partial<Record<string, Permission>> = {
   contest: 'judge.edit_all_contest',
   contestParticipation: 'judge.edit_all_contest',
   submission: 'judge.change_submission',
+  share: 'judge.manage_share',
 };
 
 /** Kinds whose writers store only fixed notes ("Edited from site", a judge name), shown to every viewer. Any other kind without a permission above is redacted, so a new writer cannot leak by omission. */

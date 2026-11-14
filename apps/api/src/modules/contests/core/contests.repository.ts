@@ -63,6 +63,14 @@ export class ContestsRepository {
     );
   }
 
+  /** List rows of every contest, past or future, that lists the problem (`problems.problem` index). */
+  findByProblem(problemId: string): Promise<Contest[]> {
+    return this.contests
+      .find({ 'problems.problem': problemId }, LIST_PROJECTION)
+      .lean<Contest[]>()
+      .exec();
+  }
+
   async setDataPreparedAt(contestId: string, preparedAt: Date): Promise<void> {
     await this.contests
       .updateOne({ _id: contestId }, { $set: { dataPreparedAt: preparedAt } })

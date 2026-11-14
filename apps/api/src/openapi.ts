@@ -76,6 +76,10 @@ export const API_SECTIONS: ReadonlyArray<
     'Short links',
     'Create, manage and follow short `/s/<code>` links to site pages.',
   ],
+  [
+    'Shares',
+    'Unlisted `/c/<code>` links to a frozen copy of a submission or to pasted code: create, read, manage, report and take down.',
+  ],
 ];
 
 /** The contract of the internal API: what `GET /api/internal/openapi.json` serves and `npm run openapi:emit` writes. */
