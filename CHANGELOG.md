@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.38.3
+
+### Patch Changes
+
+- 236203e: Security update (GHSA-43j5-pfv2-4mfq).
+
 ## 2.38.2
 
 ### Patch Changes
