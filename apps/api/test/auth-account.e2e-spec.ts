@@ -1,4 +1,4 @@
-import { UsersRepository } from '@libs/auth';
+import { Passwords, UsersRepository } from '@libs/auth';
 import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
 
 const AUTH = '/api/internal/auth';
@@ -237,5 +237,62 @@ describe('account endpoints', () => {
       .expect(400)
       .expect(errorCode('invalid_credentials'));
     await attempt('wrong wrong wrong').expect(429);
+  });
+
+  const me = (session: { cookie: string }) =>
+    api.http().get(`${AUTH}/me`).set('Cookie', session.cookie);
+
+  it('ends the other sessions of a password change whose session clean-up never ran', async () => {
+    await createUser(api.users, {
+      username: 'dora',
+      email: 'dora@example.com',
+    });
+    const [current, other] = [
+      await login(undefined, 'dora'),
+      await login(undefined, 'dora'),
+    ];
+    // The process stops after the password write, before the session records are deleted.
+    const cleanUp = jest
+      .spyOn(api.sessions, 'destroyAllForUser')
+      .mockResolvedValueOnce(undefined);
+    try {
+      await post('password/change', current, {
+        currentPassword: 'correct horse battery',
+        newPassword: 'brand new passphrase',
+      }).expect(204);
+    } finally {
+      cleanUp.mockRestore();
+    }
+    await me(other).expect(401);
+    await me(current).expect(200);
+  });
+
+  it('refuses an api token whose password check overlapped a sign-out everywhere', async () => {
+    const erin = await createUser(api.users, {
+      username: 'erin',
+      email: 'erin@example.com',
+    });
+    const [requesting, other] = [
+      await login(undefined, 'erin'),
+      await login(undefined, 'erin'),
+    ];
+    const passwords = api.app.get(Passwords);
+    const verify = passwords.verify.bind(passwords);
+    const inHashWait = jest
+      .spyOn(passwords, 'verify')
+      .mockImplementationOnce(async (...args) => {
+        await post('logout-all', other).expect(204);
+        return verify(...args);
+      });
+    try {
+      await post('token/regenerate', requesting, {
+        currentPassword: 'correct horse battery',
+      }).expect(401);
+    } finally {
+      inHashWait.mockRestore();
+    }
+    expect(
+      (await api.users.findById(erin._id).lean())!.apiTokenHash,
+    ).toBeNull();
   });
 });

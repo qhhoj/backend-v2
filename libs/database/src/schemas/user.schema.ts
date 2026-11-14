@@ -95,6 +95,8 @@ export class User {
   @Prop({ type: [SchemaFactory.createForClass(SocialAuth)], default: [] })
   socialAuth!: SocialAuth[];
   @Prop({ type: String, default: null }) apiTokenHash!: string | null;
+  /** Raised in the same write as every credential revocation; sessions and reset links issued at a lower value are refused. Rows from before the field read 0. */
+  @Prop({ default: 0 }) credentialEpoch!: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

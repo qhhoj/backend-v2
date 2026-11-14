@@ -15,6 +15,23 @@ export const stalePendingFilter = (cutoff: Date) => ({
   dateJoined: { $lt: cutoff },
 });
 
+/** What a revoking write requires of the row besides its id; `credentialEpoch` 0 also matches rows from before the field. */
+export interface CredentialMatch {
+  password?: string;
+  banReason?: null;
+  credentialEpoch?: number;
+}
+
+const credentialFilter = ({ credentialEpoch, ...fields }: CredentialMatch) => ({
+  ...fields,
+  ...(credentialEpoch === undefined
+    ? {}
+    : {
+        credentialEpoch:
+          credentialEpoch === 0 ? { $in: [0, null] } : credentialEpoch,
+      }),
+});
+
 @Injectable()
 export class UsersRepository {
   constructor(@InjectModel(User.name) private readonly users: Model<User>) {}
@@ -157,11 +174,17 @@ export class UsersRepository {
       .exec();
   }
 
-  /** False when the user is missing, already active, banned or deactivated by staff. */
-  async activate(userId: string): Promise<boolean> {
+  /** False when the user is missing, already active, banned, deactivated by staff, or past `credentialEpoch` (the key was mailed before a credential revocation such as an e-mail change). */
+  async activate(userId: string, credentialEpoch: number): Promise<boolean> {
     const { matchedCount } = await this.users
       .updateOne(
-        { _id: userId, isActive: false, banReason: null, deactivatedAt: null },
+        {
+          _id: userId,
+          isActive: false,
+          banReason: null,
+          deactivatedAt: null,
+          ...credentialFilter({ credentialEpoch }),
+        },
         { $set: { isActive: true } },
       )
       .exec();
@@ -176,6 +199,36 @@ export class UsersRepository {
   ): Promise<boolean> {
     const { matchedCount } = await this.users
       .updateOne({ _id: id, banReason: expectedReason }, { $set: changes })
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** Writes `changes` and raises the credential epoch in the same write, so every session and reset link issued before it is refused even if the clean-up after it never runs. The updated row, or null when it no longer matches `match`. */
+  revokeCredentials(
+    id: string,
+    changes: Partial<User>,
+    match: CredentialMatch = {},
+  ): Promise<UserDocument | null> {
+    return this.users
+      .findOneAndUpdate(
+        { _id: id, ...credentialFilter(match) },
+        { $set: changes, $inc: { credentialEpoch: 1 } },
+        { new: true },
+      )
+      .exec();
+  }
+
+  /** Compare-and-set: the new token is written only while the account is active and still has the password and credential epoch the request was checked against. */
+  async setApiTokenIfCurrent(
+    id: string,
+    expected: { password: string; credentialEpoch: number },
+    apiTokenHash: string,
+  ): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: id, isActive: true, ...credentialFilter(expected) },
+        { $set: { apiTokenHash } },
+      )
       .exec();
     return matchedCount === 1;
   }

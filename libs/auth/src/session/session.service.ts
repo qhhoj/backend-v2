@@ -15,6 +15,10 @@ export interface SessionData {
   twoFaPassed: boolean;
   passwordPwned: boolean;
   impersonatorId: string | null;
+  /** The user's credential epoch when the session was issued; the guard refuses it once the user's has moved on. */
+  credentialEpoch: number;
+  /** The impersonator's credential epoch when the impersonation started (0 when not impersonating). */
+  impersonatorEpoch: number;
   csrf: string;
   /** Login time (ms): the session ends `auth.sessionMaxDays` after it, however often it is used. */
   createdAt: number;
@@ -26,6 +30,8 @@ export interface SessionData {
 
 type StoredSession = Omit<
   SessionData,
+  | 'credentialEpoch'
+  | 'impersonatorEpoch'
   | 'createdAt'
   | 'cookieIssuedAt'
   | 'pendingTotpSecret'
@@ -40,6 +46,8 @@ const MAX_CHANGE_ATTEMPTS = 50;
 
 // sessions stored before these fields existed lack them
 const withDefaults = (json: string): SessionData => ({
+  credentialEpoch: 0,
+  impersonatorEpoch: 0,
   createdAt: 0,
   cookieIssuedAt: 0,
   pendingTotpSecret: null,
@@ -85,20 +93,26 @@ export class SessionService {
     redis.defineCommand('sessionSwap', { numberOfKeys: 2, lua: SWAP_LUA });
   }
 
+  /** The epochs default to 0, the value of an account no credential revocation has touched. */
   async create(
     data: Omit<
       SessionData,
       | 'csrf'
+      | 'credentialEpoch'
+      | 'impersonatorEpoch'
       | 'createdAt'
       | 'cookieIssuedAt'
       | 'pendingTotpSecret'
       | 'webauthnChallenge'
       | 'webauthnRegistrationChallenge'
-    >,
+    > &
+      Partial<Pick<SessionData, 'credentialEpoch' | 'impersonatorEpoch'>>,
   ): Promise<{ id: string; session: SessionData }> {
     const id = randomToken();
     const now = Date.now();
     const session: SessionData = {
+      credentialEpoch: 0,
+      impersonatorEpoch: 0,
       ...data,
       csrf: randomToken(),
       createdAt: now,

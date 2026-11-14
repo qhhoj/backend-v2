@@ -34,7 +34,13 @@ import {
   clearBridgeCommands,
 } from './submission-fixtures';
 
-import { sha256, generateApiToken, PERMISSION_CATALOG } from '@libs/auth';
+import {
+  sha256,
+  generateApiToken,
+  PERMISSION_CATALOG,
+  UsersRepository,
+} from '@libs/auth';
+import { PasswordResetService } from '../src/modules/auth/password-reset/password-reset.service';
 
 import { getModelToken } from '@nestjs/mongoose';
 
@@ -1094,6 +1100,41 @@ afterAll(() => api.teardown());
       expect(String(rows[0].userId)).toBe(
         String((await api.users.findOne({ username: 'admin' }).lean())!._id),
       );
+    });
+
+    it('ends the reset link, the sessions and the API token issued before a staff e-mail change', async () => {
+      const target = await createUserWith(api, 'ines');
+      const targetSession = await loginAs(api, target._id);
+      const { token, hash } = generateApiToken(
+        target._id,
+        TEST_ENV.TOKEN_SECRET,
+      );
+      await api.users.updateOne({ _id: target._id }, { apiTokenHash: hash });
+      api.mailer.sent.length = 0;
+      await api.app
+        .get(PasswordResetService)
+        .sendTo((await api.app.get(UsersRepository).findById(target._id))!);
+      const link = /\/reset-password\/([A-Za-z0-9_-]+)/.exec(
+        api.mailer.sent[0].text,
+      )![1];
+      await authed(api.http().patch(`${USER('ines')}/profile`), admin)
+        .send({ currentPassword: OLD, email: 'ines.new@example.com' })
+        .expect(200);
+      await api
+        .http()
+        .post('/api/internal/auth/password/reset/confirm')
+        .send({ token: link, newPassword: 'brand new passphrase 8' })
+        .expect(400)
+        .expect(errorCode('invalid_token'));
+      await authed(
+        api.http().get('/api/internal/profile'),
+        targetSession,
+      ).expect(401);
+      await api
+        .http()
+        .get('/api/internal/auth/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(401);
     });
 
     it('renews the e-mail lock while staff change an e-mail', async () => {

@@ -38,11 +38,15 @@ import { Permission } from '../principal/permissions';
 import { hasPermission } from '../principal/principal';
 import { PrincipalService } from '../principal/principal.service';
 import { SESSION_COOKIE, setSessionCookie } from '../session/session-cookie';
-import { COOKIE_REFRESH_MS, SessionService } from '../session/session.service';
+import {
+  COOKIE_REFRESH_MS,
+  type SessionData,
+  SessionService,
+} from '../session/session.service';
 import { apiTokenMatches, parseApiToken } from '../token/api-token';
 import { isServiceKey, SERVICE_KEY_PREFIX } from '../token/service-key';
 import { isActiveSuperuser } from '../users/active-superuser';
-import { UsersRepository } from '../users/users.repository';
+import { type UserDocument, UsersRepository } from '../users/users.repository';
 import { AuthContext } from './auth-context';
 
 const isBearerHeader = (header: string) => /^bearer/i.test(header);
@@ -278,9 +282,23 @@ export class AuthGuard implements CanActivate {
     await this.sessions.update(auth.sessionId, { cookieIssuedAt: Date.now() });
   }
 
-  /** An impersonation ends as soon as the impersonator stops being an active superuser. */
-  private async impersonatorValid(impersonatorId: string) {
-    return isActiveSuperuser(await this.users.findById(impersonatorId));
+  /** An impersonation ends as soon as the impersonator stops being an active superuser or revokes their credentials (password change or reset, sign out everywhere). */
+  private async impersonatorValid(session: SessionData) {
+    const impersonator = await this.users.findById(session.impersonatorId!);
+    return (
+      isActiveSuperuser(impersonator) &&
+      impersonator.credentialEpoch === session.impersonatorEpoch
+    );
+  }
+
+  /** The user is active and has revoked no credential since the session was issued. */
+  private async sessionCurrent(
+    session: SessionData,
+    user: UserDocument,
+  ): Promise<boolean> {
+    if (!user.isActive || user.credentialEpoch !== session.credentialEpoch)
+      return false;
+    return !session.impersonatorId || this.impersonatorValid(session);
   }
 
   private async fromBearer(
@@ -314,11 +332,7 @@ export class AuthGuard implements CanActivate {
     const session = sessionId ? await this.sessions.get(sessionId) : null;
     const user = session && (await this.users.findById(session.userId));
     if (!sessionId || !session) return null;
-    if (
-      !user?.isActive ||
-      (session.impersonatorId &&
-        !(await this.impersonatorValid(session.impersonatorId)))
-    ) {
+    if (!user || !(await this.sessionCurrent(session, user))) {
       await this.sessions.destroy(sessionId);
       return null;
     }

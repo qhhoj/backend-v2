@@ -224,15 +224,20 @@ export class AuthService {
     );
   }
 
-  /** The single session-opening path (also used by impersonation, which must not touch lastLogin). */
+  /** The single session-opening path (also used by impersonation, which must not touch lastLogin). The session carries the credential epoch of `user` as read, so a revocation after that read ends it. */
   async openSession(
     user: UserDocument,
-    data: Pick<SessionData, 'twoFaPassed' | 'passwordPwned' | 'impersonatorId'>,
+    data: Pick<
+      SessionData,
+      'twoFaPassed' | 'passwordPwned' | 'impersonatorId'
+    > &
+      Partial<Pick<SessionData, 'impersonatorEpoch'>>,
     previousSessionId: string | null,
   ) {
     const { id, session } = await this.sessions.create({
       ...data,
       userId: user._id,
+      credentialEpoch: user.credentialEpoch,
     });
     if (previousSessionId) await this.sessions.destroy(previousSessionId);
     return {
@@ -282,7 +287,38 @@ export class AuthService {
   ): Promise<void> {
     await this.confirmPassword(auth, currentPassword);
     const { userId } = auth.principal;
+    await this.assertNewPasswordAcceptable(auth, currentPassword, newPassword);
+    const changed = await this.users.revokeCredentials(
+      userId,
+      {
+        password: await this.passwords.hash(newPassword, auth.ip),
+        apiTokenHash: null,
+      },
+      {
+        password: auth.user.password,
+        credentialEpoch: auth.session!.credentialEpoch,
+      },
+    );
+    if (!changed)
+      throw new AppError(
+        'conflict',
+        409,
+        'Password was changed by another request',
+      );
+    // Only this session moves to the new epoch; the other records are deleted, and refused by the guard if they are not.
+    await this.sessions.update(auth.sessionId!, {
+      passwordPwned: false,
+      credentialEpoch: changed.credentialEpoch,
+    });
+    await this.sessions.destroyAllForUser(userId, auth.sessionId!);
+  }
 
+  /** The signup policy, a different password than the current one, and the breach check, reported on `newPassword`. */
+  private async assertNewPasswordAcceptable(
+    auth: AuthContext,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
     const problems = passwordProblems(newPassword, auth.user);
     if (newPassword === currentPassword)
       problems.push({
@@ -296,30 +332,15 @@ export class AuthService {
         'Password rejected',
         problems.map((problem) => ({ field: 'newPassword', ...problem })),
       );
-    const changed = await this.users.updatePasswordIfUnchanged(
-      userId,
-      auth.user.password,
-      await this.passwords.hash(newPassword, auth.ip),
-    );
-    if (!changed)
-      throw new AppError(
-        'conflict',
-        409,
-        'Password was changed by another request',
-      );
-    await this.users.update(userId, { apiTokenHash: null });
-    await this.sessions.destroyAllForUser(userId, auth.sessionId ?? undefined);
-    if (auth.sessionId)
-      await this.sessions.update(auth.sessionId, { passwordPwned: false });
   }
 
   /** Every session of the user, the current one included, and the API token. */
   async logoutAll(userId: string): Promise<void> {
-    await this.users.update(userId, { apiTokenHash: null });
+    await this.users.revokeCredentials(userId, { apiTokenHash: null });
     await this.sessions.destroyAllForUser(userId);
   }
 
-  /** A stolen session cookie alone must not mint a credential that outlives the session, so the password is re-entered. */
+  /** A stolen session cookie alone must not mint a credential that outlives the session, so the password is re-entered. The token is written only if no revocation landed while the password was checked. */
   async regenerateApiToken(
     auth: AuthContext,
     currentPassword: string,
@@ -327,7 +348,15 @@ export class AuthService {
     await this.confirmPassword(auth, currentPassword);
     const { userId } = auth.principal;
     const { token, hash } = generateApiToken(userId, this.env.tokenSecret);
-    await this.users.update(userId, { apiTokenHash: hash });
+    const written = await this.users.setApiTokenIfCurrent(
+      userId,
+      {
+        password: auth.user.password,
+        credentialEpoch: auth.session!.credentialEpoch,
+      },
+      hash,
+    );
+    if (!written) throw new AppError('unauthorized', 401, 'Login required');
     return { token };
   }
 }

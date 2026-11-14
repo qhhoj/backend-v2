@@ -411,7 +411,7 @@ describe('registration extras', () => {
       const user = (await api.users.findOne({ username: 'newbie' }))!;
       const planted = await api.app
         .get(ActivationService)
-        .createKey(uuidStr(user._id));
+        .createKey(uuidStr(user._id), user.credentialEpoch);
       await api
         .http()
         .post(`${AUTH}/activate`)

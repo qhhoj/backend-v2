@@ -200,7 +200,7 @@ export class UserProfileEditingService {
       await this.users.update(user._id, { isActive, deactivatedAt: null });
       return;
     }
-    await this.users.update(user._id, {
+    await this.users.revokeCredentials(user._id, {
       isActive,
       deactivatedAt: new Date(),
       apiTokenHash: null,
@@ -219,10 +219,15 @@ export class UserProfileEditingService {
       throw new ValidationFailedError('E-mail rejected', [EMAIL_TAKEN]);
   }
 
-  /** Staff-set addresses count as verified: v2 has no unverified-e-mail state. The social links were granted for the old address, so they go with it. */
+  /** Staff-set addresses count as verified: v2 has no unverified-e-mail state. The old address may be in other hands, so everything issued through it or before it goes: social links, reset links and activation keys (the credential epoch rises), sessions and the API token, as on a staff password set. */
   private async writeEmail(user: UserDocument, email: string): Promise<void> {
     await this.assertEmailFree(user, email);
-    await this.users.update(user._id, { email, socialAuth: [] });
+    await this.users.revokeCredentials(user._id, {
+      email,
+      socialAuth: [],
+      apiTokenHash: null,
+    });
+    await this.sessions.destroyAllForUser(user._id);
   }
 
   private async respond(user: UserDocument): Promise<UserEditResponse> {

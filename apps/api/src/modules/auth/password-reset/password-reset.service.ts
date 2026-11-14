@@ -32,6 +32,7 @@ const tokenOwner = (user: UserDocument) => ({
   id: user._id,
   password: user.password,
   lastLogin: user.lastLogin,
+  credentialEpoch: user.credentialEpoch,
 });
 
 @Injectable()
@@ -112,17 +113,18 @@ export class PasswordResetService {
     );
     if (issues.length)
       throw new ValidationFailedError('Password rejected', issues);
-    const changed = await this.users.updatePasswordIfUnchanged(
+    // Reset is the recovery path: a leaked API token must not survive it; the mailbox chose this password.
+    // Matching the epoch the link was checked against refuses it if a revocation (an e-mail change) landed during the hash.
+    const changed = await this.users.revokeCredentials(
       user._id,
-      user.password,
-      await this.passwords.hash(newPassword, ip),
+      {
+        password: await this.passwords.hash(newPassword, ip),
+        apiTokenHash: null,
+        passwordSetBeforeVerification: false,
+      },
+      { password: user.password, credentialEpoch: user.credentialEpoch },
     );
     if (!changed) throw invalidToken();
-    // Reset is the recovery path: a leaked API token must not survive it; the mailbox chose this password.
-    await this.users.update(user._id, {
-      apiTokenHash: null,
-      passwordSetBeforeVerification: false,
-    });
     await this.sessions.destroyAllForUser(user._id);
   }
 }

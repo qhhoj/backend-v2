@@ -13,7 +13,7 @@ export class ImpersonationService {
     private readonly auth: AuthService,
   ) {}
 
-  /** Replaces the superuser's session with one for `targetId`; the target's lastLogin is not touched. */
+  /** Replaces the superuser's session with one for `targetId`; the target's lastLogin is not touched. The new session carries the epoch the superuser's session was checked at, so a later revocation by the superuser ends it. */
   async start(auth: AuthContext, targetId: string) {
     if (auth.session?.impersonatorId)
       throw new AppError('forbidden', 403, 'Already impersonating');
@@ -30,6 +30,7 @@ export class ImpersonationService {
         twoFaPassed: true,
         passwordPwned: false,
         impersonatorId: auth.user._id,
+        impersonatorEpoch: auth.session!.credentialEpoch,
       },
       auth.sessionId,
     );
@@ -37,13 +38,16 @@ export class ImpersonationService {
     return opened;
   }
 
-  /** Restores the impersonator's session (the guard already ended it if they lost superuser rights). */
+  /** Restores the impersonator's session, re-checking their rights and credential epoch on a fresh read (the guard checked them at the start of the request). */
   async stop(auth: AuthContext) {
     const { session } = auth;
     if (!session?.impersonatorId)
       throw new AppError('not_impersonating', 400, 'Not impersonating');
     const impersonator = await this.users.findById(session.impersonatorId);
-    if (!isActiveSuperuser(impersonator))
+    if (
+      !isActiveSuperuser(impersonator) ||
+      impersonator.credentialEpoch !== session.impersonatorEpoch
+    )
       throw new AppError(
         'unauthorized',
         401,

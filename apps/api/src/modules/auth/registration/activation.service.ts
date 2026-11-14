@@ -36,11 +36,12 @@ export class ActivationService {
     @Inject(ENV) private readonly env: ApiConfig,
   ) {}
 
-  /** Stores the hash of a fresh key and returns the key itself. */
-  async createKey(userId: string): Promise<string> {
+  /** Stores the hash of a fresh key, bound to the user's credential epoch as read, and returns the key itself. */
+  async createKey(userId: string, credentialEpoch: number): Promise<string> {
     const key = randomBytes(32).toString('hex');
     await this.activationKeys.create({
       userId,
+      credentialEpoch,
       keyHash: sha256(key),
       expiresAt: new Date(Date.now() + ACTIVATION_DAYS * DAY_MS),
     });
@@ -83,7 +84,10 @@ export class ActivationService {
   private async reissue(user: UserDocument): Promise<void> {
     await this.activationKeys.deleteMany({ userId: user._id }).exec();
     await this.mailer.send(
-      this.mail(user.email, await this.createKey(user._id)),
+      this.mail(
+        user.email,
+        await this.createKey(user._id, user.credentialEpoch),
+      ),
     );
   }
 }
