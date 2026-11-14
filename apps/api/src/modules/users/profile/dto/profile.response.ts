@@ -24,6 +24,8 @@ export class AppearanceResponse {
   @ApiProperty(PERCENT_SCHEMA) glass!: number;
   /** Glow effect strength, 0-100. */
   @ApiProperty(PERCENT_SCHEMA) glow!: number;
+  /** Page background style; absent means the default (`blueprint`). */
+  background?: string;
 }
 
 export class BitRoamResponse {

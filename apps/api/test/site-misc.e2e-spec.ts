@@ -342,6 +342,28 @@ describe('profile', () => {
       { accent: 'red', glass: 50, glow: 50 },
     );
 
+    // A page background is optional (absent is the default), a listed style is stored, an unknown one is refused.
+    const contour = dataOf<ProfileResponse>(
+      await patch({
+        appearance: {
+          accent: 'red',
+          glass: 50,
+          glow: 50,
+          background: 'contour',
+        },
+      }).expect(200),
+    );
+    expect(contour.appearance?.background).toBe('contour');
+    await patch({
+      appearance: { accent: 'red', glass: 50, glow: 50, background: 'plaid' },
+    }).expect(400);
+    const unset = dataOf<ProfileResponse>(
+      await patch({
+        appearance: { accent: 'red', glass: 50, glow: 50 },
+      }).expect(200),
+    );
+    expect(unset.appearance).toEqual({ accent: 'red', glass: 50, glow: 50 });
+
     // null is the one way back to the site's look; mode (siteTheme) is not part of it.
     const cleared = dataOf<ProfileResponse>(
       await patch({ appearance: null }).expect(200),

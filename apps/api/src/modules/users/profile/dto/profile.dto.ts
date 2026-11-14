@@ -37,6 +37,19 @@ export const APPEARANCE_ACCENTS = [
   'red',
 ] as const;
 export type AppearanceAccent = (typeof APPEARANCE_ACCENTS)[number];
+/** The frontend's page-background styles (frontend `src/theme/appearance.ts`); absent in a look means the default, `blueprint`. */
+export const APPEARANCE_BACKGROUNDS = [
+  'none',
+  'paper',
+  'grainy',
+  'blueprint',
+  'contour',
+  'halftone',
+  'dither',
+  'stipple',
+  'landscape',
+] as const;
+export type AppearanceBackground = (typeof APPEARANCE_BACKGROUNDS)[number];
 /** The only profile field a PATCH may set to `null`: the site's look. */
 export const NULLABLE_PROFILE_FIELDS = ['appearance'];
 
@@ -54,6 +67,10 @@ export class AppearanceDto {
   @ApiProperty(PERCENT_SCHEMA) @IsInt() @Min(0) @Max(100) glass!: number;
   /** Glow effect strength, 0-100. */
   @ApiProperty(PERCENT_SCHEMA) @IsInt() @Min(0) @Max(100) glow!: number;
+  /** Page background style; omit for the default (`blueprint`). */
+  @IsOptional()
+  @IsIn(APPEARANCE_BACKGROUNDS)
+  background?: AppearanceBackground;
 }
 
 /** Most roaming Bits a viewer may ask for (the frontend caps phones lower). */

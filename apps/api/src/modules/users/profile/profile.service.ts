@@ -37,6 +37,7 @@ const appearanceChange = (
           accent: appearance.accent,
           glass: appearance.glass,
           glow: appearance.glow,
+          ...(appearance.background && { background: appearance.background }),
         },
       };
 
