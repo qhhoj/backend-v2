@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.38.5
+
+### Patch Changes
+
+- 8f48c23: A personal look may carry an optional page `background` (one of nine styles; absent means the default), accepted by `PATCH /profile` and returned in `appearance`.
+
 ## 2.38.4
 
 ### Patch Changes
