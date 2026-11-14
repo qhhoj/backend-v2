@@ -297,6 +297,36 @@ describe('External judge routes', () => {
       expect(await allowedOf('quiet')).toEqual([catalog.languages.cpp]);
     });
 
+    it('sets and removes the link of a manually managed or mirror problem only for judge.edit_all_problem', async () => {
+      const source = await createProblem(api, catalog, { code: 'seed' });
+      await createProblem(api, catalog, {
+        code: 'manual',
+        authors: [editorId],
+        isManuallyManaged: true,
+      });
+      await createProblem(api, catalog, {
+        code: 'mirror',
+        authors: [editorId],
+        mirrorOf: source._id,
+        mirrorRoot: source._id,
+      });
+      for (const code of ['manual', 'mirror']) {
+        await as(editor)
+          .put(configOf(code), mapping())
+          .expect(403)
+          .expect(errorCode('forbidden'));
+        expect(
+          (await api.problems.findOne({ code }))!.externalJudge,
+        ).toBeNull();
+        await as(admin).put(configOf(code), mapping()).expect(200);
+        await as(editor).delete(configOf(code)).expect(403);
+        expect(
+          (await api.problems.findOne({ code }))!.externalJudge?.isActive,
+        ).toBe(true);
+        await as(admin).delete(configOf(code)).expect(200);
+      }
+    });
+
     it('refuses file-only, unknown and repeated languages and keeps the stored link', async () => {
       await createProblem(api, catalog, {
         code: 'strict',

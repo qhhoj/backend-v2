@@ -89,8 +89,9 @@ export class ProblemEditingController {
    * `isOrganizationPrivate` (a move) need the organization problem creation
    * rights in every organization added or removed (403
    * `organization_rights`) and `judge.add_problem` to leave every organization
-   * for the site (403 `site_problem_rights`). Any edit that makes a public
-   * problem visible to everyone by leaving organization privacy needs
+   * for the site (403 `site_problem_rights`); making a site problem private
+   * to no organization needs `judge.edit_all_problem`. Any edit that makes a
+   * public problem visible to everyone by leaving organization privacy needs
    * `judge.change_public_visibility` (403 `site_publish_rights`); without it,
    * an edit of `isPublic` or `isOrganizationPrivate` saves only while both
    * are as its gates read them (409 `conflict`). A move keeps the code; only a

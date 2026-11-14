@@ -53,11 +53,12 @@ export class ProblemExternalJudgeController {
    * Set a problem's external judge link
    *
    * @remarks
-   * Needs edit rights on the problem. Replaces the link: the remote OJ and
-   * problem and the site-to-remote language mapping. Every language must exist
-   * and take typed source (400 `validation_failed`). While `isActive`, the
-   * problem's allowed languages become exactly the mapped ones and its
-   * submissions are judged by the external judge. Writes a revision.
+   * Needs edit rights on the problem, and `judge.edit_all_problem` on a
+   * manually managed or mirror problem (403 `forbidden`). Replaces the link:
+   * the remote OJ and problem and the site-to-remote language mapping. Every
+   * language must exist and take typed source (400 `validation_failed`). While
+   * `isActive`, the problem's allowed languages become exactly the mapped ones
+   * and its submissions are judged by the external judge. Writes a revision.
    */
   @Put()
   put(
@@ -72,8 +73,9 @@ export class ProblemExternalJudgeController {
    * Remove a problem's external judge link
    *
    * @remarks
-   * Needs edit rights on the problem. The problem is judged by judge-v2 again;
-   * its allowed languages are left as they are.
+   * Needs edit rights on the problem, and `judge.edit_all_problem` on a
+   * manually managed or mirror problem (403 `forbidden`). The problem is
+   * judged by judge-v2 again; its allowed languages are left as they are.
    */
   @Delete()
   remove(
