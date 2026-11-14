@@ -46,6 +46,7 @@ describe('registration', () => {
     );
   };
   beforeEach(resetRateLimits);
+  afterEach(() => jest.restoreAllMocks());
 
   it('registers an inactive user and mails an activation link that activates once', async () => {
     await register('newbie', 'Newbie@Example.com').expect(204);
@@ -90,6 +91,7 @@ describe('registration', () => {
     api.mailer.sent.length = 0;
     expect(dataOf(await activate(key).expect(200))).toEqual({
       passwordResetSent: true,
+      passwordVoided: true,
     });
     await api
       .http()
@@ -125,6 +127,7 @@ describe('registration', () => {
       .mockRejectedValueOnce(new Error('smtp down'));
     expect(dataOf(await activate(key).expect(200))).toEqual({
       passwordResetSent: false,
+      passwordVoided: true,
     });
     const after = (await api.users.findOne({ username: 'nomail' }).lean())!;
     expect(after.isActive).toBe(true);
