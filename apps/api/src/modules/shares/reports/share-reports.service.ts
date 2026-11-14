@@ -13,7 +13,13 @@ import type { ShareReport } from '@libs/database';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import type { SettledReportStatus } from '../../comments/reports/dto/report-comment.dto';
 import { ShareSummaryResponse } from '../core/dto/share.response';
-import { REPORT_LIMIT, REPORT_WINDOW_SECONDS } from '../core/rate-limits';
+import {
+  READ_LIMIT,
+  READ_WINDOW_SECONDS,
+  readKeys,
+  REPORT_LIMIT,
+  REPORT_WINDOW_SECONDS,
+} from '../core/rate-limits';
 import { ShareAccessService } from '../core/share-access.service';
 import { SharesRepository } from '../core/shares.repository';
 import type {
@@ -36,12 +42,17 @@ export class ShareReportsService {
     private readonly rateLimits: RateLimitService,
   ) {}
 
-  /** A share the reporter can read and did not make; once per user (409), `REPORT_LIMIT` an hour. */
+  /** A share the reporter can read and did not make; once per user (409), `REPORT_LIMIT` an hour. The lookup costs a read first, so it cannot probe codes for free. */
   async report(
     principal: Principal,
-    code: string,
+    { code, ip }: { code: string; ip: string },
     { reason, note = '' }: ReportShareDto,
   ): Promise<void> {
+    await this.rateLimits.reserve(
+      readKeys(principal, ip),
+      READ_LIMIT,
+      READ_WINDOW_SECONDS,
+    );
     const { share, isOwner } = await this.access.readable(principal, code, {
       withSource: false,
       now: new Date(),

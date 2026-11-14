@@ -1,5 +1,8 @@
 import type { Problem, Share, SubmissionCase } from '@libs/database';
-import { ACTIVE_SHARE_LIMIT } from '../src/modules/shares/core/rate-limits';
+import {
+  ACTIVE_SHARE_LIMIT,
+  READ_LIMIT,
+} from '../src/modules/shares/core/rate-limits';
 import {
   clearRateLimits,
   contestProblem,
@@ -302,6 +305,16 @@ describe('share links', () => {
     await authed(api.http().post(at('/reports/settle')), staff)
       .send({ outcome: 'dismissed' })
       .expect(204);
+  });
+
+  it('counts a report against the read limit before looking the code up', async () => {
+    const report = () =>
+      authed(api.http().post(`${SHARES}/zzzzzzzzzz/reports`), reader).send({
+        reason: 'spam',
+      });
+    for (let attempt = 0; attempt < READ_LIMIT; attempt += 1)
+      await report().expect(404);
+    await report().expect(429).expect(errorCode('rate_limited'));
   });
 
   it("takes a link down for everyone until staff restore it, logs both, and hides a banned author's links", async () => {
