@@ -555,7 +555,7 @@ Domain words (what a Judging, a Participation or an Effect is) are in [GLOSSARY.
 
 ## Testing
 
-- The CI `db` job runs the specs that need MongoDB or Redis (mongodb-memory-server plus a Redis container) that a change can reach: `scripts/ci/select-db-specs.cjs <base>` lists the judging, submissions, bridge and auth specs plus those of the changed modules (a changed file no module row covers selects the whole suite; a new `apps/api/src/modules/<name>` needs a row in that script). The full suite runs nightly on origin/main (`.batch/nightly/run.sh`); `npm run test:db` runs it locally. The file name says which kind a spec is:
+- The CI `db` job runs the specs that need MongoDB or Redis (mongodb-memory-server plus a Redis container) that a change can reach: `scripts/ci/select-db-specs.cjs <base>` lists the judging, submissions, bridge, auth and access/permission specs plus those of the changed API modules and the modules that import them (any change under `libs/`, a test fixture, a file no module row covers, an unknown base or a script error selects the whole suite; a new `apps/api/src/modules/<name>` needs a row in that script). The full suite runs nightly on origin/main (`.batch/nightly/run.sh`); `npm run test:db` runs it locally. The file name says which kind a spec is:
 
   | File                                           | Needs                                                   | Config                           | Runs                             |
   | ---------------------------------------------- | ------------------------------------------------------- | -------------------------------- | -------------------------------- |

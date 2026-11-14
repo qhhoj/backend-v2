@@ -9,7 +9,7 @@ heavy="${CI_HEAVY_PATHS:-}"
 if [ -z "$base" ] || [[ $base =~ ^0+$ ]] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
   echo code=true; exit 0
 fi
-changed="$(git diff --name-only "$base" HEAD)"
+changed="$(git diff --no-renames --name-only "$base" HEAD)"
 if [ -z "$changed" ] || grep -qvE "$light" <<<"$changed" || { [ -n "$heavy" ] && grep -qE "$heavy" <<<"$changed"; }; then
   echo code=true
 else

@@ -73,6 +73,9 @@ sed -i 's/"a": "1"/"a": "2"/' "$repo/package.json"; git -C "$repo" -c user.email
 [ "$(gate HEAD)" = "$(git -C "$repo" rev-parse HEAD)" ] || fail "a dependency change waits for its own CI"
 sed -i 's/"version": "1.0.1"/"version": "1.0.2"/' "$repo/package.json"; commit apps/y.ts
 [ "$(gate HEAD)" = "$(git -C "$repo" rev-parse HEAD)" ] || fail "a version bump with code waits for its own CI"
+parent="$(git -C "$repo" rev-parse HEAD)"; sed -i 's/"dependencies"/"scripts": { "x": "y" },\n  "version": "9.9.9",\n  "dependencies"/' "$repo/package.json"
+git -C "$repo" -c user.email=t@t -c user.name=t -c commit.gpgSign=false commit -qam "version-looking line under scripts"
+[ "$(gate HEAD)" = "$(git -C "$repo" rev-parse HEAD)" ] || fail "a package.json change beyond the version waits for its own CI"
 echo "$RANDOM" >> "$repo/CHANGELOG.md"; git -C "$repo" -c user.email=t@t -c user.name=t -c commit.gpgSign=false commit -qam notes
 parent="$(git -C "$repo" rev-parse HEAD)"; echo "$RANDOM" >> "$repo/CHANGELOG.md"; git -C "$repo" -c user.email=t@t -c user.name=t -c commit.gpgSign=false commit -qam notes2
 [ "$(gate HEAD)" = "$parent" ] || fail "a changelog-only commit gates on its parent"

@@ -31,7 +31,9 @@ jobs:
         run: |
           if [ '${{ github.event_name }}' = workflow_dispatch ]; then BASE="$(git merge-base origin/main HEAD)"; fi
           echo "BASE=$BASE" >> "$GITHUB_ENV"
-          bash deploy/ci/code-changed.sh "$BASE" >> "$GITHUB_OUTPUT"
+          # A version-packages change (changesets, changelog, version fields) has no code to test.
+          if bash deploy/ci/version-only.sh "$BASE" HEAD 2>/dev/null; then echo code=false >> "$GITHUB_OUTPUT"
+          else bash deploy/ci/code-changed.sh "$BASE" >> "$GITHUB_OUTPUT"; fi
       # The image is what Containerfile, the dependencies, the entrypoint and the app entry points make of the code.
       - id: image
         run: |
@@ -39,8 +41,12 @@ jobs:
             || git diff --name-only "$BASE" HEAD | grep -qE '^(Containerfile|package(-lock)?[.]json|nest-cli[.]json|deploy/container/|\.github/workflows/|apps/[^/]+/src/main[.]ts)'; then
             echo image=true >> "$GITHUB_OUTPUT"
           else echo image=false >> "$GITHUB_OUTPUT"; fi
+      # Fails the job (and so ci-ok) when the selector errors or selects nothing: never "no specs, nothing to run".
       - id: specs
-        run: echo "db_specs=$(node scripts/ci/select-db-specs.cjs "$BASE" | paste -sd' ')" >> "$GITHUB_OUTPUT"
+        run: |
+          specs="$(node scripts/ci/select-db-specs.cjs "$BASE" | paste -sd' ')"
+          [ -n "$specs" ] || { echo "no DB specs selected" >&2; exit 1; }
+          echo "db_specs=$specs" >> "$GITHUB_OUTPUT"
   # lint, type check and the build run side by side: each is on the PR's critical path
   static:
     needs: changes
@@ -95,15 +101,15 @@ jobs:
       - run: pandoc --version
       # --forceExit: one leaked handle must not hang the job until the timeout.
       - run: npm run test:unit -- --forceExit
-  # Two shards of the selected specs, each on its own runner with its own Redis and in-memory MongoDB.
+  # Three shards of the selected specs, each on its own runner with its own Redis and in-memory MongoDB.
   db:
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.db_specs != ''
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
-      matrix: { shard: [1, 2] }
+      matrix: { shard: [1, 2, 3] }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -126,7 +132,7 @@ jobs:
       # --forceExit: jest hangs at exit on leaked handles. In band: the submission-events pub/sub channel is shared
       # across Redis dbs, so concurrent workers would see each other's events.
       # Only the selected specs (changes job); the nightly run covers the rest.
-      - run: npm run test:db -- --forceExit --passWithNoTests --shard=${{ matrix.shard }}/2 --runTestsByPath $SPECS
+      - run: npm run test:db -- --forceExit --shard=${{ matrix.shard }}/3 --runTestsByPath $SPECS
         env: { TEST_REDIS_URL: 'redis://localhost:6379/60', SPECS: '${{ needs.changes.outputs.db_specs }}' }
   openapi:
     needs: changes
@@ -184,15 +190,27 @@ jobs:
           path: judge-v2
           sparse-checkout: packaging
       - run: bash scripts/judge/check-deploy-copies.sh judge-v2
-  # The required check (with changes): it fails when any job above failed or was cancelled; a skipped job passes
-  # (a job is skipped when the change does not need it: no code, no DB spec selected, no image change).
+  # The required check (with changes). Fails when any job failed or was cancelled. When the change has code, the jobs that
+  # must run (static, build, test, db, openapi, and image when selected) must have succeeded: a skipped one is a failure.
   ci-ok:
     if: always()
     needs: [changes, static, build, test, db, openapi, image, deploy-scripts]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
-      - env: { RESULTS: '${{ join(needs.*.result, '' '') }}' }
+      - env:
+          RESULTS: '${{ join(needs.*.result, '' '') }}'
+          CODE: ${{ needs.changes.outputs.code }}
+          IMAGE: ${{ needs.changes.outputs.image }}
+          MUST: '${{ needs.changes.result }} ${{ needs.deploy-scripts.result }}'
+          CODE_JOBS: '${{ needs.static.result }} ${{ needs.build.result }} ${{ needs.test.result }} ${{ needs.db.result }} ${{ needs.openapi.result }}'
+          IMAGE_JOB: ${{ needs.image.result }}
         run: |
           echo "$RESULTS"
-          ! grep -qE 'failure|cancelled' <<< "$RESULTS"
+          # `! cmd` never trips bash -e, so each check exits explicitly
+          ! grep -qE 'failure|cancelled' <<< "$RESULTS" || exit 1
+          ! grep -qvE '^(success )*success$' <<< "$MUST" || exit 1
+          if [ "$CODE" = true ]; then
+            ! grep -qvE '^(success )*success$' <<< "$CODE_JOBS" || exit 1
+            [ "$IMAGE" != true ] || [ "$IMAGE_JOB" = success ] || exit 1
+          fi
