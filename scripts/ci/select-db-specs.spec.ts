@@ -11,7 +11,9 @@ const SPECS = [
   'libs/judging/src/jobs.db.spec.ts',
   'apps/api/src/modules/blog/core/blog-access.filters.db.spec.ts',
 ];
-const ALWAYS = SPECS.filter((s) => /submission|auth|bridge|judging|access/.test(s));
+const ALWAYS = SPECS.filter((s) =>
+  /submission|auth|bridge|judging|access/.test(s),
+);
 type Select = (
   all: string[],
   changed: string[],
