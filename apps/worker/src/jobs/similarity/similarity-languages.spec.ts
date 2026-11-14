@@ -43,4 +43,16 @@ describe('similarity languages', () => {
     expect(prepared).toBe('begin\nx := 1;\n\n\nend.');
     expect(prepared.split('\n')).toHaveLength(source.split('\n').length);
   });
+
+  it('prepares Pascal in time linear in its length when comment openers never close', () => {
+    for (const opener of ['{', '(*']) {
+      const line = `s:='${opener.repeat(100)}'; // c\n`;
+      const source = line.repeat(Math.ceil((256 * 1024) / line.length));
+      const startedAt = performance.now();
+      const prepared = preparePascal(source);
+      expect(performance.now() - startedAt).toBeLessThan(500);
+      expect(prepared.split('\n')[0]).toBe(`s:='${opener.repeat(100)}';`);
+      expect(prepared.split('\n')).toHaveLength(source.split('\n').length);
+    }
+  });
 });

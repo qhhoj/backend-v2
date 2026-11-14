@@ -17,6 +17,7 @@ import {
   SUBMISSION_EVENTS_CHANNEL,
 } from '@libs/judging';
 import { ContestFinalJudgeService } from '../src/jobs/contest-final-judge/contest-final-judge.service';
+import { SubmissionEffectsService } from '../src/jobs/submission-effects/submission-effects.service';
 import {
   seedContest,
   seedContestSubmission,
@@ -54,8 +55,14 @@ describe('FSO final judging', () => {
       endTime: hours(-1),
       ...extra,
     });
+  const PENDING = {
+    status: 'PD',
+    result: null,
+    points: null,
+    judgedDate: null,
+  } as const;
+  /** `count` pending rows of one contestant, each on its own problem. */
   const pending = async (contest: { _id: string }, count: number) => {
-    const problem = await seedProblem(worker);
     const user = await seedUser(worker);
     const participation = await seedParticipation(
       worker,
@@ -63,19 +70,17 @@ describe('FSO final judging', () => {
       user._id,
     );
     const ids: string[] = [];
-    for (let index = 0; index < count; index += 1)
+    let problem = await seedProblem(worker);
+    for (let index = 0; index < count; index += 1) {
+      if (index > 0) problem = await seedProblem(worker);
       ids.push(
         (
           await seedContestSubmission(worker, participation, problem._id, {
-            fields: {
-              status: 'PD',
-              result: null,
-              points: null,
-              judgedDate: null,
-            },
+            fields: PENDING,
           })
         )._id,
       );
+    }
     return { ids, problem, participation, user };
   };
 
@@ -186,6 +191,59 @@ describe('FSO final judging', () => {
       await worker.submissions.findById(rejected._id).lean(),
     ).toMatchObject({ status: 'PD', result: 'RJ' });
     expect((await commandedIds()).sort()).toEqual([...ids].sort());
+  });
+
+  it('judges the newest pending row of each contestant and problem first, the older ones behind all other work, and an early AC still counts site-wide', async () => {
+    const contest = await fsoContest();
+    const problem = await seedProblem(worker);
+    const user = await seedUser(worker);
+    const participation = await seedParticipation(
+      worker,
+      contest._id,
+      user._id,
+    );
+    const minutesAgo = (count: number) => new Date(Date.now() - count * 60_000);
+    const seed = async (date: Date) =>
+      (
+        await seedContestSubmission(worker, participation, problem._id, {
+          fields: { ...PENDING, date },
+        })
+      )._id;
+    const oldest = await seed(minutesAgo(3));
+    const newest = await seed(minutesAgo(1));
+    const middle = await seed(minutesAgo(2));
+    const other = await pending(contest, 1);
+    expect(await service.judgeFinal(contest._id, { isManual: false })).toBe(4);
+    const priorityOf = async (id: string) =>
+      (await worker.submissions.findById(id).lean())!.priority;
+    expect(
+      await Promise.all([newest, other.ids[0], oldest, middle].map(priorityOf)),
+    ).toEqual([3, 3, 4, 4]);
+    expect(await statusesOf([oldest, middle, newest])).toEqual([
+      'QU',
+      'QU',
+      'QU',
+    ]);
+    const commanded = await commandedIds();
+    expect(commanded.slice(0, 2).sort()).toEqual([newest, ...other.ids].sort());
+    expect(commanded.slice(2).sort()).toEqual([oldest, middle].sort());
+    const grade = (id: string, fields: object) =>
+      worker.submissions.updateOne(
+        { _id: id },
+        { status: 'D', caseTotal: 1, judgedDate: new Date(), ...fields },
+      );
+    await grade(oldest, { result: 'AC', points: 1000, casePoints: 1 });
+    await grade(newest, { result: 'WA', points: 0, casePoints: 0 });
+    const effects = worker.module.get(SubmissionEffectsService);
+    for (const id of [oldest, newest])
+      await effects.apply({
+        submissionId: id,
+        userId: uuidStr(user._id),
+        problemId: uuidStr(problem._id),
+      });
+    expect((await worker.users.findById(user._id).lean())!.problemCount).toBe(
+      1,
+    );
   });
 
   it("runs an editor's queued request through the processor, whatever autoJudge says", async () => {

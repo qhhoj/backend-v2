@@ -42,7 +42,7 @@ export class HomeCountsResponse {
 
 /** Legacy `PostList` side widgets; running and upcoming contests come from `GET /contests?phase=`. */
 export class HomeResponse {
-  /** Newest comments the viewer may read. */
+  /** Newest comments the viewer may read; a `bodyHtml` over 32 KiB comes as a paragraph of its first words. */
   recentComments!: RecentCommentResponse[];
   /** The 7 newest problems. */
   newProblems!: HomeProblemResponse[];

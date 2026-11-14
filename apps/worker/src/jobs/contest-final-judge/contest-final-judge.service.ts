@@ -2,12 +2,14 @@ import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { REDIS, runCoalesced } from '@libs/common';
 import { contestPhase, finalSubmissionFormat } from '@libs/contests';
+import { SUBMISSION_PRIORITY } from '@libs/database';
 import {
   BridgeCommandsService,
   JUDGE_COMMAND_BATCH,
   submissionEvent,
   SubmissionEventsService,
 } from '@libs/judging';
+import type { SubmissionGradedJob } from '@libs/judging';
 import { ContestFinalJudgeRepository } from './contest-final-judge.repository';
 
 @Injectable()
@@ -19,7 +21,7 @@ export class ContestFinalJudgeService {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  /** Legacy `judge_final_submissions` for an ended FSO contest (a started one on an editor's request), for pending rows only: back to the queue, announced as `queued` and commanded to the bridge a batch at a time. Serialised per contest across processes; a row leaves PD once, so racing triggers requeue each submission exactly once. Automatic runs skip `autoJudge: false`. Returns how many this call requeued. */
+  /** Legacy `judge_final_submissions` for an ended FSO contest (a started one on an editor's request), for pending rows only: each participation's newest pending row per problem (the one the format scores) goes back to the queue at batch priority first, then every older pending row at backlog priority, behind all other work; each is announced as `queued` and commanded to the bridge a batch at a time. Serialised per contest across processes; a row leaves PD once, so racing triggers requeue each submission exactly once. Automatic runs skip `autoJudge: false`. Returns how many this call requeued. */
   async judgeFinal(
     contestId: string,
     { isManual, now = new Date() }: { isManual: boolean; now?: Date },
@@ -38,6 +40,14 @@ export class ContestFinalJudgeService {
       this.redis,
       `contest-final-judge:${contestId}`,
       async () => {
+        for await (const rows of this.repository.newestPendingRows(
+          contestId,
+          JUDGE_COMMAND_BATCH,
+        ))
+          requeued += await this.requeue(
+            rows,
+            SUBMISSION_PRIORITY.batchRejudge,
+          );
         for (
           let rows = await this.repository.pendingRows(
             contestId,
@@ -48,20 +58,27 @@ export class ContestFinalJudgeService {
             contestId,
             JUDGE_COMMAND_BATCH,
           )
-        ) {
-          const ids = rows.map((row) => row.submissionId);
-          await this.repository.requeue(ids);
-          await this.commands.judge(ids);
-          await Promise.all(
-            rows.map((row) =>
-              this.events.publish(submissionEvent(row, 'queued', 'QU')),
-            ),
-          );
-          requeued += ids.length;
-        }
+        )
+          requeued += await this.requeue(rows, SUBMISSION_PRIORITY.backlog);
       },
     );
     return requeued;
+  }
+
+  /** One batch back to the queue at `priority`, commanded and announced. */
+  private async requeue(
+    rows: SubmissionGradedJob[],
+    priority: number,
+  ): Promise<number> {
+    const ids = rows.map((row) => row.submissionId);
+    await this.repository.requeue(ids, priority);
+    await this.commands.judge(ids);
+    await Promise.all(
+      rows.map((row) =>
+        this.events.publish(submissionEvent(row, 'queued', 'QU')),
+      ),
+    );
+    return ids.length;
   }
 
   /** Every minute: ended FSO contests still holding pending rows (a lost delayed job, a submission stored at the last moment). */

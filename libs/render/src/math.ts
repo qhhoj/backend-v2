@@ -22,6 +22,8 @@ export type MathBudget = {
   startedAt: number;
   formulas: number;
   outputBytes: number;
+  /** KaTeX output this render may produce; formulas past it show as source. */
+  maxOutputBytes: number;
   limitReported: boolean;
 };
 const MAX_FORMULAS = 2000;
@@ -35,12 +37,14 @@ const SIZE_REFUSAL = `Sizes beyond ±${USER_MAX_SIZE}em are not allowed here`;
 export const createMathBudget = (
   userAuthored = false,
   clock: () => number = () => performance.now(),
+  maxOutputBytes = MAX_MATH_OUTPUT_BYTES,
 ): MathBudget => ({
   userAuthored,
   clock,
   startedAt: clock(),
   formulas: 0,
   outputBytes: 0,
+  maxOutputBytes: Math.min(maxOutputBytes, MAX_MATH_OUTPUT_BYTES),
   limitReported: false,
 });
 
@@ -143,7 +147,7 @@ export function renderMath(
     budget &&
     (++budget.formulas > MAX_FORMULAS ||
       tex.length > MAX_FORMULA_LENGTH ||
-      budget.outputBytes > MAX_MATH_OUTPUT_BYTES)
+      budget.outputBytes > budget.maxOutputBytes)
   )
     return limitExceeded(budget, tex, displayMode, 'Formula limit exceeded');
   const userAuthored = budget?.userAuthored ?? false;
@@ -175,8 +179,8 @@ export function renderMath(
     if (refusal) return mathError(tex, displayMode, refusal);
     const html = katex.renderToString(tex, options);
     if (budget) {
-      if (budget.outputBytes + html.length > MAX_MATH_OUTPUT_BYTES) {
-        budget.outputBytes = MAX_MATH_OUTPUT_BYTES + 1;
+      if (budget.outputBytes + html.length > budget.maxOutputBytes) {
+        budget.outputBytes = budget.maxOutputBytes + 1;
         return limitExceeded(
           budget,
           tex,

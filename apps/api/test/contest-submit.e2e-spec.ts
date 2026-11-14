@@ -24,6 +24,7 @@ import {
   bridgeCommands,
   clearBridgeCommands,
   dataOf,
+  seedSubmission,
 } from './submission-fixtures';
 import { ParticipationsRepository } from '../src/modules/contests/core/participations.repository';
 import { errorCode, setupApiTest } from './setup';
@@ -280,7 +281,36 @@ describe('submitting inside a contest', () => {
     }
   });
 
-  it('judges FSO submissions at once after the contest ended (virtual participants)', async () => {
+  it('refuses a pending FSO submission past 50 per participation and problem', async () => {
+    const problem = await createProblem(api, catalog, { code: 'cp_final_cap' });
+    const contest = await createContest(api, {
+      formatName: 'final_submission',
+      problems: [contestProblem(problem._id, 0)],
+    });
+    const participation = await enter('erin', contest._id);
+    for (let count = 0; count < 49; count += 1) {
+      const row = await seedSubmission(api, {
+        user: users.erin._id,
+        problem: problem._id,
+        language: catalog.languages.cpp,
+        contest: contest._id,
+        status: 'PD',
+        result: null,
+      });
+      await api.contestSubmissions.create({
+        _id: row._id,
+        participation: participation._id,
+        contest: contest._id,
+        problem: problem._id,
+      });
+    }
+    await submit('erin', 'cp_final_cap').expect(201);
+    await submit('erin', 'cp_final_cap')
+      .expect(429)
+      .expect(errorCode('final_pending_limit'));
+  });
+
+  it('judges FSO submissions at once after the contest ended (virtual participants), within the unfinished limit', async () => {
     const problem = await createProblem(api, catalog, {
       code: 'cp_final_late',
     });
@@ -296,6 +326,10 @@ describe('submitting inside a contest', () => {
     expect((await bridgeCommands(api)).map((command) => command.type)).toEqual([
       'judge',
     ]);
+    await submit('carol', 'cp_final_late').expect(201);
+    await submit('carol', 'cp_final_late')
+      .expect(429)
+      .expect(errorCode('unfinished_submission_limit'));
   });
 
   it('judges on pretests only when the contest runs pretests only and the problem has them', async () => {

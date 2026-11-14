@@ -21,15 +21,52 @@ const syntax = (language: string): SimilarityFamily => ({
   prepare: (source) => source,
 });
 
+/** Pascal comment delimiters; a `//` comment ends before its newline. */
+const PASCAL_COMMENTS = [
+  ['{', '}'],
+  ['(*', '*)'],
+  ['//', '\n'],
+] as const;
+
+/** Where the comment opening at `index` ends (exclusive), or -1. An opener with no closer ahead is text, and so is every later opener of its kind (`unclosed` remembers it), so each closer is searched for at most once per comment. */
+function commentEnd(
+  source: string,
+  index: number,
+  unclosed: Set<string>,
+): number {
+  for (const [opener, closer] of PASCAL_COMMENTS) {
+    if (unclosed.has(opener) || !source.startsWith(opener, index)) continue;
+    const close = source.indexOf(closer, index + opener.length);
+    if (close !== -1) return opener === '//' ? close : close + closer.length;
+    if (opener === '//') return source.length;
+    unclosed.add(opener);
+  }
+  return -1;
+}
+
+/** One left-to-right scan: each comment becomes nothing but its newlines. */
+function blankPascalComments(source: string): string {
+  const unclosed = new Set<string>();
+  let blanked = '';
+  let copiedTo = 0;
+  for (let index = 0; index < source.length; index++) {
+    const end = commentEnd(source, index, unclosed);
+    if (end === -1) continue;
+    blanked +=
+      source.slice(copiedTo, index) +
+      source.slice(index, end).replace(/[^\n]/g, '');
+    copiedTo = end;
+    index = end - 1;
+  }
+  return blanked + source.slice(copiedTo);
+}
+
 /**
  * Comments (`{ }`, `(* *)`, `//`) become nothing but keep their newlines; case and runs of blanks do not matter in Pascal.
  * Braces inside string literals are eaten as comments too: that only lowers similarity, it never fails.
  */
 export const preparePascal = (source: string): string =>
-  source
-    .replace(/\{[\s\S]*?\}|\(\*[\s\S]*?\*\)|\/\/[^\n]*/g, (comment) =>
-      comment.replace(/[^\n]/g, ''),
-    )
+  blankPascalComments(source)
     .toLowerCase()
     .split('\n')
     .map((line) => line.replace(/\s+/g, ' ').trim())

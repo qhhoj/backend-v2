@@ -61,6 +61,8 @@ export const SUBMISSION_PRIORITY = {
   normal: 1,
   rejudge: 2,
   batchRejudge: 3,
+  /** Older pending rows of a final-submission contest: judged after every other row. */
+  backlog: 4,
 } as const;
 export const MAX_SOURCE_LENGTH = 65536;
 /** Unicode code points (legacy Python `len`): neither UTF-16 units nor validator.js `isLength`, which drops variation selectors. */
@@ -148,7 +150,7 @@ export class Submission {
   @Prop({
     default: SUBMISSION_PRIORITY.normal,
     min: SUBMISSION_PRIORITY.contest,
-    max: SUBMISSION_PRIORITY.batchRejudge,
+    max: SUBMISSION_PRIORITY.backlog,
   })
   priority!: number;
   /** Name of the judge it was last handed to; every judge packet's write is filtered on it. */

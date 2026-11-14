@@ -152,6 +152,29 @@ const markdowns = {
 const MAX_MARKUP_TAGS = 200000;
 const MAX_MARKUP_DEPTH = 500;
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
+const KIB = 1024;
+
+/** `user`-style output budgets for text up to 8 KiB (a comment or ticket message at its length cap). */
+const USER_MATH_BYTES = 160 * KIB;
+const USER_HTML_BYTES = 320 * KIB;
+
+/** Output budgets of one render, in bytes. The `user` style (comments, ticket messages, profile and organization about) allows 160 KiB of formulas and 320 KiB of HTML, more for longer text (16 and 32 bytes per source byte), so short text renders to bounded HTML. */
+function outputLimitsOf(
+  text: string,
+  style: RenderStyle,
+): { html: number; math: number | undefined } {
+  if (style !== 'user') return { html: MAX_HTML_BYTES, math: undefined };
+  const sourceBytes = Buffer.byteLength(text);
+  return {
+    html: Math.min(MAX_HTML_BYTES, Math.max(USER_HTML_BYTES, 32 * sourceBytes)),
+    math: Math.max(USER_MATH_BYTES, 16 * sourceBytes),
+  };
+}
+
+const assertWithinBytes = (html: string, maxBytes: number): void => {
+  if (Buffer.byteLength(html) > maxBytes)
+    throw new RenderLimitError('Rendered HTML is too large');
+};
 
 const assertWithinMarkupLimits = (html: string): void => {
   if (
@@ -172,8 +195,9 @@ export function renderMarkdown(
   style: RenderStyle,
   { problemLinks }: { problemLinks?: ProblemLinks } = {},
 ): string {
+  const limits = outputLimitsOf(text, style);
   const env: RenderEnv = {
-    budget: createMathBudget(isUserAuthored(style)),
+    budget: createMathBudget(isUserAuthored(style), undefined, limits.math),
     problemLinks,
     ...(isSanitizedStyle(style)
       ? {
@@ -192,13 +216,13 @@ export function renderMarkdown(
       ),
     ),
   );
+  assertWithinBytes(rendered, limits.html);
   assertWithinMarkupLimits(rendered);
   let html = rendered;
   if (env.deferredMath) {
     html = sanitizeWithMath(rendered, style, env.deferredMath);
     assertWithinMarkupLimits(html);
   }
-  if (Buffer.byteLength(html) > MAX_HTML_BYTES)
-    throw new RenderLimitError('Rendered HTML is too large');
+  assertWithinBytes(html, limits.html);
   return html;
 }
