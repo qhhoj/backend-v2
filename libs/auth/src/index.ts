@@ -14,6 +14,7 @@ export * from './token/service-key';
 export * from './integration/integration-clients.repository';
 export * from './guards/service-client';
 export * from './session/session.service';
+export * from './session/session-current';
 export * from './session/session-cookie';
 export * from './users/users.repository';
 export * from './users/active-superuser';

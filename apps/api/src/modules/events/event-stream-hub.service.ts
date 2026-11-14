@@ -2,7 +2,12 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import Redis from 'ioredis';
-import { PrincipalService, SessionService, UsersRepository } from '@libs/auth';
+import {
+  PrincipalService,
+  sessionCurrent,
+  SessionService,
+  UsersRepository,
+} from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, ENV, ipMatcher, limiterAddress } from '@libs/common';
 import type { ApiConfig } from '@libs/common';
@@ -240,16 +245,15 @@ export class EventStreamHubService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** The session still exists (logout, password change and impersonation end destroy it) and predates no credential revocation, the user is still active, and an API token was not regenerated. */
+  /** The session still exists and still stands for its user (as the guard checks it), or the API token was not regenerated and its user is still active. */
   private async currentPrincipal(auth: AuthContext): Promise<Principal | null> {
     const session = auth.sessionId && (await this.sessions.get(auth.sessionId));
     if (auth.sessionId !== null && !session) return null;
     const user = await this.users.findById(auth.user._id);
-    if (
-      !user?.isActive ||
-      (session && session.credentialEpoch !== user.credentialEpoch) ||
-      (auth.viaToken && user.apiTokenHash !== auth.user.apiTokenHash)
-    )
+    if (!user?.isActive) return null;
+    if (session && !(await sessionCurrent(this.users, session, user)))
+      return null;
+    if (auth.viaToken && user.apiTokenHash !== auth.user.apiTokenHash)
       return null;
     return this.principals.build(user);
   }

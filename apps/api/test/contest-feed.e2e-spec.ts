@@ -1,3 +1,5 @@
+import { UsersRepository } from '@libs/auth';
+
 import { profileQueries } from '@libs/database/testing';
 
 import type { Contest, User } from '@libs/database';
@@ -299,6 +301,22 @@ describe('contest event feed', () => {
     await setActive(false);
     await setActive(true);
     await refused(deactivated);
+  });
+
+  it('refuses a key minted before its owner revoked credentials, though the key was never marked revoked', async () => {
+    const owner = await createUserWith(api, 'feed-owner-2', {
+      permissions: ['judge.edit_own_contest'],
+    });
+    const { contest } = await seed({ authors: [owner._id] });
+    const key = await mint(contest, {}, await loginAs(api, owner._id));
+    await fetchFeed(contest, key);
+    // A ban or deactivation whose step marking the keys revoked never ran, followed by an unban.
+    await api.app.get(UsersRepository).revokeCredentials(owner._id, {});
+    await api
+      .http()
+      .get(url(contest))
+      .set('Authorization', basic(key))
+      .expect(401);
   });
 
   it('cuts the feed at the freeze until the key is released, the contest unfreezes, or the key is live', async () => {

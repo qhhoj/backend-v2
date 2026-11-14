@@ -1,3 +1,4 @@
+import { UsersRepository } from '@libs/auth';
 import { waitUntil } from '@libs/common/testing';
 import { NotificationsService } from '@libs/community';
 import { uuidStr } from '@libs/database';
@@ -9,7 +10,7 @@ import { createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { openStream, streamsOf } from './sse-client';
 import type { SseClient } from './sse-client';
-import { setupApiTest } from './setup';
+import { sessionCookie, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 const USER_EVENTS = '/api/internal/events/user';
@@ -117,4 +118,30 @@ describe('user event stream', () => {
     expect(streams.openCounts().userStreams).toBe(1);
     people.u1.session = await loginAs(api, people.u1.id);
   });
+
+  it.each(['the user', 'the impersonator'])(
+    'closes the stream once %s revokes credentials, before any session clean-up',
+    async (who) => {
+      const user = await createUserWith(api, `streamer-${who.length}`);
+      const root = await createUserWith(api, `root-${who.length}`, {
+        isSuperuser: true,
+      });
+      const impersonating = who === 'the impersonator';
+      const { id } = await api.sessions.create({
+        userId: user._id,
+        twoFaPassed: true,
+        passwordPwned: false,
+        impersonatorId: impersonating ? root._id : null,
+      });
+      const tab = await openStream(api, USER_EVENTS, {
+        Cookie: sessionCookie(id),
+      });
+      opened.push(tab);
+      expect(tab.status).toBe(200);
+      await api.app
+        .get(UsersRepository)
+        .revokeCredentials(impersonating ? root._id : user._id, {});
+      await tab.closed;
+    },
+  );
 });

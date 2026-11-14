@@ -41,6 +41,7 @@ import {
   UsersRepository,
 } from '@libs/auth';
 import { PasswordResetService } from '../src/modules/auth/password-reset/password-reset.service';
+import { ActivationService } from '../src/modules/auth/registration/activation.service';
 
 import { getModelToken } from '@nestjs/mongoose';
 
@@ -1135,6 +1136,22 @@ afterAll(() => api.teardown());
         .get('/api/internal/auth/me')
         .set('Authorization', `Bearer ${token}`)
         .expect(401);
+    });
+
+    it('refuses an activation key mailed before a staff e-mail change', async () => {
+      const pending = await createUserWith(api, 'jules', { isActive: false });
+      const key = await api.app
+        .get(ActivationService)
+        .createKey(pending._id, 0);
+      await authed(api.http().patch(`${USER('jules')}/profile`), admin)
+        .send({ currentPassword: OLD, email: 'jules.new@example.com' })
+        .expect(200);
+      await api
+        .http()
+        .post('/api/internal/auth/activate')
+        .send({ token: key })
+        .expect(400)
+        .expect(errorCode('invalid_token'));
     });
 
     it('renews the e-mail lock while staff change an e-mail', async () => {

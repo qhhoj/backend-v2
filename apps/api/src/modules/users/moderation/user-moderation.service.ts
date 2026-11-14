@@ -87,10 +87,11 @@ export class UserModerationService {
     });
   }
 
-  /** Recovery for a locked-out user: removes TOTP and every security key, then signs the user out everywhere. Audit-logged as a `user` revision. */
+  /** Recovery for a locked-out user: removes TOTP and every security key and the API token, then signs the user out everywhere. Audit-logged as a `user` revision. */
   async resetTwoFactor(principal: Principal, username: string): Promise<void> {
     const user = await this.target(principal, username);
     await this.users.revokeCredentials(user._id, {
+      apiTokenHash: null,
       isTotpEnabled: false,
       totpKey: null,
       scratchCodes: null,

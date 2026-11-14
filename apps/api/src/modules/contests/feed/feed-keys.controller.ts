@@ -48,6 +48,8 @@ export class FeedKeysController {
    * impersonation). Creates a key and returns it once with the Basic user name
    * `feed`; earlier keys stop working. The mode is `frozen-until-release` by
    * default or `live`, and it expires after `expiresInDays` (at most 30).
+   * It stops working once its minter changes or resets their password, signs
+   * out everywhere, is banned or deactivated.
    * Limited to a few per hour.
    */
   @Post()
@@ -58,7 +60,7 @@ export class FeedKeysController {
     @Param() { key }: ContestKeyParamDto,
     @Body() dto: MintFeedKeyDto,
   ): Promise<MintedFeedKeyResponse> {
-    return this.keys.mint(auth.principal, key, dto);
+    return this.keys.mint(auth, key, dto);
   }
 
   /**

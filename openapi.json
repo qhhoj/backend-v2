@@ -26730,7 +26730,7 @@
         ]
       },
       "post": {
-        "description": "Contest editors only, with a browser session (no API tokens, no\nimpersonation). Creates a key and returns it once with the Basic user name\n`feed`; earlier keys stop working. The mode is `frozen-until-release` by\ndefault or `live`, and it expires after `expiresInDays` (at most 30).\nLimited to a few per hour.",
+        "description": "Contest editors only, with a browser session (no API tokens, no\nimpersonation). Creates a key and returns it once with the Basic user name\n`feed`; earlier keys stop working. The mode is `frozen-until-release` by\ndefault or `live`, and it expires after `expiresInDays` (at most 30).\nIt stops working once its minter changes or resets their password, signs\nout everywhere, is banned or deactivated.\nLimited to a few per hour.",
         "operationId": "FeedKeysController_mint",
         "parameters": [
           {
@@ -42305,7 +42305,7 @@
     },
     "/api/internal/users/{username}/reset-two-factor": {
       "post": {
-        "description": "Requires `judge.ban_user` and a browser session (API tokens get 403), not while impersonating, like the other staff credential routes. Removes the user's authenticator app and all security keys so a locked-out user can sign in again, signs them out everywhere and records a `user` revision for audit. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`. Returns 204.",
+        "description": "Requires `judge.ban_user` and a browser session (API tokens get 403), not while impersonating, like the other staff credential routes. Removes the user's authenticator app and all security keys so a locked-out user can sign in again, signs them out everywhere, revokes their API token and records a `user` revision for audit. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`. Returns 204.",
         "operationId": "UserModerationController_resetTwoFactor",
         "parameters": [
           {
