@@ -130,6 +130,36 @@ describe('contest participation', () => {
       ).toEqual([1, 2]);
     });
 
+    it('starts a new run when the user joins again after leaving the live one', async () => {
+      const ended = await createContest(api, {
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+      });
+      const first = dataOf<ParticipationSummaryResponse>(
+        await post('carol', ended.key, 'join').expect(201),
+      );
+      await post('carol', ended.key, 'leave').expect(204);
+      const second = dataOf<ParticipationSummaryResponse>(
+        await post('carol', ended.key, 'join').expect(201),
+      );
+      expect(second.id).not.toBe(first.id);
+      expect(second.virtual).toBe(first.virtual + 1);
+    });
+
+    it('caps new virtual runs per user per day', async () => {
+      const ended = await createContest(api, {
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+      });
+      await api.app
+        .get<Redis>(REDIS)
+        .set(`rate:contest-virtual:user:${users.dave._id}`, 50);
+      await post('dave', ended.key, 'join')
+        .expect(429)
+        .expect(errorCode('rate_limited'));
+      expect(await participationsOf(ended._id, 'dave')).toHaveLength(0);
+    });
+
     it('limits joins per user, every kind, and still lets a normal join through', async () => {
       const running = await createContest(api);
       for (let attempt = 0; attempt < 30; attempt += 1)

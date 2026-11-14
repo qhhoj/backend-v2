@@ -68,6 +68,8 @@ import {
   ACCESS_CODE_USER_LIMIT,
   JOIN_USER_LIMIT,
   JOIN_WINDOW_SECONDS,
+  VIRTUAL_RUN_DAILY_LIMIT,
+  VIRTUAL_RUN_WINDOW_SECONDS,
   ACCESS_CODE_WINDOW_SECONDS,
 } from '../core/rate-limits';
 
@@ -242,7 +244,16 @@ export class ContestParticipationService {
       now,
       {
         acceptance: this.acceptanceFor(contest, credentials, now),
-        isLive: (latest) => !hasParticipationEnded(contest, latest, now),
+        reuse: {
+          isLive: (latest) => !hasParticipationEnded(contest, latest, now),
+        },
+        beforeInsert: async () => {
+          await this.rateLimit.reserve(
+            [`contest-virtual:user:${principal.userId}`],
+            VIRTUAL_RUN_DAILY_LIMIT,
+            VIRTUAL_RUN_WINDOW_SECONDS,
+          );
+        },
       },
     );
   }
@@ -498,6 +509,7 @@ export class ContestParticipationService {
     )
       throw refusal('not_in_contest');
     await this.participationRows.clearCurrent(principal.userId, pointer);
+    await this.participationRows.markLeft(pointer, new Date());
   }
 
   async current(

@@ -165,6 +165,13 @@ export class ParticipationsRepository {
       : null;
   }
 
+  /** Ends the user's claim on a virtual run: a later join starts a new one. */
+  async markLeft(id: string, now: Date): Promise<void> {
+    await this.participations
+      .updateOne({ _id: id, virtual: { $gt: LIVE } }, { leftAt: now })
+      .exec();
+  }
+
   async currentIdOf(userId: string): Promise<string | null> {
     const user = await this.users
       .findById(userId, { currentParticipation: 1 })
@@ -248,17 +255,24 @@ export class ParticipationsRepository {
     }
   }
 
-  /** Legacy: the next virtual number, retried while concurrent joins take it. The user's latest run is returned instead when the optional `isLive` says it is unfinished (checked again on every retry, so the loser of a race gets the winner's row). */
+  /**
+   * Legacy: the next virtual number, retried while concurrent joins take it.
+   * With `reuse`, the user's latest run is returned instead of a new row when it is unfinished (`isLive`) and the user
+   * has not left it; the check repeats on every retry, so the loser of an insert race gets the winner's row.
+   * `beforeInsert` runs before each insert.
+   */
   async createVirtual(
     contestId: string,
     userId: string,
     now: Date,
     {
       acceptance,
-      isLive,
+      reuse,
+      beforeInsert,
     }: {
       acceptance: RulesAcceptance | null;
-      isLive?: (latest: ParticipationDocument) => boolean;
+      reuse?: { isLive: (latest: ParticipationDocument) => boolean };
+      beforeInsert?: () => Promise<void>;
     },
   ): Promise<ParticipationDocument> {
     try {
@@ -268,8 +282,13 @@ export class ParticipationsRepository {
           .sort({ virtual: -1 })
           .limit(1)
           .exec();
-        if (highest && highest.virtual > LIVE && isLive?.(highest))
-          return highest;
+        const isReusable =
+          highest &&
+          highest.virtual > LIVE &&
+          !highest.leftAt &&
+          reuse?.isLive(highest);
+        if (isReusable) return highest;
+        await beforeInsert?.();
         return this.participations.create({
           contest: contestId,
           user: userId,

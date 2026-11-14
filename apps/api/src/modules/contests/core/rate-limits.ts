@@ -14,6 +14,9 @@ export const ANNOUNCEMENT_PUSH_WINDOW_SECONDS = 60 * 60;
 /** Export or data builds per contest per day, failed ones included (new; legacy had only "once a day while a zip is ready"): a failed build leaves no zip, so the zip rule alone let editors rerun 512 MiB builds back to back. Never given back. */
 export const CONTEST_ZIP_BUILD_LIMIT = 3;
 export const CONTEST_ZIP_BUILD_WINDOW_SECONDS = 86_400;
-/** Joins per user, every kind (live, spectate, virtual; refusals included): each virtual join could add a row to every board and rescore. Generous enough for retries and double clicks. */
+/** Joins per user, every kind (live, spectate, virtual; refusals included); sized for retries and double clicks. */
 export const JOIN_USER_LIMIT = 30;
 export const JOIN_WINDOW_SECONDS = 10 * 60;
+/** New virtual runs per user per day, over all contests. */
+export const VIRTUAL_RUN_DAILY_LIMIT = 50;
+export const VIRTUAL_RUN_WINDOW_SECONDS = 86_400;
