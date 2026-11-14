@@ -407,6 +407,21 @@
             ],
             "type": "string"
           },
+          "background": {
+            "description": "Page background style; omit for the default (`blueprint`).",
+            "enum": [
+              "blueprint",
+              "contour",
+              "dither",
+              "grainy",
+              "halftone",
+              "landscape",
+              "none",
+              "paper",
+              "stipple"
+            ],
+            "type": "string"
+          },
           "glass": {
             "description": "Glass effect strength, 0-100.",
             "maximum": 100,
@@ -431,6 +446,10 @@
         "properties": {
           "accent": {
             "description": "Accent colour preset.",
+            "type": "string"
+          },
+          "background": {
+            "description": "Page background style; absent means the default (`blueprint`).",
             "type": "string"
           },
           "glass": {
