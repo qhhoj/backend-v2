@@ -23,23 +23,15 @@ import {
   ABOUT_EDIT_LIMIT,
   ABOUT_EDIT_WINDOW_SECONDS,
 } from '../core/rate-limits';
+import { currentAppearance, currentSiteTheme } from './current-look';
 import type { UpdateProfileDto } from './dto/profile.dto';
 import type { ProfileResponse } from './dto/profile.response';
 
-/** Appearance is replaced whole; `null` clears it. Absent means unchanged. */
+/** Appearance is replaced whole, in its current shape; `null` clears it. Absent means unchanged. */
 const appearanceChange = (
   appearance: UpdateProfileDto['appearance'],
 ): Partial<User> =>
-  appearance === undefined
-    ? {}
-    : {
-        appearance: appearance && {
-          accent: appearance.accent,
-          glass: appearance.glass,
-          glow: appearance.glow,
-          ...(appearance.background && { background: appearance.background }),
-        },
-      };
+  appearance === undefined ? {} : { appearance: currentAppearance(appearance) };
 
 /** Plain values, not the DTO instance, go to Mongo. Absent means unchanged. */
 const bitRoamChange = (bitRoam: UpdateProfileDto['bitRoam']): Partial<User> =>
@@ -215,8 +207,8 @@ export class ProfileService {
       firstName: user.firstName,
       timezone: user.timezone,
       languageId: user.languageId && uuidStr(user.languageId),
-      siteTheme: user.siteTheme,
-      appearance: user.appearance ?? null,
+      siteTheme: currentSiteTheme(user.siteTheme),
+      appearance: currentAppearance(user.appearance ?? null),
       bitRoam: user.bitRoam ?? { ...DEFAULT_BIT_ROAM },
       organizations: organizations.map((organization) => ({
         ...OrganizationSummaryResponse.from(organization),

@@ -292,84 +292,77 @@ describe('profile', () => {
       dataOf<ProfileResponse>(await get().expect(200)).appearance,
     ).toBeNull();
 
+    const look = {
+      accent: 'teal',
+      mode: 'dark',
+      contrast: 'high',
+      background: 'contour',
+    };
     const saved = dataOf<ProfileResponse>(
-      await patch({
-        appearance: { accent: 'ocean', glass: 30, glow: 100 },
-      }).expect(200),
+      await patch({ appearance: look }).expect(200),
     );
-    expect(saved.appearance).toEqual({ accent: 'ocean', glass: 30, glow: 100 });
-    expect((await api.users.findOne({ _id: user._id }))!.appearance).toEqual({
-      accent: 'ocean',
-      glass: 30,
-      glow: 100,
-    });
+    expect(saved.appearance).toEqual(look);
+    expect((await api.users.findOne({ _id: user._id }))!.appearance).toEqual(
+      look,
+    );
 
-    // Another field leaves it alone.
-    const untouched = dataOf<ProfileResponse>(
-      await patch({ siteTheme: 'dark' }).expect(200),
-    );
-    expect(untouched.appearance).toEqual({
-      accent: 'ocean',
-      glass: 30,
-      glow: 100,
-    });
-
-    // A new object replaces the old one, boundaries included.
-    const replaced = dataOf<ProfileResponse>(
-      await patch({
-        appearance: { accent: 'mono', glass: 0, glow: 0 },
-      }).expect(200),
-    );
-    expect(replaced.appearance).toEqual({ accent: 'mono', glass: 0, glow: 0 });
-    const edge = dataOf<ProfileResponse>(
-      await patch({
-        appearance: { accent: 'gold', glass: 100, glow: 100 },
-      }).expect(200),
-    );
-    expect(edge.appearance).toEqual({ accent: 'gold', glass: 100, glow: 100 });
-    const red = dataOf<ProfileResponse>(
-      await patch({
-        appearance: { accent: 'red', glass: 50, glow: 50 },
-      }).expect(200),
-    );
-    expect(red.appearance).toEqual({ accent: 'red', glass: 50, glow: 50 });
-
-    // An accent the frontend has no preset for is refused and changes nothing.
-    await patch({
-      appearance: { accent: 'crimson', glass: 50, glow: 50 },
-    }).expect(400);
+    // Another field leaves it alone; a new object replaces the old one, absent keys and all.
+    await patch({ siteTheme: 'dark' }).expect(200);
     expect(dataOf<ProfileResponse>(await get().expect(200)).appearance).toEqual(
-      { accent: 'red', glass: 50, glow: 50 },
+      look,
+    );
+    const replaced = dataOf<ProfileResponse>(
+      await patch({ appearance: { accent: 'graphite' } }).expect(200),
+    );
+    expect(replaced.appearance).toEqual({ accent: 'graphite' });
+
+    // Unknown values are refused and change nothing.
+    for (const appearance of [
+      { accent: 'crimson' },
+      { accent: 'teal', mode: 'sepia' },
+      { accent: 'teal', contrast: 'max' },
+      { accent: 'teal', background: 'plaid' },
+      { accent: 'teal', glass: 101 },
+    ])
+      await patch({ appearance }).expect(400);
+    expect(dataOf<ProfileResponse>(await get().expect(200)).appearance).toEqual(
+      { accent: 'graphite' },
     );
 
-    // A page background is optional (absent is the default), a listed style is stored, an unknown one is refused.
-    const contour = dataOf<ProfileResponse>(
-      await patch({
-        appearance: {
-          accent: 'red',
-          glass: 50,
-          glow: 50,
-          background: 'contour',
-        },
-      }).expect(200),
-    );
-    expect(contour.appearance?.background).toBe('contour');
-    await patch({
-      appearance: { accent: 'red', glass: 50, glow: 50, background: 'plaid' },
-    }).expect(400);
-    const unset = dataOf<ProfileResponse>(
-      await patch({
-        appearance: { accent: 'red', glass: 50, glow: 50 },
-      }).expect(200),
-    );
-    expect(unset.appearance).toEqual({ accent: 'red', glass: 50, glow: 50 });
-
-    // null is the one way back to the site's look; mode (siteTheme) is not part of it.
+    // null is the one way back to the site's look; siteTheme is not part of it.
     const cleared = dataOf<ProfileResponse>(
       await patch({ appearance: null }).expect(200),
     );
     expect(cleared.appearance).toBeNull();
     expect(cleared.siteTheme).toBe('dark');
+  });
+
+  it('answers a Clay or Glass look as its palette A successor, stored or sent by an older client', async () => {
+    const { user, patch, get } = await person();
+    await api.users.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          siteTheme: 'glass-dark',
+          appearance: { accent: 'orchid', glass: 30, glow: 100 },
+        },
+      },
+    );
+    const stored = dataOf<ProfileResponse>(await get().expect(200));
+    expect(stored.siteTheme).toBe('dark');
+    expect(stored.appearance).toEqual({ accent: 'plum' });
+
+    const sent = dataOf<ProfileResponse>(
+      await patch({
+        siteTheme: 'clay-light',
+        appearance: { accent: 'red', glass: 50, glow: 50 },
+      }).expect(200),
+    );
+    expect(sent.siteTheme).toBe('light');
+    expect(sent.appearance).toEqual({ accent: 'terracotta' });
+    expect((await api.users.findOne({ _id: user._id }))!.appearance).toEqual({
+      accent: 'terracotta',
+    });
   });
 
   it('keeps roaming Bits off with one Bit until set, stores 1-5 and refuses other counts', async () => {

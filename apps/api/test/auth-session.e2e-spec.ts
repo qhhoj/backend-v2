@@ -542,10 +542,9 @@ describe('auth session endpoints', () => {
           .set('Cookie', (await loginAs(api, userId)).cookie)
           .expect(200),
       );
+    // Stored before palette A: answered in the current shape (the accent's successor, no Glass levels).
     expect((await meOf(paula._id)).user?.appearance).toEqual({
-      accent: 'sunset',
-      glass: 60,
-      glow: 40,
+      accent: 'terracotta',
     });
     const alice = await api.users.findOne({ username: 'Alice' });
     expect((await meOf(alice!._id)).user?.appearance).toBeNull();

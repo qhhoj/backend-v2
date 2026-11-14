@@ -57,13 +57,15 @@ export class User {
   @Prop({ default: 0 }) problemCount!: number;
   @Prop({ default: 'auto' }) aceTheme!: string;
   @Prop({ default: 'auto' }) siteTheme!: string;
-  /** The user's own look (accent preset, glass 0-100, glow 0-100, optional page background); null = the site's look. Validated by `AppearanceDto`. */
+  /** The user's own look (accent, optional mode, contrast and page background); null = the site's look. Validated by `AppearanceDto`; looks stored before 2026-11-15 may hold a retired accent and the Glass levels `glass` and `glow`, read through `currentAppearance`. */
   @Prop({ type: Object, default: null })
   appearance!: {
     accent: string;
-    glass: number;
-    glow: number;
+    mode?: string;
+    contrast?: string;
     background?: string;
+    glass?: number;
+    glow?: number;
   } | null;
   /** Roaming Bits on every page (frontend `features/bit-roam`): switch and count 1-5. Validated by `BitRoamDto`. */
   @Prop({ type: Object, default: () => ({ ...DEFAULT_BIT_ROAM }) })
