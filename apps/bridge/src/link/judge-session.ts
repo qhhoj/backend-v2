@@ -26,6 +26,7 @@ import type { DispatchTarget } from '../dispatch/slots';
 import type { JudgesRepository } from '../judges/judges.repository';
 import type { AssignRequest } from '../submissions/assign-request';
 import type { RunsService } from '../submissions/runs.service';
+import { IncompleteRunError } from '../submissions/write-outcome';
 import type { RunKey, WriteOutcome } from '../submissions/write-outcome';
 import type { AcceptClock } from './accept-clock';
 import { MAX_LOG_BYTES, MAX_MESSAGES_PER_SECOND } from './link-limits';
@@ -487,7 +488,13 @@ export class JudgeSession implements DispatchTarget {
         return await this.settle(key, report);
       } catch (error) {
         const isLast = attempt >= FINAL_WRITE_ATTEMPTS || this.isClosed;
-        if (error instanceof ProtocolError || isLast) throw error;
+        // an incomplete run fails every try alike: it goes to `finalNotStored` at once
+        if (
+          error instanceof ProtocolError ||
+          error instanceof IncompleteRunError ||
+          isLast
+        )
+          throw error;
         this.logger.warn(
           `Judge ${this.name}: storing the Final of submission ${key.ref.submissionId} gen ${key.ref.generation} failed (try ${attempt}), retrying in ${waitMs} ms: ${(error as Error).message}`,
         );

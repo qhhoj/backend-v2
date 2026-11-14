@@ -70,3 +70,22 @@ export function classifyMiss(
   // the row changed between the write and this read: the next message decides
   return 'stale';
 }
+
+/** A Final GRADED whose stored cases are not exactly the positions 1..n that Started announced: no verdict is stored, and the session ends the run as a Final that could not be stored (`JudgeSession.finalNotStored`), never retried in the session. */
+export class IncompleteRunError extends Error {
+  override readonly name = 'IncompleteRunError';
+}
+
+/** Why `positions` are not exactly 1..`caseCount` once each, or null when they are. */
+export function caseCountMismatch(
+  positions: readonly number[],
+  caseCount: number,
+): string | null {
+  const sorted = [...positions].sort((left, right) => left - right);
+  if (
+    sorted.length === caseCount &&
+    sorted.every((position, index) => position === index + 1)
+  )
+    return null;
+  return `${positions.length} cases stored at positions [${sorted.slice(0, 20).join(', ')}${sorted.length > 20 ? ', ...' : ''}], Started announced ${caseCount}`;
+}

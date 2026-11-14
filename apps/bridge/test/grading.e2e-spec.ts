@@ -182,6 +182,27 @@ describe('Grading through the judge link (results written for what a judge sends
     expect(row.cases).toHaveLength(1);
   });
 
+  it('stores no verdict for a Final GRADED that follows fewer cases than Started announced: not acked, the judge told to abort, the run requeued without its cases', async () => {
+    const judge = await online();
+    const id = await submit({ points: 800 });
+    const assign = await judge.nextAssign();
+    const ref = assign.ref!;
+    judge.accept(ref);
+    judge.started(ref, 5);
+    judge.cases(ref, [
+      { position: 1, status: AC, points: 1, total: 1 },
+      { position: 2, status: AC, points: 1, total: 1 },
+    ]);
+    sentFinal(judge, assign, judge.nextSeq(ref));
+    await judge.next('abort');
+    await judge.nextAssign();
+    expect(ackSeqs(judge)).toEqual([1, 2, 3]);
+    const row = await stored(id);
+    expect(row).toMatchObject({ unstoredCount: 1, points: null, cases: [] });
+    expect(row.status).not.toBe('D');
+    expect(await jobIds()).toEqual([]);
+  });
+
   it('ignores a Final for a run that moved on (the row was finished elsewhere): not acked, not written, the judge told to abort', async () => {
     const judge = await online();
     const id = await submit({ points: 1000 });

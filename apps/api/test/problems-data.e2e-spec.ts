@@ -268,6 +268,24 @@ afterAll(() => api.teardown());
       ).expect(200);
     });
 
+    it('refuses a case set whose points are all on plain pretests, leaving the stored data and init.yml as they were', async () => {
+      await put('sum', editor, config([plainCase(1)])).expect(200);
+      const initPath = join(api.problemDataRoot, 'sum', 'init.yml');
+      const init = readFileSync(initPath, 'utf8');
+      const { cases } = dataOf(await get('sum', editor).expect(200));
+      const allPlainPretests = [
+        { ...plainCase(1), isPretest: true },
+        { ...plainCase(2), isPretest: true },
+      ];
+      expect(
+        fieldsOf(
+          await put('sum', editor, config(allPlainPretests)).expect(400),
+        ),
+      ).toHaveProperty('cases');
+      expect(readFileSync(initPath, 'utf8')).toBe(init);
+      expect(dataOf(await get('sum', editor).expect(200)).cases).toEqual(cases);
+    });
+
     it('refuses an unauthorised or oversized body before validating its cases', async () => {
       const body = config(bulkCases(9999));
       const median = async (send: () => Promise<number>) => {

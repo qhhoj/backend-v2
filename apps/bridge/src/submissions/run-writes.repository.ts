@@ -26,7 +26,11 @@ import type { BridgeTimings } from '../bridge-timings';
 import { MAX_SUBMISSION_CASES } from '../link/link-limits';
 import { DEFERRAL_LIMIT_MESSAGE, nextDeferral } from './deferral';
 import { REQUEUE_RESET } from './submissions.repository';
-import { classifyMiss } from './write-outcome';
+import {
+  caseCountMismatch,
+  classifyMiss,
+  IncompleteRunError,
+} from './write-outcome';
 import type { RunKey, StoredRun, WriteOutcome } from './write-outcome';
 
 /** `Final{RETRY}` answers a submission may get; the last one is IE. A RETRY Unsupported is a refusal and a transient one (data, runtime, sandbox) a deferral: neither counts. */
@@ -72,6 +76,21 @@ const runFilter = (key: RunKey, statuses: readonly SubmissionStatus[]) => ({
   judgeSeq: key.seq - 1,
   status: { $in: [...statuses] },
 });
+
+/** A started run (G) is graded only from the cases its Started announced: a short or holed run would score as if the missing cases passed. */
+function assertCompleteRun(
+  row: Pick<Submission, 'status' | 'judgeCaseCount' | 'cases'>,
+): void {
+  if (row.status !== 'G' || typeof row.judgeCaseCount !== 'number') return;
+  const mismatch = caseCountMismatch(
+    row.cases.map((stored) => stored.position),
+    row.judgeCaseCount,
+  );
+  if (mismatch)
+    throw new IncompleteRunError(
+      `Final GRADED refused, no verdict stored: ${mismatch}`,
+    );
+}
 
 /** Every write a judge message causes: one `updateOne` that also advances `judgeSeq`, so a replay, a gap or another run's message changes nothing; a miss is classified by one read. */
 @Injectable()
@@ -132,17 +151,24 @@ export class RunWritesRepository {
     return matchedCount === 1 ? 'applied' : this.miss(key, ['G'], cases.length);
   }
 
-  /** Legacy `on_grading_end`, also from P: totals from the stored cases, points from the problem's current points. */
+  /** Legacy `on_grading_end`, also from P: totals from the stored cases, points from the problem's current points. A G row whose Started named a case count must hold exactly positions 1..count, or `IncompleteRunError` is thrown and nothing is written (a P row's count is stale from an earlier claim; the external adapter stores none). */
   async finishGraded(
     key: RunKey,
     dataVersionUsed: number,
   ): Promise<FinishOutcome> {
     const filter = runFilter(key, GRADABLE);
     const submission = await this.submissions
-      .findOne(filter, { user: 1, problem: 1, cases: 1 })
+      .findOne(filter, {
+        user: 1,
+        problem: 1,
+        cases: 1,
+        status: 1,
+        judgeCaseCount: 1,
+      })
       .lean();
     if (!submission)
       return { outcome: await this.miss(key, GRADABLE), job: null };
+    assertCompleteRun(submission);
     const problem = await this.problems
       .findById(submission.problem, { points: 1, partial: 1 })
       .lean();

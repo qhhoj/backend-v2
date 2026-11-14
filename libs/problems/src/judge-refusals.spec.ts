@@ -1,4 +1,8 @@
-import { JUDGE_MAX_OUTPUT_LIMIT, judgeRefusal } from './judge-refusals';
+import {
+  ALL_PLAIN_PRETESTS_MESSAGE,
+  JUDGE_MAX_OUTPUT_LIMIT,
+  judgeRefusal,
+} from './judge-refusals';
 import type { JudgedSettings } from './judge-refusals';
 
 const plain = {
@@ -6,6 +10,8 @@ const plain = {
   checker: '' as const,
   checkerArgs: null,
   outputLimit: null,
+  points: 1,
+  isPretest: false,
 };
 const base: JudgedSettings = {
   checker: 'floats',
@@ -30,6 +36,20 @@ describe('judgeRefusal', () => {
     ).toBeNull();
     const standard = { ...plain, checker: 'standard' as const };
     expect(judgeRefusal(withCases(standard, standard))).toBeNull();
+  });
+
+  it('refuses a case set whose points are all on plain pretests, and accepts one scored only by a pretest batch', () => {
+    const pretest = { ...plain, isPretest: true };
+    expect(judgeRefusal(withCases(pretest, pretest))).toEqual({
+      field: 'cases',
+      message: ALL_PLAIN_PRETESTS_MESSAGE,
+    });
+    const batch = [
+      { ...pretest, type: 'S' as const, points: 10 },
+      { ...pretest, points: null },
+      { ...pretest, type: 'E' as const, points: null },
+    ];
+    expect(judgeRefusal(withCases(...batch))).toBeNull();
   });
 
   it('refuses nobigmath, which the judge does not grade', () => {

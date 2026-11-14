@@ -25,6 +25,7 @@ import {
   clearBridgeCommands,
   dataOf,
 } from './submission-fixtures';
+import { ParticipationsRepository } from '../src/modules/contests/core/participations.repository';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
@@ -209,6 +210,50 @@ describe('submitting inside a contest', () => {
     await submit('bob', 'cp_lock')
       .expect(403)
       .expect(errorCode('contest_submission_limit'));
+  });
+
+  it('dates a contest submission at the instant its window was checked: one accepted inside the window is dated inside it, however long the request then takes', async () => {
+    const problem = await createProblem(api, catalog, { code: 'cp_boundary' });
+    const endTime = new Date(Date.now() + 60_000);
+    const contest = await createContest(api, {
+      endTime,
+      problems: [contestProblem(problem._id, 0, { maxSubmissions: 5 })],
+    });
+    await enter('spammer', contest._id);
+    const participations = api.app.get(ParticipationsRepository);
+    const countAttempts = participations.countAttempts.bind(participations);
+    // only `Date` is faked: the request runs on real timers, and the clock jumps past the end under the submit lock
+    jest.useFakeTimers({
+      advanceTimers: true,
+      doNotFake: [
+        'hrtime',
+        'nextTick',
+        'performance',
+        'queueMicrotask',
+        'setImmediate',
+        'clearImmediate',
+        'setInterval',
+        'clearInterval',
+        'setTimeout',
+        'clearTimeout',
+      ],
+    });
+    const slow = jest
+      .spyOn(participations, 'countAttempts')
+      .mockImplementationOnce((...args) => {
+        jest.setSystemTime(endTime.getTime() + 60_000);
+        return countAttempts(...args);
+      });
+    try {
+      const id = idOf(await submit('spammer', 'cp_boundary').expect(201));
+      expect(slow).toHaveBeenCalled();
+      expect(await api.contestSubmissions.findById(id).lean()).not.toBeNull();
+      const { date } = (await api.submissions.findById(id).lean())!;
+      expect(date.getTime()).toBeLessThanOrEqual(endTime.getTime());
+    } finally {
+      jest.useRealTimers();
+      slow.mockRestore();
+    }
   });
 
   it('stores FSO submissions pending without judging, publishing or the unfinished limit', async () => {
