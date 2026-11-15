@@ -563,6 +563,19 @@ afterAll(() => api.teardown());
       }
     });
 
+    it('counts only the public problems a visitor can see', async () => {
+      const before = (await home()).counts.problems;
+      await createProblem(api, catalog, { code: 'count_pub', isPublic: true });
+      await createProblem(api, catalog, {
+        code: 'count_priv',
+        isPublic: false,
+      });
+      const redis = api.app.get<Redis>(REDIS);
+      const slices = await redis.keys('home:*');
+      if (slices.length) await redis.del(...slices);
+      expect((await home()).counts.problems).toBe(before + 1);
+    });
+
     it("pages a user's readable comments for view_all_user_comment only", async () => {
       const { user: author } = await person();
       const { session: plain } = await person();

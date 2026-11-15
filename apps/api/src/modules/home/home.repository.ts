@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { Contest, Problem, Submission, User } from '@libs/database';
+import { ProblemAccess } from '@libs/problems';
 import { ContestAccess } from '../contests/core/contest-access';
 
 /** Legacy `Problem.get_public_problems()`, minus soft-deleted problems. */
@@ -46,7 +47,7 @@ export class HomeRepository {
       .exec();
   }
 
-  /** `problems` is the archive size (every live problem, private ones included), not the public listing's. */
+  /** `problems` is the public listing's size: what an anonymous visitor sees, so the home page never reveals how many private problems exist. */
   async counts(): Promise<{
     users: number;
     problems: number;
@@ -55,7 +56,12 @@ export class HomeRepository {
   }> {
     const [users, problems, submissions, contests] = await Promise.all([
       this.users.estimatedDocumentCount().exec(),
-      this.problems.countDocuments({ deletedAt: null }).exec(),
+      this.problems
+        .countDocuments({
+          ...ProblemAccess.visibleFilter(null, null),
+          deletedAt: null,
+        })
+        .exec(),
       this.submissions.estimatedDocumentCount().exec(),
       this.contests.countDocuments(ContestAccess.visibleFilter(null)).exec(),
     ]);
