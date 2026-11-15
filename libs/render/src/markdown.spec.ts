@@ -16,12 +16,17 @@ const timeOf = (action: () => void) => {
   }
   return performance.now() - started;
 };
-/** Linear work grows ~5x for 5x the input and quadratic ~25x; the ratio holds on a loaded machine where a fixed bound would not. */
+const SIZE_STEP = 5;
+const SAMPLES = 3;
+/** Fastest of a few runs: noise (GC, CPU steal) only adds time, so the minimum is the closest to the real cost. */
+const bestTimeOf = (action: () => void) =>
+  Math.min(...Array.from({ length: SAMPLES }, () => timeOf(action)));
+/** Linear work grows ~5x for 5x the input and quadratic ~25x; 12 sits between them. Each size is warmed up once and then timed by its best of 3 runs, so one slow run cannot fail the check. */
 const expectLinear = (render: (count: number) => string, count: number) => {
   timeOf(() => render(count));
-  const small = timeOf(() => render(count));
-  const large = timeOf(() => render(count * 5));
-  expect(large / Math.max(small, 1)).toBeLessThan(15);
+  const small = bestTimeOf(() => render(count));
+  const large = bestTimeOf(() => render(count * SIZE_STEP));
+  expect(large / Math.max(small, 1)).toBeLessThan(12);
   expect(large).toBeLessThan(CATASTROPHIC_MS);
 };
 
