@@ -1,5 +1,15 @@
 # qhhoj-backend
 
+## 2.41.0
+
+### Minor Changes
+
+- dd462ce: Problem list: editors get `setup` (`hasStatement`, `hasTests`, `hasPoints`) on each problem they may edit, and `status=unfinished` lists the editable problems that lack a statement or scored tests.
+
+### Patch Changes
+
+- 2cf9c48: The share-link 403 `hidden` now also carries a stable issue code (`problem_hidden` or `source_hidden`) naming the rule; code and message are unchanged.
+
 ## 2.40.0
 
 ### Minor Changes
