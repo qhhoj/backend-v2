@@ -18,11 +18,7 @@ import {
   sanitizeStatementHtml,
 } from './sanitizer';
 import { rewriteHtmlSpoilers, spoilerRule } from './spoiler';
-import {
-  isSanitizedStyle,
-  isUserAuthored,
-  RenderStyle,
-} from './styles';
+import { isSanitizedStyle, isUserAuthored, RenderStyle } from './styles';
 import {
   problemReferenceRule,
   renderProblemReference,
