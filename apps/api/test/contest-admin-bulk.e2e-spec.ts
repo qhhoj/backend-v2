@@ -214,6 +214,7 @@ describe('contest list admin filters', () => {
       formatName: 'final_submission',
       authors: [editorId],
       lockedAfter: hoursFromNow(-1),
+      frozenLastMinutes: 30,
       userCount: 1,
     });
     await createContest(api, { key: 'fl_other', name: 'Delta' });
@@ -270,11 +271,13 @@ describe('contest list admin filters', () => {
     expect(rows.get('fl_fso')).toEqual({
       isVisible: true,
       lockedAfter: expect.any(String) as unknown,
+      frozenLastMinutes: 30,
       pendingCount: 1,
     });
     expect(rows.get('fl_hidden')).toEqual({
       isVisible: false,
       lockedAfter: null,
+      frozenLastMinutes: 0,
       pendingCount: null,
     });
     // A tester sees the contest but may not edit it.

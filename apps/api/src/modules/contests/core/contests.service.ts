@@ -92,6 +92,7 @@ const editorRowOf = (
 ): ContestListEditorResponse => ({
   isVisible: contest.isVisible,
   lockedAfter: contest.lockedAfter,
+  frozenLastMinutes: contest.frozenLastMinutes,
   pendingCount:
     contest.formatName === 'final_submission'
       ? (pending.get(uuidStr(contest._id)) ?? 0)

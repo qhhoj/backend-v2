@@ -105,6 +105,8 @@ export class ContestListEditorResponse {
   lockedAfter!: Date | null;
   /** Submissions still waiting for the final judge; null unless the format is `final_submission`. */
   pendingCount!: number | null;
+  /** Minutes before the end when the public ranking freezes; 0 for no freeze. */
+  frozenLastMinutes!: number;
 }
 
 export class ContestListItemResponse extends ContestSummaryResponse {
