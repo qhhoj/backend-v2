@@ -1,5 +1,5 @@
 # Opens or updates the "Version Packages" PR from the pending .changeset/*.md files on every push to main.
-# Merging that PR leaves no changesets, so the next run takes the publish branch: release:tag tags v<version>
+# Merging that PR leaves no changesets, so the next run takes the release steps: release:tag tags v<version>
 # through the REST API (no npm publish, the app is private). GITHUB_TOKEN cannot create a ref whose commit changes
 # workflow files (HTTP 403 "Resource not accessible by integration", release v2.38.0, 2026-11-14), so tagging uses a
 # token of the org GitHub App set in vars.RELEASE_APP_ID and secrets.RELEASE_APP_KEY (Contents and Workflows write,
@@ -29,26 +29,33 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
+      - id: version
+        uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
+        with:
+          version: npm run release:version
+          title: 'chore: version packages'
+          commit: 'chore: version packages'
+          commitMode: github-api
+          createGithubReleases: false # the tag step creates the Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The tag steps run only when no changeset is pending (a release). The App token never reaches the step that
+      # runs dependency code (changeset version, npm install).
       - id: app-token # lets release:tag create a tag whose commit changes workflow files
-        if: vars.RELEASE_APP_ID != ''
+        if: steps.version.outputs.hasChangesets == 'false' && vars.RELEASE_APP_ID != ''
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
-      - id: version
-        uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
-        with:
-          version: npm run release:version
-          publish: npm run release:tag
-          title: 'chore: version packages'
-          commit: 'chore: version packages'
-          commitMode: github-api
-          createGithubReleases: false # release:tag creates the Release itself, with the changelog section
+          permission-contents: write
+          permission-workflows: write
+      - name: Tag the release and create the GitHub Release # tag-release.mjs creates the Release itself, with the changelog section
+        if: steps.version.outputs.hasChangesets == 'false'
+        run: npm run release:tag
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # the action's own PR and version commit
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }} # gh in release:tag: tag and Release
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
       - name: Run the required checks on the Version Packages PR
         if: steps.version.outputs.pullRequestNumber != '' # empty-only changesets make no PR or branch
         env: { GH_TOKEN: '${{ github.token }}' }
