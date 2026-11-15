@@ -2921,6 +2921,10 @@
       },
       "ContestListEditorResponse": {
         "properties": {
+          "frozenLastMinutes": {
+            "description": "Minutes before the end when the public ranking freezes; 0 for no freeze.",
+            "type": "number"
+          },
           "isVisible": {
             "description": "Whether the contest is shown to users who may see it.",
             "type": "boolean"
@@ -2940,7 +2944,8 @@
         "required": [
           "isVisible",
           "lockedAfter",
-          "pendingCount"
+          "pendingCount",
+          "frozenLastMinutes"
         ],
         "type": "object"
       },
