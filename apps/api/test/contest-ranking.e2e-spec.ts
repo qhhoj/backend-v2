@@ -114,7 +114,7 @@ describe('contest ranking', () => {
           sessions[who],
         ).expect(200),
       );
-    // alice 100 live (frozen 10), bob 50 live (frozen 60): the live order is alice, bob; the frozen one is bob, alice.
+    // alice 4242 live (frozen 10), bob 50 live (frozen 60): the live order is alice, bob; the frozen one is bob, alice.
     const seed = async (extra: Partial<Contest>) => {
       const contest = await createContest(api, extra);
       const [alice, bob] = await Promise.all([
@@ -122,7 +122,7 @@ describe('contest ranking', () => {
           api,
           contest._id,
           users.alice._id,
-          results(100, { frozenScore: 10 }),
+          results(4242, { frozenScore: 10 }),
         ),
         joinParticipation(
           api,
@@ -144,7 +144,7 @@ describe('contest ranking', () => {
       await seed({});
       expect((await current('alice'))?.standing).toEqual({
         rank: 1,
-        score: 100,
+        score: 4242,
         cumtime: 0,
         frozen: false,
       });
@@ -167,7 +167,7 @@ describe('contest ranking', () => {
         rank: 1,
         score: 60,
       });
-      expect(JSON.stringify(alice)).not.toContain('100');
+      expect(textWithoutIds(alice)).not.toContain('4242');
     });
 
     it('gives a user outside any contest no contest and no standing', async () => {

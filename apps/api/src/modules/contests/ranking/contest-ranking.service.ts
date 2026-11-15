@@ -168,7 +168,7 @@ export class ContestRankingService {
 
   /**
    * The user's own place on the board `ranking` shows a non-editor, read from the shared cached board (never a rebuild per call).
-   * Null where the board would not show the user's row. Without the full board the rank is null, as on that board.
+   * Null for a spectator, or when the user may not see even their own row. Where the board shows only the own row (hidden board), the user's own score is returned with a null rank, as on that board.
    */
   async ownStanding(
     principal: Principal,

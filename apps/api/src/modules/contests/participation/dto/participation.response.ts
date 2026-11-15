@@ -55,7 +55,7 @@ export class CurrentContestResponse {
 export class CurrentParticipationResponse {
   contest!: CurrentContestResponse;
   participation!: ParticipationSummaryResponse;
-  /** The viewer's place on the board a non-editor sees (frozen while frozen); null when that board would not show them, or for a spectator. */
+  /** The viewer's place on the board a non-editor sees (frozen while frozen); null for a spectator, before the start and when the board is hidden from them (a contestant whose board is hidden still gets their own score, with a null rank). */
   standing!: OwnStandingResponse | null;
 }
 
