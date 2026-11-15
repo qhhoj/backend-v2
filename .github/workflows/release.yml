@@ -1,9 +1,10 @@
 # Opens or updates the "Version Packages" PR from the pending .changeset/*.md files on every push to main.
 # Merging that PR leaves no changesets, so the next run takes the publish branch: release:tag tags v<version>
 # through the REST API (no npm publish, the app is private). GITHUB_TOKEN cannot create a ref whose commit changes
-# workflow files (HTTP 403 "Resource not accessible by integration", release v2.38.0, 2026-11-14), so tagging uses the
-# secret RELEASE_TAG_TOKEN (fine-grained token or GitHub App token; repository permissions Contents: write and
-# Workflows: write) and falls back to GITHUB_TOKEN while the secret is unset. Third-party actions are pinned by commit SHA; bump them deliberately.
+# workflow files (HTTP 403 "Resource not accessible by integration", release v2.38.0, 2026-11-14), so tagging uses a
+# token of the org GitHub App set in vars.RELEASE_APP_ID and secrets.RELEASE_APP_KEY (Contents and Workflows write,
+# installed on this repository only); without the variable it falls back to GITHUB_TOKEN. Third-party actions are
+# pinned by commit SHA; bump them deliberately.
 # commitMode github-api: GitHub signs the version commit (Verified), as the protected main requires. A PR made with
 # GITHUB_TOKEN starts no pull_request workflow, so the job dispatches ci and changeset on the version branch; their
 # check runs attach to its head commit under the names the branch protection requires.
@@ -28,6 +29,14 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
+      - id: app-token # lets release:tag create a tag whose commit changes workflow files
+        if: vars.RELEASE_APP_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
       - id: version
         uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
         with:
@@ -39,7 +48,7 @@ jobs:
           createGithubReleases: false # release:tag creates the Release itself, with the changelog section
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # the action's own PR and version commit
-          GH_TOKEN: ${{ secrets.RELEASE_TAG_TOKEN || secrets.GITHUB_TOKEN }} # gh in release:tag: tag and Release
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }} # gh in release:tag: tag and Release
       - name: Run the required checks on the Version Packages PR
         if: steps.version.outputs.pullRequestNumber != '' # empty-only changesets make no PR or branch
         env: { GH_TOKEN: '${{ github.token }}' }
