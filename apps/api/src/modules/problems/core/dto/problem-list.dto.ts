@@ -21,6 +21,9 @@ import { toBoolean } from './transforms';
 export const PROBLEM_VISIBILITIES = ['public', 'private', 'all'] as const;
 export type ProblemVisibility = (typeof PROBLEM_VISIBILITIES)[number];
 
+export const PROBLEM_STATUSES = ['unfinished'] as const;
+export type ProblemStatus = (typeof PROBLEM_STATUSES)[number];
+
 /** The filters shared by the list and the random pick. */
 export class ProblemFilterQueryDto {
   /** Words separated by spaces (first 8 used); each must be a substring of the code or any title, ignoring case and Vietnamese accents. */
@@ -58,6 +61,11 @@ export class ProblemFilterQueryDto {
   @IsOptional() @Transform(toBoolean) @IsBoolean() suggested?: boolean;
   /** true: only problems the viewer may edit (the admin screen's index, with `visibility=all`), whatever contest the viewer is in; false: only the others. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() editable?: boolean;
+  /** `unfinished`: only problems the viewer may edit that lack a statement or scored test cases (the admin list's readiness filter). */
+  @ApiPropertyOptional({ enum: PROBLEM_STATUSES, enumName: 'ProblemStatus' })
+  @IsOptional()
+  @IsIn(PROBLEM_STATUSES)
+  status?: ProblemStatus;
   /** `public` (default): public problems; `private`: visible problems that are not public; `all`: both. */
   @ApiPropertyOptional()
   @IsOptional()

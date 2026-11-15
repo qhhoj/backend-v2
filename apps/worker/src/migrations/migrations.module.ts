@@ -23,6 +23,7 @@ import type { Migration } from './migration';
 import { MigrationRunner } from './migration-runner.service';
 import { PasswordVerificationBackfillMigration } from './password-verification-backfill/password-verification-backfill.migration';
 import { PermissionRenameMigration } from './permission-rename/permission-rename.migration';
+import { ProblemSetupFlagsMigration } from './problem-setup-flags/problem-setup-flags.migration';
 import { ProblemDataBytesMigration } from './problem-databytes/problem-databytes.migration';
 import { ProblemDataBytesRepository } from './problem-databytes/problem-databytes.repository';
 import { workerTuning } from '../worker-tuning';
@@ -42,6 +43,7 @@ const IN_ORDER = [
   LanguageActiveFlagMigration,
   TicketStaffFlagMigration,
   PolygonApiKeySealingMigration,
+  ProblemSetupFlagsMigration,
 ];
 
 /** What `worker migrate` boots: data access only, no queue, processor or schedule, so nothing but the migrations touches the live site. */

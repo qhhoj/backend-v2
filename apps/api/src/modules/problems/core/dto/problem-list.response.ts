@@ -10,6 +10,16 @@ import { ApiProperty } from '@nestjs/swagger';
 import { VIEWER_MARKS, type ViewerStatus } from '../viewer-status.repository';
 import { UserSummaryResponse } from './user-summary.response';
 
+/** What is still missing before a problem is ready; the rules mirror the admin editor's setup checklist. */
+export class ProblemSetupResponse {
+  /** A written statement in the base language or any translation or a PDF statement. */
+  hasStatement!: boolean;
+  /** At least one test case. */
+  hasTests!: boolean;
+  /** Test cases are scored: the scored points add up to more than 0. */
+  hasPoints!: boolean;
+}
+
 export class ProblemListItemResponse {
   /** Problem id. */
   id!: string;
@@ -44,6 +54,8 @@ export class ProblemListItemResponse {
   /** For the signed-in viewer; null when anonymous or never submitted. */
   @ApiProperty({ enum: VIEWER_MARKS, nullable: true })
   viewerStatus!: ViewerStatus;
+  /** Setup readiness. Only on problems the viewer may edit; absent for other viewers, and for a problem the backfill has not reached yet. */
+  setup?: ProblemSetupResponse;
 
   static from(
     problem: ProblemDocument,
@@ -51,11 +63,13 @@ export class ProblemListItemResponse {
       lang: StatementLanguage;
       types: ProblemTypesQuerier;
       groups: ProblemGroupsQuerier;
+      /** Attach `setup`: the viewer may edit this problem. */
+      includeSetup?: boolean;
     },
     viewerStatus: ViewerStatus,
     authors: UserSummaryResponse[],
   ): ProblemListItemResponse {
-    const { lang, types, groups } = catalog;
+    const { lang, types, groups, includeSetup } = catalog;
     const group = groups.byId(uuidStr(problem.groupId));
     return {
       id: problem._id,
@@ -76,6 +90,7 @@ export class ProblemListItemResponse {
       hasPdfStatement: problem.pdfStatementUrl !== null,
       authors,
       viewerStatus,
+      ...(includeSetup && problem.setup ? { setup: problem.setup } : {}),
     };
   }
 }

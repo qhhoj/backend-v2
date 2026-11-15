@@ -76,6 +76,14 @@ const SUGGESTED_FILTER: FilterQuery<Problem> = {
   isPublic: false,
 };
 
+/** Readiness is for editors only: the filter is cut to what the viewer may edit, so it cannot probe other problems. */
+function unfinishedClause(principal: Principal | null): FilterQuery<Problem> {
+  const editable = ProblemAccess.editableFilter(principal);
+  return editable
+    ? { $and: [editable, { isSetupUnfinished: true }] }
+    : { _id: null };
+}
+
 /** The admin list's person and review-queue filters; curators stay private, so only full editors may match on them. */
 function staffClauses(
   principal: Principal | null,
@@ -92,6 +100,7 @@ function staffClauses(
         : { authors: query.authorId },
     );
   }
+  if (query.status === 'unfinished') clauses.push(unfinishedClause(principal));
   if (query.suggested !== undefined)
     clauses.push(
       query.suggested ? SUGGESTED_FILTER : { $nor: [SUGGESTED_FILTER] },
@@ -167,7 +176,7 @@ export class ProblemsService {
           problem._id,
           ProblemListItemResponse.from(
             problem,
-            catalog,
+            { ...catalog, includeSetup: this.canEdit(principal, problem) },
             statuses.get(problem._id) ?? null,
             authorsOf(problem),
           ),

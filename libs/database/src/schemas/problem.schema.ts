@@ -13,6 +13,9 @@ import {
   ExternalJudgeLinkSchema,
 } from './external-judge-link.schema';
 
+import { keepSetupFlagsCurrent } from './problem-setup';
+import type { ProblemSetupFlags } from './problem-setup';
+
 const UUID = MongooseSchema.Types.UUID;
 
 export const PROBLEM_CODE_PATTERN = /^[a-z0-9_]{1,32}$/;
@@ -157,6 +160,11 @@ export class Problem {
   /** Judged by a remote OJ through the external judge; null for a problem judge-v2 judges. */
   @Prop({ type: ExternalJudgeLinkSchema, default: null })
   externalJudge!: ExternalJudgeLink | null;
+  /** Setup readiness, recomputed after every statement, translation or test-data write (see `keepSetupFlagsCurrent`); absent on rows written before it until the backfill migration. */
+  @Prop({ type: Object })
+  setup?: ProblemSetupFlags;
+  /** True unless the problem has a statement and scored points; the admin list's `status=unfinished` filter. */
+  @Prop() isSetupUnfinished?: boolean;
   /** Written by Mongoose `timestamps`; read by the organization problem list. */
   updatedAt!: Date;
   /** Soft delete: set while the problem is in its grace period, and afterwards on the tombstone. Absent while the problem is live (restore `$unset`s it), so `{deletedAt: null}` reads "live". */
@@ -169,7 +177,13 @@ export class Problem {
 }
 
 export const ProblemSchema = SchemaFactory.createForClass(Problem);
+keepSetupFlagsCurrent(ProblemSchema);
 ProblemSchema.index({ code: 1 }, { unique: true });
+// The admin list's unfinished filter: few problems are unfinished, so the partial index stays small.
+ProblemSchema.index(
+  { isSetupUnfinished: 1 },
+  { partialFilterExpression: { isSetupUnfinished: true } },
+);
 ProblemSchema.index({ isPublic: 1, date: -1 });
 ProblemSchema.index({ organizations: 1 });
 ProblemSchema.index({ authors: 1 });
