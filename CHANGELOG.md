@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.42.0
+
+### Minor Changes
+
+- 96551fb: The staff contest list rows carry `editor.frozenLastMinutes`.
+
 ## 2.41.0
 
 ### Minor Changes
