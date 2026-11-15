@@ -120,14 +120,15 @@ describe('share links', () => {
   });
 
   it('refuses a problem that is not public or whose setter shows sources to owners and testers only, and a missing source', async () => {
-    for (const fields of [
-      { submissionSourceVisibility: 'O' as const },
-      { isPublic: false, testers: [ownerId] },
-    ]) {
+    for (const [fields, reason] of [
+      [{ submissionSourceVisibility: 'O' as const }, 'source_hidden'],
+      [{ isPublic: false, testers: [ownerId] }, 'problem_hidden'],
+    ] satisfies Array<[Partial<Problem>, string]>) {
       const problem = await newProblem(fields);
       await shareSubmission(owner, (await submissionOf(problem._id))._id)
         .expect(403)
-        .expect(errorCode('hidden'));
+        .expect(errorCode('hidden'))
+        .expect(issueCodes([reason]));
     }
     const submission = await submissionOf((await newProblem())._id);
     await api.submissionSources.deleteOne({ _id: submission._id });

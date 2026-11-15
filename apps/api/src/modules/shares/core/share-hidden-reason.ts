@@ -1,4 +1,4 @@
-import { AppError } from '@libs/common';
+import { AppError, issueError } from '@libs/common';
 
 /**
  * Why a share is withheld from everyone but its owner and staff: a staff takedown, an author who was banned,
@@ -35,10 +35,14 @@ const REFUSAL_MESSAGES: Record<CopyRefusal, string> = {
     "The problem's setter keeps submission sources to their owners and testers",
 };
 
-/** The existing submission-source codes, so the SPA reads them as it does on the submission page. */
+/** The existing submission-source codes, so the SPA reads them as it does on the submission page. `hidden` covers two rules, so the first issue's code (`problem_hidden`, `contest_running` or `source_hidden`) names the rule; the SPA never matches the message. */
 export const copyRefusalError = (refusal: CopyRefusal): AppError =>
-  new AppError(
+  issueError(
     refusal === 'contest_running' ? 'contest_running' : 'hidden',
     403,
-    REFUSAL_MESSAGES[refusal],
+    {
+      field: '',
+      code: refusal,
+      message: REFUSAL_MESSAGES[refusal],
+    },
   );
