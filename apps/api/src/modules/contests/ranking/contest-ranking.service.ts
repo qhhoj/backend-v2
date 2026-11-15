@@ -12,6 +12,7 @@ import {
 import {
   compareStandings,
   isFrozenFor,
+  LIVE,
   orderedProblems,
   problemLabel,
   problemSummaries,
@@ -27,7 +28,11 @@ import { ContestAccess } from '../core/contest-access';
 import { ContestViewerService } from '../core/contest-viewer.service';
 import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
-import type { RankingResponse } from './dto/ranking.response';
+import type { ParticipationDocument } from '../core/participations.repository';
+import type {
+  OwnStandingResponse,
+  RankingResponse,
+} from './dto/ranking.response';
 import { ParticipationsRepository } from '../core/participations.repository';
 import { RankingUsersRepository } from './ranking-users.repository';
 import { RatingChangesRepository } from '../rating/rating-changes.repository';
@@ -98,6 +103,11 @@ const withoutProblems = (
       }
     : board;
 
+const ownScore = ({ score, cumtime }: Pick<Standing, 'score' | 'cumtime'>) => ({
+  score,
+  cumtime,
+});
+
 @Injectable()
 export class ContestRankingService {
   private readonly builds = new Map<string, Promise<RankingResponse>>();
@@ -154,6 +164,38 @@ export class ContestRankingService {
         { isFrozenView, isRanked: false },
       );
     return withoutProblems(await this.board(contest, boardView), hidesProblems);
+  }
+
+  /**
+   * The user's own place on the board `ranking` shows a non-editor, read from the shared cached board (never a rebuild per call).
+   * Null for a spectator, or when the user may not see even their own row. Where the board shows only the own row (hidden board), the user's own score is returned with a null rank, as on that board.
+   */
+  async ownStanding(
+    principal: Principal,
+    contest: ContestDocument,
+    participation: ParticipationDocument,
+    now = new Date(),
+  ): Promise<OwnStandingResponse | null> {
+    if (participation.virtual < LIVE) return null;
+    const accessView = ContestAccess.accessView(contest);
+    const viewer = await this.viewers.viewerOf(principal, contest, now);
+    if (!ContestAccess.canSeeOwnScoreboard(principal, accessView, now, viewer))
+      return null;
+    const frozen = isFrozenFor(contest, now, false);
+    if (!ContestAccess.canSeeFullScoreboard(principal, accessView, now, viewer))
+      return {
+        rank: null,
+        frozen,
+        ...ownScore(standingOf(participation.toObject(), frozen)),
+      };
+    const board = await this.board(contest, {
+      withVirtual: participation.virtual > LIVE,
+      isFrozenView: frozen,
+      isCacheable: true,
+    });
+    const id = uuidStr(participation._id);
+    const row = board.rows.find((entry) => entry.participationId === id);
+    return row ? { rank: row.rank, frozen, ...ownScore(row) } : null;
   }
 
   /**

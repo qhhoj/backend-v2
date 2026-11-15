@@ -5141,11 +5141,22 @@
           },
           "participation": {
             "$ref": "#/components/schemas/ParticipationSummaryResponse"
+          },
+          "standing": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OwnStandingResponse"
+              }
+            ],
+            "description": "The viewer's place on the board a non-editor sees (frozen while frozen); null for a spectator, before the start and when the board is hidden from them (a contestant whose board is hidden still gets their own score, with a null rank).",
+            "nullable": true,
+            "type": "object"
           }
         },
         "required": [
           "contest",
-          "participation"
+          "participation",
+          "standing"
         ],
         "type": "object"
       },
@@ -8679,6 +8690,34 @@
           "WA"
         ],
         "type": "string"
+      },
+      "OwnStandingResponse": {
+        "properties": {
+          "cumtime": {
+            "description": "Cumulative time (penalty) in seconds.",
+            "type": "number"
+          },
+          "frozen": {
+            "description": "Whether the values are the frozen ones.",
+            "type": "boolean"
+          },
+          "rank": {
+            "description": "Null when the board shows only the viewer's row.",
+            "nullable": true,
+            "type": "number"
+          },
+          "score": {
+            "description": "Total score.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "rank",
+          "score",
+          "cumtime",
+          "frozen"
+        ],
+        "type": "object"
       },
       "PackageBuildingResponse": {
         "properties": {

@@ -54,3 +54,15 @@ export class RankingResponse {
   /** Participants, best first. */
   rows!: RankingRowResponse[];
 }
+
+/** A user's own place on the board a non-editor sees; the frozen values while frozen. */
+export class OwnStandingResponse {
+  /** Null when the board shows only the viewer's row. */
+  rank!: number | null;
+  /** Total score. */
+  score!: number;
+  /** Cumulative time (penalty) in seconds. */
+  cumtime!: number;
+  /** Whether the values are the frozen ones. */
+  frozen!: boolean;
+}
