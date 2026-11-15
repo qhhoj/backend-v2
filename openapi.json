@@ -10774,6 +10774,14 @@
             "description": "Points the problem is worth.",
             "type": "number"
           },
+          "setup": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProblemSetupResponse"
+              }
+            ],
+            "description": "Setup readiness. Only on problems the viewer may edit; absent for other viewers, and for a problem the backfill has not reached yet."
+          },
           "types": {
             "description": "Problem types.",
             "items": {
@@ -10879,6 +10887,28 @@
         ],
         "type": "object"
       },
+      "ProblemSetupResponse": {
+        "properties": {
+          "hasPoints": {
+            "description": "Test cases are scored: the scored points add up to more than 0.",
+            "type": "boolean"
+          },
+          "hasStatement": {
+            "description": "A written statement in the base language or any translation or a PDF statement.",
+            "type": "boolean"
+          },
+          "hasTests": {
+            "description": "At least one test case.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hasStatement",
+          "hasTests",
+          "hasPoints"
+        ],
+        "type": "object"
+      },
       "ProblemSort": {
         "enum": [
           "-acRate",
@@ -10893,6 +10923,12 @@
           "name",
           "points",
           "userCount"
+        ],
+        "type": "string"
+      },
+      "ProblemStatus": {
+        "enum": [
+          "unfinished"
         ],
         "type": "string"
       },
@@ -35031,6 +35067,15 @@
         "operationId": "ProblemsController_list",
         "parameters": [
           {
+            "description": "`unfinished`: only problems the viewer may edit that lack a statement or scored test cases (the admin list's readiness filter).",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ProblemStatus"
+            }
+          },
+          {
             "description": "`public` (default): public problems; `private`: visible problems that are not public; `all`: both.",
             "in": "query",
             "name": "visibility",
@@ -35862,6 +35907,15 @@
         "description": "Public. Applies the same filters and visibility rules as `GET /problems`\n(search, groups, types, points, editorial, solved, visibility) and returns\nthe code of one matching problem. Responds 404 `no_problem` when nothing\nmatches.",
         "operationId": "ProblemsController_random",
         "parameters": [
+          {
+            "description": "`unfinished`: only problems the viewer may edit that lack a statement or scored test cases (the admin list's readiness filter).",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ProblemStatus"
+            }
+          },
           {
             "description": "`public` (default): public problems; `private`: visible problems that are not public; `all`: both.",
             "in": "query",
