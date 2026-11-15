@@ -2,15 +2,13 @@
 # workflow_dispatch: release.yml starts it on changeset-release/main (a PR opened with GITHUB_TOKEN triggers nothing).
 name: ci
 on: { push: { branches: [main] }, pull_request: {}, merge_group: {}, workflow_dispatch: {} }
-# The test job runs the unit specs (jest.config.js) and the static OpenAPI specs; the db job runs the specs that need
-# MongoDB and Redis (*.db.spec.ts, *.e2e-spec.ts; CONTRIBUTING.md, Testing) only for what the change touches:
-# scripts/ci/select-db-specs.cjs picks the judging, submissions, bridge and auth specs plus those of the changed modules
-# (the whole suite when a changed file belongs to no module). The full DB suite runs nightly on origin/main
-# (.batch/nightly/run.sh). The image job builds on pushes to main and on PRs that change what the image is made of.
+# The test job runs the unit specs (jest.config.js) and the static OpenAPI specs. No job starts MongoDB or Redis: the
+# specs that need them (*.db.spec.ts, *.e2e-spec.ts; CONTRIBUTING.md, Testing) run locally before a PR and nightly on
+# origin/main (.batch/nightly/run.sh). The image job builds on pushes to main and on PRs that change what the image is made of.
 # Third-party actions are pinned by commit SHA (the comment names the tag). .github/actions/deps installs Node and the
 # cached node_modules; on a cache miss it runs `npm ci --ignore-scripts` (no dependency's install script runs) and
 # rebuilds by name the two native modules the jobs need (dolos-parsers for the similarity specs, grpc-tools' protoc for
-# judge-proto:check). mongodb-memory-server fetches mongod on first use instead.
+# judge-proto:check).
 jobs:
   # Pushes that touch only docs, changesets or deploy scripts skip the heavy jobs below; a skipped job counts as a
   # pass, so the run (and the deploy gate waiting on it) stays green. deploy-scripts always runs.
@@ -22,7 +20,6 @@ jobs:
       deploy: '${{ steps.image.outputs.deploy }}'
       lint_files: '${{ steps.lint.outputs.lint_files }}'
       image: '${{ steps.image.outputs.image }}'
-      db_specs: '${{ steps.specs.outputs.db_specs }}'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { fetch-depth: 0 }
@@ -59,12 +56,6 @@ jobs:
             files="$(git diff --name-only --diff-filter=d "$BASE" HEAD | grep -E '^(apps|libs)/.*[.]ts$' | paste -sd' ' || true)"
             echo "lint_files=${files:-none}" >> "$GITHUB_OUTPUT"
           else echo lint_files=all >> "$GITHUB_OUTPUT"; fi
-      # Fails the job (and so ci-ok) when the selector errors or selects nothing: never "no specs, nothing to run".
-      - id: specs
-        run: |
-          specs="$(node scripts/ci/select-db-specs.cjs "$BASE" | paste -sd' ')"
-          [ -n "$specs" ] || { echo "no DB specs selected" >&2; exit 1; }
-          echo "db_specs=$specs" >> "$GITHUB_OUTPUT"
   # lint, type check and the build run side by side: each is on the PR's critical path
   static:
     needs: changes
@@ -124,42 +115,6 @@ jobs:
           key: jest-${{ github.job }}-${{ matrix.shard }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
           restore-keys: jest-${{ github.job }}-${{ matrix.shard }}-${{ hashFiles('package-lock.json') }}-
       - run: npm run test:unit -- --forceExit --cacheDirectory=${{ runner.temp }}/jest
-  # Six shards of the selected specs (jest time is about 3 s per spec, so shards beat one big runner), each on its own runner with its own Redis and in-memory MongoDB.
-  db:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix: { shard: [1, 2, 3, 4, 5, 6] }
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: ./.github/actions/deps
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with: { python-version: "3.12" }
-      # Some specs use Redis db numbers above 15, so the server needs more than the default 16 databases.
-      - name: Start Redis
-        run: |
-          docker run -d --name redis -p 6379:6379 redis:7 redis-server --databases 100 --save '' --appendonly no
-          for _ in $(seq 30); do docker exec redis redis-cli ping | grep -q PONG && exit 0; sleep 1; done
-          exit 1
-      - id: mms
-        run: echo "version=$(node -p "require('mongodb-memory-server/package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: node_modules/.cache/mongodb-memory-server
-          key: mongodb-binaries-${{ runner.os }}-${{ steps.mms.outputs.version }}
-      # --forceExit: jest hangs at exit on leaked handles. In band: the submission-events pub/sub channel is shared
-      # across Redis dbs, so concurrent workers would see each other's events.
-      # Only the selected specs (changes job); the nightly run covers the rest.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ${{ runner.temp }}/jest
-          key: jest-${{ github.job }}-${{ matrix.shard }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
-          restore-keys: jest-${{ github.job }}-${{ matrix.shard }}-${{ hashFiles('package-lock.json') }}-
-      - run: npm run test:db -- --forceExit --cacheDirectory=${{ runner.temp }}/jest --passWithNoTests --shard=${{ matrix.shard }}/6 --runTestsByPath $SPECS
-        env: { TEST_REDIS_URL: 'redis://localhost:6379/60', SPECS: '${{ needs.changes.outputs.db_specs }}' }
   openapi:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -218,10 +173,10 @@ jobs:
           sparse-checkout: packaging
       - run: bash scripts/judge/check-deploy-copies.sh judge-v2
   # The required check (with changes). Fails when any job failed or was cancelled. When the change has code, the jobs that
-  # must run (static, build, test, db, openapi, and image when selected; deploy-scripts when deploy/, scripts/judge/ or a workflow changed) must have succeeded: a skipped one is a failure.
+  # must run (static, build, test, openapi, and image when selected; deploy-scripts when deploy/, scripts/judge/ or a workflow changed) must have succeeded: a skipped one is a failure.
   ci-ok:
     if: always()
-    needs: [changes, static, build, test, db, openapi, image, deploy-scripts]
+    needs: [changes, static, build, test, openapi, image, deploy-scripts]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -232,7 +187,7 @@ jobs:
           MUST: '${{ needs.changes.result }}'
           DEPLOY: ${{ needs.changes.outputs.deploy }}
           DEPLOY_JOB: ${{ needs.deploy-scripts.result }}
-          CODE_JOBS: '${{ needs.static.result }} ${{ needs.build.result }} ${{ needs.test.result }} ${{ needs.db.result }} ${{ needs.openapi.result }}'
+          CODE_JOBS: '${{ needs.static.result }} ${{ needs.build.result }} ${{ needs.test.result }} ${{ needs.openapi.result }}'
           IMAGE_JOB: ${{ needs.image.result }}
         run: |
           echo "$RESULTS"
