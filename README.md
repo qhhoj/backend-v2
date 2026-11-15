@@ -65,12 +65,12 @@ Dev and end-to-end data: `NODE_ENV=development npm run seed:e2e` creates `e2e_ad
 ```
 npm test               # every spec (needs Redis; the api e2e flushes its db)
 npm run test:unit      # pure and static specs only, no services (CI job `test`)
-npm run test:db        # *.db.spec.ts and *.e2e-spec.ts (needs Redis; CI job `db`)
+npm run test:db        # *.db.spec.ts and *.e2e-spec.ts (needs Redis; local and nightly, not in CI)
 npm run lint
 npm run typecheck
 ```
 
-- CI runs `test:unit`, the static `test:openapi` and, in the `db` job (Redis container with 100 databases, cached mongod binary), `test:db`. Specs that need services are named `*.db.spec.ts` or `*.e2e-spec.ts` (CONTRIBUTING.md, Testing). `test:db` runs in band, in CI too: with `--maxWorkers=2` and up, workers get separate Redis and Mongo databases but share the `submission-events` pub/sub channel, so specs can see each other's events.
+- CI runs `test:unit` and the static `test:openapi`; it starts no database. Specs that need services are named `*.db.spec.ts` or `*.e2e-spec.ts` (CONTRIBUTING.md, Testing) and run locally before a PR and nightly on origin/main. Before you open a PR, run the DB specs of the modules you touched: `TEST_REDIS_URL=redis://127.0.0.1:6379/18 npm run test:db -- --runTestsByPath $(node scripts/ci/select-db-specs.cjs origin/main)` (use Redis db 18 or 19 so a second checkout can run beside it). A change to judging, submissions or the bridge must run the judging DB specs locally; the selector always includes them. `test:db` runs in band: with `--maxWorkers=2` and up, workers get separate Redis and Mongo databases but share the `submission-events` pub/sub channel, so specs can see each other's events.
 - `TEST_REDIS_URL` picks the db (default `redis://127.0.0.1:6379/15`); use another db to run two checkouts side by side, e.g. `TEST_REDIS_URL=redis://127.0.0.1:6379/12 npm test`. Each jest worker uses the next db up (db + `JEST_WORKER_ID - 1`), so the base db plus `--maxWorkers` must fit the server (16 dbs by default).
 - MongoDB is in-memory (`mongodb-memory-server`): one replica set per jest run (`test/jest/global-setup.js`); `startMongo()` gives each caller databases of its own on it and drops them on `stop()`.
 

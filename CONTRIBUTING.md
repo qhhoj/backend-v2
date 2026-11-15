@@ -555,7 +555,7 @@ Domain words (what a Judging, a Participation or an Effect is) are in [GLOSSARY.
 
 ## Testing
 
-- The CI `db` job runs the specs that need MongoDB or Redis (mongodb-memory-server plus a Redis container) that a change can reach: `scripts/ci/select-db-specs.cjs <base>` lists the judging, submissions, bridge, auth and access/permission specs plus those of the changed API modules and the modules that import them (any change under `libs/`, a test fixture, a file no module row covers, an unknown base or a script error selects the whole suite; a new `apps/api/src/modules/<name>` needs a row in that script). The full suite runs nightly on origin/main (`.batch/nightly/run.sh`); `npm run test:db` runs it locally. The file name says which kind a spec is:
+- CI starts no database. Before you open a PR, run the DB specs of the modules you touched: `TEST_REDIS_URL=redis://127.0.0.1:6379/18 npm run test:db -- --runTestsByPath $(node scripts/ci/select-db-specs.cjs origin/main)` (Redis db 18 or 19). The selector (`scripts/ci/select-db-specs.cjs <base>`) lists the judging, submissions, bridge, auth and access/permission specs plus those of the changed API modules and the modules that import them (any change under `libs/`, a test fixture, a file no module row covers, an unknown base or a script error selects the whole suite; a new `apps/api/src/modules/<name>` needs a row in that script). A judging, submissions or bridge change must run the judging DB specs locally. The full suite runs nightly on origin/main (`.batch/nightly/run.sh`); `npm run test:db` runs it locally. The file name says which kind a spec is:
 
   | File                                           | Needs                                                   | Config                           | Runs                             |
   | ---------------------------------------------- | ------------------------------------------------------- | -------------------------------- | -------------------------------- |
@@ -586,7 +586,7 @@ Domain words (what a Judging, a Participation or an Effect is) are in [GLOSSARY.
 | ------------------------- | ----------------------------------------------------------------------------- |
 | `npm test`                | every spec: unit, OpenAPI, then the DB-backed ones (needs Redis)              |
 | `npm run test:unit`       | unit specs only, no services (CI job `test`)                                  |
-| `npm run test:db`         | `*.db.spec.ts` and `*.e2e-spec.ts`, in band (needs Redis; CI job `db`, selected) |
+| `npm run test:db`         | `*.db.spec.ts` and `*.e2e-spec.ts`, in band (needs Redis; local and nightly, not in CI) |
 | `npm run format`          | Prettier write on `apps/` and `libs/`                                         |
 | `npm run lint`            | ESLint (+ Prettier) on `apps/` and `libs/`                                    |
 | `npm run test:openapi`    | the static OpenAPI specs with the swagger plugin (see OpenAPI)                |
