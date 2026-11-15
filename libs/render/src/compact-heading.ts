@@ -3,6 +3,9 @@ import { problemReferenceAt } from './problem-reference';
 
 /** 1–6 hashes directly followed by text: `##Input`. With a space after the hashes it is CommonMark's own heading. */
 const COMPACT_HASHES = /^#{1,6}(?=[^\s#])/;
+/** A C/C++ preprocessor word right after the hashes: `#include<x>` is pasted code, not a heading. */
+const PREPROCESSOR_WORD =
+  /^#+(?:include|define|pragma|ifdef|ifndef|endif|if|else|elif|undef|import|using)(?![A-Za-z0-9_])/;
 /** Closing hashes, which the old site dropped whether or not a space preceded them. */
 const CLOSING_HASHES = /#+[ \t]*$/;
 
@@ -19,8 +22,9 @@ export function compactHeadingRule(
     state.eMarks[startLine],
   );
   const hashes = COMPACT_HASHES.exec(line)?.[0];
+  if (!hashes || PREPROCESSOR_WORD.test(line)) return false;
   // An announcement line that opens with a problem reference (`#C: ...`) is text, not an h1.
-  if (!hashes || problemReferenceAt(line, state.env)) return false;
+  if (problemReferenceAt(line, state.env)) return false;
   if (silent) return true;
   const tag = `h${hashes.length}`;
   state.line = startLine + 1;

@@ -18,12 +18,7 @@ import {
   sanitizeStatementHtml,
 } from './sanitizer';
 import { rewriteHtmlSpoilers, spoilerRule } from './spoiler';
-import {
-  allowsRawHtml,
-  isSanitizedStyle,
-  isUserAuthored,
-  RenderStyle,
-} from './styles';
+import { isSanitizedStyle, isUserAuthored, RenderStyle } from './styles';
 import {
   problemReferenceRule,
   renderProblemReference,
@@ -98,19 +93,24 @@ const wrapTables = (html: string) =>
 
 function createMarkdown({
   allowsHtml,
+  compactHeadings,
 }: {
   allowsHtml: boolean;
+  compactHeadings: boolean;
 }): MarkdownIt.MarkdownIt {
   // No typographer: the old site kept straight quotes, `...` and `--` as written.
   const markdown = new MarkdownIt({ html: allowsHtml });
-  markdown.block.ruler.before(
-    'heading',
-    'compact_heading',
-    compactHeadingRule,
-    {
-      alt: ['paragraph', 'reference', 'blockquote'],
-    },
-  );
+  // Only text that came from the old site may use `##Input`; in text typed today `#include<x>` is code.
+  if (compactHeadings) {
+    markdown.block.ruler.before(
+      'heading',
+      'compact_heading',
+      compactHeadingRule,
+      {
+        alt: ['paragraph', 'reference', 'blockquote'],
+      },
+    );
+  }
   markdown.inline.ruler.before('escape', 'math_inline', mathInlineRule);
   markdown.inline.ruler.before('strikethrough', 'math_tilde', mathTildeRule);
   markdown.inline.ruler.before('link', 'user_reference', userReferenceRule);
@@ -145,9 +145,18 @@ function createMarkdown({
 }
 
 const markdowns = {
-  raw: createMarkdown({ allowsHtml: true }),
-  escaped: createMarkdown({ allowsHtml: false }),
+  raw: createMarkdown({ allowsHtml: true, compactHeadings: true }),
+  blog: createMarkdown({ allowsHtml: true, compactHeadings: false }),
+  escaped: createMarkdown({ allowsHtml: false, compactHeadings: false }),
 };
+
+/** The Markdown parser of a style: `user` shows HTML as text, `blog` and `user` have no compact headings. */
+const markdownOf = (style: RenderStyle) =>
+  style === 'user'
+    ? markdowns.escaped
+    : style === 'blog'
+      ? markdowns.blog
+      : markdowns.raw;
 
 const MAX_MARKUP_TAGS = 200000;
 const MAX_MARKUP_DEPTH = 500;
@@ -210,7 +219,7 @@ export function renderMarkdown(
   };
   const rendered = wrapTables(
     shiftHeaders(
-      markdowns[allowsRawHtml(style) ? 'raw' : 'escaped'].render(
+      markdownOf(style).render(
         rewriteHtmlSpoilers(separateFencesFromHtml(text)),
         env,
       ),

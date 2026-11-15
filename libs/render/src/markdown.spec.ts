@@ -115,12 +115,10 @@ describe('renderMarkdown', () => {
     expect(full('    ##code')).toBe('<pre><code>##code\n</code></pre>\n');
     expect(full('####### seven')).toBe('<p>####### seven</p>\n');
   });
-  it('reads a line-start #word as a heading, as the old site did (code belongs in a fence)', () => {
+  it('reads a line-start #word as a heading, as the old site did, unless it is a preprocessor line', () => {
     expect(
       renderMarkdown('#include <bits/stdc++.h>\n#12 is the issue', 'problem'),
-    ).toBe(
-      '<h3>include &lt;bits/stdc++.h&gt;</h3>\n<h3>12 is the issue</h3>\n',
-    );
+    ).toBe('<p>#include &lt;bits/stdc++.h&gt;</p>\n<h3>12 is the issue</h3>\n');
     expect(full('see #12 here')).toBe('<p>see #12 here</p>\n');
   });
   it('ends an HTML block at a column-0 code fence', () => {
