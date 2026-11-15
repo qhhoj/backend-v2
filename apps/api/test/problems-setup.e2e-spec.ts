@@ -147,6 +147,36 @@ describe('problem setup flags', () => {
     ).toEqual(['nopoints', 'nostatement', 'notests']);
   });
 
+  it('counts a PDF statement as a statement and an external judge as tests and points', async () => {
+    const setupOf = async (code: string) =>
+      (await list(admin, 'visibility=all&editable=true')).find(
+        (item) => item.code === code,
+      )?.setup;
+    await api.problems.updateOne(
+      { _id: await idOf('nostatement') },
+      { $set: { pdfStatementUrl: 'statements/a.pdf' } },
+    );
+    await api.problems.updateOne(
+      { _id: await idOf('notests') },
+      { $set: { externalJudge: { isActive: true } } },
+    );
+    expect(await setupOf('nostatement')).toMatchObject({ hasStatement: true });
+    expect(await setupOf('notests')).toMatchObject({
+      hasTests: true,
+      hasPoints: true,
+    });
+    await api.problems.updateOne(
+      { _id: await idOf('nostatement') },
+      { $set: { pdfStatementUrl: null } },
+    );
+    await api.problems.updateOne(
+      { _id: await idOf('notests') },
+      { $set: { externalJudge: null } },
+    );
+    expect(await setupOf('nostatement')).toMatchObject({ hasStatement: false });
+    expect(await setupOf('notests')).toMatchObject({ hasTests: false });
+  });
+
   it('filters to unfinished problems with an index', async () => {
     let items: { code: string }[] = [];
     const operations = await profileQueries(api.db, async () => {

@@ -101,6 +101,11 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
       'S',
       "recomputes every problem's dataBytes from disk, deleted and purged ones included",
     ],
+  'apps/worker/src/migrations/problem-setup-flags/problem-setup-flags.migration.ts':
+    [
+      'S',
+      'fills the setup flags on every problem without them, deleted ones included, so a restored problem lists correctly',
+    ],
   'apps/worker/src/migrations/problem-visibility-flags/problem-visibility-flags.migration.ts':
     [
       'S',

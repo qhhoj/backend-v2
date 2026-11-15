@@ -12,7 +12,7 @@ import { UserSummaryResponse } from './user-summary.response';
 
 /** What is still missing before a problem is ready; the rules mirror the admin editor's setup checklist. */
 export class ProblemSetupResponse {
-  /** A written statement in the base language or any translation (a PDF does not count). */
+  /** A written statement in the base language or any translation or a PDF statement. */
   hasStatement!: boolean;
   /** At least one test case. */
   hasTests!: boolean;

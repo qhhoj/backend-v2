@@ -18,7 +18,7 @@ import { ProblemsRepository } from '../core/problems.repository';
 import { ProblemsService } from '../core/problems.service';
 import { RevisionsRepository } from '../core/revisions.repository';
 
-/** Never carried over by a clone: identity, timestamps, people, statement translations, editorial, mirror, Polygon and external judge links, and test data. */
+/** Never carried over by a clone: identity, timestamps, people, statement translations, editorial, mirror, Polygon and external judge links, test data, and the setup flags (recomputed when the clone is saved). */
 export const CLONE_RESET_FIELDS = [
   'id',
   'createdAt',
@@ -47,6 +47,8 @@ export const CLONE_RESET_FIELDS = [
   'mirrorRoot',
   'polygonLink',
   'externalJudge',
+  'setup',
+  'isSetupUnfinished',
 ];
 /** Copied by value (the material is then pointed at the clone's own file copy); together with CLONE_RESET_FIELDS this must cover every schema path. */
 export const CLONE_COPIED_FIELDS = [

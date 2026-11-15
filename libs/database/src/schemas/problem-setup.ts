@@ -11,6 +11,9 @@ const isWritten = (path: string) => ({
   $ne: [{ $trim: { input: { $ifNull: [path, ''] } } }, ''],
 });
 
+/** An external-judge problem keeps its tests and points on the remote OJ. */
+const isExternal = { $ne: [{ $ifNull: ['$externalJudge', null] }, null] };
+
 const hasCaseOfType = {
   $anyElementTrue: [
     {
@@ -70,7 +73,7 @@ const scoredTotal = {
 
 /**
  * Update pipeline that recomputes `setup` and `isSetupUnfinished` from the stored statement, translations and test data.
- * The rule mirrors the frontend's setup checks: a written statement in any slot, at least one 'C' case, scored points above 0.
+ * The rule mirrors the frontend's setup checks: a written statement in any slot or a PDF statement, at least one 'C' case, scored points above 0 (an external-judge problem counts as having both).
  */
 export const SETUP_REFRESH_PIPELINE: PipelineStage[] = [
   {
@@ -79,6 +82,7 @@ export const SETUP_REFRESH_PIPELINE: PipelineStage[] = [
         hasStatement: {
           $or: [
             isWritten('$description'),
+            isWritten('$pdfStatementUrl'),
             {
               $anyElementTrue: [
                 {
@@ -92,8 +96,13 @@ export const SETUP_REFRESH_PIPELINE: PipelineStage[] = [
             },
           ],
         },
-        hasTests: hasCaseOfType,
-        hasPoints: { $and: [hasCaseOfType, { $gt: [scoredTotal, 0] }] },
+        hasTests: { $or: [isExternal, hasCaseOfType] },
+        hasPoints: {
+          $or: [
+            isExternal,
+            { $and: [hasCaseOfType, { $gt: [scoredTotal, 0] }] },
+          ],
+        },
       },
     },
   },
@@ -107,7 +116,8 @@ export const SETUP_REFRESH_PIPELINE: PipelineStage[] = [
   },
 ] as PipelineStage[];
 
-const SETUP_FIELDS = /^(description|translations|data)(\.|$)/;
+const SETUP_FIELDS =
+  /^(description|pdfStatementUrl|translations|data|externalJudge)(\.|$)/;
 
 function touchesSetup(update: unknown): boolean {
   if (!update || Array.isArray(update)) return false;
