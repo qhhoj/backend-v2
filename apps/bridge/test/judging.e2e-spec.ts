@@ -86,15 +86,16 @@ describe('judging across the api and the bridge', () => {
     judge.accept(refs.get(id)!);
     judge.started(refs.get(id)!, 2);
   };
-  const gradeAcWa = (id: string) => {
-    judge.cases(refs.get(id)!, [
-      caseOf(1, Status.STATUS_AC),
-      caseOf(2, Status.STATUS_WA),
-    ]);
-    judge.final(refs.get(id)!, Outcome.OUTCOME_GRADED);
+  /**
+   * Sends two cases (AC, then `second`) and Final GRADED, and waits for the Final's ack: the bridge acks after the verdict write and the graded job.
+   * The row is not the sync point: it reads D as soon as the write lands, and the bridge enqueues the graded job only after that write returns.
+   */
+  const grade = async (id: string, second: Status) => {
+    const ref = refs.get(id)!;
+    judge.cases(ref, [caseOf(1, Status.STATUS_AC), caseOf(2, second)]);
+    await judge.ackOf(ref, judge.final(ref, Outcome.OUTCOME_GRADED));
   };
-  const finished = (id: string, status: string) =>
-    waitUntil(async () => (await row(id)).status === status);
+  const gradeAcWa = (id: string) => grade(id, Status.STATUS_WA);
 
   beforeAll(async () => {
     countResyncTicks();
@@ -161,9 +162,9 @@ describe('judging across the api and the bridge', () => {
     const id = await submit();
     expect(await requestedId()).toBe(id);
     begin(id);
-    gradeAcWa(id);
-    await finished(id, 'D');
+    await gradeAcWa(id);
     expect(await row(id)).toMatchObject({
+      status: 'D',
       result: 'WA',
       casePoints: 1,
       caseTotal: 2,
@@ -185,8 +186,7 @@ describe('judging across the api and the bridge', () => {
     await act('owner', queued, 'abort').expect(204);
     expect(await row(queued)).toMatchObject({ status: 'AB' });
     expect(await gradedJobsOf(queued)).toHaveLength(1);
-    gradeAcWa(running);
-    await finished(running, 'D');
+    await gradeAcWa(running);
     // two resync ticks: the aborted row must not come back
     await resyncTicks(2);
     expect(judge.seen('assign')).toEqual([]);
@@ -197,20 +197,18 @@ describe('judging across the api and the bridge', () => {
     const id = await submit();
     expect(await requestedId()).toBe(id);
     begin(id);
-    gradeAcWa(id);
-    await finished(id, 'D');
+    await gradeAcWa(id);
     await act('manager', id, 'rejudge').expect(204);
     expect(await requestedId()).toBe(id);
     expect(refs.get(id)?.generation).toBe(2);
     begin(id);
-    judge.cases(refs.get(id)!, [
-      caseOf(1, Status.STATUS_AC),
-      caseOf(2, Status.STATUS_AC),
-    ]);
-    judge.final(refs.get(id)!, Outcome.OUTCOME_GRADED);
-    await waitUntil(async () => (await row(id)).result === 'AC');
-    expect(await row(id)).toMatchObject({ status: 'D', points: 1000 });
-    await waitUntil(async () => (await gradedJobsOf(id)).length === 2);
+    await grade(id, Status.STATUS_AC);
+    expect(await row(id)).toMatchObject({
+      status: 'D',
+      result: 'AC',
+      points: 1000,
+    });
+    expect(await gradedJobsOf(id)).toHaveLength(2);
     await act('manager', id, 'reject').expect(204);
     expect(await row(id)).toMatchObject({
       status: 'D',
@@ -227,12 +225,10 @@ describe('judging across the api and the bridge', () => {
     begin(running);
     const queued = await submit('xdel');
     await softDelete(api, (await api.problems.findOne({ code: 'xdel' }))!._id);
-    gradeAcWa(running);
-    await finished(running, 'D');
+    await gradeAcWa(running);
     expect(await requestedId()).toBe(queued);
     begin(queued);
-    gradeAcWa(queued);
-    await finished(queued, 'D');
+    await gradeAcWa(queued);
     expect(await row(queued)).toMatchObject({
       result: 'WA',
       judgedOn: 'judge-x',
