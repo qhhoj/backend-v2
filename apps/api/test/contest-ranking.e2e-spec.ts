@@ -14,6 +14,8 @@ import type { Contest, ContestParticipation, User } from '@libs/database';
 
 import { profileQueries } from '@libs/database/testing';
 
+import type { CurrentParticipationResponse } from '../src/modules/contests/participation/dto/participation.response';
+
 import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
 
 import type { RankingResponse } from '../src/modules/contests/ranking/dto/ranking.response';
@@ -103,6 +105,75 @@ describe('contest ranking', () => {
     );
   });
   afterAll(() => api.teardown());
+
+  describe('own standing in /contests/current', () => {
+    const current = async (who: string) =>
+      dataOf<CurrentParticipationResponse | null>(
+        await authed(
+          api.http().get('/api/internal/contests/current'),
+          sessions[who],
+        ).expect(200),
+      );
+    // alice 100 live (frozen 10), bob 50 live (frozen 60): the live order is alice, bob; the frozen one is bob, alice.
+    const seed = async (extra: Partial<Contest>) => {
+      const contest = await createContest(api, extra);
+      const [alice, bob] = await Promise.all([
+        joinParticipation(
+          api,
+          contest._id,
+          users.alice._id,
+          results(100, { frozenScore: 10 }),
+        ),
+        joinParticipation(
+          api,
+          contest._id,
+          users.bob._id,
+          results(50, { frozenScore: 60 }),
+        ),
+      ]);
+      await makeCurrent(api, users.alice._id, alice._id);
+      await makeCurrent(api, users.bob._id, bob._id);
+      return contest;
+    };
+    afterEach(async () => {
+      await makeCurrent(api, users.alice._id, null);
+      await makeCurrent(api, users.bob._id, null);
+    });
+
+    it('gives each contestant their live rank and score without a freeze', async () => {
+      await seed({});
+      expect((await current('alice'))?.standing).toEqual({
+        rank: 1,
+        score: 100,
+        cumtime: 0,
+        frozen: false,
+      });
+      expect((await current('bob'))?.standing).toMatchObject({
+        rank: 2,
+        score: 50,
+      });
+    });
+
+    it('gives the frozen rank and score during a freeze, never the hidden live ones', async () => {
+      await seed({ formatName: 'icpc', frozenLastMinutes: 180 });
+      const alice = await current('alice');
+      expect(alice?.standing).toEqual({
+        rank: 2,
+        score: 10,
+        cumtime: 0,
+        frozen: true,
+      });
+      expect((await current('bob'))?.standing).toMatchObject({
+        rank: 1,
+        score: 60,
+      });
+      expect(JSON.stringify(alice)).not.toContain('100');
+    });
+
+    it('gives a user outside any contest no contest and no standing', async () => {
+      expect(await current('carol')).toBeNull();
+    });
+  });
 
   it('orders by score, cumtime and tiebreaker with shared ranks, disqualified last, virtual rows on request, spectators never', async () => {
     const contest = await createContest(api, {

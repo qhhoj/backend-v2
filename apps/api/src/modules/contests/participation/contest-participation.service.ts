@@ -36,6 +36,7 @@ import { ContestAccess } from '../core/contest-access';
 import { ContestsRepository } from '../core/contests.repository';
 import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
+import { ContestRankingService } from '../ranking/contest-ranking.service';
 import { CurrentContestService } from '../core/current-contest.service';
 import { FeedKeysRepository } from '../feed/feed-keys.repository';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
@@ -132,6 +133,7 @@ export class ContestParticipationService {
     private readonly settings: SettingsService,
     private readonly sessions: SessionService,
     private readonly feedKeys: FeedKeysRepository,
+    private readonly ranking: ContestRankingService,
   ) {}
 
   async register(
@@ -528,6 +530,11 @@ export class ContestParticipationService {
         endTime: contest.endTime,
       },
       participation: ParticipationSummaryResponse.from(participation, contest),
+      standing: await this.ranking.ownStanding(
+        principal,
+        contest,
+        participation,
+      ),
     };
   }
 

@@ -7,6 +7,7 @@ import type { Contest, ContestParticipation } from '@libs/database';
 import { ApiProblemCells } from '../../core/dto/api-problem-cells';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
 import { ParticipationSummaryResponse } from '../../core/dto/contest-detail.response';
+import type { OwnStandingResponse } from '../../ranking/dto/ranking.response';
 
 export class ParticipationResponse extends ParticipationSummaryResponse {
   /** The participant. */
@@ -54,6 +55,8 @@ export class CurrentContestResponse {
 export class CurrentParticipationResponse {
   contest!: CurrentContestResponse;
   participation!: ParticipationSummaryResponse;
+  /** The viewer's place on the board a non-editor sees (frozen while frozen); null when that board would not show them, or for a spectator. */
+  standing!: OwnStandingResponse | null;
 }
 
 export class BulkDisqualifyResultResponse {
