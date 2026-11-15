@@ -592,6 +592,7 @@ Domain words (what a Judging, a Participation or an Effect is) are in [GLOSSARY.
 | `npm run test:openapi`    | the static OpenAPI specs with the swagger plugin (see OpenAPI)                |
 | `npm run test:openapi:db` | the OpenAPI specs that boot the api (needs Redis; local only)                 |
 | `npm run seed:e2e`        | idempotent dev/e2e seed (see Seed script)                                     |
+| `npm run prepush`         | fast pre-push check (seconds): changeset present, eslint+prettier on changed files, `openapi.json` current (`scripts/ci/prepush.sh [base]`) |
 | `npm run typecheck`       | `tsc --noEmit`                                                                |
 | `npm run build`           | build `api`                                                                   |
 | `npx nest build worker`   | build worker                                                                  |
@@ -600,7 +601,9 @@ Domain words (what a Judging, a Participation or an Effect is) are in [GLOSSARY.
 | `npx nest start bridge`   | run the bridge                                                                |
 | `npx nest start worker`   | run the worker (from the repo root: KaTeX's CSS resolves from `node_modules`) |
 
-CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
+Run `npm run prepush` before every `git push`: it catches the usual red checks (missing changeset, lint, stale `openapi.json`) without waiting for CI.
+
+CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds. On a pull request and in the merge queue lint covers the changed files only (the push to main lints everything); `node_modules` is cached on `package-lock.json` (`.github/actions/deps`), the DB specs run in six shards, and `image` and `deploy-scripts` run only when their inputs changed. The workflows also trigger on `merge_group`.
 
 ## Env and deploy
 
@@ -631,7 +634,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 
 The app follows Semantic Versioning (`package.json` `version`, starting at 2.0.0): major = breaking API, protocol or DB migration; minor = feature; patch = fix.
 
-- Every PR adds a changeset: `npm run changeset` (pick the bump, write one line for the changelog) and commit the `.changeset/*.md` file; a pure CI/docs PR commits an empty one (`npx changeset --empty`). CI runs `npx changeset status --since=origin/main` on pull requests.
+- Every PR adds a changeset: `npm run changeset` (pick the bump, write one line for the changelog) and commit the `.changeset/*.md` file; a pure CI/docs PR commits an empty one (`npx changeset --empty`). CI runs `npx changeset status --since=origin/main` on pull requests (not in the merge queue).
 - Releases are automated (`.github/workflows/release.yml`): every push to `main` opens or updates the "chore: version packages" PR, which bumps `package.json` and `package-lock.json`, writes `CHANGELOG.md` and consumes the changesets. Review and merge it; the next run tags `v<version>` (`npm run release:tag`, idempotent) and creates a GitHub Release from the changelog section. Nothing is published to npm.
 - One-time repo setting: Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests". The workflow uses only the default `GITHUB_TOKEN`.
 - First release: the pending changesets were folded into the 2.0.0 entry, so the first Version PR is for the first change after 2.0.0.

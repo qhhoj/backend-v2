@@ -1,19 +1,19 @@
 name: changeset
+# merge_group: the merge queue needs this required check to report; a queued PR was checked when it was open, so the job is skipped there.
 # workflow_dispatch: release.yml starts it on changeset-release/main (a PR opened with GITHUB_TOKEN triggers nothing).
-on: { pull_request: {}, workflow_dispatch: {} }
+on: { pull_request: {}, merge_group: {}, workflow_dispatch: {} }
 jobs:
   status:
     # the bot's Version Packages PR consumes the changesets, so it has none to show
-    if: github.head_ref != 'changeset-release/main'
+    if: github.event_name != 'merge_group' && github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # changeset status diffs against origin/main
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
+      # node_modules comes from the cache the ci workflow fills (same lockfile key), so this job rarely runs npm ci
+      - uses: ./.github/actions/deps
       - name: the PR carries a changeset
         if: github.event_name == 'pull_request'
         run: npx changeset status --since=origin/main

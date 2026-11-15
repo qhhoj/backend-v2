@@ -1,0 +1,22 @@
+name: deps
+description: >-
+  Node 22 and node_modules. node_modules is cached on the lockfile, so an unchanged lockfile skips npm ci and the native
+  rebuilds (the tree-sitter grammars of dolos-parsers compile for about a minute). Cached without node_modules/.cache:
+  the db job caches the mongod binary there on its own. Third-party actions are pinned by commit SHA.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with: { node-version: 22 }
+    - id: modules
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: |
+          node_modules
+          !node_modules/.cache
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json') }}
+    # --ignore-scripts: no dependency's install script runs; the two native modules the jobs need are rebuilt by name
+    # (dolos-parsers for the similarity specs, grpc-tools' protoc for judge-proto:check).
+    - if: steps.modules.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci --ignore-scripts && npm rebuild @dodona/dolos-parsers grpc-tools

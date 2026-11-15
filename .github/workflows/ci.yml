@@ -1,14 +1,16 @@
+# merge_group: the merge queue runs the same checks on the queued merge commit (its base is merge_group.base_sha).
 # workflow_dispatch: release.yml starts it on changeset-release/main (a PR opened with GITHUB_TOKEN triggers nothing).
 name: ci
-on: { push: { branches: [main] }, pull_request: {}, workflow_dispatch: {} }
+on: { push: { branches: [main] }, pull_request: {}, merge_group: {}, workflow_dispatch: {} }
 # The test job runs the unit specs (jest.config.js) and the static OpenAPI specs; the db job runs the specs that need
 # MongoDB and Redis (*.db.spec.ts, *.e2e-spec.ts; CONTRIBUTING.md, Testing) only for what the change touches:
 # scripts/ci/select-db-specs.cjs picks the judging, submissions, bridge and auth specs plus those of the changed modules
 # (the whole suite when a changed file belongs to no module). The full DB suite runs nightly on origin/main
 # (.batch/nightly/run.sh). The image job builds on pushes to main and on PRs that change what the image is made of.
-# Third-party actions are pinned by commit SHA (the comment names the tag). `npm ci --ignore-scripts`: no dependency's
-# install script runs; a job rebuilds by name only the native modules it needs (dolos-parsers for the similarity
-# specs, grpc-tools' protoc for judge-proto:check). mongodb-memory-server fetches mongod on first use instead.
+# Third-party actions are pinned by commit SHA (the comment names the tag). .github/actions/deps installs Node and the
+# cached node_modules; on a cache miss it runs `npm ci --ignore-scripts` (no dependency's install script runs) and
+# rebuilds by name the two native modules the jobs need (dolos-parsers for the similarity specs, grpc-tools' protoc for
+# judge-proto:check). mongodb-memory-server fetches mongod on first use instead.
 jobs:
   # Pushes that touch only docs, changesets or deploy scripts skip the heavy jobs below; a skipped job counts as a
   # pass, so the run (and the deploy gate waiting on it) stays green. deploy-scripts always runs.
@@ -17,6 +19,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: '${{ steps.diff.outputs.code }}'
+      deploy: '${{ steps.image.outputs.deploy }}'
+      lint_files: '${{ steps.lint.outputs.lint_files }}'
       image: '${{ steps.image.outputs.image }}'
       db_specs: '${{ steps.specs.outputs.db_specs }}'
     steps:
@@ -24,7 +28,7 @@ jobs:
         with: { fetch-depth: 0 }
       - id: diff
         env:
-          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.before }}
           CI_LIGHT_PATHS: '^(.*[.]md|docs/.*|[.]changeset/.*|deploy/.*)$'
           CI_HEAVY_PATHS: '^deploy/container/'
         # A manual run (the Version Packages branch) compares with main: its changes are what the branch adds.
@@ -35,12 +39,26 @@ jobs:
           if bash deploy/ci/version-only.sh "$BASE" HEAD 2>/dev/null; then echo code=false >> "$GITHUB_OUTPUT"
           else bash deploy/ci/code-changed.sh "$BASE" >> "$GITHUB_OUTPUT"; fi
       # The image is what Containerfile, the dependencies, the entrypoint and the app entry points make of the code.
+      # deploy-scripts checks deploy/, scripts/judge/ and the workflows. Pushes and manual runs always run both jobs;
+      # a PR or a merge-queue run runs one only when its inputs changed.
       - id: image
         run: |
-          if [ '${{ github.event_name }}' != pull_request ] \
-            || git diff --name-only "$BASE" HEAD | grep -qE '^(Containerfile|package(-lock)?[.]json|nest-cli[.]json|deploy/container/|\.github/workflows/|apps/[^/]+/src/main[.]ts)'; then
+          changed() { git diff --name-only "$BASE" HEAD | grep -qE "$1"; }
+          if [ '${{ github.event_name }}' != pull_request ] && [ '${{ github.event_name }}' != merge_group ] \
+            || changed '^(Containerfile|package(-lock)?[.]json|nest-cli[.]json|deploy/container/|\.github/workflows/|apps/[^/]+/src/main[.]ts)'; then
             echo image=true >> "$GITHUB_OUTPUT"
           else echo image=false >> "$GITHUB_OUTPUT"; fi
+          if [ '${{ github.event_name }}' != pull_request ] && [ '${{ github.event_name }}' != merge_group ] \
+            || changed '^(deploy/|scripts/judge/|\.github/)'; then
+            echo deploy=true >> "$GITHUB_OUTPUT"
+          else echo deploy=false >> "$GITHUB_OUTPUT"; fi
+      # A PR or a merge-queue run lints only the changed TypeScript files; pushes to main and manual runs lint all.
+      - id: lint
+        run: |
+          if [ '${{ github.event_name }}' = pull_request ] || [ '${{ github.event_name }}' = merge_group ]; then
+            files="$(git diff --name-only --diff-filter=d "$BASE" HEAD | grep -E '^(apps|libs)/.*[.]ts$' | paste -sd' ' || true)"
+            echo "lint_files=${files:-none}" >> "$GITHUB_OUTPUT"
+          else echo lint_files=all >> "$GITHUB_OUTPUT"; fi
       # Fails the job (and so ci-ok) when the selector errors or selects nothing: never "no specs, nothing to run".
       - id: specs
         run: |
@@ -55,13 +73,17 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 22, cache: npm }
+      - uses: ./.github/actions/deps
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.12" }
       - run: pip install pyyaml==6.0.3
-      - run: npm ci --ignore-scripts && npm rebuild grpc-tools
-      - run: npm run lint
+      # PR and merge queue: the changed files only (lint_files, changes job); eslint also runs prettier on them.
+      - name: Lint
+        env: { LINT_FILES: '${{ needs.changes.outputs.lint_files }}' }
+        run: |
+          if [ "$LINT_FILES" = all ]; then npm run lint
+          elif [ "$LINT_FILES" != none ]; then npx eslint --no-warn-ignored $LINT_FILES
+          fi
       # No plan, task or preflight ids in source comments.
       - run: bash scripts/lint/check-plan-ids.sh
       - run: npm run typecheck
@@ -74,9 +96,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
+      - uses: ./.github/actions/deps
       - run: npm run build && npx nest build worker && npx nest build bridge
   test:
     needs: changes
@@ -85,12 +105,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 22, cache: npm }
+      - uses: ./.github/actions/deps
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.12" }
       - run: pip install pyyaml==6.0.3
-      - run: npm ci --ignore-scripts && npm rebuild @dodona/dolos-parsers
       # Official static build: the Debian/Ubuntu pandoc fails to start threads under the worker's `prlimit --as=768MiB` cap.
       - name: Install pandoc 3.1.3
         run: |
@@ -100,8 +118,13 @@ jobs:
           echo "$RUNNER_TEMP/pandoc-3.1.3/bin" >> "$GITHUB_PATH"
       - run: pandoc --version
       # --forceExit: one leaked handle must not hang the job until the timeout.
-      - run: npm run test:unit -- --forceExit
-  # Three shards of the selected specs, each on its own runner with its own Redis and in-memory MongoDB.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/jest
+          key: jest-${{ github.job }}-${{ matrix.shard }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: jest-${{ github.job }}-${{ matrix.shard }}-${{ hashFiles('package-lock.json') }}-
+      - run: npm run test:unit -- --forceExit --cacheDirectory=${{ runner.temp }}/jest
+  # Six shards of the selected specs (jest time is about 3 s per spec, so shards beat one big runner), each on its own runner with its own Redis and in-memory MongoDB.
   db:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -109,14 +132,12 @@ jobs:
     timeout-minutes: 25
     strategy:
       fail-fast: false
-      matrix: { shard: [1, 2, 3] }
+      matrix: { shard: [1, 2, 3, 4, 5, 6] }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 22, cache: npm }
+      - uses: ./.github/actions/deps
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.12" }
-      - run: npm ci --ignore-scripts && npm rebuild @dodona/dolos-parsers
       # Some specs use Redis db numbers above 15, so the server needs more than the default 16 databases.
       - name: Start Redis
         run: |
@@ -132,7 +153,12 @@ jobs:
       # --forceExit: jest hangs at exit on leaked handles. In band: the submission-events pub/sub channel is shared
       # across Redis dbs, so concurrent workers would see each other's events.
       # Only the selected specs (changes job); the nightly run covers the rest.
-      - run: npm run test:db -- --forceExit --shard=${{ matrix.shard }}/3 --runTestsByPath $SPECS
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/jest
+          key: jest-${{ github.job }}-${{ matrix.shard }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: jest-${{ github.job }}-${{ matrix.shard }}-${{ hashFiles('package-lock.json') }}-
+      - run: npm run test:db -- --forceExit --cacheDirectory=${{ runner.temp }}/jest --passWithNoTests --shard=${{ matrix.shard }}/6 --runTestsByPath $SPECS
         env: { TEST_REDIS_URL: 'redis://localhost:6379/60', SPECS: '${{ needs.changes.outputs.db_specs }}' }
   openapi:
     needs: changes
@@ -141,11 +167,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 22, cache: npm }
+      - uses: ./.github/actions/deps
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.12" }
-      - run: npm ci --ignore-scripts
       # The swagger CLI plugin does not run under plain jest, so the OpenAPI specs have their own config. Static: the
       # document comes from stubbed controllers (the specs that boot the app are local, npm run test:openapi:db).
       - run: npm run test:openapi -- --forceExit
@@ -169,6 +193,8 @@ jobs:
       # Static checks only; booting api and worker against Mongo and Redis is local: bash deploy/container/smoke.sh <image>.
       - run: bash deploy/container/smoke.sh --static qhhoj-backend:ci
   deploy-scripts:
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -177,9 +203,10 @@ jobs:
       - run: sudo apt-get install -y shellcheck restic rsync
       - run: shellcheck -S warning deploy/qhhoj-deploy deploy/qhhoj-deploy-serve deploy/install-host.sh deploy/nginx/*.sh deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh deploy/backup/qhhoj-backup deploy/backup/*.sh deploy/backup/pull/qhhoj-pull deploy/backup/pull/qhhoj-pull-serve deploy/backup/pull/*.sh
       - name: Run script tests
+        # Four at a time (each test makes its own temp dirs); one test (backup) takes two minutes, so the rest finish inside it.
         run: |
           shopt -s nullglob
-          for t in deploy/*.test.sh deploy/*/*.test.sh deploy/*/*/*.test.sh; do echo "== $t"; bash "$t"; done
+          printf '%s\n' deploy/*.test.sh deploy/*/*.test.sh deploy/*/*/*.test.sh | xargs -P 4 -I{} bash -c 'echo "== {}"; bash "{}" 2>&1 || { echo "FAILED {}"; exit 1; }'
       # deploy/judge copies equal judge-v2's packaging/ at the ref in deploy/judge/judge-release (a tag or a commit SHA).
       - id: judge
         run: echo "ref=$(cat deploy/judge/judge-release)" >> "$GITHUB_OUTPUT"
@@ -191,7 +218,7 @@ jobs:
           sparse-checkout: packaging
       - run: bash scripts/judge/check-deploy-copies.sh judge-v2
   # The required check (with changes). Fails when any job failed or was cancelled. When the change has code, the jobs that
-  # must run (static, build, test, db, openapi, and image when selected) must have succeeded: a skipped one is a failure.
+  # must run (static, build, test, db, openapi, and image when selected; deploy-scripts when deploy/, scripts/judge/ or a workflow changed) must have succeeded: a skipped one is a failure.
   ci-ok:
     if: always()
     needs: [changes, static, build, test, db, openapi, image, deploy-scripts]
@@ -202,7 +229,9 @@ jobs:
           RESULTS: '${{ join(needs.*.result, '' '') }}'
           CODE: ${{ needs.changes.outputs.code }}
           IMAGE: ${{ needs.changes.outputs.image }}
-          MUST: '${{ needs.changes.result }} ${{ needs.deploy-scripts.result }}'
+          MUST: '${{ needs.changes.result }}'
+          DEPLOY: ${{ needs.changes.outputs.deploy }}
+          DEPLOY_JOB: ${{ needs.deploy-scripts.result }}
           CODE_JOBS: '${{ needs.static.result }} ${{ needs.build.result }} ${{ needs.test.result }} ${{ needs.db.result }} ${{ needs.openapi.result }}'
           IMAGE_JOB: ${{ needs.image.result }}
         run: |
@@ -210,6 +239,7 @@ jobs:
           # `! cmd` never trips bash -e, so each check exits explicitly
           ! grep -qE 'failure|cancelled' <<< "$RESULTS" || exit 1
           ! grep -qvE '^(success )*success$' <<< "$MUST" || exit 1
+          [ "$DEPLOY" != true ] || [ "$DEPLOY_JOB" = success ] || exit 1
           if [ "$CODE" = true ]; then
             ! grep -qvE '^(success )*success$' <<< "$CODE_JOBS" || exit 1
             [ "$IMAGE" != true ] || [ "$IMAGE_JOB" = success ] || exit 1
