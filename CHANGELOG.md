@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.40.0
+
+### Minor Changes
+
+- 20ecd78: `GET /contests/current` now returns `standing`: the caller's own rank, score and penalty on the board a non-editor sees (frozen values during a freeze), read from the cached ranking.
+
 ## 2.39.0
 
 ### Minor Changes
