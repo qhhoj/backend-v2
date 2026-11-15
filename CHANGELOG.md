@@ -1,5 +1,12 @@
 # qhhoj-backend
 
+## 2.42.1
+
+### Patch Changes
+
+- a510f73: The home page counts only public problems, so it no longer reveals how many private problems exist.
+- 6da728b: Pasted C++ such as `#include<bits/stdc++.h>` is no longer shown as a heading in comments and blog posts.
+
 ## 2.42.0
 
 ### Minor Changes
