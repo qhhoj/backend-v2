@@ -46,6 +46,7 @@ export * from './test-generation.schema';
 export * from './problem-group.schema';
 export * from './problem-type.schema';
 export * from './problem.schema';
+export * from './problem-setup';
 export * from './rating.schema';
 export * from './revision.schema';
 export * from './setting-revision.schema';
