@@ -23,6 +23,8 @@ export interface SessionData {
   /** Login time (ms): the session ends `auth.sessionMaxDays` after it, however often it is used. */
   createdAt: number;
   cookieIssuedAt: number;
+  /** The cookie was issued as `__Host-qhhoj_session`: the old name is refused for this session from then on. False only on a session from before 2026-11-16. */
+  hostCookie: boolean;
   pendingTotpSecret: string | null;
   webauthnChallenge: string | null;
   webauthnRegistrationChallenge: string | null;
@@ -34,6 +36,7 @@ type StoredSession = Omit<
   | 'impersonatorEpoch'
   | 'createdAt'
   | 'cookieIssuedAt'
+  | 'hostCookie'
   | 'pendingTotpSecret'
   | 'webauthnChallenge'
   | 'webauthnRegistrationChallenge'
@@ -50,6 +53,7 @@ const withDefaults = (json: string): SessionData => ({
   impersonatorEpoch: 0,
   createdAt: 0,
   cookieIssuedAt: 0,
+  hostCookie: false,
   pendingTotpSecret: null,
   webauthnChallenge: null,
   webauthnRegistrationChallenge: null,
@@ -102,6 +106,7 @@ export class SessionService {
       | 'impersonatorEpoch'
       | 'createdAt'
       | 'cookieIssuedAt'
+      | 'hostCookie'
       | 'pendingTotpSecret'
       | 'webauthnChallenge'
       | 'webauthnRegistrationChallenge'
@@ -117,6 +122,7 @@ export class SessionService {
       csrf: randomToken(),
       createdAt: now,
       cookieIssuedAt: now,
+      hostCookie: true,
       pendingTotpSecret: null,
       webauthnChallenge: null,
       webauthnRegistrationChallenge: null,

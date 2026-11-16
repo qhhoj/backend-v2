@@ -577,8 +577,13 @@ describe('the session cookie with COOKIE_SECURE', () => {
       expect(cookie).toContain(attribute);
     expect(cookie).not.toMatch(/Domain=/i);
   });
-  it('accepts the old name once, reissues it as __Host- and expires the old one', async () => {
+  it('accepts the old name only for a session from before __Host-, reissues it and refuses the old name after', async () => {
     const id = await idOf();
+    const asLegacy = () =>
+      api.http().get(ME).set('Cookie', `qhhoj_session=${id}`);
+    // A session issued as __Host- (every new one) is refused under the old name: a planted cookie fails.
+    await asLegacy().expect(401);
+    await api.sessions.update(id, { hostCookie: false });
     const response = await api
       .http()
       .get(ME)
@@ -597,6 +602,7 @@ describe('the session cookie with COOKIE_SECURE', () => {
       .get(ME)
       .set('Cookie', `__Host-qhhoj_session=${id}`)
       .expect(200);
+    await asLegacy().expect(401);
   });
   it('lets the __Host- cookie win over the old name, with no fallback when it is stale', async () => {
     const [own, planted] = [await idOf(), await idOf()];
@@ -632,5 +638,11 @@ describe('the session cookie with COOKIE_SECURE', () => {
       expect(
         cookies.some((c) => c.startsWith(`${name}=;`) && c.includes('Secure')),
       ).toBe(true);
+    // The old name is expired on the site's domain too, where a sibling subdomain can plant it.
+    expect(
+      cookies.some(
+        (c) => c.startsWith('qhhoj_session=;') && /Domain=/i.test(c),
+      ),
+    ).toBe(true);
   });
 });

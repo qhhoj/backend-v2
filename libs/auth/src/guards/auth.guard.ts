@@ -40,6 +40,7 @@ import { PrincipalService } from '../principal/principal.service';
 import {
   clearLegacySessionCookie,
   readSessionCookie,
+  type SessionCookie,
   setSessionCookie,
 } from '../session/session-cookie';
 import { sessionCurrent } from '../session/session-current';
@@ -225,10 +226,10 @@ export class AuthGuard implements CanActivate {
     const cookie = this.sessionCookieOf(request);
     request.auth =
       (await this.fromBearer(request)) ??
-      (await this.fromSession(request, cookie.id)) ??
+      (await this.fromSession(request, cookie)) ??
       undefined;
     if (isStream) return;
-    if (cookie.legacySent) clearLegacySessionCookie(reply);
+    if (cookie.legacySent) clearLegacySessionCookie(reply, this.env);
     await this.refreshCookie(reply, request.auth, cookie.fromLegacy);
   }
 
@@ -300,7 +301,10 @@ export class AuthGuard implements CanActivate {
     const due = Date.now() - auth.session.cookieIssuedAt > COOKIE_REFRESH_MS;
     if (!due && !fromLegacy) return;
     setSessionCookie(reply, auth.sessionId, this.env.cookieSecure);
-    await this.sessions.update(auth.sessionId, { cookieIssuedAt: Date.now() });
+    await this.sessions.update(auth.sessionId, {
+      cookieIssuedAt: Date.now(),
+      hostCookie: true,
+    });
   }
 
   private async fromBearer(
@@ -327,13 +331,16 @@ export class AuthGuard implements CanActivate {
     };
   }
 
+  /** An old-name cookie counts only for a session never issued as `__Host-`: a planted one from a sibling subdomain fails. */
   private async fromSession(
     request: FastifyRequest,
-    sessionId: string | undefined,
+    cookie: SessionCookie,
   ): Promise<AuthContext | null> {
+    const sessionId = cookie.id;
     const session = sessionId ? await this.sessions.get(sessionId) : null;
-    const user = session && (await this.users.findById(session.userId));
     if (!sessionId || !session) return null;
+    if (cookie.fromLegacy && session.hostCookie) return null;
+    const user = await this.users.findById(session.userId);
     if (!user || !(await sessionCurrent(this.users, session, user))) {
       await this.sessions.destroy(sessionId);
       return null;

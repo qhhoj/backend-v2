@@ -102,7 +102,7 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
     if (auth.sessionId) await this.sessions.destroy(auth.sessionId);
-    clearSessionCookie(reply, this.env.cookieSecure);
+    clearSessionCookie(reply, this.env);
   }
 
   /**
@@ -120,7 +120,7 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
     await this.auth.logoutAll(auth.principal.userId);
-    clearSessionCookie(reply, this.env.cookieSecure);
+    clearSessionCookie(reply, this.env);
   }
 
   /**

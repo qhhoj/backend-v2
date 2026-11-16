@@ -14,7 +14,7 @@ const sessionCookieName = (secure: boolean) =>
 export interface SessionCookie {
   /** The session id the request carries; the `__Host-` cookie wins over the old name. */
   id: string | undefined;
-  /** The id came under the old name only: reissue it as `__Host-`. */
+  /** The id came under the old name only: valid only for a session never issued as `__Host-` (`hostCookie`), then reissued. */
   fromLegacy: boolean;
   /** An old-name cookie came along (secure mode): expire it. */
   legacySent: boolean;
@@ -46,11 +46,28 @@ export const setSessionCookie = (
     maxAge: SESSION_TTL_SECONDS,
   });
 
-export const clearLegacySessionCookie = (reply: FastifyReply) =>
+export interface CookieSite {
+  cookieSecure: boolean;
+  siteUrl: string;
+}
+
+/**
+ * Expires the old name host-only and on the site's domain (where a sibling subdomain can plant it), at Path=/ and /api.
+ * Another path or a parent domain cannot be reached from here; the guard refuses such a cookie for a `hostCookie` session anyway.
+ */
+export const clearLegacySessionCookie = (
+  reply: FastifyReply,
+  site: CookieSite,
+) => {
+  const domain = new URL(site.siteUrl).hostname;
   reply.clearCookie(LEGACY_SESSION_COOKIE, { path: '/', secure: true });
+  for (const path of ['/', '/api'])
+    reply.clearCookie(LEGACY_SESSION_COOKIE, { domain, path, secure: true });
+};
 
 /** A browser drops a `__Host-` Set-Cookie, a deleting one too, unless it is Secure with Path=/. */
-export const clearSessionCookie = (reply: FastifyReply, secure: boolean) => {
+export const clearSessionCookie = (reply: FastifyReply, site: CookieSite) => {
+  const secure = site.cookieSecure;
   reply.clearCookie(sessionCookieName(secure), { path: '/', secure });
-  if (secure) clearLegacySessionCookie(reply);
+  if (secure) clearLegacySessionCookie(reply, site);
 };
