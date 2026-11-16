@@ -71,10 +71,8 @@ function statementsOf(row: ProblemRow): Statement[] {
 @Injectable()
 export class RehostHackmdImagesJob implements ContentJob {
   readonly name = 'rehost-hackmd-images';
-  private readonly downloads = new Map<
-    string,
-    DownloadedImage | { failure: string }
-  >();
+  /** Failed downloads only: a downloaded image is not kept, so memory stays one chunk's images however long the run. */
+  private readonly failures = new Map<string, { failure: string }>();
 
   constructor(
     @InjectModel(Problem.name) private readonly problems: Model<Problem>,
@@ -164,13 +162,13 @@ export class RehostHackmdImagesJob implements ContentJob {
   }
 
   private async fetchOnce(url: string) {
-    const known = this.downloads.get(url);
+    const known = this.failures.get(url);
     if (known) return known;
     const image = await this.downloader.download(
       url,
       this.options.includeImgur,
     );
-    this.downloads.set(url, image);
+    if ('failure' in image) this.failures.set(url, image);
     return image;
   }
 }

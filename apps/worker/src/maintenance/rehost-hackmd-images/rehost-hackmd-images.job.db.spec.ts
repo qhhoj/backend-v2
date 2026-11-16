@@ -86,17 +86,24 @@ describe('rehost-hackmd-images job', () => {
     expect(second.planned).toBe(0);
   });
 
-  it('never fetches a host that is not hackmd', async () => {
-    const evil = jest.fn(() =>
-      Promise.resolve(new Response(PNG)),
+  it('never fetches a host that is not hackmd, also after a redirect', async () => {
+    const REDIRECTED = 'https://hackmd.io/_uploads/redirected.png';
+    const evil = jest.fn((url: string) =>
+      Promise.resolve(
+        url === REDIRECTED
+          ? new Response(null, {
+              status: 302,
+              headers: { location: 'https://127.0.0.1/a.png' },
+            })
+          : new Response(PNG),
+      ),
     ) as unknown as typeof fetch;
     const guarded = await setupContentJobsTest(evil);
     try {
       await guarded.raw(Problem.name).insertOne({
         _id: toUuid(newId()),
         code: 'evil',
-        description:
-          '![x](https://169.254.169.254/a.png)\n![y](https://evilhackmd.io/a.png)',
+        description: `![x](https://169.254.169.254/a.png)\n![y](https://evilhackmd.io/a.png)\n![z](${REDIRECTED})`,
       });
       const report = await runContentJob(
         guarded.module.get(RehostHackmdImagesJob),
@@ -104,7 +111,8 @@ describe('rehost-hackmd-images job', () => {
         guarded.storage,
       );
       expect(report.planned).toBe(0);
-      expect(evil).not.toHaveBeenCalled();
+      expect(evil).toHaveBeenCalledTimes(1);
+      expect(evil).toHaveBeenCalledWith(REDIRECTED, expect.anything());
     } finally {
       await guarded.teardown();
     }
