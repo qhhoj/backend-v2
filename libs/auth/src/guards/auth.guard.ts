@@ -55,8 +55,9 @@ type RouteMetadataReader = <Value>(key: string) => Value | undefined;
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  /** SITE_URL's origin plus EXTRA_ORIGINS: the only Origin headers a cookie request may carry. */
-  private readonly allowedOrigins: ReadonlySet<string>;
+  private readonly siteOrigin: string;
+  /** EXTRA_ORIGINS by origin -> its host: such an origin is allowed only on a request to that same host. */
+  private readonly extraOriginHosts: ReadonlyMap<string, string>;
 
   constructor(
     private readonly reflector: Reflector,
@@ -67,10 +68,10 @@ export class AuthGuard implements CanActivate {
     private readonly rateLimit: RateLimitService,
     @Inject(ENV) private readonly env: SiteConfig & WebConfig,
   ) {
-    this.allowedOrigins = new Set([
-      new URL(env.siteUrl).origin,
-      ...env.extraOrigins,
-    ]);
+    this.siteOrigin = new URL(env.siteUrl).origin;
+    this.extraOriginHosts = new Map(
+      env.extraOrigins.map((origin) => [origin, new URL(origin).host]),
+    );
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -196,9 +197,19 @@ export class AuthGuard implements CanActivate {
       !SAFE_METHODS.has(request.method) &&
       !isBearerHeader(request.headers.authorization ?? '') &&
       origin !== undefined &&
-      !this.allowedOrigins.has(origin)
+      !this.isAllowedOrigin(origin, request.headers.host)
     )
       throw new AppError('csrf_failed', 403, 'Cross-origin request rejected');
+  }
+
+  /**
+   * SITE_URL's origin anywhere; an EXTRA_ORIGINS origin only on a request whose Host is its own host (nginx passes `Host $host`).
+   * The staging host and the site are one site to the browser, so SameSite=Lax sends the site's cookie on a request a staging
+   * page makes to the site: binding the extra origin to its own host keeps such a request out. The Host header only narrows the list.
+   */
+  private isAllowedOrigin(origin: string, host: string | undefined): boolean {
+    if (origin === this.siteOrigin) return true;
+    return host !== undefined && this.extraOriginHosts.get(origin) === host;
   }
 
   /** Sets `request.auth` before the cookie refresh, so a failed refresh still leaves the request attributed. A stream route skips the refresh: its reply is hijacked, so the cookie would never be sent while the day's refresh was spent. */

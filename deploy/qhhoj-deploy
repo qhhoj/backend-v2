@@ -50,7 +50,7 @@ EX_DEFERRED=75
 say() { echo "$(date -u +%FT%TZ) $*" >> "$STATE/deploy.log" 2>/dev/null || true; { echo "$*"; } 2>/dev/null || true; }
 warn() { echo "$(date -u +%FT%TZ) $*" >> "$STATE/deploy.log" 2>/dev/null || true; { echo "$*" >&2; } 2>/dev/null || true; }
 die() { warn "qhhoj-deploy: $*"; exit 1; }
-usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' >&2; exit "$EX_USAGE"; }
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' >&2; exit "$EX_USAGE"; }
 defer() { say "deferred: $*"; exit "$EX_DEFERRED"; }
 valid_tag() { [[ $1 =~ $TAG_RE ]] || { warn "qhhoj-deploy: bad version '$1'"; exit "$EX_USAGE"; }; }
 env_value() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -1; }

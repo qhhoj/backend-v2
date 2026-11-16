@@ -392,10 +392,19 @@ describe('AuthGuard', () => {
       .expect(403)
       .expect(errorCode('csrf_failed'));
   });
-  it('accepts an EXTRA_ORIGINS origin by exact match only', async () => {
-    const write = (origin: string) =>
-      api.http().post('/guarded/public-write').set('Origin', origin);
+  it('accepts an EXTRA_ORIGINS origin by exact match, on its own host only', async () => {
+    const write = (origin: string, host = 'staging.example.org') =>
+      api
+        .http()
+        .post('/guarded/public-write')
+        .set('Host', host)
+        .set('Origin', origin);
     await write('https://staging.example.org').expect(201);
+    // A staging page posting to the site itself (same site, so the site's cookie goes along) is refused.
+    await write('https://staging.example.org', 'localhost:5173')
+      .expect(403)
+      .expect(errorCode('csrf_failed'));
+    await write('http://localhost:5173', 'staging.example.org').expect(201);
     for (const origin of [
       'https://staging.example.org.evil.example',
       'https://evil.staging.example.org',
