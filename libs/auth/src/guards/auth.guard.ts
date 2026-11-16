@@ -37,7 +37,11 @@ import {
 import { Permission } from '../principal/permissions';
 import { hasPermission } from '../principal/principal';
 import { PrincipalService } from '../principal/principal.service';
-import { SESSION_COOKIE, setSessionCookie } from '../session/session-cookie';
+import {
+  clearLegacySessionCookie,
+  readSessionCookie,
+  setSessionCookie,
+} from '../session/session-cookie';
 import { sessionCurrent } from '../session/session-current';
 import { COOKIE_REFRESH_MS, SessionService } from '../session/session.service';
 import { apiTokenMatches, parseApiToken } from '../token/api-token';
@@ -112,7 +116,7 @@ export class AuthGuard implements CanActivate {
     const header = request.headers.authorization ?? '';
     const token = /^bearer\s+(\S+)\s*$/i.exec(header)?.[1] ?? null;
     const isUserCredential =
-      request.cookies[SESSION_COOKIE] !== undefined ||
+      this.sessionCookieOf(request).id !== undefined ||
       (header !== '' && !token?.startsWith(SERVICE_KEY_PREFIX));
     if (isUserCredential)
       throw new AppError(
@@ -218,11 +222,18 @@ export class AuthGuard implements CanActivate {
     reply: FastifyReply,
     isStream: boolean,
   ): Promise<void> {
+    const cookie = this.sessionCookieOf(request);
     request.auth =
       (await this.fromBearer(request)) ??
-      (await this.fromSession(request)) ??
+      (await this.fromSession(request, cookie.id)) ??
       undefined;
-    if (!isStream) await this.refreshCookie(reply, request.auth);
+    if (isStream) return;
+    if (cookie.legacySent) clearLegacySessionCookie(reply);
+    await this.refreshCookie(reply, request.auth, cookie.fromLegacy);
+  }
+
+  private sessionCookieOf(request: FastifyRequest) {
+    return readSessionCookie(request.cookies, this.env.cookieSecure);
   }
 
   /** A `@SessionOnly()` route refuses API tokens, except a superuser's on a route marked `@AllowSuperuserToken()`; superuser is read from the principal built from the user row. */
@@ -279,16 +290,15 @@ export class AuthGuard implements CanActivate {
       throw new AppError('forbidden', 403, 'Not allowed while impersonating');
   }
 
+  /** Reissues the cookie once a day, and at once when it came under the old name (`fromLegacy`). */
   private async refreshCookie(
     reply: FastifyReply,
     auth: AuthContext | undefined,
+    fromLegacy: boolean,
   ) {
-    if (
-      !auth?.sessionId ||
-      !auth.session ||
-      Date.now() - auth.session.cookieIssuedAt <= COOKIE_REFRESH_MS
-    )
-      return;
+    if (!auth?.sessionId || !auth.session) return;
+    const due = Date.now() - auth.session.cookieIssuedAt > COOKIE_REFRESH_MS;
+    if (!due && !fromLegacy) return;
     setSessionCookie(reply, auth.sessionId, this.env.cookieSecure);
     await this.sessions.update(auth.sessionId, { cookieIssuedAt: Date.now() });
   }
@@ -319,8 +329,8 @@ export class AuthGuard implements CanActivate {
 
   private async fromSession(
     request: FastifyRequest,
+    sessionId: string | undefined,
   ): Promise<AuthContext | null> {
-    const sessionId = request.cookies[SESSION_COOKIE];
     const session = sessionId ? await this.sessions.get(sessionId) : null;
     const user = session && (await this.users.findById(session.userId));
     if (!sessionId || !session) return null;

@@ -550,3 +550,87 @@ describe('auth session endpoints', () => {
     expect((await meOf(alice!._id)).user?.appearance).toBeNull();
   });
 });
+
+describe('the session cookie with COOKIE_SECURE', () => {
+  let api: ApiTest;
+  let userId: string;
+  beforeAll(async () => {
+    api = await setupApiTest({ env: { COOKIE_SECURE: 'true' } });
+    userId = String((await createUser(api.users, { username: 'sam' }))._id);
+  });
+  afterAll(() => api.teardown());
+  const idOf = async () => (await loginAs(api, userId)).cookie.split('=')[1];
+  const setCookies = (response: { headers: Record<string, unknown> }) =>
+    (response.headers['set-cookie'] as string[] | undefined) ?? [];
+  const usernameOf = (response: { body: unknown }) =>
+    sessionOf(response).user?.username;
+
+  it('is a __Host- cookie: Secure, Path=/, no Domain', async () => {
+    const response = await api
+      .http()
+      .post(LOGIN)
+      .send({ username: 'sam', password: 'correct horse battery' })
+      .expect(200);
+    const [cookie] = setCookies(response);
+    expect(cookie).toMatch(/^__Host-qhhoj_session=[A-Za-z0-9_-]{43};/);
+    for (const attribute of ['Path=/', 'Secure', 'HttpOnly', 'SameSite=Lax'])
+      expect(cookie).toContain(attribute);
+    expect(cookie).not.toMatch(/Domain=/i);
+  });
+  it('accepts the old name once, reissues it as __Host- and expires the old one', async () => {
+    const id = await idOf();
+    const response = await api
+      .http()
+      .get(ME)
+      .set('Cookie', `qhhoj_session=${id}`)
+      .expect(200);
+    expect(usernameOf(response)).toBe('sam');
+    const cookies = setCookies(response);
+    expect(
+      cookies.some((c) => c.startsWith(`__Host-qhhoj_session=${id};`)),
+    ).toBe(true);
+    expect(
+      cookies.some((c) => /^qhhoj_session=;.*Expires=Thu, 01 Jan 1970/.test(c)),
+    ).toBe(true);
+    await api
+      .http()
+      .get(ME)
+      .set('Cookie', `__Host-qhhoj_session=${id}`)
+      .expect(200);
+  });
+  it('lets the __Host- cookie win over the old name, with no fallback when it is stale', async () => {
+    const [own, planted] = [await idOf(), await idOf()];
+    const both = await api
+      .http()
+      .get(ME)
+      .set('Cookie', `qhhoj_session=${planted}; __Host-qhhoj_session=${own}`)
+      .expect(200);
+    expect(usernameOf(both)).toBe('sam');
+    expect(
+      setCookies(both).some((c) => c.startsWith('__Host-qhhoj_session=')),
+    ).toBe(false);
+    expect(setCookies(both).some((c) => c.startsWith('qhhoj_session=;'))).toBe(
+      true,
+    );
+    await api
+      .http()
+      .get(ME)
+      .set('Cookie', `qhhoj_session=${planted}; __Host-qhhoj_session=gone`)
+      .expect(401);
+  });
+  it('logout expires both names', async () => {
+    const id = await idOf();
+    const session = await api.sessions.get(id);
+    const response = await api
+      .http()
+      .post('/api/internal/auth/logout')
+      .set('Cookie', `__Host-qhhoj_session=${id}`)
+      .set('X-CSRF-Token', session!.csrf)
+      .expect(204);
+    const cookies = setCookies(response);
+    for (const name of ['__Host-qhhoj_session', 'qhhoj_session'])
+      expect(
+        cookies.some((c) => c.startsWith(`${name}=;`) && c.includes('Secure')),
+      ).toBe(true);
+  });
+});

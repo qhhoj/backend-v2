@@ -87,7 +87,7 @@ export function buildOpenApiDocument(app: INestApplication): OpenAPIObject {
   const builder = new DocumentBuilder()
     .setTitle('QHHOJ internal API')
     .setVersion('1')
-    .addCookieAuth('qhhoj_session')
+    .addCookieAuth('__Host-qhhoj_session')
     .addBearerAuth();
   for (const [name, description] of API_SECTIONS)
     builder.addTag(name, description);

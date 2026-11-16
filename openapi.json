@@ -18660,7 +18660,7 @@
       },
       "cookie": {
         "in": "cookie",
-        "name": "qhhoj_session",
+        "name": "__Host-qhhoj_session",
         "type": "apiKey"
       }
     }
@@ -23573,7 +23573,7 @@
     },
     "/api/internal/auth/login": {
       "post": {
-        "description": "Public. Verifies the credentials and opens a browser session: the `qhhoj_session` cookie is set and any session the browser already held is replaced. Send the returned `csrfToken` in the `X-CSRF-Token` header on every later non-GET request.\nWhen the account has TOTP or a security key, `twoFactorRequired` is true and `user` is null until the second factor is passed. When the password appears in a known breach, `passwordChangeRequired` is true and only the password change works.\nFailed attempts are limited per account from one IP (10 in 15 minutes) and per IP across all accounts (300 in 15 minutes), then 429 `rate_limited`; a refused attempt is not counted. Failures from elsewhere never lock the owner out, and one user's typos never lock out others behind the same address. Errors: 401 `invalid_credentials`, 403 `banned` (carries the ban reason), 403 `account_not_activated`, 403 `account_disabled` (deactivated by staff).",
+        "description": "Public. Verifies the credentials and opens a browser session: the `__Host-qhhoj_session` cookie is set and any session the browser already held is replaced. Send the returned `csrfToken` in the `X-CSRF-Token` header on every later non-GET request.\nWhen the account has TOTP or a security key, `twoFactorRequired` is true and `user` is null until the second factor is passed. When the password appears in a known breach, `passwordChangeRequired` is true and only the password change works.\nFailed attempts are limited per account from one IP (10 in 15 minutes) and per IP across all accounts (300 in 15 minutes), then 429 `rate_limited`; a refused attempt is not counted. Failures from elsewhere never lock the owner out, and one user's typos never lock out others behind the same address. Errors: 401 `invalid_credentials`, 403 `banned` (carries the ban reason), 403 `account_not_activated`, 403 `account_disabled` (deactivated by staff).",
         "operationId": "AuthController_login",
         "parameters": [],
         "requestBody": {
@@ -23633,7 +23633,7 @@
     },
     "/api/internal/auth/logout": {
       "post": {
-        "description": "Signed-in callers only. Destroys the current session on the server and clears the `qhhoj_session` cookie. Other sessions of the user stay valid. Returns 204.",
+        "description": "Signed-in callers only. Destroys the current session on the server and clears the `__Host-qhhoj_session` cookie. Other sessions of the user stay valid. Returns 204.",
         "operationId": "AuthController_logout",
         "parameters": [],
         "responses": {
