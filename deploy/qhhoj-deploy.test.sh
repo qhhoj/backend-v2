@@ -414,5 +414,21 @@ set +e; out="$(deploy frontend-staging v2.6.0 2>&1)"; code=$?; set -e
 rm -f "$root/etc/nginx/conf.d/zz-qhhoj-staging.conf"; staging_tarball v2.7.0
 out="$(deploy frontend-staging v2.7.0 2>&1)" || fail "staging file check: $out"
 grep -q "nginx does not serve /var/www/qhhoj-staging/current yet" <<<"$out" || fail "staging file-check message: $out"
+# A tarball that unpacks past ARCHIVE_MAX_BYTES is refused before anything is unpacked, also when an owner name with a
+# space would shift the columns of tar's listing.
+staging_tarball v2.8.0
+(cd "$inc" && src="$(mktemp -d)" && tar -xzf frontend-staging-dist-v2.8.0.tar.gz -C "$src" \
+  && tar --owner='a b:0' --group='c d:0' -czf frontend-staging-dist-v2.8.0.tar.gz -C "$src" . && rm -rf "$src" \
+  && sha256sum frontend-staging-dist-v2.8.0.tar.gz > frontend-staging-dist-v2.8.0.tar.gz.sha256)
+set +e; out="$(QHHOJ_DEPLOY_ARCHIVE_MAX_BYTES=10 deploy frontend-staging v2.8.0 2>&1)"; code=$?; set -e
+[ "$code" = 1 ] && [ "$(readlink "$swww/current")" = releases/v2.7.0 ] && [ ! -e "$swww/releases/v2.8.0" ] \
+  || fail "an oversize staging tarball must be refused ($code): $out"
+# Staging has its own lock: a held production lock does not delay it, a held staging lock defers it.
+exec 7>"$root/run/qhhoj-deploy.lock"; flock 7
+QHHOJ_DEPLOY_LOCK_WAIT=1 deploy frontend-staging v2.8.0 >/dev/null 2>&1 || fail "staging must not wait for the production lock"
+exec 7>&- 7>"$root/run/qhhoj-deploy-staging.lock"; flock 7
+set +e; QHHOJ_DEPLOY_LOCK_WAIT=1 deploy rollback frontend-staging >/dev/null 2>&1; code=$?; set -e
+exec 7>&-
+[ "$code" = 75 ] || fail "a held staging lock must defer staging, got $code"
 
 echo "qhhoj-deploy backend ok"

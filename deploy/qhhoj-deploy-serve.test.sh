@@ -94,6 +94,18 @@ for command in 'sudo /usr/local/sbin/qhhoj-deploy frontend sha-0123456789ab' 'su
   [ "$rc" = 1 ] || fail "staging key: '$command' must be refused (exit $rc)"
   grep -q '^sudo' "$calls" && fail "staging key: '$command' reached sudo"
 done
+# The staging key is an allow-list: a verb the general dispatch gains later stays refused to it.
+# shellcheck disable=SC2016 # the sed pattern is the dispatcher's text
+sed 's|^    \*) refuse "${command:-<no command>}" ;;|    "audit-log") exit 0 ;;\n&|' "$here/qhhoj-deploy-serve" > "$work/serve-future"
+grep -q '"audit-log") exit 0' "$work/serve-future" || fail "the future-verb copy of the dispatcher"
+SSH_ORIGINAL_COMMAND=audit-log QHHOJ_DEPLOY_ROOT="$host" bash "$work/serve-future" > "$out" 2>&1 || fail "full mode takes the future verb"
+SSH_ORIGINAL_COMMAND=audit-log QHHOJ_DEPLOY_ROOT="$host" bash "$work/serve-future" -c "$FORCED_STAGING" > "$out" 2>&1 \
+  && fail "the staging key must refuse a verb that is not on its allow-list"
+# A shell request (no client command): sshd runs the forced command alone, which is refused for either key.
+for forced in "$FORCED_STAGING" /usr/local/sbin/qhhoj-deploy-serve; do
+  : > "$calls"; as_shell -c "$forced" > "$out" 2>&1 && fail "a shell request with forced command '$forced'"
+  grep -q 'refused: shell request' "$calls" && ! grep -q '^sudo' "$calls" || fail "the shell request '$forced' is refused and logged"
+done
 # A forced command with an unknown option refuses everything; the production key's forced command keeps full rights.
 SSH_ORIGINAL_COMMAND='sudo /usr/local/sbin/qhhoj-deploy frontend sha-0123456789ab' QHHOJ_DEPLOY_ROOT="$host" \
   bash "$here/qhhoj-deploy-serve" -c '/usr/local/sbin/qhhoj-deploy-serve --staging' > "$out" 2>&1 && fail "an unknown forced option"
@@ -124,6 +136,13 @@ for target in fakehost: fakehost:/var/lib/qhhoj-deploy/ fakehost:/var/lib/qhhoj-
   fakehost:/var/lib/qhhoj-deploy/incoming/sub/; do
   rsync -e ssh-staging "$work/up/$staged" "$target" > "$out" 2>&1 && fail "a staging upload to $target"
 done
+# A file over the size limit stops the receive: nothing lands.
+head -c 200000 /dev/zero > "$work/up/frontend-staging-dist-v9.0.0.tar.gz"
+QHHOJ_STAGING_MAX_FILE_KB=64 rsync -e ssh-staging "$work/up/frontend-staging-dist-v9.0.0.tar.gz" \
+  fakehost:/var/lib/qhhoj-deploy/incoming/ > "$out" 2>&1 && fail "an oversize staging upload must be refused"
+[ ! -e "$incoming/frontend-staging-dist-v9.0.0.tar.gz" ] || fail "an oversize staging upload lands nothing"
+: > "$calls"; rsync -e ssh-staging "$work/up/$staged" fakehost:/var/lib/qhhoj-deploy/incoming/ > "$out" 2>&1 || fail "staging re-upload"
+grep -q "staging upload $staged\$" "$calls" || fail "the staging upload logs the moved names"
 [ -z "$(find "$incoming" -name '.staging.*')" ] || fail "the staging upload leaves no private directory"
 [ "$(find "$host" -name 'frontend-staging-dist-*' | wc -l)" = 2 ] || fail "nothing staging lands outside incoming/"
 echo "qhhoj-deploy-serve ok"

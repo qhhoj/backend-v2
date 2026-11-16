@@ -34,6 +34,8 @@ use_frontend() { # frontend|frontend-staging
 }
 HEALTH_TRIES="${QHHOJ_DEPLOY_HEALTH_TRIES:-30}"
 LOCK_WAIT="${QHHOJ_DEPLOY_LOCK_WAIT:-900}" # seconds; sudo env_reset keeps the override out of production
+# A frontend tarball unpacks to at most this many bytes: a small gzip bomb must not fill the disk shared with production.
+ARCHIVE_MAX_BYTES="${QHHOJ_DEPLOY_ARCHIVE_MAX_BYTES:-536870912}" # 512 MiB
 # Seconds every backend unit must stay up after the restart: longer than one restart cycle (RestartSec=3 plus a boot).
 SETTLE=30
 STEP_TIMEOUT="${QHHOJ_DEPLOY_STEP_TIMEOUT:-1800}" # seconds per one-shot step (index build, migrations)
@@ -267,10 +269,12 @@ verify_checksum() { # <dir> <name>: sha256 of the tarball equals the hash in <na
   [ -n "$want" ] && [ "$got" = "$want" ]
 }
 
-archive_safe() { # <tarball>: only regular files and directories, no absolute or '..' member names
+archive_safe() { # <tarball>: only regular files and directories, no absolute or '..' member names, ARCHIVE_MAX_BYTES in all
   local verbose names
-  verbose="$(tar -tvzf "$1")" && names="$(tar -tzf "$1")" || return 1
-  ! grep -qvE '^[-d]' <<<"$verbose" && ! grep -qE '(^/|(^|/)\.\.(/|$))' <<<"$names"
+  # --numeric-owner: owner names come from the tarball and may hold spaces, which would shift the size column
+  verbose="$(tar --numeric-owner -tvzf "$1")" && names="$(tar -tzf "$1")" || return 1
+  ! grep -qvE '^[-d]' <<<"$verbose" && ! grep -qE '(^/|(^|/)\.\.(/|$))' <<<"$names" \
+    && awk -v max="$ARCHIVE_MAX_BYTES" '{ total += $3 } END { exit !(total <= max) }' <<<"$verbose"
 }
 
 unpack_frontend() { # <version>: verified private copy of the incoming tarball -> releases/<version>
@@ -278,7 +282,7 @@ unpack_frontend() { # <version>: verified private copy of the incoming tarball -
   STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
   stage_incoming "$name"
   verify_checksum "$STAGE" "$name" || die "checksum mismatch for $name"
-  archive_safe "$STAGE/$name" || die "$name has a member that is not a file or directory, or an unsafe path"
+  archive_safe "$STAGE/$name" || die "$name has a member that is not a file or directory, an unsafe path, or is too large"
   rm -rf "$dir.tmp"; mkdir -p "$dir.tmp"
   tar -xzf "$STAGE/$name" -C "$dir.tmp" --no-same-owner --no-same-permissions || { rm -rf "$dir.tmp"; die "cannot unpack $name"; }
   [ -f "$dir.tmp/index.html" ] || { rm -rf "$dir.tmp"; die "$name has no index.html"; }
@@ -327,9 +331,16 @@ deploy_frontend() { # frontend|frontend-staging <version>
   exit 1
 }
 
+lock_file() { # <command> <app>: staging takes its own lock, so it never queues in front of a production deploy or rollback
+  case "${1:-} ${2:-}" in
+    "frontend-staging "* | "rollback frontend-staging") echo "$ROOT/run/qhhoj-deploy-staging.lock" ;;
+    *) echo "$ROOT/run/qhhoj-deploy.lock" ;;
+  esac
+}
+
 main() {
   mkdir -p "$STATE" "$ROOT/run"
-  exec 9>"$ROOT/run/qhhoj-deploy.lock"
+  exec 9>"$(lock_file "$@")"
   flock -w "$LOCK_WAIT" 9 || defer "another deploy holds the lock"
   case "${1:-}" in
     backend) deploy_backend "${2:-}" "${@:3}" ;;
