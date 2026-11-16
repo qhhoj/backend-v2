@@ -381,7 +381,7 @@ shist() { cat "$root/var/lib/qhhoj-deploy/frontend-staging.history"; }
 fresh_staging() {
   fresh; stub curl "$site_curl"
   echo "STAGING_SITE_URL=https://staging.oj.test" >> "$root/etc/qhhoj/env"
-  echo "root /var/www/qhhoj-staging/current;" > "$root/etc/nginx/conf.d/qhhoj-staging.conf"
+  echo "root /var/www/qhhoj-staging/current;" > "$root/etc/nginx/conf.d/zz-qhhoj-staging.conf"
 }
 fresh_staging; tarball v2.1.0; deploy frontend v2.1.0 >/dev/null || fail "production baseline"
 staging_tarball v2.1.0; : > "$calls"
@@ -411,7 +411,7 @@ set +e; out="$(deploy frontend-staging v2.6.0 2>&1)"; code=$?; set -e
 [ "$code" = 1 ] && grep -q "STAGING_SITE_URL is not set" "$root/var/lib/qhhoj-deploy/deploy.log" \
   && [ "$(readlink "$swww/current")" = releases/v2.4.0 ] || fail "missing STAGING_SITE_URL ($code): $out"
 # before nginx serves the staging root: a file check only
-rm -f "$root/etc/nginx/conf.d/qhhoj-staging.conf"; staging_tarball v2.7.0
+rm -f "$root/etc/nginx/conf.d/zz-qhhoj-staging.conf"; staging_tarball v2.7.0
 out="$(deploy frontend-staging v2.7.0 2>&1)" || fail "staging file check: $out"
 grep -q "nginx does not serve /var/www/qhhoj-staging/current yet" <<<"$out" || fail "staging file-check message: $out"
 

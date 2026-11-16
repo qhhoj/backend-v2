@@ -64,4 +64,66 @@ as_shell -c 'id' > "$out" 2>&1 && fail "the login shell refuses other commands"
 SSH_CONNECTION='192.0.2.1 50000 192.0.2.2 22' serve 'rsync --server -logDtpre.iLsfxCIvu . /var/lib/qhhoj-deploy/incoming/' \
   > "$out" 2>&1 \
   && fail "QHHOJ_DEPLOY_ROOT must be ignored under sshd"
+# The staging key (RUNBOOK "Staging frontend" step 6): sshd runs the login shell (the dispatcher) with -c and the forced
+# command, SSH_ORIGINAL_COMMAND holding the client's command.
+FORCED_STAGING='/usr/local/sbin/qhhoj-deploy-serve --staging-only'
+staging() { SSH_ORIGINAL_COMMAND="$1" QHHOJ_DEPLOY_ROOT="$host" bash "$here/qhhoj-deploy-serve" -c "$FORCED_STAGING"; }
+cat > "$bin/ssh-staging" <<EOF
+#!/usr/bin/env bash
+while [ \$# -gt 0 ]; do case "\$1" in -[iloFp]) shift 2 ;; -*) shift ;; *) break ;; esac; done
+shift
+SSH_ORIGINAL_COMMAND="\$*" QHHOJ_DEPLOY_ROOT="$host" exec bash "$here/qhhoj-deploy-serve" -c "$FORCED_STAGING"
+EOF
+chmod +x "$bin/ssh-staging"
+for command in 'sudo /usr/local/sbin/qhhoj-deploy frontend-staging sha-0123456789ab' \
+  'sudo /usr/local/sbin/qhhoj-deploy frontend-staging v2.1.0' 'sudo /usr/local/sbin/qhhoj-deploy rollback frontend-staging'; do
+  : > "$calls"; staging "$command" > "$out" 2>&1 || fail "staging key: '$command'"
+  grep -qx "sudo -n ${command#sudo }" "$calls" || fail "the staging key runs '$command'"
+done
+: > "$calls"; SSH_ORIGINAL_COMMAND='sudo /usr/local/sbin/qhhoj-deploy frontend sha-0123456789ab' QHHOJ_DEPLOY_ROOT="$host" \
+  bash "$here/qhhoj-deploy-serve" --staging-only > "$out" 2>&1 && fail "--staging-only as a plain argument must restrict too"
+grep -q '^sudo' "$calls" && fail "--staging-only as a plain argument reached sudo"
+for command in 'sudo /usr/local/sbin/qhhoj-deploy frontend sha-0123456789ab' 'sudo /usr/local/sbin/qhhoj-deploy backend v2.1.0' \
+  'sudo /usr/local/sbin/qhhoj-deploy backend v2.1.0 --force' 'sudo /usr/local/sbin/qhhoj-deploy rollback backend' \
+  'sudo /usr/local/sbin/qhhoj-deploy rollback frontend' 'sudo /usr/local/sbin/qhhoj-deploy status' \
+  'sudo /usr/local/sbin/qhhoj-deploy frontend-staging ../../x' 'sudo /usr/local/sbin/qhhoj-deploy frontend-staging sha-0123456789ab --force' \
+  'sudo /usr/local/sbin/qhhoj-deploy frontend-staging sha-0123456789ab frontend' 'sudo /usr/local/sbin/qhhoj-deploy frontend-staging' \
+  'sudo /usr/local/sbin/qhhoj-deploy  frontend-staging sha-0123456789ab' 'sudo /bin/sh frontend-staging sha-0123456789ab' \
+  'rsync --server --sender -logDtpre.iLsfxCIvu . /var/lib/qhhoj-deploy/incoming/' ls ''; do
+  : > "$calls"; set +e; staging "$command" > "$out" 2>&1; rc=$?; set -e
+  [ "$rc" = 1 ] || fail "staging key: '$command' must be refused (exit $rc)"
+  grep -q '^sudo' "$calls" && fail "staging key: '$command' reached sudo"
+done
+# A forced command with an unknown option refuses everything; the production key's forced command keeps full rights.
+SSH_ORIGINAL_COMMAND='sudo /usr/local/sbin/qhhoj-deploy frontend sha-0123456789ab' QHHOJ_DEPLOY_ROOT="$host" \
+  bash "$here/qhhoj-deploy-serve" -c '/usr/local/sbin/qhhoj-deploy-serve --staging' > "$out" 2>&1 && fail "an unknown forced option"
+: > "$calls"; SSH_ORIGINAL_COMMAND='sudo /usr/local/sbin/qhhoj-deploy backend v2.1.0' QHHOJ_DEPLOY_ROOT="$host" \
+  bash "$here/qhhoj-deploy-serve" -c /usr/local/sbin/qhhoj-deploy-serve > "$out" 2>&1 || fail "production forced command"
+grep -qx 'sudo -n /usr/local/sbin/qhhoj-deploy backend v2.1.0' "$calls" || fail "the production key keeps the backend deploy"
+
+# Staging uploads: only frontend-staging-dist-<version>.tar.gz[.sha256] reach incoming/; any other name refuses the whole
+# upload, so the staging key can never replace a production tarball between its upload and its deploy.
+staged=frontend-staging-dist-sha-0123456789ab.tar.gz
+echo prod > "$incoming/frontend-dist-sha-2.tar.gz"
+echo dist > "$work/up/$staged"; echo sum > "$work/up/$staged.sha256"
+rsync -e ssh-staging "$work/up/$staged" "$work/up/$staged.sha256" fakehost:/var/lib/qhhoj-deploy/incoming/ > "$out" 2>&1 \
+  || fail "staging upload"
+[ "$(cat "$incoming/$staged")" = dist ] && [ -f "$incoming/$staged.sha256" ] || fail "the staging upload lands in incoming/"
+mkdir -p "$work/bad/frontend-staging-dist-v1.0.0.tar.gz"
+echo evil > "$work/up/frontend-dist-sha-2.tar.gz"; echo evil > "$work/up/frontend-staging-dist-x.tar.gz"
+echo two > "$work/up/frontend-staging-dist-v1.0.0.tar.gz"
+for files in "$work/up/frontend-dist-sha-2.tar.gz" "$work/up/frontend-staging-dist-x.tar.gz" \
+  "$work/up/frontend-staging-dist-v1.0.0.tar.gz $work/up/frontend-dist-sha-2.tar.gz" "-r $work/bad/"; do
+  # shellcheck disable=SC2086 # $files is a word list
+  rsync -e ssh-staging $files fakehost:/var/lib/qhhoj-deploy/incoming/ > "$out" 2>&1 && fail "staging upload of $files"
+done
+[ "$(cat "$incoming/frontend-dist-sha-2.tar.gz")" = prod ] || fail "the staging key replaced a production tarball"
+[ ! -e "$incoming/frontend-staging-dist-v1.0.0.tar.gz" ] && [ ! -e "$incoming/frontend-staging-dist-x.tar.gz" ] \
+  || fail "a refused staging upload moves nothing"
+for target in fakehost: fakehost:/var/lib/qhhoj-deploy/ fakehost:/var/lib/qhhoj-deploy/incoming/../x \
+  fakehost:/var/lib/qhhoj-deploy/incoming/sub/; do
+  rsync -e ssh-staging "$work/up/$staged" "$target" > "$out" 2>&1 && fail "a staging upload to $target"
+done
+[ -z "$(find "$incoming" -name '.staging.*')" ] || fail "the staging upload leaves no private directory"
+[ "$(find "$host" -name 'frontend-staging-dist-*' | wc -l)" = 2 ] || fail "nothing staging lands outside incoming/"
 echo "qhhoj-deploy-serve ok"

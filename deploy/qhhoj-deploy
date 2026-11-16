@@ -199,12 +199,13 @@ previous_entry() { # <app>: the history entry before the live one (empty when th
   return 0
 }
 
-target_present() { # <app> <version>: the image or release that a rollback would switch to still exists
-  if [ "$1" = backend ]; then podman image exists "$IMAGE:$2"; else use_frontend "$1" && [ -d "$WWW/releases/$2" ]; fi
+target_present() { # <app> <version>: the image or release that a rollback would switch to still exists (no side effect)
+  if [ "$1" = backend ]; then podman image exists "$IMAGE:$2"; else [ -d "$WWW/releases/$2" ]; fi
 }
 
 rollback() { # backend|frontend|frontend-staging: history moves only after the target is confirmed present
   local app=$1 target
+  [ "$app" = backend ] || use_frontend "$app" # WWW, SERVED_ROOT, URL_KEY for every frontend step below
   target="$(previous_entry "$app")"
   [ -n "$target" ] || die "no previous $app version to roll back to"
   target_present "$app" "$target" || die "$app $target is no longer present; history unchanged"

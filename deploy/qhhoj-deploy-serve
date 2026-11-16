@@ -7,6 +7,10 @@
 #                                               names it in full, so the same upload works on a host without this script
 # Anything else (a login, sftp, another command) is refused with exit 1 and logged to syslog (auth, tag qhhoj-deploy-serve).
 # As the forced command it reads SSH_ORIGINAL_COMMAND; as the login shell sshd runs it with `-c <command>`.
+# --staging-only (the staging key's forced command, RUNBOOK "Staging frontend" step 6) allows only
+#   sudo /usr/local/sbin/qhhoj-deploy frontend-staging <version>, sudo ... rollback frontend-staging, and the upload of
+#   frontend-staging-dist-<version>.tar.gz[.sha256]: received in a private directory first, moved into incoming/ by name
+#   (the names travel inside the rsync protocol, not in the command), so the staging key never touches another tarball.
 set -euo pipefail
 
 # Tests set ROOT and stub tools; under sshd (SSH_CONNECTION) the override is ignored whatever AcceptEnv passes on.
@@ -18,6 +22,10 @@ HELPER=/usr/local/sbin/qhhoj-deploy
 UPLOAD_PATH=/var/lib/qhhoj-deploy/incoming/ # as the client names it
 INCOMING="$ROOT$UPLOAD_PATH"
 TAG=qhhoj-deploy-serve
+VERSION_RE='(v[0-9]+\.[0-9]+\.[0-9]+|sha-[0-9a-f]{12})' # qhhoj-deploy's TAG_RE
+STAGING_HELPER_RE="^sudo $HELPER (frontend-staging $VERSION_RE|rollback frontend-staging)\$"
+STAGING_UPLOAD_RE="^frontend-staging-dist-$VERSION_RE\.tar\.gz(\.sha256)?\$"
+STAGING_ONLY=0
 
 note() { logger -t "$TAG" -p "auth.$1" -- "$2" || true; } # priority message
 refuse() { note warning "refused: ${1:0:200}"; echo "$TAG: refused" >&2; exit 1; }
@@ -37,12 +45,47 @@ serve_upload() { # rsync --server <opts> . /var/lib/qhhoj-deploy/incoming/: rrsy
   plain_words "$1"
   [[ $1 == *" . $UPLOAD_PATH" ]] || refuse "$1"
   note info "upload"
+  [ "$STAGING_ONLY" = 0 ] || serve_staging_upload "$1"
   SSH_ORIGINAL_COMMAND="${1%"$UPLOAD_PATH"}." exec rrsync -wo -no-del "$INCOMING"
+}
+
+serve_staging_upload() { # the same rsync into a private directory; only staging tarball names then move into incoming/
+  local received path name rc=0
+  received="$(mktemp -d "$INCOMING/.staging.XXXXXX")"
+  trap 'rm -rf "$received"' EXIT
+  SSH_ORIGINAL_COMMAND="${1%"$UPLOAD_PATH"}." rrsync -wo -no-del "$received" || rc=$?
+  [ "$rc" = 0 ] || exit "$rc"
+  for path in "$received"/* "$received"/.[!.]*; do
+    [ -e "$path" ] || [ -L "$path" ] || continue
+    name="${path##*/}"
+    [[ $name =~ $STAGING_UPLOAD_RE ]] && [ -f "$path" ] && [ ! -L "$path" ] || refuse "staging upload of $name"
+  done
+  for path in "$received"/*; do
+    if [ -f "$path" ]; then mv -f -T "$path" "$INCOMING/${path##*/}"; fi
+  done
+  exit 0
+}
+
+serve_mode() { # [-c "<forced command>"] or [--staging-only]: the key's forced command picks the mode; unknown words refuse
+  local forced="${1:-}"
+  if [ "$forced" = -c ]; then
+    [ -n "${SSH_ORIGINAL_COMMAND+set}" ] || return 0 # the login shell running a plain command: full mode
+    forced="${2:-}"; forced="${forced#*qhhoj-deploy-serve}"; forced="${forced# }"
+  fi
+  case "$forced" in
+    "") ;;
+    --staging-only) STAGING_ONLY=1 ;;
+    *) refuse "forced command option ${forced}" ;;
+  esac
 }
 
 main() {
   local command="${SSH_ORIGINAL_COMMAND-}"
+  serve_mode "$@"
   if [ -z "${SSH_ORIGINAL_COMMAND+set}" ] && [ "${1:-}" = -c ]; then command="${2:-}"; fi
+  if [ "$STAGING_ONLY" = 1 ] && [[ $command == "sudo "* ]] && ! [[ $command =~ $STAGING_HELPER_RE ]]; then
+    refuse "staging key: $command"
+  fi
   case "$command" in
     "sudo $HELPER "*) serve_helper "$command" ;;
     "rsync --server --sender "*) refuse "$command" ;;
