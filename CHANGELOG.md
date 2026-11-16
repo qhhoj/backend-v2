@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.43.1
+
+### Patch Changes
+
+- e12e1e2: Manual worker steps `rehost-hackmd-images` and `rerender-content`: dry run by default, `--apply --backup <file>` to write.
+
 ## 2.43.0
 
 ### Minor Changes
