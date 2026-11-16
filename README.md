@@ -99,7 +99,7 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 
 ### Jobs (`apps/worker/src/jobs`)
 
-One folder per job. Schedule: a repeating job registers its own scheduler when the worker starts; the rest run when something enqueues them. One-off data fixes are not jobs: they are migrations (`apps/worker/src/migrations`), run by the deploy, never at worker start.
+One folder per job. Schedule: a repeating job registers its own scheduler when the worker starts; the rest run when something enqueues them. One-off data fixes are not jobs: they are migrations (`apps/worker/src/migrations`), run by the deploy, never at worker start. A one-off fix an operator must choose to run, with a dry run and a backup, is a manual content job (`apps/worker/src/maintenance`): `worker rehost-hackmd-images` and `worker rerender-content`, each `[--dry-run | --apply --backup <file>]`; the deploy never runs them.
 
 | Job                              | Schedule                 | Purpose                                                                 |
 | -------------------------------- | ------------------------ | ----------------------------------------------------------------------- |
