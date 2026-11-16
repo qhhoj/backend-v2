@@ -1,4 +1,9 @@
-import { hashPassword, PASSWORD_ITERATIONS, UsersRepository } from '@libs/auth';
+import {
+  hashPassword,
+  LEGACY_COOKIE_GRACE_MS,
+  PASSWORD_ITERATIONS,
+  UsersRepository,
+} from '@libs/auth';
 
 import { AppError, REDIS } from '@libs/common';
 
@@ -577,10 +582,31 @@ describe('the session cookie with COOKIE_SECURE', () => {
       expect(cookie).toContain(attribute);
     expect(cookie).not.toMatch(/Domain=/i);
   });
-  it('accepts the old name only for a session from before __Host-, reissues it and refuses the old name after', async () => {
+  // Only Date is faked: the database, Redis and HTTP keep real timers.
+  const fakeClock = () =>
+    jest.useFakeTimers({
+      now: Date.now(),
+      doNotFake: [
+        'hrtime',
+        'nextTick',
+        'performance',
+        'queueMicrotask',
+        'setImmediate',
+        'clearImmediate',
+        'setInterval',
+        'clearInterval',
+        'setTimeout',
+        'clearTimeout',
+      ],
+    });
+  const legacyRequest = (id: string) =>
+    api.http().get(ME).set('Cookie', `qhhoj_session=${id}`);
+  afterEach(() => jest.useRealTimers());
+
+  it('accepts the old name only for a session from before __Host-, reissues it and keeps it for the grace window', async () => {
+    fakeClock();
     const id = await idOf();
-    const asLegacy = () =>
-      api.http().get(ME).set('Cookie', `qhhoj_session=${id}`);
+    const asLegacy = () => legacyRequest(id);
     // A session issued as __Host- (every new one) is refused under the old name: a planted cookie fails.
     await asLegacy().expect(401);
     await api.sessions.update(id, { hostCookie: false });
@@ -602,7 +628,24 @@ describe('the session cookie with COOKIE_SECURE', () => {
       .get(ME)
       .set('Cookie', `__Host-qhhoj_session=${id}`)
       .expect(200);
-    await asLegacy().expect(401);
+    // The page's parallel requests on load still carry the old name.
+    jest.advanceTimersByTime(LEGACY_COOKIE_GRACE_MS - 1000);
+    await asLegacy().expect(200);
+  });
+  it('refuses the old name once the grace window ends; a later old-name request does not extend it', async () => {
+    fakeClock();
+    const id = await idOf();
+    await api.sessions.update(id, { hostCookie: false });
+    await legacyRequest(id).expect(200);
+    jest.advanceTimersByTime(LEGACY_COOKIE_GRACE_MS / 2);
+    await legacyRequest(id).expect(200);
+    jest.advanceTimersByTime(LEGACY_COOKIE_GRACE_MS / 2);
+    await legacyRequest(id).expect(401);
+    await api
+      .http()
+      .get(ME)
+      .set('Cookie', `__Host-qhhoj_session=${id}`)
+      .expect(200);
   });
   it('lets the __Host- cookie win over the old name, with no fallback when it is stale', async () => {
     const [own, planted] = [await idOf(), await idOf()];

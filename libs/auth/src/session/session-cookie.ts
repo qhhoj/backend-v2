@@ -1,6 +1,6 @@
 import '@fastify/cookie';
 import { FastifyReply } from 'fastify';
-import { SESSION_TTL_SECONDS } from './session.service';
+import { SESSION_TTL_SECONDS, type SessionData } from './session.service';
 
 /** `__Host-`: the browser takes it only Secure, Path=/ and without Domain, so a sibling subdomain cannot plant one. */
 export const SESSION_COOKIE = '__Host-qhhoj_session';
@@ -11,10 +11,21 @@ export const LEGACY_SESSION_COOKIE = 'qhhoj_session';
 const sessionCookieName = (secure: boolean) =>
   secure ? SESSION_COOKIE : LEGACY_SESSION_COOKIE;
 
+/** The page's parallel requests on load all carry the old name: they still pass this long after the first one reissued it. */
+export const LEGACY_COOKIE_GRACE_MS = 60_000;
+
+/** The old name is valid for a session never issued as `__Host-`, or within the grace window after the old name marked it. */
+export const acceptsLegacyCookie = (
+  session: Pick<SessionData, 'hostCookie' | 'hostCookieMarkedAt'>,
+  now: number,
+) =>
+  !session.hostCookie ||
+  now - session.hostCookieMarkedAt < LEGACY_COOKIE_GRACE_MS;
+
 export interface SessionCookie {
   /** The session id the request carries; the `__Host-` cookie wins over the old name. */
   id: string | undefined;
-  /** The id came under the old name only: valid only for a session never issued as `__Host-` (`hostCookie`), then reissued. */
+  /** The id came under the old name only: valid only as `acceptsLegacyCookie` allows, then reissued. */
   fromLegacy: boolean;
   /** An old-name cookie came along (secure mode): expire it. */
   legacySent: boolean;

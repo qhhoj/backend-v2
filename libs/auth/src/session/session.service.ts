@@ -25,6 +25,8 @@ export interface SessionData {
   cookieIssuedAt: number;
   /** The cookie was issued as `__Host-qhhoj_session`: the old name is refused for this session from then on. False only on a session from before 2026-11-16. */
   hostCookie: boolean;
+  /** When an old-name request marked `hostCookie` (ms); 0 for a session created as `__Host-`. Starts the old name's grace window. */
+  hostCookieMarkedAt: number;
   pendingTotpSecret: string | null;
   webauthnChallenge: string | null;
   webauthnRegistrationChallenge: string | null;
@@ -37,6 +39,7 @@ type StoredSession = Omit<
   | 'createdAt'
   | 'cookieIssuedAt'
   | 'hostCookie'
+  | 'hostCookieMarkedAt'
   | 'pendingTotpSecret'
   | 'webauthnChallenge'
   | 'webauthnRegistrationChallenge'
@@ -54,6 +57,7 @@ const withDefaults = (json: string): SessionData => ({
   createdAt: 0,
   cookieIssuedAt: 0,
   hostCookie: false,
+  hostCookieMarkedAt: 0,
   pendingTotpSecret: null,
   webauthnChallenge: null,
   webauthnRegistrationChallenge: null,
@@ -107,6 +111,7 @@ export class SessionService {
       | 'createdAt'
       | 'cookieIssuedAt'
       | 'hostCookie'
+  | 'hostCookieMarkedAt'
       | 'pendingTotpSecret'
       | 'webauthnChallenge'
       | 'webauthnRegistrationChallenge'
@@ -123,6 +128,7 @@ export class SessionService {
       createdAt: now,
       cookieIssuedAt: now,
       hostCookie: true,
+      hostCookieMarkedAt: 0,
       pendingTotpSecret: null,
       webauthnChallenge: null,
       webauthnRegistrationChallenge: null,

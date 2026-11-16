@@ -38,6 +38,7 @@ import { Permission } from '../principal/permissions';
 import { hasPermission } from '../principal/principal';
 import { PrincipalService } from '../principal/principal.service';
 import {
+  acceptsLegacyCookie,
   clearLegacySessionCookie,
   readSessionCookie,
   type SessionCookie,
@@ -301,9 +302,12 @@ export class AuthGuard implements CanActivate {
     const due = Date.now() - auth.session.cookieIssuedAt > COOKIE_REFRESH_MS;
     if (!due && !fromLegacy) return;
     setSessionCookie(reply, auth.sessionId, this.env.cookieSecure);
+    const now = Date.now();
     await this.sessions.update(auth.sessionId, {
-      cookieIssuedAt: Date.now(),
+      cookieIssuedAt: now,
       hostCookie: true,
+      // only the first mark starts the grace window; later old-name requests do not extend it
+      hostCookieMarkedAt: auth.session.hostCookie ? undefined : now,
     });
   }
 
@@ -331,7 +335,7 @@ export class AuthGuard implements CanActivate {
     };
   }
 
-  /** An old-name cookie counts only for a session never issued as `__Host-`: a planted one from a sibling subdomain fails. */
+  /** An old-name cookie counts only as `acceptsLegacyCookie` allows: a planted one from a sibling subdomain fails. */
   private async fromSession(
     request: FastifyRequest,
     cookie: SessionCookie,
@@ -339,7 +343,8 @@ export class AuthGuard implements CanActivate {
     const sessionId = cookie.id;
     const session = sessionId ? await this.sessions.get(sessionId) : null;
     if (!sessionId || !session) return null;
-    if (cookie.fromLegacy && session.hostCookie) return null;
+    if (cookie.fromLegacy && !acceptsLegacyCookie(session, Date.now()))
+      return null;
     const user = await this.users.findById(session.userId);
     if (!user || !(await sessionCurrent(this.users, session, user))) {
       await this.sessions.destroy(sessionId);
