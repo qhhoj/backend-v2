@@ -50,7 +50,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Sign in with a username and password',
     description: [
-      'Public. Verifies the credentials and opens a browser session: the `qhhoj_session` cookie is set and any session the browser already held is replaced. Send the returned `csrfToken` in the `X-CSRF-Token` header on every later non-GET request.',
+      'Public. Verifies the credentials and opens a browser session: the `__Host-qhhoj_session` cookie is set and any session the browser already held is replaced. Send the returned `csrfToken` in the `X-CSRF-Token` header on every later non-GET request.',
       'When the account has TOTP or a security key, `twoFactorRequired` is true and `user` is null until the second factor is passed. When the password appears in a known breach, `passwordChangeRequired` is true and only the password change works.',
       `Failed attempts are limited per account from one IP (${FAILURE_LIMIT} in ${FAILURE_WINDOW_SECONDS / MINUTE_S} minutes) and per IP across all accounts (${FAILURE_IP_LIMIT} in ${FAILURE_WINDOW_SECONDS / MINUTE_S} minutes), then 429 \`rate_limited\`; a refused attempt is not counted. Failures from elsewhere never lock the owner out, and one user's typos never lock out others behind the same address. Errors: 401 \`invalid_credentials\`, 403 \`banned\` (carries the ban reason), 403 \`account_not_activated\`, 403 \`account_disabled\` (deactivated by staff).`,
     ].join('\n'),
@@ -91,7 +91,7 @@ export class AuthController {
    * Sign out of the current session
    *
    * @remarks
-   * Signed-in callers only. Destroys the current session on the server and clears the `qhhoj_session` cookie. Other sessions of the user stay valid. Returns 204.
+   * Signed-in callers only. Destroys the current session on the server and clears the `__Host-qhhoj_session` cookie. Other sessions of the user stay valid. Returns 204.
    */
   @AllowBeforeTwoFactor()
   @AllowPwnedPassword()
@@ -102,7 +102,7 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
     if (auth.sessionId) await this.sessions.destroy(auth.sessionId);
-    clearSessionCookie(reply);
+    clearSessionCookie(reply, this.env);
   }
 
   /**
@@ -120,7 +120,7 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
     await this.auth.logoutAll(auth.principal.userId);
-    clearSessionCookie(reply);
+    clearSessionCookie(reply, this.env);
   }
 
   /**

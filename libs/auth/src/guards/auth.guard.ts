@@ -37,7 +37,13 @@ import {
 import { Permission } from '../principal/permissions';
 import { hasPermission } from '../principal/principal';
 import { PrincipalService } from '../principal/principal.service';
-import { SESSION_COOKIE, setSessionCookie } from '../session/session-cookie';
+import {
+  acceptsLegacyCookie,
+  clearLegacySessionCookie,
+  readSessionCookie,
+  type SessionCookie,
+  setSessionCookie,
+} from '../session/session-cookie';
 import { sessionCurrent } from '../session/session-current';
 import { COOKIE_REFRESH_MS, SessionService } from '../session/session.service';
 import { apiTokenMatches, parseApiToken } from '../token/api-token';
@@ -56,6 +62,8 @@ type RouteMetadataReader = <Value>(key: string) => Value | undefined;
 @Injectable()
 export class AuthGuard implements CanActivate {
   private readonly siteOrigin: string;
+  /** EXTRA_ORIGINS by origin -> its host: such an origin is allowed only on a request to that same host. */
+  private readonly extraOriginHosts: ReadonlyMap<string, string>;
 
   constructor(
     private readonly reflector: Reflector,
@@ -67,6 +75,9 @@ export class AuthGuard implements CanActivate {
     @Inject(ENV) private readonly env: SiteConfig & WebConfig,
   ) {
     this.siteOrigin = new URL(env.siteUrl).origin;
+    this.extraOriginHosts = new Map(
+      env.extraOrigins.map((origin) => [origin, new URL(origin).host]),
+    );
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -107,7 +118,7 @@ export class AuthGuard implements CanActivate {
     const header = request.headers.authorization ?? '';
     const token = /^bearer\s+(\S+)\s*$/i.exec(header)?.[1] ?? null;
     const isUserCredential =
-      request.cookies[SESSION_COOKIE] !== undefined ||
+      this.sessionCookieOf(request).id !== undefined ||
       (header !== '' && !token?.startsWith(SERVICE_KEY_PREFIX));
     if (isUserCredential)
       throw new AppError(
@@ -192,9 +203,19 @@ export class AuthGuard implements CanActivate {
       !SAFE_METHODS.has(request.method) &&
       !isBearerHeader(request.headers.authorization ?? '') &&
       origin !== undefined &&
-      origin !== this.siteOrigin
+      !this.isAllowedOrigin(origin, request.headers.host)
     )
       throw new AppError('csrf_failed', 403, 'Cross-origin request rejected');
+  }
+
+  /**
+   * SITE_URL's origin anywhere; an EXTRA_ORIGINS origin only on a request whose Host is its own host (nginx passes `Host $host`).
+   * The staging host and the site are one site to the browser, so SameSite=Lax sends the site's cookie on a request a staging
+   * page makes to the site: binding the extra origin to its own host keeps such a request out. The Host header only narrows the list.
+   */
+  private isAllowedOrigin(origin: string, host: string | undefined): boolean {
+    if (origin === this.siteOrigin) return true;
+    return host !== undefined && this.extraOriginHosts.get(origin) === host;
   }
 
   /** Sets `request.auth` before the cookie refresh, so a failed refresh still leaves the request attributed. A stream route skips the refresh: its reply is hijacked, so the cookie would never be sent while the day's refresh was spent. */
@@ -203,11 +224,18 @@ export class AuthGuard implements CanActivate {
     reply: FastifyReply,
     isStream: boolean,
   ): Promise<void> {
+    const cookie = this.sessionCookieOf(request);
     request.auth =
       (await this.fromBearer(request)) ??
-      (await this.fromSession(request)) ??
+      (await this.fromSession(request, cookie)) ??
       undefined;
-    if (!isStream) await this.refreshCookie(reply, request.auth);
+    if (isStream) return;
+    if (cookie.legacySent) clearLegacySessionCookie(reply, this.env);
+    await this.refreshCookie(reply, request.auth, cookie.fromLegacy);
+  }
+
+  private sessionCookieOf(request: FastifyRequest) {
+    return readSessionCookie(request.cookies, this.env.cookieSecure);
   }
 
   /** A `@SessionOnly()` route refuses API tokens, except a superuser's on a route marked `@AllowSuperuserToken()`; superuser is read from the principal built from the user row. */
@@ -264,18 +292,23 @@ export class AuthGuard implements CanActivate {
       throw new AppError('forbidden', 403, 'Not allowed while impersonating');
   }
 
+  /** Reissues the cookie once a day, and at once when it came under the old name (`fromLegacy`). */
   private async refreshCookie(
     reply: FastifyReply,
     auth: AuthContext | undefined,
+    fromLegacy: boolean,
   ) {
-    if (
-      !auth?.sessionId ||
-      !auth.session ||
-      Date.now() - auth.session.cookieIssuedAt <= COOKIE_REFRESH_MS
-    )
-      return;
+    if (!auth?.sessionId || !auth.session) return;
+    const due = Date.now() - auth.session.cookieIssuedAt > COOKIE_REFRESH_MS;
+    if (!due && !fromLegacy) return;
     setSessionCookie(reply, auth.sessionId, this.env.cookieSecure);
-    await this.sessions.update(auth.sessionId, { cookieIssuedAt: Date.now() });
+    const now = Date.now();
+    await this.sessions.update(auth.sessionId, {
+      cookieIssuedAt: now,
+      hostCookie: true,
+      // only the first mark starts the grace window; later old-name requests do not extend it
+      hostCookieMarkedAt: auth.session.hostCookie ? undefined : now,
+    });
   }
 
   private async fromBearer(
@@ -302,13 +335,17 @@ export class AuthGuard implements CanActivate {
     };
   }
 
+  /** An old-name cookie counts only as `acceptsLegacyCookie` allows: a planted one from a sibling subdomain fails. */
   private async fromSession(
     request: FastifyRequest,
+    cookie: SessionCookie,
   ): Promise<AuthContext | null> {
-    const sessionId = request.cookies[SESSION_COOKIE];
+    const sessionId = cookie.id;
     const session = sessionId ? await this.sessions.get(sessionId) : null;
-    const user = session && (await this.users.findById(session.userId));
     if (!sessionId || !session) return null;
+    if (cookie.fromLegacy && !acceptsLegacyCookie(session, Date.now()))
+      return null;
+    const user = await this.users.findById(session.userId);
     if (!user || !(await sessionCurrent(this.users, session, user))) {
       await this.sessions.destroy(sessionId);
       return null;

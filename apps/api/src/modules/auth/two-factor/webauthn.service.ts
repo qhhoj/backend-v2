@@ -36,7 +36,8 @@ const failed = (message = 'WebAuthn verification failed') =>
 @Injectable()
 export class WebauthnService {
   private readonly rpID: string;
-  private readonly origin: string;
+  /** SITE_URL's origin plus EXTRA_ORIGINS; the rpID stays SITE_URL's host, which a subdomain origin may use. */
+  private readonly origins: string[];
 
   constructor(
     private readonly users: UsersRepository,
@@ -47,7 +48,7 @@ export class WebauthnService {
   ) {
     const site = new URL(env.siteUrl);
     this.rpID = site.hostname;
-    this.origin = site.origin;
+    this.origins = [site.origin, ...env.extraOrigins];
   }
 
   // @SessionOnly() guarantees a session, so `auth.sessionId` is set on every method here.
@@ -108,7 +109,7 @@ export class WebauthnService {
       const { verified, registrationInfo } = await verifyRegistrationResponse({
         response: response as unknown as RegistrationResponseJSON,
         expectedChallenge: challenge,
-        expectedOrigin: this.origin,
+        expectedOrigin: this.origins,
         expectedRPID: this.rpID,
         requireUserVerification: false,
       });
@@ -194,7 +195,7 @@ export class WebauthnService {
         await verifyAuthenticationResponse({
           response: response as unknown as AuthenticationResponseJSON,
           expectedChallenge: challenge,
-          expectedOrigin: this.origin,
+          expectedOrigin: this.origins,
           expectedRPID: this.rpID,
           requireUserVerification: false,
           credential: {

@@ -260,6 +260,31 @@ describe('config values', () => {
       /SSE_IP_ALLOWLIST must be a comma-separated list of IPs or CIDRs/,
     ),
   );
+  it('reads EXTRA_ORIGINS as trimmed exact origins', () => {
+    const origins = (value: string) =>
+      apiConfig.load({ ...production, EXTRA_ORIGINS: value }).extraOrigins;
+    expect(origins('')).toEqual([]);
+    expect(
+      origins(' https://staging.qhhoj.com , https://a-b.example.org,'),
+    ).toEqual(['https://staging.qhhoj.com', 'https://a-b.example.org']);
+  });
+  it.each([
+    'https://*.qhhoj.com',
+    '*',
+    'https://staging.qhhoj.com/',
+    'https://staging.qhhoj.com/path',
+    'http://staging.qhhoj.com',
+    'https://Staging.qhhoj.com',
+    'https://staging.qhhoj.com:443',
+    'https://staging.qhhoj.com:8443',
+    'https://user@staging.qhhoj.com',
+    'staging.qhhoj.com',
+    'null',
+  ])('rejects EXTRA_ORIGINS entry %j', (entry) =>
+    expect(api({ EXTRA_ORIGINS: `https://ok.example.org,${entry}` })).toMatch(
+      /EXTRA_ORIGINS must be a comma-separated list of exact https origins/,
+    ),
+  );
   it.each(['True', '1', 'yes'])('rejects COOKIE_SECURE=%s', (value) =>
     expect(api({ COOKIE_SECURE: value })).toMatch(
       'COOKIE_SECURE must be true or false',

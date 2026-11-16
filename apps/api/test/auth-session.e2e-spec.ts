@@ -1,4 +1,9 @@
-import { hashPassword, PASSWORD_ITERATIONS, UsersRepository } from '@libs/auth';
+import {
+  hashPassword,
+  LEGACY_COOKIE_GRACE_MS,
+  PASSWORD_ITERATIONS,
+  UsersRepository,
+} from '@libs/auth';
 
 import { AppError, REDIS } from '@libs/common';
 
@@ -548,5 +553,149 @@ describe('auth session endpoints', () => {
     });
     const alice = await api.users.findOne({ username: 'Alice' });
     expect((await meOf(alice!._id)).user?.appearance).toBeNull();
+  });
+});
+
+describe('the session cookie with COOKIE_SECURE', () => {
+  let api: ApiTest;
+  let userId: string;
+  beforeAll(async () => {
+    api = await setupApiTest({ env: { COOKIE_SECURE: 'true' } });
+    userId = String((await createUser(api.users, { username: 'sam' }))._id);
+  });
+  afterAll(() => api.teardown());
+  const idOf = async () => (await loginAs(api, userId)).cookie.split('=')[1];
+  const setCookies = (response: { headers: Record<string, unknown> }) =>
+    (response.headers['set-cookie'] as string[] | undefined) ?? [];
+  const usernameOf = (response: { body: unknown }) =>
+    sessionOf(response).user?.username;
+
+  it('is a __Host- cookie: Secure, Path=/, no Domain', async () => {
+    const response = await api
+      .http()
+      .post(LOGIN)
+      .send({ username: 'sam', password: 'correct horse battery' })
+      .expect(200);
+    const [cookie] = setCookies(response);
+    expect(cookie).toMatch(/^__Host-qhhoj_session=[A-Za-z0-9_-]{43};/);
+    for (const attribute of ['Path=/', 'Secure', 'HttpOnly', 'SameSite=Lax'])
+      expect(cookie).toContain(attribute);
+    expect(cookie).not.toMatch(/Domain=/i);
+  });
+  // Only Date is faked: the database, Redis and HTTP keep real timers.
+  const fakeClock = () =>
+    jest.useFakeTimers({
+      now: Date.now(),
+      doNotFake: [
+        'hrtime',
+        'nextTick',
+        'performance',
+        'queueMicrotask',
+        'setImmediate',
+        'clearImmediate',
+        'setInterval',
+        'clearInterval',
+        'setTimeout',
+        'clearTimeout',
+      ],
+    });
+  const legacyRequest = (id: string) =>
+    api.http().get(ME).set('Cookie', `qhhoj_session=${id}`);
+  afterEach(() => jest.useRealTimers());
+
+  it('accepts the old name only for a session from before __Host-, reissues it and keeps it for the grace window', async () => {
+    fakeClock();
+    const id = await idOf();
+    const asLegacy = () => legacyRequest(id);
+    // A session issued as __Host- (every new one) is refused under the old name: a planted cookie fails.
+    await asLegacy().expect(401);
+    await api.sessions.update(id, { hostCookie: false });
+    const response = await api
+      .http()
+      .get(ME)
+      .set('Cookie', `qhhoj_session=${id}`)
+      .expect(200);
+    expect(usernameOf(response)).toBe('sam');
+    const cookies = setCookies(response);
+    expect(
+      cookies.some((cookie) =>
+        cookie.startsWith(`__Host-qhhoj_session=${id};`),
+      ),
+    ).toBe(true);
+    expect(
+      cookies.some((cookie) =>
+        /^qhhoj_session=;.*Expires=Thu, 01 Jan 1970/.test(cookie),
+      ),
+    ).toBe(true);
+    await api
+      .http()
+      .get(ME)
+      .set('Cookie', `__Host-qhhoj_session=${id}`)
+      .expect(200);
+    // The page's parallel requests on load still carry the old name.
+    jest.advanceTimersByTime(LEGACY_COOKIE_GRACE_MS - 1000);
+    await asLegacy().expect(200);
+  });
+  it('refuses the old name once the grace window ends; a later old-name request does not extend it', async () => {
+    fakeClock();
+    const id = await idOf();
+    await api.sessions.update(id, { hostCookie: false });
+    await legacyRequest(id).expect(200);
+    jest.advanceTimersByTime(LEGACY_COOKIE_GRACE_MS / 2);
+    await legacyRequest(id).expect(200);
+    jest.advanceTimersByTime(LEGACY_COOKIE_GRACE_MS / 2);
+    await legacyRequest(id).expect(401);
+    await api
+      .http()
+      .get(ME)
+      .set('Cookie', `__Host-qhhoj_session=${id}`)
+      .expect(200);
+  });
+  it('lets the __Host- cookie win over the old name, with no fallback when it is stale', async () => {
+    const [own, planted] = [await idOf(), await idOf()];
+    const both = await api
+      .http()
+      .get(ME)
+      .set('Cookie', `qhhoj_session=${planted}; __Host-qhhoj_session=${own}`)
+      .expect(200);
+    expect(usernameOf(both)).toBe('sam');
+    expect(
+      setCookies(both).some((cookie) =>
+        cookie.startsWith('__Host-qhhoj_session='),
+      ),
+    ).toBe(false);
+    expect(
+      setCookies(both).some((cookie) => cookie.startsWith('qhhoj_session=;')),
+    ).toBe(true);
+    await api
+      .http()
+      .get(ME)
+      .set('Cookie', `qhhoj_session=${planted}; __Host-qhhoj_session=gone`)
+      .expect(401);
+  });
+  it('logout expires both names', async () => {
+    const id = await idOf();
+    const session = await api.sessions.get(id);
+    const response = await api
+      .http()
+      .post('/api/internal/auth/logout')
+      .set('Cookie', `__Host-qhhoj_session=${id}`)
+      .set('X-CSRF-Token', session!.csrf)
+      .expect(204);
+    const cookies = setCookies(response);
+    for (const name of ['__Host-qhhoj_session', 'qhhoj_session'])
+      expect(
+        cookies.some(
+          (cookie) =>
+            cookie.startsWith(`${name}=;`) && cookie.includes('Secure'),
+        ),
+      ).toBe(true);
+    // The old name is expired on the site's domain too, where a sibling subdomain can plant it.
+    expect(
+      cookies.some(
+        (cookie) =>
+          cookie.startsWith('qhhoj_session=;') && /Domain=/i.test(cookie),
+      ),
+    ).toBe(true);
   });
 });

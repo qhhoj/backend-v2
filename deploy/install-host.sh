@@ -37,6 +37,7 @@ ensure_dirs() {
   install -d -m 750 "$ROOT/var/lib/qhhoj-deploy/incoming"
   chown deploy:deploy "$ROOT/var/lib/qhhoj-deploy/incoming"
   install -d -m 755 "$ROOT/var/www/qhhoj/releases"
+  install -d -m 755 "$ROOT/var/www/qhhoj-staging/releases" # qhhoj-deploy frontend-staging (RUNBOOK "Staging frontend")
   install -d -m 755 "$ROOT/var/www/qhhoj-maintenance"
   install -d -m 700 "$ROOT/etc/qhhoj"
 }
@@ -73,6 +74,7 @@ install_files() {
   visudo -cf "$here/sudoers.qhhoj-deploy" >/dev/null || die "sudoers file does not parse"
   install -m 440 "$here/sudoers.qhhoj-deploy" "$ROOT/etc/sudoers.d/qhhoj-deploy"
   install -m 644 "$here/nginx/security-headers.conf" "$ROOT/etc/nginx/snippets/qhhoj-security-headers.conf"
+  install -m 644 "$here/nginx/staging-headers.conf" "$ROOT/etc/nginx/snippets/qhhoj-staging-headers.conf"
   [ -f "$ROOT/etc/nginx/snippets/qhhoj-gate.conf" ] || install -m 644 "$here/nginx/qhhoj-gate.conf" "$ROOT/etc/nginx/snippets/qhhoj-gate.conf"
   install -m 644 "$here/nginx/cloudflare-origin.conf" "$ROOT/etc/nginx/conf.d/qhhoj-cloudflare-origin.conf"
   install -m 644 "$here/nginx/login-limit.conf" "$ROOT/etc/nginx/conf.d/10-qhhoj-login-limit.conf"

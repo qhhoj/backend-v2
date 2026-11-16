@@ -392,6 +392,28 @@ describe('AuthGuard', () => {
       .expect(403)
       .expect(errorCode('csrf_failed'));
   });
+  it('accepts an EXTRA_ORIGINS origin by exact match, on its own host only', async () => {
+    const write = (origin: string, host = 'staging.example.org') =>
+      api
+        .http()
+        .post('/guarded/public-write')
+        .set('Host', host)
+        .set('Origin', origin);
+    await write('https://staging.example.org').expect(201);
+    // A staging page posting to the site itself (same site, so the site's cookie goes along) is refused.
+    await write('https://staging.example.org', 'localhost:5173')
+      .expect(403)
+      .expect(errorCode('csrf_failed'));
+    await write('http://localhost:5173', 'staging.example.org').expect(201);
+    for (const origin of [
+      'https://staging.example.org.evil.example',
+      'https://evil.staging.example.org',
+      'http://staging.example.org',
+      'https://staging.example.org:8443',
+      'null',
+    ])
+      await write(origin).expect(403).expect(errorCode('csrf_failed'));
+  });
   it('answers a too deeply nested body with 400 and the standard issues list', async () => {
     let body: unknown = {};
     for (let depth = 0; depth < 40; depth += 1) body = { a: body };

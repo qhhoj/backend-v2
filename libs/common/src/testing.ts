@@ -51,6 +51,7 @@ export const TEST_ENV = {
   TOKEN_SECRET: 'test-token-secret-test-token-secret',
   SESSION_SECRET: 'test-session-secret-test-session-secret',
   SITE_URL: 'http://localhost:5173',
+  EXTRA_ORIGINS: 'https://staging.example.org',
   COOKIE_SECURE: 'false',
   LOG_LEVEL: 'silent',
 };

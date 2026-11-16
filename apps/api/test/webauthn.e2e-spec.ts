@@ -209,6 +209,30 @@ describe('webauthn endpoints', () => {
     expect((await stored())!.webauthnCredentials[0].counter).toBe(11);
   });
 
+  it('accepts an assertion from an EXTRA_ORIGINS origin and refuses any other origin', async () => {
+    const fake = authenticator();
+    await register(fake);
+    // Each origin's copy keeps its own sign counter: start above the stored one so only the origin decides.
+    const fromOrigin = (origin: string) => {
+      const copy = fake.withOrigin(origin);
+      copy.setSignCount(5);
+      return copy;
+    };
+    const elsewhere = await login();
+    await failedAssertion(
+      elsewhere,
+      fromOrigin('https://evil.example'),
+      (await loginOptions(elsewhere)).challenge,
+    );
+    const staging = await login();
+    const { challenge } = await loginOptions(staging);
+    await post('login/verify', staging, {
+      response: fromOrigin('https://staging.example.org').authenticate(
+        challenge,
+      ),
+    }).expect(204);
+  });
+
   it('answers malformed responses with 400, never 500', async () => {
     const fake = authenticator();
     await register(fake);

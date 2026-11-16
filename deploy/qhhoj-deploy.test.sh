@@ -258,7 +258,7 @@ grep -q "previous version v2.1.0 restored but UNHEALTHY" <<<"$out" || fail "rest
 fresh_frontend; tarball v2.1.0
 rm -rf "$root/etc/nginx"; : > "$calls"
 out="$(STUB_HEALTH=fail deploy frontend v2.1.0 2>&1)" || fail "file check only must pass without nginx serving v2: $out"
-grep -q "nginx does not serve v2 yet: file check only" <<<"$out" || fail "file-check message"
+grep -q "nginx does not serve /var/www/qhhoj/current yet: file check only" <<<"$out" || fail "file-check message"
 ! grep -q '^curl' "$calls" || fail "file check must not use HTTP"
 mkdir -p "$root/etc/nginx/conf.d"; echo "root /var/www/qhhoj/current;" > "$root/etc/nginx/conf.d/qhhoj.conf"
 tarball v2.2.0; : > "$calls"
@@ -362,5 +362,73 @@ stub mongosh 'echo "$*" >> "$QHHOJ_DEPLOY_ROOT/mongosh.args"; echo "2026-10-10T1
 set +e; out="$(deploy backend v2.1.0 2>&1)"; code=$?; set -e
 [ "$code" = 75 ] && [ "$out" = "deferred: a contest is running; retry after 2026-10-10T12:00:00.000Z" ] || fail "deferral message: $out"
 grep -qE 'key|name' "$root/mongosh.args" && fail "the contest query must not read key or name"
+
+# frontend-staging: its own tree, history, tarball name and host; never touches the production frontend
+# The curl stub serves each host's own tree: the staging host its staging current, any other host production's.
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs
+site_curl='out="" url=""; while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; case "$1" in https://*) url=$1 ;; esac; shift; done
+tree=qhhoj; [ "$url" = https://staging.oj.test/ ] && tree=qhhoj-staging
+[ "${STUB_HEALTH:-ok}" = ok ] && cp "$QHHOJ_DEPLOY_ROOT/var/www/$tree/current/index.html" "$out"'
+staging_tarball() { # <version> [body]: an index.html that differs from the production tarball of the same version
+  local src; src="$(mktemp -d)"
+  echo "<html>staging ${2:-$1}</html>" > "$src/index.html"; mkdir -p "$src/assets"; echo "js $1" > "$src/assets/app.js"
+  tar -czf "$inc/frontend-staging-dist-$1.tar.gz" -C "$src" .
+  (cd "$inc" && sha256sum "frontend-staging-dist-$1.tar.gz" > "frontend-staging-dist-$1.tar.gz.sha256")
+  rm -rf "$src"
+}
+swww="$root/var/www/qhhoj-staging"
+shist() { cat "$root/var/lib/qhhoj-deploy/frontend-staging.history"; }
+fresh_staging() {
+  fresh; stub curl "$site_curl"
+  echo "STAGING_SITE_URL=https://staging.oj.test" >> "$root/etc/qhhoj/env"
+  echo "root /var/www/qhhoj-staging/current;" > "$root/etc/nginx/conf.d/zz-qhhoj-staging.conf"
+}
+fresh_staging; tarball v2.1.0; deploy frontend v2.1.0 >/dev/null || fail "production baseline"
+staging_tarball v2.1.0; : > "$calls"
+deploy frontend-staging v2.1.0 >/dev/null || fail "staging deploy"
+[ "$(readlink "$swww/current")" = releases/v2.1.0 ] || fail "staging current -> v2.1.0"
+grep -q 'https://staging.oj.test/' "$calls" || fail "the staging check asks the staging host"
+[ "$(cat "$www/current/index.html")" = "<html>v2.1.0</html>" ] || fail "staging deploy must leave production alone"
+[ "$(fhist)" = v2.1.0 ] && [ "$(shist)" = v2.1.0 ] || fail "separate histories"
+[ ! -e "$inc/frontend-staging-dist-v2.1.0.tar.gz" ] || fail "staging incoming cleaned"
+staging_tarball v2.2.0; set +e; STUB_HEALTH=fail deploy frontend-staging v2.2.0 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] && [ "$(readlink "$swww/current")" = releases/v2.1.0 ] || fail "unhealthy staging must flip back"
+tarball v2.2.1; set +e; deploy frontend-staging v2.2.1 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] || fail "a production tarball must not deploy to staging"
+for v in v2.3.0 v2.4.0 v2.5.0; do staging_tarball "$v"; deploy frontend-staging "$v" >/dev/null || fail "staging $v"; done
+[ "$(ls "$swww/releases")" = "$(printf 'v2.4.0\nv2.5.0')" ] || fail "staging prunes to KEEP: $(ls "$swww/releases" | tr '\n' ' ')"
+[ "$(ls "$www/releases")" = v2.1.0 ] || fail "staging pruning must not touch production releases"
+deploy rollback frontend-staging >/dev/null && [ "$(readlink "$swww/current")" = releases/v2.4.0 ] || fail "staging rollback"
+[ "$(fhist)" = v2.1.0 ] || fail "staging rollback must not touch production history"
+grep -qx "frontend-staging: v2.4.0" <<<"$(deploy status)" || fail "status names the staging version"
+set +e; deploy frontend-staging latest >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 64 ] || fail "bad staging version must exit 64, got $code"
+set +e; deploy frontend-preview v2.1.0 >/dev/null 2>&1; code=$?; deploy rollback frontend-preview >/dev/null 2>&1; code2=$?; set -e
+[ "$code" = 64 ] && [ "$code2" = 64 ] || fail "an unknown frontend app is a usage error ($code, $code2)"
+# without STAGING_SITE_URL the HTTP check cannot pass: the deploy fails and flips back
+sed -i '/^STAGING_SITE_URL=/d' "$root/etc/qhhoj/env"; staging_tarball v2.6.0
+set +e; out="$(deploy frontend-staging v2.6.0 2>&1)"; code=$?; set -e
+[ "$code" = 1 ] && grep -q "STAGING_SITE_URL is not set" "$root/var/lib/qhhoj-deploy/deploy.log" \
+  && [ "$(readlink "$swww/current")" = releases/v2.4.0 ] || fail "missing STAGING_SITE_URL ($code): $out"
+# before nginx serves the staging root: a file check only
+rm -f "$root/etc/nginx/conf.d/zz-qhhoj-staging.conf"; staging_tarball v2.7.0
+out="$(deploy frontend-staging v2.7.0 2>&1)" || fail "staging file check: $out"
+grep -q "nginx does not serve /var/www/qhhoj-staging/current yet" <<<"$out" || fail "staging file-check message: $out"
+# A tarball that unpacks past ARCHIVE_MAX_BYTES is refused before anything is unpacked, also when an owner name with a
+# space would shift the columns of tar's listing.
+staging_tarball v2.8.0
+(cd "$inc" && src="$(mktemp -d)" && tar -xzf frontend-staging-dist-v2.8.0.tar.gz -C "$src" \
+  && tar --owner='a b:0' --group='c d:0' -czf frontend-staging-dist-v2.8.0.tar.gz -C "$src" . && rm -rf "$src" \
+  && sha256sum frontend-staging-dist-v2.8.0.tar.gz > frontend-staging-dist-v2.8.0.tar.gz.sha256)
+set +e; out="$(QHHOJ_DEPLOY_ARCHIVE_MAX_BYTES=10 deploy frontend-staging v2.8.0 2>&1)"; code=$?; set -e
+[ "$code" = 1 ] && [ "$(readlink "$swww/current")" = releases/v2.7.0 ] && [ ! -e "$swww/releases/v2.8.0" ] \
+  || fail "an oversize staging tarball must be refused ($code): $out"
+# Staging has its own lock: a held production lock does not delay it, a held staging lock defers it.
+exec 7>"$root/run/qhhoj-deploy.lock"; flock 7
+QHHOJ_DEPLOY_LOCK_WAIT=1 deploy frontend-staging v2.8.0 >/dev/null 2>&1 || fail "staging must not wait for the production lock"
+exec 7>&- 7>"$root/run/qhhoj-deploy-staging.lock"; flock 7
+set +e; QHHOJ_DEPLOY_LOCK_WAIT=1 deploy rollback frontend-staging >/dev/null 2>&1; code=$?; set -e
+exec 7>&-
+[ "$code" = 75 ] || fail "a held staging lock must defer staging, got $code"
 
 echo "qhhoj-deploy backend ok"
