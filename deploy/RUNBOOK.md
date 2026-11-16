@@ -89,6 +89,18 @@ The qhhoj server blocks answer 444 (close, no reply) to any TCP peer that is not
 
 Purged tombstones keep their old `polygonLink`; clear them so the unique index is not blocked by them: `db.problems.updateMany({ purgedAt: { $exists: true }, 'polygonLink.problemId': { $exists: true } }, { $set: { polygonLink: null } })`. The deploy's index build fails (and the deploy with it) if two live problems share a `polygonLink.problemId`: find them with an aggregation on that field and unlink one. After the new index exists, drop the old one: `db.problems.dropIndex('polygonLink.problemId_1')`.
 
+### Manual content jobs (`rehost-hackmd-images`, `rerender-content`)
+
+Run by hand, never by the deploy. The default is a dry run: it writes nothing and prints how many rows change, how many differ by more than whitespace, and the first 10 of them. The dry run of `rehost-hackmd-images` downloads images from hackmd.io (outbound requests), but stores nothing. `--apply` needs `--backup <file>` under `/srv/qhhoj` (the only writable path); the file holds `{collection, id, before, after}` per row, owner-readable only. A restore may put `before` back only on a row that still holds `after`. `rehost-hackmd-images` rewrites only the image URL, in the Markdown and in the stored HTML; it never re-renders. Add `--include-imgur` to take imgur images too.
+
+```
+RUN='podman run --rm --network=host --user 987:987 --read-only --cap-drop=all --security-opt=no-new-privileges --memory=5g --env-file /etc/qhhoj/env -e APP=worker -e NODE_ENV=production -v /srv/qhhoj:/srv/qhhoj ghcr.io/qhhoj/backend-v2:<tag>'
+$RUN rehost-hackmd-images                  # dry run
+$RUN rehost-hackmd-images --apply --backup /srv/qhhoj/backups/rehost-$(date +%F).jsonl
+$RUN rerender-content                      # dry run
+$RUN rerender-content --apply --backup /srv/qhhoj/backups/rerender-$(date +%F).jsonl
+```
+
 ## Backups
 
 `backup/`: `qhhoj-backup` (installed to `/usr/local/sbin` with `qhhoj-backup-lib.sh`, which it sources), run nightly at 03:30 Asia/Ho_Chi_Minh by `qhhoj-backup.timer`; `restore-test.sh` (installed as `qhhoj-backup-restore-test`); `backup.env.example`. restic: encrypted, deduplicated, incremental, zstd-compressed (repository format 2). No daemon: a oneshot unit capped at one CPU and 2 GiB, at idle priority, because the site and the local judge share the host.
