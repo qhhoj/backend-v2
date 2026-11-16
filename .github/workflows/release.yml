@@ -5,15 +5,19 @@
 # token of the org GitHub App set in vars.RELEASE_APP_ID and secrets.RELEASE_APP_KEY (Contents and Workflows write,
 # installed on this repository only); without the variable it falls back to GITHUB_TOKEN. Third-party actions are
 # pinned by commit SHA; bump them deliberately.
-# commitMode github-api: GitHub signs the version commit (Verified), as the protected main requires. A PR made with
-# GITHUB_TOKEN starts no pull_request workflow, so the job dispatches ci and changeset on the version branch; their
-# check runs attach to its head commit under the names the branch protection requires.
+# commitMode github-api: GitHub signs the version commit (Verified), as the protected main requires. A PR that
+# GITHUB_TOKEN opens or updates gets its pull_request runs in the approval-required state (docs: "About the
+# GITHUB_TOKEN"), and the merge queue does not count checks from runs dispatched beside them. So the same App opens the
+# PR, with a second token limited to contents and pull-requests write: no more scope than GITHUB_TOKEN has here. That
+# token is in the environment of the version command (changeset version, npm install --package-lock-only). If the App
+# lacks the Pull requests permission, the job falls back to GITHUB_TOKEN and dispatches ci and changeset on the
+# version branch; someone must then click "Approve workflows to run" on the PR (deploy/RUNBOOK.md, Release flow).
 name: release
 on: { push: { branches: [main] } }
 permissions:
   contents: write
   pull-requests: write
-  actions: write # dispatch ci and changeset on the version branch
+  actions: write # fallback: dispatch ci and changeset on the version branch
 jobs:
   release:
     concurrency:
@@ -29,6 +33,17 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
+      - id: pr-token # PR events from an App token start the required checks; from GITHUB_TOKEN they wait for approval
+        if: vars.RELEASE_APP_ID != ''
+        continue-on-error: true # the App lacks Pull requests write: fall back to GITHUB_TOKEN
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
       - id: version
         uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
         with:
@@ -37,10 +52,11 @@ jobs:
           commit: 'chore: version packages'
           commitMode: github-api
           createGithubReleases: false # the tag step creates the Release
+          github-token: ${{ steps.pr-token.outputs.token || secrets.GITHUB_TOKEN }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # The tag steps run only when no changeset is pending (a release). The App token never reaches the step that
-      # runs dependency code (changeset version, npm install).
+          GITHUB_TOKEN: ${{ steps.pr-token.outputs.token || secrets.GITHUB_TOKEN }}
+      # The tag steps run only when no changeset is pending (a release). The tag token (workflows write) never reaches
+      # the step that runs dependency code (changeset version, npm install).
       - id: app-token # lets release:tag create a tag whose commit changes workflow files
         if: steps.version.outputs.hasChangesets == 'false' && vars.RELEASE_APP_ID != ''
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -56,8 +72,9 @@ jobs:
         run: npm run release:tag
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-      - name: Run the required checks on the Version Packages PR
-        if: steps.version.outputs.pullRequestNumber != '' # empty-only changesets make no PR or branch
+      - name: Fallback without the App token, run the required checks on the Version Packages PR
+        # empty-only changesets make no PR or branch
+        if: steps.version.outputs.pullRequestNumber != '' && steps.pr-token.outputs.token == ''
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           gh workflow run ci.yml --ref changeset-release/main

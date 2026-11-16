@@ -1,6 +1,6 @@
 name: changeset
 # merge_group: the merge queue needs this required check to report; a queued PR was checked when it was open, so the job is skipped there.
-# workflow_dispatch: release.yml starts it on changeset-release/main (a PR opened with GITHUB_TOKEN triggers nothing).
+# workflow_dispatch: release.yml starts it on changeset-release/main when it had to open the PR with GITHUB_TOKEN.
 on: { pull_request: {}, merge_group: {}, workflow_dispatch: {} }
 jobs:
   status:

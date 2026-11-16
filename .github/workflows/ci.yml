@@ -1,5 +1,5 @@
 # merge_group: the merge queue runs the same checks on the queued merge commit (its base is merge_group.base_sha).
-# workflow_dispatch: release.yml starts it on changeset-release/main (a PR opened with GITHUB_TOKEN triggers nothing).
+# workflow_dispatch: release.yml starts it on changeset-release/main when it had to open the PR with GITHUB_TOKEN.
 name: ci
 on: { push: { branches: [main] }, pull_request: {}, merge_group: {}, workflow_dispatch: {} }
 # The test job runs the unit specs (jest.config.js) and the static OpenAPI specs. No job starts MongoDB or Redis: the
