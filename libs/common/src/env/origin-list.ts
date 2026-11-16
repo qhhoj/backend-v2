@@ -1,5 +1,8 @@
-/** An exact browser origin as the Origin header sends it: https, lowercase host, a port only when not 443; no path, no wildcard. */
-const ORIGIN_SHAPE = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*(:[0-9]{1,5})?$/;
+/**
+ * An exact browser origin as the Origin header sends it: https, lowercase host, no port, no path, no wildcard. No port,
+ * because nginx passes `Host $host` (port dropped) and the guard compares it with the origin's host: a port could never pass.
+ */
+const ORIGIN_SHAPE = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*$/;
 
 const isExactOrigin = (entry: string): boolean => {
   if (!ORIGIN_SHAPE.test(entry)) return false;

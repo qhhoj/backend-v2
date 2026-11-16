@@ -83,7 +83,7 @@ function readOriginList(reader: EnvReader, name: string): string[] {
   const { entries, invalid } = parseOriginList(reader.text(name));
   if (!invalid.length) return entries;
   reader.problem(
-    `${name} must be a comma-separated list of exact https origins (https://host[:port], no path or wildcard), got ${invalid.join(', ')}`,
+    `${name} must be a comma-separated list of exact https origins (https://host: no port, path or wildcard), got ${invalid.join(', ')}`,
   );
   return [];
 }

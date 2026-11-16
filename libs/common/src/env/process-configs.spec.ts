@@ -265,8 +265,8 @@ describe('config values', () => {
       apiConfig.load({ ...production, EXTRA_ORIGINS: value }).extraOrigins;
     expect(origins('')).toEqual([]);
     expect(
-      origins(' https://staging.qhhoj.com , https://a-b.example.org:8443,'),
-    ).toEqual(['https://staging.qhhoj.com', 'https://a-b.example.org:8443']);
+      origins(' https://staging.qhhoj.com , https://a-b.example.org,'),
+    ).toEqual(['https://staging.qhhoj.com', 'https://a-b.example.org']);
   });
   it.each([
     'https://*.qhhoj.com',
@@ -276,6 +276,7 @@ describe('config values', () => {
     'http://staging.qhhoj.com',
     'https://Staging.qhhoj.com',
     'https://staging.qhhoj.com:443',
+    'https://staging.qhhoj.com:8443',
     'https://user@staging.qhhoj.com',
     'staging.qhhoj.com',
     'null',
