@@ -46,11 +46,11 @@ export const setSessionCookie = (
     maxAge: SESSION_TTL_SECONDS,
   });
 
+export const clearLegacySessionCookie = (reply: FastifyReply) =>
+  reply.clearCookie(LEGACY_SESSION_COOKIE, { path: '/', secure: true });
+
 /** A browser drops a `__Host-` Set-Cookie, a deleting one too, unless it is Secure with Path=/. */
 export const clearSessionCookie = (reply: FastifyReply, secure: boolean) => {
   reply.clearCookie(sessionCookieName(secure), { path: '/', secure });
   if (secure) clearLegacySessionCookie(reply);
 };
-
-export const clearLegacySessionCookie = (reply: FastifyReply) =>
-  reply.clearCookie(LEGACY_SESSION_COOKIE, { path: '/', secure: true });

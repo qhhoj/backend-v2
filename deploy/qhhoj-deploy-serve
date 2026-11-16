@@ -53,7 +53,7 @@ serve_staging_upload() { # the same rsync into a private directory; only staging
   local received path name rc=0
   received="$(mktemp -d "$INCOMING/.staging.XXXXXX")"
   trap 'rm -rf "$received"' EXIT
-  SSH_ORIGINAL_COMMAND="${1%"$UPLOAD_PATH"}." rrsync -wo -no-del "$received" || rc=$?
+  SSH_ORIGINAL_COMMAND="${1%"$UPLOAD_PATH"}." rrsync -wo -no-del -munge "$received" || rc=$? # -munge: a sent symlink never leads out
   [ "$rc" = 0 ] || exit "$rc"
   for path in "$received"/* "$received"/.[!.]*; do
     [ -e "$path" ] || [ -L "$path" ] || continue
