@@ -3,6 +3,7 @@ import { PINO_LEVELS } from '../log-levels';
 import { checkDataRoots } from './data-roots';
 import type { EnvReader } from './env-reader';
 import { parseIpList } from './ip-allowlist';
+import { parseOriginList } from './origin-list';
 
 /** A group of env vars a process may declare: `read` parses them, `check` refuses values that parse but are unusable. */
 export interface ConfigPart<Config> {
@@ -62,6 +63,8 @@ export interface WebConfig {
   /** Client IPs/CIDRs (IPv4 or IPv6) that may hold more live event streams than `perIp` (a school lab behind one NAT); empty means none. */
   sseIpAllowlist: string[];
   cookieSecure: boolean;
+  /** Browser origins besides SITE_URL's that may send cookie requests (a staging frontend on the same api); exact match, empty means none. Links in mails, feeds and OAuth stay on SITE_URL. */
+  extraOrigins: string[];
 }
 
 function readTrustProxy(reader: EnvReader): false | string {
@@ -74,6 +77,15 @@ function readTrustProxy(reader: EnvReader): false | string {
     return false;
   }
   return value;
+}
+
+function readOriginList(reader: EnvReader, name: string): string[] {
+  const { entries, invalid } = parseOriginList(reader.text(name));
+  if (!invalid.length) return entries;
+  reader.problem(
+    `${name} must be a comma-separated list of exact https origins (https://host[:port], no path or wildcard), got ${invalid.join(', ')}`,
+  );
+  return [];
 }
 
 function readIpList(reader: EnvReader, name: string): string[] {
@@ -98,6 +110,7 @@ export const web: ConfigPart<WebConfig> = {
     trustProxy: readTrustProxy(reader),
     sseIpAllowlist: readIpList(reader, 'SSE_IP_ALLOWLIST'),
     cookieSecure: reader.booleanFrom('COOKIE_SECURE', true),
+    extraOrigins: readOriginList(reader, 'EXTRA_ORIGINS'),
   }),
   check: ({ tokenSecret, sessionSecret }) => [
     ...(tokenSecret.length < 32

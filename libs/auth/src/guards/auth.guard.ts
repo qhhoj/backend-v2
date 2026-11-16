@@ -55,7 +55,8 @@ type RouteMetadataReader = <Value>(key: string) => Value | undefined;
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  private readonly siteOrigin: string;
+  /** SITE_URL's origin plus EXTRA_ORIGINS: the only Origin headers a cookie request may carry. */
+  private readonly allowedOrigins: ReadonlySet<string>;
 
   constructor(
     private readonly reflector: Reflector,
@@ -66,7 +67,10 @@ export class AuthGuard implements CanActivate {
     private readonly rateLimit: RateLimitService,
     @Inject(ENV) private readonly env: SiteConfig & WebConfig,
   ) {
-    this.siteOrigin = new URL(env.siteUrl).origin;
+    this.allowedOrigins = new Set([
+      new URL(env.siteUrl).origin,
+      ...env.extraOrigins,
+    ]);
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -192,7 +196,7 @@ export class AuthGuard implements CanActivate {
       !SAFE_METHODS.has(request.method) &&
       !isBearerHeader(request.headers.authorization ?? '') &&
       origin !== undefined &&
-      origin !== this.siteOrigin
+      !this.allowedOrigins.has(origin)
     )
       throw new AppError('csrf_failed', 403, 'Cross-origin request rejected');
   }

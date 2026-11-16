@@ -5,7 +5,10 @@
 #                             health-check, roll back on failure;
 #                             --token-stdin logs in to ghcr.io with one line of stdin (per-deploy authfile, removed on exit)
 #   frontend <version>        unpack incoming/frontend-dist-<version>.tar.gz, carry kept releases' recent assets/ over, flip /var/www/qhhoj/current, check, roll back on failure
-#   rollback backend|frontend go back to the previous history entry
+#   frontend-staging <version>
+#                             the same for incoming/frontend-staging-dist-<version>.tar.gz and /var/www/qhhoj-staging/current
+#   rollback backend|frontend|frontend-staging
+#                             go back to the previous history entry
 #   status                    live versions and recent history
 # Exit: 0 ok, 1 failed (previous version live), 64 usage, 75 deferred (contest running; retry later).
 set -euo pipefail
@@ -13,13 +16,22 @@ set -euo pipefail
 ROOT="${QHHOJ_DEPLOY_ROOT:-}"
 # Root runs bare tool names (podman, systemctl, curl): never trust the caller's PATH. Tests set ROOT and stub tools.
 [ -n "$ROOT" ] || export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-FORCE=0 TOKEN_STDIN=0 TMP=""
+FORCE=0 TOKEN_STDIN=0 TMP="" FRONTEND=""
 IMAGE=ghcr.io/qhhoj/backend-v2
 STATE="$ROOT/var/lib/qhhoj-deploy"
 INCOMING="$STATE/incoming"
-WWW="$ROOT/var/www/qhhoj"
+WWW="" SERVED_ROOT="" URL_KEY="" # set by use_frontend
 ENV_FILE="$ROOT/etc/qhhoj/env"
 AUTHFILE="$ROOT/etc/qhhoj/ghcr-auth.json"
+# Frontend apps: each has its own release tree, history file, nginx root and env key naming its public URL.
+use_frontend() { # frontend|frontend-staging
+  case "$1" in
+    frontend) WWW="$ROOT/var/www/qhhoj" SERVED_ROOT=/var/www/qhhoj/current URL_KEY=SITE_URL ;;
+    frontend-staging) WWW="$ROOT/var/www/qhhoj-staging" SERVED_ROOT=/var/www/qhhoj-staging/current URL_KEY=STAGING_SITE_URL ;;
+    *) return 1 ;;
+  esac
+  FRONTEND="$1"
+}
 HEALTH_TRIES="${QHHOJ_DEPLOY_HEALTH_TRIES:-30}"
 LOCK_WAIT="${QHHOJ_DEPLOY_LOCK_WAIT:-900}" # seconds; sudo env_reset keeps the override out of production
 # Seconds every backend unit must stay up after the restart: longer than one restart cycle (RestartSec=3 plus a boot).
@@ -38,7 +50,7 @@ EX_DEFERRED=75
 say() { echo "$(date -u +%FT%TZ) $*" >> "$STATE/deploy.log" 2>/dev/null || true; { echo "$*"; } 2>/dev/null || true; }
 warn() { echo "$(date -u +%FT%TZ) $*" >> "$STATE/deploy.log" 2>/dev/null || true; { echo "$*" >&2; } 2>/dev/null || true; }
 die() { warn "qhhoj-deploy: $*"; exit 1; }
-usage() { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//' >&2; exit "$EX_USAGE"; }
+usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' >&2; exit "$EX_USAGE"; }
 defer() { say "deferred: $*"; exit "$EX_DEFERRED"; }
 valid_tag() { [[ $1 =~ $TAG_RE ]] || { warn "qhhoj-deploy: bad version '$1'"; exit "$EX_USAGE"; }; }
 env_value() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -1; }
@@ -188,10 +200,10 @@ previous_entry() { # <app>: the history entry before the live one (empty when th
 }
 
 target_present() { # <app> <version>: the image or release that a rollback would switch to still exists
-  if [ "$1" = backend ]; then podman image exists "$IMAGE:$2"; else [ -d "$WWW/releases/$2" ]; fi
+  if [ "$1" = backend ]; then podman image exists "$IMAGE:$2"; else use_frontend "$1" && [ -d "$WWW/releases/$2" ]; fi
 }
 
-rollback() { # backend|frontend: history moves only after the target is confirmed present
+rollback() { # backend|frontend|frontend-staging: history moves only after the target is confirmed present
   local app=$1 target
   target="$(previous_entry "$app")"
   [ -n "$target" ] || die "no previous $app version to roll back to"
@@ -201,8 +213,8 @@ rollback() { # backend|frontend: history moves only after the target is confirme
     drop_last backend
     backend_healthy || die "backend $target unhealthy after rollback"
   else
-    point_frontend "$target"; drop_last frontend
-    frontend_healthy "$target" || die "frontend $target unhealthy after rollback"
+    point_frontend "$target"; drop_last "$app"
+    frontend_healthy "$target" || die "$app $target unhealthy after rollback"
   fi
   say "rolled back $app to $target"
 }
@@ -210,7 +222,8 @@ rollback() { # backend|frontend: history moves only after the target is confirme
 status() {
   echo "backend: $(live backend)"
   echo "frontend: $(live frontend)"
-  for app in backend frontend; do
+  echo "frontend-staging: $(live frontend-staging)"
+  for app in backend frontend frontend-staging; do
     echo "--- $app history"; tail -n 10 "$(history_file "$app")" 2>/dev/null || true
   done
 }
@@ -222,11 +235,12 @@ point_frontend() { # <version>
 
 frontend_healthy() { # <version>: nginx serves that release's index.html (loopback is exempt from the preview gate)
   local host got
-  if ! grep -rqsF /var/www/qhhoj/current "$ROOT/etc/nginx"; then
-    say "nginx does not serve v2 yet: file check only"
+  if ! grep -rqsF "$SERVED_ROOT" "$ROOT/etc/nginx"; then
+    say "nginx does not serve $SERVED_ROOT yet: file check only"
     cmp -s "$WWW/current/index.html" "$WWW/releases/$1/index.html"; return
   fi
-  host="$(env_value SITE_URL)"; host="${host#https://}"; host="${host%%/*}"
+  host="$(env_value "$URL_KEY")"; host="${host#https://}"; host="${host%%/*}"
+  [ -n "$host" ] || { warn "qhhoj-deploy: $URL_KEY is not set in $ENV_FILE"; return 1; }
   got="$(mktemp)"
   if curl -fsS -k --resolve "$host:443:127.0.0.1" -o "$got" "https://$host/" \
     && cmp -s "$got" "$WWW/releases/$1/index.html"; then
@@ -259,7 +273,7 @@ archive_safe() { # <tarball>: only regular files and directories, no absolute or
 }
 
 unpack_frontend() { # <version>: verified private copy of the incoming tarball -> releases/<version>
-  local name="frontend-dist-$1.tar.gz" dir="$WWW/releases/$1"
+  local name="$FRONTEND-dist-$1.tar.gz" dir="$WWW/releases/$1"
   STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
   stage_incoming "$name"
   verify_checksum "$STAGE" "$name" || die "checksum mismatch for $name"
@@ -274,7 +288,7 @@ unpack_frontend() { # <version>: verified private copy of the incoming tarball -
 carry_old_assets() { # <version>: tabs on a previous build still request its hashed chunks; keep them servable
   local version=$1 target="$WWW/releases/$1/assets" old
   mkdir -p "$target"
-  for old in $(tail -n "$KEEP" "$(history_file frontend)" 2>/dev/null || true); do
+  for old in $(tail -n "$KEEP" "$(history_file "$FRONTEND")" 2>/dev/null || true); do
     [ "$old" != "$version" ] && [ -d "$WWW/releases/$old/assets" ] || continue
     # Hashed names never collide, so no overwrite. Files keep their build mtime: the age filter drops
     # chunks older than ASSET_MAX_AGE_DAYS, and they never reach the next release either.
@@ -285,39 +299,41 @@ carry_old_assets() { # <version>: tabs on a previous build still request its has
 }
 
 prune_releases() {
-  local keep; keep="$(tail -n "$KEEP" "$(history_file frontend)")"
+  local keep; keep="$(tail -n "$KEEP" "$(history_file "$FRONTEND")")"
   for dir in "$WWW"/releases/*; do
     [ -d "$dir" ] || continue
     grep -qxF "$(basename "$dir")" <<<"$keep" || rm -rf "$dir"
   done
 }
 
-deploy_frontend() { # <version>
-  local version=$1 previous
+deploy_frontend() { # frontend|frontend-staging <version>
+  local version=$2 previous
   trap '' PIPE HUP # as in deploy_backend
+  use_frontend "$1"
   valid_tag "$version"
+  mkdir -p "$WWW/releases"
   unpack_frontend "$version"
-  previous="$(live frontend)"
+  previous="$(live "$FRONTEND")"
   carry_old_assets "$version"
   point_frontend "$version"
   if frontend_healthy "$version"; then
-    record frontend "$version"; prune_releases
-    rm -f "$INCOMING/frontend-dist-$version.tar.gz" "$INCOMING/frontend-dist-$version.tar.gz.sha256"
-    say "deployed frontend $version"; return
+    record "$FRONTEND" "$version"; prune_releases
+    rm -f "$INCOMING/$FRONTEND-dist-$version.tar.gz" "$INCOMING/$FRONTEND-dist-$version.tar.gz.sha256"
+    say "deployed $FRONTEND $version"; return
   fi
-  warn "qhhoj-deploy: frontend $version not served; restoring ${previous:-nothing}"
+  warn "qhhoj-deploy: $FRONTEND $version not served; restoring ${previous:-nothing}"
   if [ -n "$previous" ]; then point_frontend "$previous"; fi
   exit 1
 }
 
 main() {
-  mkdir -p "$STATE" "$WWW/releases" "$ROOT/run"
+  mkdir -p "$STATE" "$ROOT/run"
   exec 9>"$ROOT/run/qhhoj-deploy.lock"
   flock -w "$LOCK_WAIT" 9 || defer "another deploy holds the lock"
   case "${1:-}" in
     backend) deploy_backend "${2:-}" "${@:3}" ;;
-    frontend) deploy_frontend "${2:-}" ;;
-    rollback) case "${2:-}" in backend | frontend) rollback "$2" ;; *) usage ;; esac ;;
+    frontend | frontend-staging) deploy_frontend "$1" "${2:-}" ;;
+    rollback) case "${2:-}" in backend | frontend | frontend-staging) rollback "$2" ;; *) usage ;; esac ;;
     status) status ;;
     *) usage ;;
   esac

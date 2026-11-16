@@ -32,6 +32,9 @@ as_shell() { (unset SSH_ORIGINAL_COMMAND; QHHOJ_DEPLOY_ROOT="$host" bash "$here/
 grep -qx 'sudo -n /usr/local/sbin/qhhoj-deploy backend v2.1.0 --token-stdin' "$calls" || fail "the helper runs through sudo"
 : > "$calls"; as_shell -c 'sudo /usr/local/sbin/qhhoj-deploy frontend sha-0123456789ab' > "$out" 2>&1 || fail "as login shell"
 grep -qx 'sudo -n /usr/local/sbin/qhhoj-deploy frontend sha-0123456789ab' "$calls" || fail "the login shell runs the helper"
+# The staging frontend (frontend-v2 deploys from its staging branch): the same helper, the helper checks the words.
+: > "$calls"; serve 'sudo /usr/local/sbin/qhhoj-deploy frontend-staging sha-0123456789ab' > "$out" 2>&1 || fail "staging helper"
+grep -qx 'sudo -n /usr/local/sbin/qhhoj-deploy frontend-staging sha-0123456789ab' "$calls" || fail "the staging deploy runs the helper"
 
 # The upload, as the frontend deploy sends it (the full incoming path): lands in incoming/ only.
 echo dist > "$work/up/frontend-dist-sha-1.tar.gz"; echo sum > "$work/up/frontend-dist-sha-1.tar.gz.sha256"
