@@ -111,7 +111,7 @@ export class SessionService {
       | 'createdAt'
       | 'cookieIssuedAt'
       | 'hostCookie'
-  | 'hostCookieMarkedAt'
+      | 'hostCookieMarkedAt'
       | 'pendingTotpSecret'
       | 'webauthnChallenge'
       | 'webauthnRegistrationChallenge'

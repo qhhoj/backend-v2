@@ -618,10 +618,14 @@ describe('the session cookie with COOKIE_SECURE', () => {
     expect(usernameOf(response)).toBe('sam');
     const cookies = setCookies(response);
     expect(
-      cookies.some((c) => c.startsWith(`__Host-qhhoj_session=${id};`)),
+      cookies.some((cookie) =>
+        cookie.startsWith(`__Host-qhhoj_session=${id};`),
+      ),
     ).toBe(true);
     expect(
-      cookies.some((c) => /^qhhoj_session=;.*Expires=Thu, 01 Jan 1970/.test(c)),
+      cookies.some((cookie) =>
+        /^qhhoj_session=;.*Expires=Thu, 01 Jan 1970/.test(cookie),
+      ),
     ).toBe(true);
     await api
       .http()
@@ -656,11 +660,13 @@ describe('the session cookie with COOKIE_SECURE', () => {
       .expect(200);
     expect(usernameOf(both)).toBe('sam');
     expect(
-      setCookies(both).some((c) => c.startsWith('__Host-qhhoj_session=')),
+      setCookies(both).some((cookie) =>
+        cookie.startsWith('__Host-qhhoj_session='),
+      ),
     ).toBe(false);
-    expect(setCookies(both).some((c) => c.startsWith('qhhoj_session=;'))).toBe(
-      true,
-    );
+    expect(
+      setCookies(both).some((cookie) => cookie.startsWith('qhhoj_session=;')),
+    ).toBe(true);
     await api
       .http()
       .get(ME)
@@ -679,12 +685,16 @@ describe('the session cookie with COOKIE_SECURE', () => {
     const cookies = setCookies(response);
     for (const name of ['__Host-qhhoj_session', 'qhhoj_session'])
       expect(
-        cookies.some((c) => c.startsWith(`${name}=;`) && c.includes('Secure')),
+        cookies.some(
+          (cookie) =>
+            cookie.startsWith(`${name}=;`) && cookie.includes('Secure'),
+        ),
       ).toBe(true);
     // The old name is expired on the site's domain too, where a sibling subdomain can plant it.
     expect(
       cookies.some(
-        (c) => c.startsWith('qhhoj_session=;') && /Domain=/i.test(c),
+        (cookie) =>
+          cookie.startsWith('qhhoj_session=;') && /Domain=/i.test(cookie),
       ),
     ).toBe(true);
   });
