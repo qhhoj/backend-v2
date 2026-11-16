@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.43.0
+
+### Minor Changes
+
+- 57f7fce: New optional env `EXTRA_ORIGINS`: exact https origins besides `SITE_URL`'s that may send cookie requests and WebAuthn assertions, so a staging frontend (staging.qhhoj.com) can use the production api. Empty by default. `qhhoj-deploy` gains `frontend-staging`, and nginx a staging site that is never indexed. The session cookie becomes `__Host-qhhoj_session` (with `COOKIE_SECURE`); an existing `qhhoj_session` is accepted only for a session from before this release and reissued, so nobody is logged out; the old name keeps working for 60 s after that first reissue (the page's parallel requests), then is refused; a session issued as `__Host-` refuses the old name at once. Logout also expires the old name on the site's domain. `EXTRA_ORIGINS` refuses an origin with a port. `qhhoj-deploy-serve --staging-only` restricts the staging deploy key to `frontend-staging` through its own allow-list, with a 256 MiB limit per uploaded file and its own deploy lock; a frontend tarball that unpacks to more than 512 MiB is refused. A backend rollback past this release logs out users whose cookie was already reissued as `__Host-`.
+
 ## 2.42.1
 
 ### Patch Changes
