@@ -45,3 +45,26 @@ export function replaceImageUrls(
     replacements.has(url) ? `${head}${replacements.get(url)}` : whole;
   return text.replace(MARKDOWN_IMAGE, swap).replace(HTML_IMAGE, swap);
 }
+
+/** The stored HTML with each URL in `replacements` replaced as a literal string, also in its attribute-escaped form (`&` as `&amp;`). Nothing else changes, so raw HTML stays byte for byte. */
+export function replaceUrlsInHtml(
+  html: string,
+  replacements: ReadonlyMap<string, string>,
+): string {
+  let result = html;
+  for (const [url, ours] of replacements) {
+    const escape = (text: string) => text.replaceAll('&', '&amp;');
+    result = result.replaceAll(url, ours);
+    if (url.includes('&'))
+      result = result.replaceAll(escape(url), escape(ours));
+  }
+  return result;
+}
+
+const UPLOADS_BUCKET =
+  /^hackmd-prod-images\.s3[.-](?:[a-z0-9-]+\.)?amazonaws\.com$/;
+
+/** The S3 bucket hackmd.io serves its `/_uploads/` images from (`hackmd.io/_uploads/x.png` answers 302 to it). Allowed as a redirect target from hackmd.io only, never as a start URL. */
+export function isUploadsBucketHost(hostname: string): boolean {
+  return UPLOADS_BUCKET.test(hostname.toLowerCase());
+}

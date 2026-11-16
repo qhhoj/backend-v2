@@ -7,7 +7,7 @@ import {
   SVG_MAX_BYTES,
 } from '@libs/problems';
 import { sanitizeSvg } from '@libs/render';
-import { isRehostableHost } from './hackmd-urls';
+import { isRehostableHost, isUploadsBucketHost } from './hackmd-urls';
 
 export const FETCH = Symbol('FETCH');
 export type Fetch = typeof fetch;
@@ -44,23 +44,39 @@ export class ImageDownloader {
     includeImgur: boolean,
   ): Promise<Buffer> {
     let url = start;
+    let viaBucket = false;
+    let previousRehostable = false;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
       const target = new URL(url);
+      // The uploads bucket is allowed only as the target of a redirect from a rehostable host.
+      viaBucket = previousRehostable && isUploadsBucketHost(target.hostname);
       if (
         target.protocol !== 'https:' ||
-        !isRehostableHost(target.hostname, includeImgur)
+        !(viaBucket || isRehostableHost(target.hostname, includeImgur))
       )
         throw new Error('host not allowed');
+      previousRehostable = isRehostableHost(target.hostname, includeImgur);
       const response = await this.doFetch(url, {
         redirect: 'manual',
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       const location = response.headers.get('location');
       if (response.status >= 300 && response.status < 400 && location) {
+        await response.body?.cancel();
         url = new URL(location, url).href;
         continue;
       }
-      if (!response.ok) throw new Error(`http ${response.status}`);
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error(`http ${response.status}`);
+      }
+      if (
+        viaBucket &&
+        !(response.headers.get('content-type') ?? '').startsWith('image/')
+      ) {
+        await response.body?.cancel();
+        throw new Error('not an image content-type');
+      }
       return readCapped(response);
     }
     throw new Error('too many redirects');

@@ -60,7 +60,9 @@ describe('rerender-content job', () => {
     const dry = await run([]);
     expect(dry.planned).toBe(2);
     expect(dry.written).toBe(0);
-    expect(dry.sample.length).toBeLessThanOrEqual(10);
+    expect(dry.significant).toBe(2);
+    expect(dry.sample).toHaveLength(2);
+    expect(dry.sample[0]).toContain(stale);
     expect((await stored(Comment.name, stale))?.bodyHtml).toBe('<p>stale</p>');
 
     const backup = join(tmpdir(), `qhhoj-backup-${newId()}.jsonl`);
@@ -82,6 +84,9 @@ describe('rerender-content job', () => {
     ).toContainEqual({
       bodyHtml: '<p>stale</p>',
     });
+    expect(
+      lines.map((line) => (JSON.parse(line) as { after: unknown }).after),
+    ).toContainEqual({ bodyHtml: renderMarkdown('# Title\n\ntext', 'user') });
 
     expect((await run(['--apply', '--backup', `${backup}.2`])).planned).toBe(0);
   });

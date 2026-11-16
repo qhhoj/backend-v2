@@ -3,11 +3,13 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { StorageService } from '@libs/common';
 import { Problem, uuidStr } from '@libs/database';
-import { renderMarkdown, RenderLimitError } from '@libs/render';
-import type { RenderStyle } from '@libs/render';
 import type { ContentJob, RowChange, Tally } from '../content-job';
 import { writeChanges } from '../write-changes';
-import { imageUrlsOf, replaceImageUrls } from './hackmd-urls';
+import {
+  imageUrlsOf,
+  replaceImageUrls,
+  replaceUrlsInHtml,
+} from './hackmd-urls';
 import { ImageDownloader } from './image-downloader';
 import type { DownloadedImage } from './image-downloader';
 
@@ -20,15 +22,12 @@ interface Translation {
   language: string;
   description?: string;
   descriptionHtml?: string;
-  isMarkupTrusted?: boolean;
 }
 
 interface ProblemRow {
   _id: string;
   description?: string;
   descriptionHtml?: string;
-  isDescriptionMarkupTrusted?: boolean;
-  isFullMarkup?: boolean;
   translations?: Translation[];
 }
 
@@ -38,14 +37,7 @@ interface Statement {
   htmlPath: string;
   text: string;
   html: string;
-  style: RenderStyle;
 }
-
-/** Same rule as the editor (`styleOf`): unsanitized only on a full-markup problem and only for trusted text. */
-const styleOf = (
-  row: ProblemRow,
-  isTrusted: boolean | undefined,
-): RenderStyle => (row.isFullMarkup && isTrusted ? 'problem-full' : 'problem');
 
 function statementsOf(row: ProblemRow): Statement[] {
   const own: Statement = {
@@ -53,7 +45,6 @@ function statementsOf(row: ProblemRow): Statement[] {
     htmlPath: 'descriptionHtml',
     text: row.description ?? '',
     html: row.descriptionHtml ?? '',
-    style: styleOf(row, row.isDescriptionMarkupTrusted),
   };
   const translated = (row.translations ?? []).map(
     (translation, index): Statement => ({
@@ -61,13 +52,12 @@ function statementsOf(row: ProblemRow): Statement[] {
       htmlPath: `translations.${index}.descriptionHtml`,
       text: translation.description ?? '',
       html: translation.descriptionHtml ?? '',
-      style: styleOf(row, translation.isMarkupTrusted),
     }),
   );
   return [own, ...translated];
 }
 
-/** Takes every hackmd image of a problem statement (and, with `includeImgur`, imgur ones) to our media storage, rewrites the URL in the Markdown, and re-renders that statement's HTML through the normal renderer. An image that cannot be fetched keeps its URL; the statement's other images are still re-hosted. */
+/** Takes every hackmd image of a problem statement (and, with `includeImgur`, imgur ones) to our media storage, and rewrites each downloaded URL, as a literal string, in both the Markdown and the stored HTML. The statement is never re-rendered, so raw HTML of a full-markup statement stays byte for byte. An image that cannot be fetched keeps its URL; the statement's other images are still re-hosted. */
 @Injectable()
 export class RehostHackmdImagesJob implements ContentJob {
   readonly name = 'rehost-hackmd-images';
@@ -100,8 +90,6 @@ export class RehostHackmdImagesJob implements ContentJob {
           {
             description: 1,
             descriptionHtml: 1,
-            isDescriptionMarkupTrusted: 1,
-            isFullMarkup: 1,
             translations: 1,
           },
         )
@@ -145,16 +133,12 @@ export class RehostHackmdImagesJob implements ContentJob {
       }
       if (!replacements.size) continue;
       const text = replaceImageUrls(statement.text, replacements);
-      const html = renderStatement(text, statement.style, tally);
-      if (html === null) continue;
-      Object.assign(before, {
-        [statement.textPath]: statement.text,
-        [statement.htmlPath]: statement.html,
-      });
-      Object.assign(after, {
-        [statement.textPath]: text,
-        [statement.htmlPath]: html,
-      });
+      const html = replaceUrlsInHtml(statement.html, replacements);
+      Object.assign(before, { [statement.textPath]: statement.text });
+      Object.assign(after, { [statement.textPath]: text });
+      if (html === statement.html) continue;
+      Object.assign(before, { [statement.htmlPath]: statement.html });
+      Object.assign(after, { [statement.htmlPath]: html });
     }
     return Object.keys(after).length
       ? { collection: 'problems', id: uuidStr(row._id), before, after, files }
@@ -170,19 +154,5 @@ export class RehostHackmdImagesJob implements ContentJob {
     );
     if ('failure' in image) this.failures.set(url, image);
     return image;
-  }
-}
-
-function renderStatement(
-  text: string,
-  style: RenderStyle,
-  tally: Tally,
-): string | null {
-  try {
-    return renderMarkdown(text, style);
-  } catch (error) {
-    if (!(error instanceof RenderLimitError)) throw error;
-    tally('statement over the render limit, kept as stored');
-    return null;
   }
 }

@@ -13,6 +13,9 @@ const PNG = Buffer.from(
   'hex',
 );
 const GOOD = 'https://hackmd.io/_uploads/good.png';
+const VIA_BUCKET = 'https://hackmd.io/_uploads/via-bucket.png';
+const BUCKET_URL =
+  'https://hackmd-prod-images.s3-ap-northeast-1.amazonaws.com/uploads/good.png';
 const MISSING = 'https://hackmd.io/_uploads/missing.png';
 
 /** The network: GOOD is a PNG, everything else a 404. */
@@ -20,7 +23,14 @@ const fetchStub = jest.fn((url: string) =>
   Promise.resolve(
     url === GOOD
       ? new Response(PNG, { status: 200 })
-      : new Response('no', { status: 404 }),
+      : url === VIA_BUCKET
+        ? new Response(null, { status: 302, headers: { location: BUCKET_URL } })
+        : url === BUCKET_URL
+          ? new Response(PNG, {
+              status: 200,
+              headers: { 'content-type': 'image/png' },
+            })
+          : new Response('no', { status: 404 }),
   ),
 ) as unknown as typeof fetch;
 
@@ -36,16 +46,14 @@ describe('rehost-hackmd-images job', () => {
   });
   afterAll(() => test.teardown());
 
-  const insert = async (description: string) => {
+  const insert = async (description: string, html = '<p>old</p>') => {
     const id = newId();
     await test.raw(Problem.name).insertOne({
       _id: toUuid(id),
       code: `p${id.slice(0, 6)}`,
       description,
-      descriptionHtml: '<p>old</p>',
-      translations: [
-        { language: 'en', description, descriptionHtml: '<p>old</p>' },
-      ],
+      descriptionHtml: html,
+      translations: [{ language: 'en', description, descriptionHtml: html }],
     });
     return id;
   };
@@ -54,7 +62,7 @@ describe('rehost-hackmd-images job', () => {
 
   it('re-hosts hackmd images, re-renders, backs up, keeps failed and note links, and is idempotent', async () => {
     const text = `![a](${GOOD})\n![b](${MISSING})\n[note](https://hackmd.io/@x/note)\n<img src="${GOOD}">`;
-    const id = await insert(text);
+    const id = await insert(text, `<p><img src="${GOOD}"></p>`);
     const plain = await insert('no images here, see hackmd.io');
 
     const dry = await run([]);
@@ -77,13 +85,55 @@ describe('rehost-hackmd-images job', () => {
     expect((await stored(plain))?.description).toBe(
       'no images here, see hackmd.io',
     );
-    expect(readFileSync(backup, 'utf8')).toContain(GOOD);
+    const backedUp = JSON.parse(readFileSync(backup, 'utf8').split('\n')[0]);
+    expect(backedUp.before.description).toBe(text);
+    expect(backedUp.after.description).toBe(row?.description);
     const url = /!\[a\]\(([^)]+)\)/.exec(String(row?.description))![1];
     const path = url.slice(test.storage.publicUrl('').length);
     expect(readFileSync(test.storage.absolutePathOf(path))).toEqual(PNG);
 
     const second = await run(['--apply', '--backup', `${backup}.2`]);
     expect(second.planned).toBe(0);
+  });
+
+  it('rewrites only the image URL: raw HTML of a full-markup statement stays byte for byte', async () => {
+    const html =
+      `<table style="border:1px solid red"><tr><td>x &amp; y</td></tr></table>\n` +
+      `<div style="color:#f00" onclick="k()">\n  <img src="${GOOD}" width="40">\n</div>`;
+    const text = `<div style="color:#f00" onclick="k()"><img src="${GOOD}"></div>`;
+    const id = await insert(text, html);
+    const apply = await run([
+      '--apply',
+      '--backup',
+      join(tmpdir(), `qhhoj-backup-${newId()}.jsonl`),
+    ]);
+    expect(apply.written).toBeGreaterThanOrEqual(1);
+    const ours = test.storage.publicUrl(
+      /images\/hackmd-[0-9a-f]+\.png/.exec(
+        String((await stored(id))?.descriptionHtml),
+      )![0],
+    );
+    expect((await stored(id))?.descriptionHtml).toBe(html.replace(GOOD, ours));
+    expect((await stored(id))?.description).toBe(text.replace(GOOD, ours));
+  });
+
+  it('follows a redirect from hackmd to its uploads bucket, but never starts there', async () => {
+    const id = await insert(
+      `![v](${VIA_BUCKET})`,
+      `<p><img src="${VIA_BUCKET}"></p>`,
+    );
+    const direct = await insert(`![d](${BUCKET_URL}) hackmd.io`);
+    await run([
+      '--apply',
+      '--backup',
+      join(tmpdir(), `qhhoj-backup-${newId()}.jsonl`),
+    ]);
+    expect((await stored(id))?.description).toContain(
+      test.storage.publicUrl('images/hackmd-'),
+    );
+    expect((await stored(direct))?.description).toBe(
+      `![d](${BUCKET_URL}) hackmd.io`,
+    );
   });
 
   it('never fetches a host that is not hackmd, also after a redirect', async () => {
