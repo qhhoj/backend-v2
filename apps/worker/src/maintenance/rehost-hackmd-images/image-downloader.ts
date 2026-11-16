@@ -66,21 +66,26 @@ export class ImageDownloader {
         url = new URL(location, url).href;
         continue;
       }
-      if (!response.ok) {
-        await response.body?.cancel();
-        throw new Error(`http ${response.status}`);
-      }
-      if (
-        viaBucket &&
-        !(response.headers.get('content-type') ?? '').startsWith('image/')
-      ) {
-        await response.body?.cancel();
-        throw new Error('not an image content-type');
-      }
+      await assertImageResponse(response, viaBucket);
       return readCapped(response);
     }
     throw new Error('too many redirects');
   }
+}
+
+async function assertImageResponse(
+  response: Response,
+  viaBucket: boolean,
+): Promise<void> {
+  const contentType = response.headers.get('content-type') ?? '';
+  const failure = !response.ok
+    ? `http ${response.status}`
+    : viaBucket && !contentType.startsWith('image/')
+      ? 'not an image content-type'
+      : null;
+  if (!failure) return;
+  await response.body?.cancel();
+  throw new Error(failure);
 }
 
 async function readCapped(response: Response): Promise<Buffer> {

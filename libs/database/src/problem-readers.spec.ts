@@ -96,6 +96,11 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'F',
     'only live problems are synced automatically',
   ],
+  'apps/worker/src/maintenance/rehost-hackmd-images/rehost-hackmd-images.job.ts':
+    [
+      'S',
+      'a manual clean-up of hackmd image links covers every stored statement, deleted problems included, so a restored problem is clean too',
+    ],
   'apps/worker/src/migrations/problem-databytes/problem-databytes.repository.ts':
     [
       'S',

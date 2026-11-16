@@ -85,7 +85,9 @@ describe('rehost-hackmd-images job', () => {
     expect((await stored(plain))?.description).toBe(
       'no images here, see hackmd.io',
     );
-    const backedUp = JSON.parse(readFileSync(backup, 'utf8').split('\n')[0]);
+    const backedUp = JSON.parse(
+      readFileSync(backup, 'utf8').split('\n')[0],
+    ) as { before: Record<string, string>; after: Record<string, string> };
     expect(backedUp.before.description).toBe(text);
     expect(backedUp.after.description).toBe(row?.description);
     const url = /!\[a\]\(([^)]+)\)/.exec(String(row?.description))![1];
