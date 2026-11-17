@@ -41,10 +41,12 @@ export class OrganizationProblemRules {
     );
     const isOrganizationPrivate =
       fields.isOrganizationPrivate ?? original.isOrganizationPrivate;
-    const moveWaiver = await this.authorizeMove(principal, scopeOf(original), {
-      organizations,
-      isOrganizationPrivate,
-    });
+    const moveWaiver = await this.authorizeMove(
+      principal,
+      scopeOf(original),
+      { organizations, isOrganizationPrivate },
+      original.isPublic,
+    );
     if (isOrganizationPrivate)
       await this.assertPrefixOnChange(
         principal,
@@ -66,12 +68,14 @@ export class OrganizationProblemRules {
    * A change of the organization fields by an editor without `judge.edit_all_problem` (who keeps the staff gate's full
    * rights): the organization creation rule in every organization it adds or removes, and `judge.add_problem` to leave
    * them all for the site. Returns the staff gates it opens; 403 with an issue code on `organizations` otherwise. A
-   * change that makes a problem organization-private with no organization left opens no gate.
+   * change that makes a public site problem organization-private, or any problem organization-private with no
+   * organization left, opens no gate: it needs `judge.edit_all_problem`.
    */
   private async authorizeMove(
     principal: Principal,
     before: OrganizationScope,
     after: OrganizationScope,
+    isPublic: boolean,
   ): Promise<ReadonlyArray<keyof CreateProblemDto>> {
     if (
       sameJson(before, after) ||
@@ -82,8 +86,8 @@ export class OrganizationProblemRules {
     const isSiteMove = leavesForSite(before, after);
     if (
       after.isOrganizationPrivate &&
-      !after.organizations.length &&
-      !before.isOrganizationPrivate
+      !before.isOrganizationPrivate &&
+      (isPublic || !after.organizations.length)
     )
       return [];
     if (

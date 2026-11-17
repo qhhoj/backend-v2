@@ -172,7 +172,7 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
   });
 
   it('moves a site problem into an organization the editor administers and charges the problem credit', async () => {
-    await problem('beta_site', []);
+    await problem('beta_site', [], { isPublic: false });
     await patch('owner', 'beta_site', {
       organizations: [ids.beta],
       isOrganizationPrivate: true,
@@ -182,6 +182,21 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
       isOrganizationPrivate: true,
     });
     expect(await creditsOf(ids.beta)).toBe(10);
+  });
+
+  it('refuses an organization editor who hides a public site problem in an organization, and keeps it public', async () => {
+    await problem('beta_public', []);
+    await patch('owner', 'beta_public', {
+      organizations: [ids.beta],
+      isOrganizationPrivate: true,
+    })
+      .expect(403)
+      .expect(errorCode('forbidden'));
+    expect(await stored('beta_public')).toEqual({
+      organizations: [],
+      isOrganizationPrivate: false,
+    });
+    await api.http().get('/api/internal/problems/beta_public').expect(200);
   });
 
   it('refuses a move into an organization whose storage the problem does not fit', async () => {

@@ -25,6 +25,12 @@ function linkFields(problem: ProblemDocument) {
   };
 }
 
+/** The `allowedLanguages` to put back when an active link ends: those from before it, none when the link was not active. */
+function restoredLanguages(problem: ProblemDocument) {
+  const previous = problem.externalJudge?.previousLanguages;
+  return previous ? { allowedLanguages: previous } : {};
+}
+
 function linkResponse(link: ExternalJudgeLink): ExternalJudgeLinkResponse {
   return {
     isActive: link.isActive,
@@ -59,7 +65,7 @@ export class ProblemExternalJudgeService {
     return this.answer(problem);
   }
 
-  /** Stores the link; while active, `allowedLanguages` become exactly the mapped languages, so the submit check only offers what the remote OJ takes. */
+  /** Stores the link. While it is active, `allowedLanguages` are exactly the mapped languages, so the submit check only offers what the remote OJ takes; when it stops being active the earlier list comes back. */
   async put(
     auth: AuthContext,
     code: string,
@@ -67,20 +73,24 @@ export class ProblemExternalJudgeService {
   ): Promise<ProblemExternalJudgeResponse> {
     const problem = await this.linkableProblem(auth.principal, code);
     this.assertMappable(dto);
-    const link = this.linkOf(problem.externalJudge, dto);
+    const link = this.linkOf(problem.externalJudge, dto, problem);
     const changes: Record<string, unknown> = { externalJudge: link };
     if (link.isActive)
       changes.allowedLanguages = link.languages.map((entry) => entry.language);
+    else Object.assign(changes, restoredLanguages(problem));
     return this.write(auth, problem, changes);
   }
 
-  /** The problem goes back to judge-v2; `allowedLanguages` stay as they are. */
+  /** The problem goes back to judge-v2 with the `allowedLanguages` it had before the link. */
   async remove(
     auth: AuthContext,
     code: string,
   ): Promise<ProblemExternalJudgeResponse> {
     const problem = await this.linkableProblem(auth.principal, code);
-    return this.write(auth, problem, { externalJudge: null });
+    return this.write(auth, problem, {
+      externalJudge: null,
+      ...restoredLanguages(problem),
+    });
   }
 
   /** The link decides what the problem is judged against, so on a manually managed or mirror problem, whose test data its editors cannot write (`ProblemDataStore.writableProblem`), only `judge.edit_all_problem` sets or removes it. */
@@ -149,6 +159,7 @@ export class ProblemExternalJudgeService {
   private linkOf(
     existing: ExternalJudgeLink | null,
     dto: PutExternalJudgeDto,
+    problem: ProblemDocument,
   ): ExternalJudgeLink {
     const isSame =
       existing?.oj === dto.oj && existing.problemId === dto.problemId;
@@ -168,6 +179,9 @@ export class ProblemExternalJudgeService {
           : isSame
             ? existing.verifiedAt
             : null,
+      previousLanguages: dto.isActive
+        ? (existing?.previousLanguages ?? problem.allowedLanguages)
+        : null,
     };
   }
 }

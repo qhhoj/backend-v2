@@ -282,19 +282,45 @@ describe('External judge routes', () => {
       );
     });
 
-    it('leaves the allowed languages alone while the link is inactive, and on delete', async () => {
+    it('keeps the allowed languages while the link is inactive, and gives them back when an active link is deleted', async () => {
       await createProblem(api, catalog, { code: 'quiet', authors: [editorId] });
+      const original = await allowedOf('quiet');
       await as(editor)
         .put(configOf('quiet'), { ...mapping(), isActive: false })
         .expect(200);
-      expect(await allowedOf('quiet')).toHaveLength(2);
+      expect(await allowedOf('quiet')).toEqual(original);
       await as(editor).put(configOf('quiet'), mapping()).expect(200);
       expect(await allowedOf('quiet')).toEqual([catalog.languages.cpp]);
       const removed = dataOf(
         await as(editor).delete(configOf('quiet')).expect(200),
       );
       expect(removed).toEqual({ connected: true, link: null });
-      expect(await allowedOf('quiet')).toEqual([catalog.languages.cpp]);
+      expect(await allowedOf('quiet')).toEqual(original);
+    });
+
+    it('gives the allowed languages back when an active link is made inactive, and keeps the first list over repeated saves', async () => {
+      await createProblem(api, catalog, {
+        code: 'toggle',
+        authors: [editorId],
+      });
+      const original = await allowedOf('toggle');
+      await as(editor).put(configOf('toggle'), mapping()).expect(200);
+      await as(editor).put(configOf('toggle'), mapping()).expect(200);
+      await as(editor)
+        .put(configOf('toggle'), { ...mapping(), isActive: false })
+        .expect(200);
+      expect(await allowedOf('toggle')).toEqual(original);
+    });
+
+    it('keeps the current allowed languages when a link saved without the earlier list is deleted', async () => {
+      await createProblem(api, catalog, { code: 'old', authors: [editorId] });
+      await as(editor).put(configOf('old'), mapping()).expect(200);
+      await api.problems.collection.updateOne(
+        { code: 'old' },
+        { $unset: { 'externalJudge.previousLanguages': '' } },
+      );
+      await as(editor).delete(configOf('old')).expect(200);
+      expect(await allowedOf('old')).toEqual([catalog.languages.cpp]);
     });
 
     it('sets and removes the link of a manually managed or mirror problem only for judge.edit_all_problem', async () => {
