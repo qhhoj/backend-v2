@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
+import { uuidStr } from '@libs/database';
 import type { Principal } from '@libs/auth';
 import { AppError, issueError } from '@libs/common';
 import { ContestAccess } from '../../contests/core/contest-access';
+import type { ContestDocument } from '../../contests/core/contests.repository';
 import { ContestsRepository } from '../../contests/core/contests.repository';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
@@ -13,6 +15,14 @@ import type { SubmissionBatchFilterDto } from './dto/submission-batch.dto';
 
 const notFound = (field: string, message: string): AppError =>
   issueError('not_found', 404, { field, code: 'not_found', message });
+
+/** Whether `problem` is one of `contest`'s problems. */
+const listsProblem = (
+  contest: ContestDocument,
+  problem: { _id: string } | null,
+): boolean =>
+  problem !== null &&
+  contest.problems.some((entry) => uuidStr(entry.problem) === problem._id);
 
 const assertMayRunBatch = (principal: Principal, scope: BatchScope): void => {
   if (!mayRunBatch(principal, scope))
@@ -60,7 +70,8 @@ export class BatchScopeService {
     const problem = problemCode
       ? await this.problemRows.findByCode(problemCode)
       : null;
-    if (problemCode && !problem) throw notFound('problem', 'No such problem');
+    if (problemCode && !listsProblem(contest, problem))
+      throw notFound('problem', 'No such problem');
     return {
       refs: {
         contestId: contest._id,
