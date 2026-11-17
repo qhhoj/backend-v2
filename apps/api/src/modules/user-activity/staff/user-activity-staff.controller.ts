@@ -74,6 +74,7 @@ export class UserActivityStaffController {
     description: 'The matching rows as CSV, newest first.',
     content: { 'text/csv': { schema: { type: 'string' } } },
   })
+  @NoImpersonation()
   @Get('logs/export')
   export(
     @Query() query: ActivityFilterDto,

@@ -10,7 +10,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CurrentAuth, RequirePermission, SessionOnly } from '@libs/auth';
+import {
+  CurrentAuth,
+  NoImpersonation,
+  RequirePermission,
+  SessionOnly,
+} from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import {
   ApiPaginatedResponse,
@@ -128,6 +133,7 @@ export class FlatpagesAdminController {
    * Needs a browser session (API tokens get 403).
    */
   @SessionOnly()
+  @NoImpersonation()
   @RequirePermission('flatpages.add_flatpage')
   @Post()
   create(
@@ -145,6 +151,7 @@ export class FlatpagesAdminController {
    * Needs a browser session (API tokens get 403).
    */
   @SessionOnly()
+  @NoImpersonation()
   @RequirePermission('flatpages.change_flatpage')
   @Patch(':id')
   update(
@@ -163,6 +170,7 @@ export class FlatpagesAdminController {
    * Needs a browser session (API tokens get 403).
    */
   @SessionOnly()
+  @NoImpersonation()
   @RequirePermission('flatpages.delete_flatpage')
   @Delete(':id')
   @HttpCode(204)

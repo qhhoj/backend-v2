@@ -22,6 +22,7 @@ export * from './principal/permissions';
 export * from './principal/permission-catalog';
 export * from './principal/build-principal';
 export * from './principal/permissions-of';
+export * from './principal/shielding-rights';
 export * from './principal/principal';
 export * from './principal/principal.service';
 export * from './principal/optional-principal';

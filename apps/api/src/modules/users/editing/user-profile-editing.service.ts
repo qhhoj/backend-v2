@@ -1,8 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   hasPermission,
   PrincipalService,
   SessionService,
+  unusablePassword,
   UsersRepository,
 } from '@libs/auth';
 import type { AuthContext, Principal, UserDocument } from '@libs/auth';
@@ -14,6 +15,7 @@ import {
 } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type Redis from 'ioredis';
+import { PasswordResetService } from '../../auth/password-reset/password-reset.service';
 import { linkedProviders } from '../../auth/social/oauth-provider';
 import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
@@ -55,6 +57,8 @@ const emailChanges = (user: UserDocument, email: string): Changes => ({
 /** Staff edits of another user's profile (legacy Django `ProfileAdmin` plus the `auth.User` e-mail and active flag). Every write leaves a `user` revision. */
 @Injectable()
 export class UserProfileEditingService {
+  private readonly logger = new Logger(UserProfileEditingService.name);
+
   constructor(
     private readonly users: UsersRepository,
     private readonly sessions: SessionService,
@@ -65,6 +69,7 @@ export class UserProfileEditingService {
     @Inject(REDIS) private readonly redis: Redis,
     private readonly feedKeys: FeedKeysRepository,
     private readonly principals: PrincipalService,
+    private readonly passwordReset: PasswordResetService,
   ) {}
 
   async get(principal: Principal, username: string): Promise<UserEditResponse> {
@@ -200,11 +205,12 @@ export class UserProfileEditingService {
     return isActive;
   }
 
-  /** Deactivation stamps `deactivatedAt` (never reclaimed as an abandoned signup) and ends every session, the API token and the contest feed keys the user minted at once (the guard also refuses inactive users). */
+  /** Deactivation stamps `deactivatedAt` (never reclaimed as an abandoned signup) and ends every session, the API token and the contest feed keys the user minted at once (the guard also refuses inactive users). Activating a signup that was never activated (`deactivatedAt` null) is the activation-key write: see `activateSignup`. */
   private async writeActivation(
     user: UserDocument,
     isActive: boolean,
   ): Promise<void> {
+    if (isActive && !user.deactivatedAt) return this.activateSignup(user);
     if (isActive) {
       await this.users.update(user._id, { isActive, deactivatedAt: null });
       return;
@@ -216,6 +222,25 @@ export class UserProfileEditingService {
     });
     await this.sessions.destroyAllForUser(user._id);
     await this.feedKeys.revokeMintedBy(user._id, new Date());
+  }
+
+  /** As `RegistrationService.activate`: a password chosen before the mailbox was proven is replaced by an unusable one in the activating write, and the owner is mailed a reset link (a failed mail is logged; the reset form sends another). 409 when the row changed since it was read. */
+  private async activateSignup(user: UserDocument): Promise<void> {
+    const activated = await this.users.activate(
+      user._id,
+      user.credentialEpoch,
+      unusablePassword(),
+    );
+    if (!activated)
+      throw new AppError('conflict', 409, 'The user changed; reload and retry');
+    if (!activated.passwordSetBeforeVerification) return;
+    try {
+      await this.passwordReset.sendTo(activated);
+    } catch (error) {
+      this.logger.error(
+        `Reset mail at staff activation of ${user._id} failed: ${(error as Error).message}`,
+      );
+    }
   }
 
   /** E-mails are not uniquely indexed (legacy duplicates): checked case-insensitively before any write, and again under the lock. */

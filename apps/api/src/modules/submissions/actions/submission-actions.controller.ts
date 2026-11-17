@@ -8,7 +8,7 @@ import {
   Put,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { CurrentAuth, SessionOnly } from '@libs/auth';
+import { CurrentAuth, NoImpersonation, SessionOnly } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { SubmissionIdParamDto } from '../core/dto/submission-params.dto';
 import { ScoreOverrideDto } from './dto/score-override.dto';
@@ -95,6 +95,7 @@ export class SubmissionActionsController {
    * Needs a browser session (API tokens get 403).
    */
   @SessionOnly()
+  @NoImpersonation()
   @Put(':id/score')
   @HttpCode(204)
   overrideScore(

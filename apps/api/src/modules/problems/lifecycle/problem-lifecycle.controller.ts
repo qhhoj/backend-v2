@@ -9,7 +9,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { CurrentAuth, RequirePermission, SessionOnly } from '@libs/auth';
+import {
+  CurrentAuth,
+  NoImpersonation,
+  RequirePermission,
+  SessionOnly,
+} from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
@@ -61,6 +66,7 @@ export class ProblemLifecycleController {
    * Needs a browser session (API tokens get 403).
    */
   @SessionOnly()
+  @NoImpersonation()
   @RequirePermission('judge.delete_problem')
   @Delete(':code')
   @HttpCode(204)
@@ -104,6 +110,7 @@ export class ProblemLifecycleController {
    * 409 `not_deleted` for a live problem.
    */
   @SessionOnly()
+  @NoImpersonation()
   @RequirePermission('judge.delete_problem')
   @Post(':code/purge-now')
   @HttpCode(202)

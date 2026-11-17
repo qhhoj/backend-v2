@@ -2,7 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
-import { UsersRepository } from '@libs/auth';
+import { GroupsQuerier, UsersRepository } from '@libs/auth';
 import { contestJobs, rankingCacheKey } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
@@ -172,6 +172,46 @@ describe('disqualification', () => {
       201,
     );
     expect((await userOf(repeat._id)).banReason).toBe('Spam');
+  });
+
+  it('never bans a staff account at the threshold: superuser, isStaff, or a right held through a role', async () => {
+    const ops = await api.groups.create({
+      name: 'dq_ops',
+      permissions: ['judge.change_settings'],
+    });
+    await api.app.get(GroupsQuerier).resync();
+    const targets = [
+      await createUserWith(api, 'dq_root', { isSuperuser: true }),
+      await createUserWith(api, 'dq_staff', { isStaff: true }),
+      await createUserWith(api, 'dq_ops', { groups: [ops._id] }),
+    ];
+    const rootSession = await loginAs(api, targets[0]._id);
+    for (const target of targets)
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const contest = await createContest(api, { authors: [editorId] });
+        const row = await joinParticipation(api, contest._id, target._id);
+        await disqualify(contest.key, row._id, true).expect(201);
+      }
+    for (const target of targets)
+      expect(await userOf(target._id)).toMatchObject({
+        banReason: null,
+        isActive: true,
+      });
+    await authed(api.http().get('/api/internal/profile'), rootSession).expect(
+      200,
+    );
+  });
+
+  it('counts only live participations toward the threshold: virtual rows never ban', async () => {
+    const target = await createUserWith(api, 'dq_virtual');
+    const contest = await createContest(api, { authors: [editorId] });
+    for (const virtual of [1, 2]) {
+      const row = await joinParticipation(api, contest._id, target._id, {
+        virtual,
+      });
+      await disqualify(contest.key, row._id, true).expect(201);
+    }
+    expect((await userOf(target._id)).banReason).toBeNull();
   });
 
   it('lifts a cheating ban without activating an account that was inactive before it', async () => {
