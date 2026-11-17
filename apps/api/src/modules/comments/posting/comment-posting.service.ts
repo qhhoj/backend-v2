@@ -88,6 +88,8 @@ export class CommentPostingService {
       COMMENT_LIMIT,
       COMMENT_WINDOW_SECONDS,
     );
+    // Rendered after the reservation and outside the release: a refused render still spends the hit.
+    const bodyHtml = renderCommentBody(dto.body);
     let comment: CommentDocument;
     try {
       const commentId = newId();
@@ -100,7 +102,7 @@ export class CommentPostingService {
         threadId: rootOf(path),
         path,
         body: dto.body,
-        bodyHtml: renderCommentBody(dto.body),
+        bodyHtml,
         number: await this.comments.nextNumber(pageInfo.page),
       });
     } catch (error) {
@@ -159,8 +161,8 @@ export class CommentPostingService {
       EDIT_LIMIT,
       EDIT_WINDOW_SECONDS,
     );
+    const bodyHtml = renderCommentBody(body);
     try {
-      const bodyHtml = renderCommentBody(body);
       await this.saveEdit(principal, { id, comment, body, bodyHtml });
     } catch (error) {
       await releaseHit();

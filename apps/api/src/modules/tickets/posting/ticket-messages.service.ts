@@ -46,7 +46,7 @@ export class TicketMessagesService {
     return this.responses.messageOf(message);
   }
 
-  /** Rate limit, then the render and the capped push; a refused body or write gives its hit back. */
+  /** Rate limit, then the render and the capped push; a refused write gives its hit back, a refused render does not. */
   private async save(
     principal: Principal,
     ticketId: string,
@@ -57,14 +57,14 @@ export class TicketMessagesService {
       TICKET_MESSAGE_LIMIT,
       TICKET_WINDOW_SECONDS,
     );
+    const message = {
+      _id: newId(),
+      user: principal.userId,
+      body,
+      bodyHtml: renderField(body, 'user', 'body'),
+      createdAt: new Date(),
+    };
     try {
-      const message = {
-        _id: newId(),
-        user: principal.userId,
-        body,
-        bodyHtml: renderField(body, 'user', 'body'),
-        createdAt: new Date(),
-      };
       if (
         !(await this.tickets.pushMessage(
           ticketId,

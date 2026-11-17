@@ -1,7 +1,7 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import Redis from 'ioredis';
-import { REDIS } from '@libs/common';
+import { AppError, REDIS } from '@libs/common';
 import { communityJobs, TICKET_EVENTS_CHANNEL } from '@libs/community';
 import type { DiscordWebhookJob, TicketEvent } from '@libs/community';
 import { newId, toUuid, uuidStr } from '@libs/database';
@@ -183,9 +183,18 @@ describe('filing tickets and posting messages', () => {
     }).expect(403);
   });
 
-  it('refuses a message over the rate limit before rendering it', async () => {
+  it('refuses a message over the rate limit before rendering it; a body the renderer refuses costs a hit', async () => {
     const ticket = await createTicket(api, { creator: people.filer.id });
-    for (let index = 0; index < TICKET_MESSAGE_LIMIT; index += 1)
+    const refuse = jest
+      .spyOn(markup, 'renderField')
+      .mockImplementationOnce(() => {
+        throw new AppError('validation_failed', 400, 'Too much math');
+      });
+    await post('filer', ticketUrl(ticket._id, '/messages'), {
+      body: 'refused',
+    }).expect(400);
+    refuse.mockRestore();
+    for (let index = 0; index < TICKET_MESSAGE_LIMIT - 1; index += 1)
       await post('filer', ticketUrl(ticket._id, '/messages'), {
         body: `reply ${index}`,
       }).expect(201);

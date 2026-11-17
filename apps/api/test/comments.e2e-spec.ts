@@ -1115,17 +1115,24 @@ describe('comment posting and editing', () => {
     }
   });
 
-  it('limits a user to 10 comments in 5 minutes', async () => {
+  it('limits a user to 10 comments in 5 minutes; a body the renderer refuses costs a hit', async () => {
     const { session } = await person();
     const page = await createPost(api);
-    for (let index = 0; index < 10; index += 1)
+    const render = jest
+      .spyOn(commentMarkup, 'renderCommentBody')
+      .mockImplementationOnce(() => {
+        throw new AppError('validation_failed', 400, 'Too much math');
+      });
+    await post(page._id, session, { body: 'refused' }).expect(400);
+    render.mockRestore();
+    for (let index = 0; index < 9; index += 1)
       await post(page._id, session, { body: `comment ${index}` }).expect(201);
     await post(page._id, session, { body: 'one too many' })
       .expect(429)
       .expect(errorCode('rate_limited'));
   });
 
-  it('limits a user to 20 comment edits in 5 minutes, refusing before any render; a refused edit costs nothing', async () => {
+  it('limits a user to 20 comment edits in 5 minutes, refusing before any render; a conflict costs nothing, a refused render costs a hit', async () => {
     const { user, session } = await person();
     const page = await createPost(api);
     const comment = await createComment(api, {
@@ -1143,7 +1150,7 @@ describe('comment posting and editing', () => {
         throw new AppError('validation_failed', 400, 'Too much math');
       });
     await edit(comment._id, session, 'refused').expect(400);
-    for (let index = 0; index < 20; index += 1)
+    for (let index = 0; index < 19; index += 1)
       await edit(comment._id, session, `edit ${index}`).expect(200);
     render.mockClear();
     await edit(comment._id, session, 'one too many')

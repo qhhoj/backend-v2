@@ -37,6 +37,8 @@ type RenderEnv = {
   deferredMath?: { nonce: string; formulas: string[] };
   /** `#C` problem references; absent, `#C` stays text. */
   problemLinks?: ProblemLinks;
+  /** Table cells (header and body, padded short rows included) this render may still lay out; absent, no limit. */
+  tableCellsLeft?: number;
 };
 
 /** A slot element standing for the formula; sanitizing leaves it alone and `spliceMath` replaces it. */
@@ -70,8 +72,70 @@ function sanitizeWithMath(
   if (style === 'blog') return spliceMath(sanitizeBlogHtml(rendered), deferred);
   return spliceMath(sanitizeStatementAuthorHtml(rendered), {
     nonce: deferred.nonce,
-    formulas: deferred.formulas.map(sanitizeStatementHtml),
+    formulas: sanitizeEach(deferred.formulas, deferred.nonce),
   });
+}
+
+/** `sanitizeStatementHtml` of each formula in one sanitizer pass: each formula is closed HTML, so joining them with a text separator gives the same pieces as one pass per formula, without the fixed cost of a pass per formula. */
+export function sanitizeEach(formulas: string[], nonce: string): string[] {
+  if (formulas.length < 2) return formulas.map(sanitizeStatementHtml);
+  const separator = `math-separator-${nonce}`;
+  const pieces = sanitizeStatementHtml(formulas.join(separator)).split(
+    separator,
+  );
+  return pieces.length === formulas.length
+    ? pieces
+    : formulas.map(sanitizeStatementHtml);
+}
+
+type BlockRule = (
+  state: MarkdownIt.StateBlock,
+  startLine: number,
+  endLine: number,
+  silent: boolean,
+) => boolean;
+
+const isCellOpen = (token: { type: string }) =>
+  token.type === 'td_open' || token.type === 'th_open';
+
+/**
+ * markdown-it's table rule within `env.tableCellsLeft`, padded short rows included. The rule reads only as many lines
+ * as the cells left allow (the delimiter row's pipes bound the width); a table that reaches that line or lays out more
+ * cells is refused before any cell is parsed inline or rendered. Tables that fit are laid out unchanged.
+ */
+const withTableCellLimit =
+  (table: BlockRule): BlockRule =>
+  (state, startLine, endLine, silent) => {
+    const env = state.env as RenderEnv;
+    const cellsLeft = env.tableCellsLeft;
+    if (silent || cellsLeft === undefined || startLine + 2 > endLine)
+      return table(state, startLine, endLine, silent);
+    const delimiterRow = startLine + 1;
+    const widthBound = state.src
+      .slice(state.bMarks[delimiterRow], state.eMarks[delimiterRow])
+      .split('|').length;
+    const lineLimit = Math.min(
+      endLine,
+      delimiterRow + 2 + Math.floor(cellsLeft / widthBound),
+    );
+    const firstToken = state.tokens.length;
+    if (!table(state, startLine, lineLimit, false)) return false;
+    env.tableCellsLeft =
+      cellsLeft - state.tokens.slice(firstToken).filter(isCellOpen).length;
+    if (
+      env.tableCellsLeft < 0 ||
+      (lineLimit < endLine && state.line >= lineLimit)
+    )
+      throw new RenderLimitError('Tables have too many cells');
+    return true;
+  };
+
+/** Puts `withTableCellLimit` around the parser's own table rule, keeping its place and alternatives. */
+function limitTableCells(markdown: MarkdownIt.MarkdownIt): void {
+  const { fn, alt } = markdown.block.ruler.__rules__.find(
+    (rule) => rule.name === 'table',
+  )!;
+  markdown.block.ruler.at('table', withTableCellLimit(fn), { alt });
 }
 
 const MAX_HEADER_LEVEL = 6;
@@ -111,6 +175,7 @@ function createMarkdown({
       },
     );
   }
+  limitTableCells(markdown);
   markdown.inline.ruler.before('escape', 'math_inline', mathInlineRule);
   markdown.inline.ruler.before('strikethrough', 'math_tilde', mathTildeRule);
   markdown.inline.ruler.before('link', 'user_reference', userReferenceRule);
@@ -163,20 +228,30 @@ const MAX_MARKUP_DEPTH = 500;
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
 const KIB = 1024;
 
-/** `user`-style output budgets for text up to 8 KiB (a comment or ticket message at its length cap). */
+/** `user`-style budgets for text up to 8 KiB (a comment or ticket message at its length cap). */
 const USER_MATH_BYTES = 160 * KIB;
 const USER_HTML_BYTES = 320 * KIB;
+/** Formula parse work (user-macro tokens expanded plus parse-tree objects): about eight times what 8 KiB of ordinary formulas use before the formula output budget runs out. */
+const USER_MATH_WORK = 10_000;
+/** Table cells beyond one per source byte: a written cell takes at least one byte, so only padded short rows reach this. */
+const USER_EXTRA_TABLE_CELLS = 1024;
 
-/** Output budgets of one render, in bytes. The `user` style (comments, ticket messages, profile and organization about) allows 160 KiB of formulas and 320 KiB of HTML, more for longer text (16 and 32 bytes per source byte), so short text renders to bounded HTML. */
-function outputLimitsOf(
-  text: string,
-  style: RenderStyle,
-): { html: number; math: number | undefined } {
-  if (style !== 'user') return { html: MAX_HTML_BYTES, math: undefined };
+type RenderLimits = {
+  html: number;
+  math?: number;
+  mathWork?: number;
+  tableCells?: number;
+};
+
+/** Output and work budgets of one render. The `user` style (comments, ticket messages, profile and organization about) allows 160 KiB of formulas, 320 KiB of HTML and 10,000 units of formula parse work, more for longer text (16 and 32 bytes and one unit per source byte), and one table cell per source byte plus 1,024, so short text renders with bounded work and to bounded HTML. */
+function limitsOf(text: string, style: RenderStyle): RenderLimits {
+  if (style !== 'user') return { html: MAX_HTML_BYTES };
   const sourceBytes = Buffer.byteLength(text);
   return {
     html: Math.min(MAX_HTML_BYTES, Math.max(USER_HTML_BYTES, 32 * sourceBytes)),
     math: Math.max(USER_MATH_BYTES, 16 * sourceBytes),
+    mathWork: Math.max(USER_MATH_WORK, sourceBytes),
+    tableCells: sourceBytes + USER_EXTRA_TABLE_CELLS,
   };
 }
 
@@ -204,10 +279,16 @@ export function renderMarkdown(
   style: RenderStyle,
   { problemLinks }: { problemLinks?: ProblemLinks } = {},
 ): string {
-  const limits = outputLimitsOf(text, style);
+  const limits = limitsOf(text, style);
   const env: RenderEnv = {
-    budget: createMathBudget(isUserAuthored(style), undefined, limits.math),
+    budget: createMathBudget(
+      isUserAuthored(style),
+      undefined,
+      limits.math,
+      limits.mathWork,
+    ),
     problemLinks,
+    tableCellsLeft: limits.tableCells,
     ...(isSanitizedStyle(style)
       ? {
           deferredMath: {

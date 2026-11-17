@@ -268,7 +268,7 @@ describe('profile', () => {
       .expect(200);
   });
 
-  it('limits about changes per user, refusing before any render; a refused body costs nothing', async () => {
+  it('limits about changes per user, refusing before any render; a refused body costs a hit', async () => {
     const { patch } = await person({ problemCount: 50 });
     const render = jest
       .spyOn(markup, 'renderField')
@@ -276,7 +276,7 @@ describe('profile', () => {
         throw new AppError('validation_failed', 400, 'Too much math');
       });
     await patch({ about: 'refused' }).expect(400);
-    for (let index = 0; index < ABOUT_EDIT_LIMIT; index += 1)
+    for (let index = 0; index < ABOUT_EDIT_LIMIT - 1; index += 1)
       await patch({ about: `about ${index}` }).expect(200);
     render.mockClear();
     await patch({ about: 'one too many' })

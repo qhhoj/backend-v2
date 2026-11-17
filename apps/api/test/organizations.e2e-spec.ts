@@ -933,7 +933,7 @@ afterAll(() => api.teardown());
       expect(html).toContain('&lt;b&gt;hi&lt;/b&gt;');
     });
 
-    it('limits about changes per user, refusing before any render; a refused body costs nothing', async () => {
+    it('limits about changes per user, refusing before any render; a refused body costs a hit', async () => {
       const { user: owner, session } = await person();
       const { slug } = await createOrganization(api, { adminIds: [owner._id] });
       const render = jest
@@ -944,7 +944,7 @@ afterAll(() => api.teardown());
       await patch(organizationUrl(slug), session, { about: 'refused' }).expect(
         400,
       );
-      for (let index = 0; index < ORGANIZATION_ABOUT_LIMIT; index += 1)
+      for (let index = 0; index < ORGANIZATION_ABOUT_LIMIT - 1; index += 1)
         await patch(organizationUrl(slug), session, {
           about: `about ${index}`,
         }).expect(200);

@@ -102,7 +102,7 @@ export class ProfileService {
     return { firstName: trimmed };
   }
 
-  /** Returns `about` with its rendered HTML when it differs from the stored text. Throws in official contest mode, below the interaction threshold, or over the rate limit, when it differs; a body the renderer refuses gives its hit back. */
+  /** Returns `about` with its rendered HTML when it differs from the stored text. Throws in official contest mode, below the interaction threshold, or over the rate limit, when it differs; a body the renderer refuses spends its hit too. */
   private async aboutChange(
     principal: Principal,
     user: UserDocument,
@@ -116,17 +116,12 @@ export class ProfileService {
         403,
         `Solve at least ${INTERACT_MIN_PROBLEM_COUNT} problems before editing your profile`,
       );
-    const releaseHit = await this.rateLimits.reserve(
+    await this.rateLimits.reserve(
       [`profile-about:${principal.userId}`],
       ABOUT_EDIT_LIMIT,
       ABOUT_EDIT_WINDOW_SECONDS,
     );
-    try {
-      return { about, aboutHtml: renderField(about, 'user', 'about') };
-    } catch (error) {
-      await releaseHit();
-      throw error;
-    }
+    return { about, aboutHtml: renderField(about, 'user', 'about') };
   }
 
   /** The order of organizations is part of how a user appears on the boards, so it freezes with `about` and the name. Resending the stored value is not a change. */

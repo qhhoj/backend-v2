@@ -234,7 +234,10 @@ describe('KaTeX in user-authored styles', () => {
     (style) => {
       for (const tex of [WIDE_DEF, OVER_CAP]) {
         const html = renderMarkdown(tex, style);
-        expect(html).toContain('Formula too large');
+        // `user` text has a per-render parse budget smaller than one such formula (user-limits.spec.ts).
+        expect(html).toMatch(
+          style === 'user' ? 'Formula limit exceeded' : 'Formula too large',
+        );
         expect(html).not.toContain('katex-html');
       }
       const cell = `\\begin{array}{${'c'.repeat(10)}}${'a&'.repeat(9)}a\\\\${'a&'.repeat(9)}a\\end{array}`;
