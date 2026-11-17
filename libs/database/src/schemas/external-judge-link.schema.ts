@@ -26,6 +26,8 @@ export class ExternalJudgeLink {
   })
   languages!: ExternalLanguage[];
   @Prop({ type: Date, default: null }) verifiedAt!: Date | null;
+  /** The problem's `allowedLanguages` from before the link became active; they come back when it stops being active or is removed. Absent on links saved before this field existed. */
+  @Prop({ type: [UUID], default: null }) previousLanguages?: string[] | null;
 }
 
 export const ExternalJudgeLinkSchema =

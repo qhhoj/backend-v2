@@ -2065,3 +2065,72 @@ afterAll(() => api.teardown());
     });
   });
 }
+
+{
+  describe('staff actions refused while impersonating', () => {
+    it('refuses every session-only staff write and the activity export to an impersonated session; the staff member passes', async () => {
+      const staff = await createUserWith(api, 'imp_staff', {
+        permissions: [
+          'judge.can_see_user_activity',
+          'judge.edit_all_organization',
+          'judge.edit_all_problem',
+          'judge.delete_problem',
+          'judge.rejudge_submission',
+          'flatpages.add_flatpage',
+          'flatpages.change_flatpage',
+          'flatpages.delete_flatpage',
+        ],
+      });
+      const root = await createUserWith(api, 'imp_root', {
+        isSuperuser: true,
+      });
+      const { id, session } = await api.sessions.create({
+        userId: staff._id,
+        twoFaPassed: true,
+        passwordPwned: false,
+        impersonatorId: root._id,
+      });
+      const impersonated = {
+        cookie: sessionCookie(id),
+        csrf: session.csrf,
+      };
+      const own = await loginAs(api, staff._id);
+      const routes = (who: TestSession) => [
+        authed(api.http().delete('/api/internal/problems/nope'), who),
+        authed(
+          api.http().put(`/api/internal/submissions/${newId()}/score`),
+          who,
+        ).send({}),
+        authed(
+          api.http().patch('/api/internal/organizations/nope-org/quota'),
+          who,
+        ).send({}),
+        authed(
+          api.http().get('/api/internal/admin/user-activity/logs/export'),
+          who,
+        ),
+        authed(
+          api.http().post('/api/internal/problems/nope/purge-now'),
+          who,
+        ).send({}),
+        authed(api.http().delete('/api/internal/contests/nope'), who),
+        authed(api.http().delete('/api/internal/organizations/nope-org'), who),
+        authed(api.http().post('/api/internal/admin/site/pages'), who).send({}),
+        authed(api.http().patch('/api/internal/admin/site/pages/1'), who).send(
+          {},
+        ),
+        authed(api.http().delete('/api/internal/admin/site/pages/1'), who),
+      ];
+      for (const request of routes(impersonated)) {
+        const refused = await request.expect(403);
+        expect(refused.body).toMatchObject({
+          error: { message: 'Not allowed while impersonating' },
+        });
+      }
+      for (const request of routes(own))
+        expect((await request).body).not.toMatchObject({
+          error: { message: 'Not allowed while impersonating' },
+        });
+    });
+  });
+}

@@ -1,6 +1,11 @@
 import { ApiTags } from '@nestjs/swagger';
 import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
-import { CurrentAuth, RequirePermission, SessionOnly } from '@libs/auth';
+import {
+  CurrentAuth,
+  NoImpersonation,
+  RequirePermission,
+  SessionOnly,
+} from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse, RefuseNullFieldsPipe } from '@libs/common';
 import type { Paginated } from '@libs/common';
@@ -66,6 +71,7 @@ export class OrganizationUsageController {
    * updated usage.
    */
   @SessionOnly()
+  @NoImpersonation()
   @RequirePermission('judge.edit_all_organization')
   @Patch(':slug/quota')
   updateQuota(

@@ -140,6 +140,38 @@ describe('registration', () => {
       .expect(401);
   });
 
+  it('staff activation of a pending signup voids the signup password and mails a reset link; reactivation keeps a working password', async () => {
+    const helpdesk = await createUserWith(api, 'helpdesk', {
+      permissions: ['auth.change_user', 'judge.change_profile'],
+    });
+    const staff = await loginAs(api, helpdesk._id);
+    const setActive = (username: string) =>
+      authed(
+        api.http().patch(`/api/internal/admin/users/${username}/profile`),
+        staff,
+      ).send({ isActive: true });
+    const login = (username: string) =>
+      api.http().post(`${AUTH}/login`).send({ username, password: PASSWORD });
+    await register('handactivated', 'handactivated@example.com').expect(204);
+    api.mailer.sent.length = 0;
+    await setActive('handactivated').expect(200);
+    await login('handactivated').expect(401);
+    expect(api.mailer.sent).toHaveLength(1);
+    expect(api.mailer.sent[0]).toMatchObject({
+      to: 'handactivated@example.com',
+      subject: 'Reset your QHHOJ password',
+    });
+    await createUser(api.users, {
+      username: 'reactivated',
+      email: 'reactivated@example.com',
+      isActive: false,
+      deactivatedAt: new Date(),
+      passwordSetBeforeVerification: true,
+    });
+    await setActive('reactivated').expect(200);
+    await login('reactivated').expect(200);
+  });
+
   it('rejects taken usernames and emails case-insensitively, bad usernames and weak passwords', async () => {
     const response = await register(
       'TAKEN',

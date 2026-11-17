@@ -2,8 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import {
   constantTimeEqual,
+  PrincipalService,
   SessionService,
   sha256,
+  shieldingRights,
   UsersRepository,
 } from '@libs/auth';
 import type { Principal, UserDocument } from '@libs/auth';
@@ -134,6 +136,7 @@ export class ContestParticipationService {
     private readonly sessions: SessionService,
     private readonly feedKeys: FeedKeysRepository,
     private readonly ranking: ContestRankingService,
+    private readonly principals: PrincipalService,
   ) {}
 
   async register(
@@ -458,7 +461,7 @@ export class ContestParticipationService {
     void this.rescores.enqueue({ contestId: contest._id });
   }
 
-  /** Legacy `check_ban`, off unless the `contest.banAfterDisqualifications` setting is above 0: at the threshold the account is banned, unlisted, signed out everywhere and its API token revoked, like a staff ban, so the lift brings neither back; below it, only this ban is lifted, and the account is active again only if it was before the ban (as a manual unban). */
+  /** Legacy `check_ban`, off unless the `contest.banAfterDisqualifications` setting is above 0: at the threshold the account is banned, unlisted, signed out everywhere and its API token revoked, like a staff ban, so the lift brings neither back; below it, only this ban is lifted, and the account is active again only if it was before the ban (as a manual unban). Staff accounts are never banned this way: a staff ban needs a moderator holding their rights. */
   private async checkCheatingBan(userId: string): Promise<void> {
     const limit = this.settings.get('contest.banAfterDisqualifications');
     if (!limit) return;
@@ -467,7 +470,7 @@ export class ContestParticipationService {
       this.users.findById(userId),
     ]);
     if (!user) return;
-    if (count >= limit && user.banReason === null)
+    if (count >= limit && user.banReason === null && !this.isStaffAccount(user))
       await this.banForCheating(user);
     else if (count < limit && user.banReason === CONTEST_CHEATING_BAN_REASON)
       await this.users.updateIfBanReason(userId, CONTEST_CHEATING_BAN_REASON, {
@@ -477,6 +480,15 @@ export class ContestParticipationService {
         isActive: user.isActiveBeforeBan ?? true,
         isActiveBeforeBan: null,
       });
+  }
+
+  /** Superusers, `isStaff` accounts and holders of any right beyond the own-scope ones (directly or through a role). */
+  private isStaffAccount(user: UserDocument): boolean {
+    return (
+      user.isSuperuser ||
+      user.isStaff ||
+      shieldingRights(this.principals.build(user).permissions).length > 0
+    );
   }
 
   /** Signs the user out only when this ban won the compare-and-set on the ban reason. */

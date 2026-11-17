@@ -10,7 +10,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CurrentAuth, RequirePermission, SessionOnly } from '@libs/auth';
+import {
+  CurrentAuth,
+  NoImpersonation,
+  RequirePermission,
+  SessionOnly,
+} from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import {
   ApiPaginatedResponse,
@@ -102,6 +107,7 @@ export class OrganizationEditingController {
    * for an unknown slug. Needs a browser session (API tokens get 403).
    */
   @SessionOnly()
+  @NoImpersonation()
   @Delete(':slug')
   @HttpCode(204)
   remove(

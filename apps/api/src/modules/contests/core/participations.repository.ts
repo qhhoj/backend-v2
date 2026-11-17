@@ -232,10 +232,13 @@ export class ParticipationsRepository {
       .exec())!;
   }
 
-  /** Legacy `check_ban` count: the user's disqualified participations in contests that are not organisation-private. */
+  /** Legacy `check_ban` count: the user's disqualified live participations in contests that are not organisation-private (virtual and spectating rows never count). */
   async countOpenDisqualifications(userId: string): Promise<number> {
     const rows = await this.participations
-      .find({ user: userId, isDisqualified: true }, { contest: 1 })
+      .find(
+        { user: userId, isDisqualified: true, virtual: LIVE },
+        { contest: 1 },
+      )
       .lean();
     if (!rows.length) return 0;
     const open = new Set(

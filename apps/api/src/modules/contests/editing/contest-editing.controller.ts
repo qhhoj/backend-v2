@@ -10,7 +10,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CurrentAuth, RequirePermission, SessionOnly } from '@libs/auth';
+import {
+  CurrentAuth,
+  NoImpersonation,
+  RequirePermission,
+  SessionOnly,
+} from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { RefuseNullFieldsPipe } from '@libs/common';
 import { ContestActionsService } from './contest-actions.service';
@@ -93,6 +98,7 @@ export class ContestEditingController {
    * Needs a browser session (API tokens get 403).
    */
   @SessionOnly()
+  @NoImpersonation()
   @Delete(':key')
   @HttpCode(204)
   remove(
