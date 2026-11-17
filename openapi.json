@@ -30348,6 +30348,58 @@
         "x-enveloped": true
       }
     },
+    "/api/internal/csp-report": {
+      "post": {
+        "description": "Public, for browsers (the policy's `report-uri` and `report-to`). Takes a\nlegacy `application/csp-report` body or an `application/reports+json`\nlist, at most 16 KiB (413 `payload_too_large`) and at most 10 reports per\nrequest. Each report is written to the server log as one line (rule,\nblocked source, page without query, script file and line); nothing is\nstored. Limited to 60 requests per minute per IP (429 `rate_limited`).\nReturns 204, also for a body that holds no violation; a body that is not\nJSON is 400.",
+        "operationId": "CspReportController_report",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/csp-report": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            },
+            "application/reports+json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Report a Content-Security-Policy violation",
+        "tags": [
+          "Home & site"
+        ]
+      }
+    },
     "/api/internal/events/contests/{key}": {
       "get": {
         "description": "Server-sent events (`text/event-stream`) for anyone who can see the\ncontest. The `announcement` event carries the id of a new or resent\nannouncement, and `resync` tells the client its subscription was lost and\nit should reload the list. Nothing is sent until an event happens apart\nfrom heartbeat comments every 15 seconds; the client reconnects after the\nadvertised 3 second retry delay. Open streams are capped per user, per IP\nand in total (429 `rate_limited`).",
