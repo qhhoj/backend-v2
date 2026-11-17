@@ -1,7 +1,7 @@
 import fastifyCookie from '@fastify/cookie';
 import fastifyMultipart from '@fastify/multipart';
 import { randomUUID } from 'node:crypto';
-import type { FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { Reflector } from '@nestjs/core';
 import {
   FastifyAdapter,
@@ -59,6 +59,21 @@ function setApiCacheHeaders(reply: FastifyReply) {
   else if (/\bmax-age=[1-9]/.test(String(cacheControl))) addVaryCookie(reply);
 }
 
+/** Browsers send CSP reports as `application/csp-report` or `application/reports+json`, both JSON; Fastify parses only `application/json` by itself. */
+function registerReportParsers(fastify: FastifyInstance): void {
+  fastify.addContentTypeParser(
+    ['application/csp-report', 'application/reports+json'],
+    { parseAs: 'string' },
+    (_request, body, done) => {
+      try {
+        done(null, JSON.parse(body as string));
+      } catch {
+        done(new AppError('validation_failed', 400, 'Body is not valid JSON'));
+      }
+    },
+  );
+}
+
 export async function configureApp(app: NestFastifyApplication): Promise<void> {
   await app.register(fastifyCookie);
   await app.register(fastifyMultipart, {
@@ -96,6 +111,7 @@ export async function configureApp(app: NestFastifyApplication): Promise<void> {
     .addHook('onSend', async (_request, reply) => {
       setApiCacheHeaders(reply);
     });
+  registerReportParsers(app.getHttpAdapter().getInstance());
   app.enableShutdownHooks();
   app.useGlobalPipes(validationPipe);
   app.useGlobalFilters(new AppExceptionFilter());

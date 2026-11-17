@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
 import { ProblemsApiModule } from '../problems/problems-api.module';
+import { CspReportController } from './csp/csp-report.controller';
 import { FlatpageHistoryService } from './admin/flatpage-history.service';
 import { FlatpagesAdminController } from './admin/flatpages-admin.controller';
 import { FlatpagesAdminService } from './admin/flatpages-admin.service';
@@ -19,6 +20,7 @@ import { SiteController } from './public/site.controller';
   controllers: [
     FlatpagesController,
     SiteController,
+    CspReportController,
     FlatpagesAdminController,
     MiscConfigAdminController,
   ],
