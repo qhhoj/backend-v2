@@ -44,7 +44,7 @@ function listViewerOf(
 }
 
 /** The viewer's participations in one contest, and the facts `ContestAccess` needs from them. */
-/** The viewer's current participation when it is in `contest` and still counts: an ended one, one in a contest the user is banned from, or a spectator row its user may no longer hold (`ContestAccess.keepsSpectating`), does not, before any read clears the pointer (`CurrentContestService.current`). */
+/** The viewer's current participation when it is in `contest` and still counts: an ended one, one in a contest the user is banned from, a live or virtual run the user may no longer take part in (`ContestAccess.canCompete`), or a spectator row its user may no longer hold (`ContestAccess.keepsSpectating`), does not, before any read clears the pointer (`CurrentContestService.current`). */
 function currentIn(
   principal: Principal,
   contest: ContestDocument,
@@ -59,7 +59,9 @@ function currentIn(
     current === null ||
     uuidStr(current.contest) !== contest._id ||
     hasParticipationEnded(contest, current, now) ||
-    ContestAccess.isBannedFrom(principal, contest)
+    ContestAccess.isBannedFrom(principal, contest) ||
+    (current.virtual !== SPECTATE &&
+      !ContestAccess.canCompete(principal, ContestAccess.accessView(contest)))
   )
     return null;
   const keeps =

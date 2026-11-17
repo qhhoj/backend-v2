@@ -23,7 +23,11 @@ import { randomUUID } from 'node:crypto';
 import { REDIS, startOfDayIn } from '@libs/common';
 import { profileQueries } from '@libs/database/testing';
 import type Redis from 'ioredis';
-import { createContest, hoursFromNow } from './contest-fixtures';
+import {
+  contestProblem,
+  createContest,
+  hoursFromNow,
+} from './contest-fixtures';
 import { recordSubmissionEvents } from '@libs/judging/testing';
 import { BULK_REJUDGE_LIMIT } from '../src/modules/submissions/core/rate-limits';
 
@@ -804,6 +808,7 @@ afterAll(() => api.teardown());
     it("lets a contest's editor rejudge its submissions only, and refuses a non-editor", async () => {
       const contest = await createContest(api, {
         authors: [ids.contestEditor],
+        problems: [contestProblem(problemId, 0)],
       });
       await insertRows(1, { contest: contest._id });
       await insertRows(2);
