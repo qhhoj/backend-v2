@@ -549,10 +549,17 @@ describe('social login', () => {
       { _id: alice._id },
       linkOf('github-secure', 'g-1'),
     );
+    const aliceSession = await loginAs(api, alice._id);
+    await authed(api.http().get('/api/internal/auth/me'), aliceSession).expect(
+      200,
+    );
     await authed(
       api.http().delete('/api/internal/admin/users/alice/social-links'),
       staff,
     ).expect(204);
+    await authed(api.http().get('/api/internal/auth/me'), aliceSession).expect(
+      401,
+    );
     expect((await api.users.findById(alice._id))!.socialAuth).toEqual([]);
     const audit = await api.revisions
       .find({ entity: 'user', entityId: alice._id })

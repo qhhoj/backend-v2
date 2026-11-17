@@ -571,31 +571,40 @@ afterAll(() => api.teardown());
       expect(await queuedFor()).toEqual([created.id]);
     });
 
-    it('gives a promoted admin the configured role once and keeps it after demotion', async () => {
-      const byName =
-        (await api.groups.findOne({ name: 'Org Admin' }).lean()) ??
-        (await api.groups.create({ name: 'Org Admin' }));
+    it('gives the creator the configured role, not an admin promoted later, and takes it back on demotion', async () => {
       const role = await api.groups.create({ name: 'Organization staff' });
       await api.setSetting('organization.adminRoleId', role._id);
       try {
-        const { user: owner, session } = await person();
-        const { user: helper } = await person();
-        const organization = await createOrganization(api, {
-          adminIds: [owner._id],
+        const { user: owner, session } = await person({
+          permissions: ['judge.add_organization'],
         });
-        const url = organizationUrl(organization.slug);
-        const rolesOf = async () =>
-          (await api.users.findById(helper._id).lean())!.groups.map(uuidStr);
-        const setAdmins = (adminIds: string[]) =>
-          patch(url, session, { adminIds }).expect(200);
-
-        await setAdmins([owner._id, helper._id]);
-        expect(await rolesOf()).toEqual([role._id]);
-        await setAdmins([owner._id]);
-        expect(await rolesOf()).toEqual([role._id]);
-        await setAdmins([owner._id, helper._id]);
-        expect(await rolesOf()).toEqual([role._id]);
-        expect(await rolesOf()).not.toContain(uuidStr(byName._id));
+        const { user: helper } = await person();
+        const rolesOf = async (id: string) =>
+          (await api.users.findById(id).lean())!.groups.map(uuidStr);
+        const created = dataOf<{ slug: string }>(
+          await post('/api/internal/organizations', session, {
+            name: 'Roles',
+            slug: 'roles-org',
+          }).expect(201),
+        );
+        expect(await rolesOf(owner._id)).toEqual([role._id]);
+        await api.users.updateOne(
+          { _id: helper._id },
+          {
+            $push: {
+              organizations: (await api.organizations.findOne({
+                slug: created.slug,
+              }))!._id,
+            },
+          },
+        );
+        const url = organizationUrl(created.slug);
+        await patch(url, session, { adminIds: [owner._id, helper._id] }).expect(
+          200,
+        );
+        expect(await rolesOf(helper._id)).toEqual([]);
+        await patch(url, session, { adminIds: [helper._id] }).expect(200);
+        expect(await rolesOf(owner._id)).toEqual([]);
       } finally {
         await api.setSetting('organization.adminRoleId', '');
       }
@@ -625,9 +634,11 @@ afterAll(() => api.teardown());
       for (let index = 0; index < 3; index++)
         await createOrganization(api, { adminIds: [busy._id] });
       const { user: owner, session: ownerSession } = await person();
-      const organization = await createOrganization(api, {
-        adminIds: [owner._id],
-      });
+      const organization = await createOrganization(
+        api,
+        { adminIds: [owner._id] },
+        [busy._id],
+      );
       await patch(organizationUrl(organization.slug), ownerSession, {
         adminIds: [owner._id, busy._id],
       })
@@ -717,6 +728,9 @@ afterAll(() => api.teardown());
       const { user: owner, session } = await person();
       const { user: member } = await person();
       const { user: outsider } = await person();
+      const { session: staff } = await person({
+        permissions: ['judge.edit_all_organization'],
+      });
       const organization = await createOrganization(
         api,
         { slots: 2, adminIds: [owner._id] },
@@ -724,6 +738,9 @@ afterAll(() => api.teardown());
       );
       const url = organizationUrl(organization.slug);
       await patch(url, session, { adminIds: [owner._id, outsider._id] })
+        .expect(422)
+        .expect(issueCode('not_a_member'));
+      await patch(url, staff, { adminIds: [owner._id, outsider._id] })
         .expect(409)
         .expect(issueCode('organization_full'));
       expect(await membershipsOf(outsider._id)).toEqual([]);
@@ -877,7 +894,7 @@ afterAll(() => api.teardown());
       const organization = await createOrganization(
         api,
         { adminIds: [owner._id] },
-        [member._id],
+        [member._id, helper._id],
       );
       const url = organizationUrl(organization.slug);
       await patch(url, ownerSession, {

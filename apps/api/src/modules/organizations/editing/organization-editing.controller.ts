@@ -52,7 +52,8 @@ export class OrganizationEditingController {
    *
    * @remarks
    * Requires `judge.add_organization`. The creator is always an admin;
-   * `adminIds` adds more. New organizations are unlisted until staff lists
+   * `adminIds` adds more (others than the creator need
+   * `judge.edit_all_organization`: 422 `not_a_member`). New organizations are unlisted until staff lists
    * them, and the short name defaults to the first 20 characters of the slug.
    * `isUnlisted`, `slots` and `shortName` need `judge.edit_all_organization`
    * (403 `forbidden`). A taken slug is 400 `validation_failed`. A user may
@@ -76,7 +77,10 @@ export class OrganizationEditingController {
    * Organization administrators only. Changes the fields sent (null is refused
    * for `slots`); `about` is re-rendered, `adminIds` is the whole new admin
    * list and must not be empty, and new admins are subject to the three-
-   * organization cap. Staff fields `isUnlisted`, `slots` and `shortName` need
+   * organization cap. A new admin must already be a member, unless the actor
+   * holds `judge.edit_all_organization`: 422 `not_a_member` on `adminIds`. An
+   * admin who is removed loses the admin role when they administer no other
+   * organization. Staff fields `isUnlisted`, `slots` and `shortName` need
    * `judge.edit_all_organization`. A slug that is taken is 400
    * `validation_failed`; the admin cap is issue code `admin_cap`. New admins
    * become members, so 409 `organization_full` when those not yet members do

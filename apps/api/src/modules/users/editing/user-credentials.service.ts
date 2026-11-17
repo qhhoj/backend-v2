@@ -113,7 +113,7 @@ export class UserCredentialsService {
     });
   }
 
-  /** Recovery when a provider identity no longer belongs to the user: no provider signs in to the account any more. Sessions already open stay; setting a password ends them. */
+  /** Recovery when a provider identity no longer belongs to the user: no provider signs in to the account any more. Open sessions end. */
   async removeSocialLinks(auth: AuthContext, username: string): Promise<void> {
     const user = await changeableTarget(
       this.users,
@@ -121,7 +121,8 @@ export class UserCredentialsService {
       auth.principal,
       username,
     );
-    await this.users.update(user._id, { socialAuth: [] });
+    await this.users.revokeCredentials(user._id, { socialAuth: [] });
+    await this.sessions.destroyAllForUser(user._id);
     await this.audit(auth, user, {
       action: 'staff_remove_social_links',
       comment: 'Social sign-in links removed by staff',

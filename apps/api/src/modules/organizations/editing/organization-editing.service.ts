@@ -90,23 +90,32 @@ export class OrganizationEditingService {
     const adminIds = unique([principal.userId, ...(dto.adminIds ?? [])]);
     const about = dto.about ?? '';
     const aboutHtml = renderField(about, 'user', 'about');
-    const organization = await this.withAdminCap(principal, adminIds, () =>
-      withSlugTaken(() =>
-        this.organizations.create({
-          name: dto.name,
-          slug: dto.slug,
-          shortName: dto.shortName ?? dto.slug.slice(0, SHORT_NAME_LENGTH),
-          about,
-          aboutHtml,
-          adminIds,
-          isOpen: dto.isOpen ?? false,
-          isUnlisted: dto.isUnlisted ?? true,
-          slots: dto.slots ?? null,
-          logoOverrideImage: dto.logoOverrideImage ?? '',
-        }),
-      ),
+    const organization = await this.withAdminCap(
+      principal,
+      adminIds,
+      null,
+      () =>
+        withSlugTaken(() =>
+          this.organizations.create({
+            name: dto.name,
+            slug: dto.slug,
+            shortName: dto.shortName ?? dto.slug.slice(0, SHORT_NAME_LENGTH),
+            about,
+            aboutHtml,
+            adminIds,
+            isOpen: dto.isOpen ?? false,
+            isUnlisted: dto.isUnlisted ?? true,
+            slots: dto.slots ?? null,
+            logoOverrideImage: dto.logoOverrideImage ?? '',
+          }),
+        ),
     );
     await this.admitAdmins(adminIds, organization._id);
+    await this.grantAdminRole(
+      hasPermission(principal, 'judge.edit_all_organization')
+        ? adminIds
+        : [principal.userId],
+    );
     await this.history.recordChange(principal, organization._id, {
       action: 'create',
       before: {},
@@ -136,12 +145,14 @@ export class OrganizationEditingService {
     const { adminIds: requestedAdmins, about, ...fields } = dto;
     const changes: Partial<Organization> = { ...fields };
     let added: string[] = [];
+    let removed: string[] = [];
     if (requestedAdmins !== undefined) {
       const adminIds = unique(requestedAdmins);
       if (!adminIds.length)
         throw invalid('adminIds', 'An organization needs at least one admin.');
       const current = OrganizationAccess.accessView(organization).adminIds;
       added = adminIds.filter((id) => !current.includes(id));
+      removed = current.filter((id) => !adminIds.includes(id));
       changes.adminIds = adminIds;
     }
     Object.assign(
@@ -151,10 +162,11 @@ export class OrganizationEditingService {
     const write = () =>
       withSlugTaken(() => this.organizations.update(organization._id, changes));
     if (added.length)
-      await this.withAdminCap(principal, added, () =>
+      await this.withAdminCap(principal, added, organization._id, () =>
         this.writeWithinSlots(organization._id, changes, added, write),
       );
     else await write();
+    await this.dropAdminRole(removed);
     // Only the sent fields can differ, so a concurrent edit to another field is never attributed to this one.
     await this.history.recordChange(principal, organization._id, {
       action: 'edit',
@@ -198,6 +210,7 @@ export class OrganizationEditingService {
   private withAdminCap<Result>(
     principal: Principal,
     newAdminIds: readonly string[],
+    organizationId: string | null,
     write: () => Promise<Result>,
   ): Promise<Result> {
     return withRedisLock(
@@ -208,19 +221,21 @@ export class OrganizationEditingService {
         busyMessage: 'Another admin change is in progress; try again',
       },
       async () => {
-        await this.checkNewAdmins(principal, newAdminIds);
+        await this.checkNewAdmins(principal, newAdminIds, organizationId);
         return write();
       },
     );
   }
 
-  /** New admins exist and hold fewer than three admin roles, unless the acting user has `judge.spam_organization` (legacy checked only the creator, and its permission typo made it superuser-only). */
+  /** New admins exist, and are members of the organization already unless the acting user has `judge.edit_all_organization` (an admin is named by consent: the user joins first). They also hold fewer than three admin roles, unless the acting user has `judge.spam_organization` (legacy checked only the creator, and its permission typo made it superuser-only). */
   private async checkNewAdmins(
     principal: Principal,
     adminIds: readonly string[],
+    organizationId: string | null,
   ): Promise<void> {
     if ((await this.users.findByIds([...adminIds])).length !== adminIds.length)
       throw invalid('adminIds', 'Unknown user.');
+    await this.checkMembership(principal, adminIds, organizationId);
     if (hasPermission(principal, 'judge.spam_organization')) return;
     for (const adminId of adminIds)
       if (
@@ -228,6 +243,29 @@ export class OrganizationEditingService {
         ORGANIZATION_ADMIN_LIMIT
       )
         throw adminId === principal.userId ? ownAdminCap() : otherAdminCap();
+  }
+
+  private async checkMembership(
+    principal: Principal,
+    adminIds: readonly string[],
+    organizationId: string | null,
+  ): Promise<void> {
+    if (hasPermission(principal, 'judge.edit_all_organization')) return;
+    for (const adminId of adminIds) {
+      const isCreator = organizationId === null && adminId === principal.userId;
+      if (
+        !isCreator &&
+        !(
+          organizationId &&
+          (await this.members.isMember(adminId, organizationId))
+        )
+      )
+        throw issueError('not_a_member', 422, {
+          field: 'adminIds',
+          code: 'not_a_member',
+          message: 'A new admin must already be a member of the organization.',
+        });
+    }
   }
 
   /** New admins become members, so the ones from outside take slots: checked, written and admitted under the organization's member lock, like a join (`withMemberSlotsLock`). `slots` is re-read, or taken from this same edit. */
@@ -265,15 +303,28 @@ export class OrganizationEditingService {
   ): Promise<void> {
     if (!adminIds.length) return;
     await this.members.addMembers(adminIds, organizationId);
-    await this.grantAdminRole(adminIds);
     await this.points.refresh([organizationId]);
   }
 
-  /** New admins get the admin role (skipped when it does not exist); losing admin rights keeps it. */
+  /** The creators of an organization get the admin role (skipped when it does not exist). */
   private async grantAdminRole(adminIds: readonly string[]): Promise<void> {
-    const roleId = await this.members.findAdminRoleId(
+    const roleId = await this.adminRoleId();
+    if (roleId) await this.members.grantGroup(adminIds, roleId);
+  }
+
+  /** A demoted admin loses the admin role unless they still administer another organization. */
+  private async dropAdminRole(demotedIds: readonly string[]): Promise<void> {
+    const roleId = await this.adminRoleId();
+    if (!roleId) return;
+    const idle: string[] = [];
+    for (const id of demotedIds)
+      if ((await this.organizations.countAdminRoles(id)) === 0) idle.push(id);
+    await this.members.revokeGroup(idle, roleId);
+  }
+
+  private adminRoleId(): Promise<string | null> {
+    return this.members.findAdminRoleId(
       this.settings.get('organization.adminRoleId'),
     );
-    if (roleId) await this.members.grantGroup(adminIds, roleId);
   }
 }

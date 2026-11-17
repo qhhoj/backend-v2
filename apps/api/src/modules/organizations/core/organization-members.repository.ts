@@ -233,7 +233,7 @@ export class OrganizationMembersRepository {
     return group && uuidStr(group._id);
   }
 
-  /** Adds the role to each user that lacks it; never removes one. */
+  /** Adds the role to each user that lacks it. */
   async grantGroup(userIds: readonly string[], groupId: string): Promise<void> {
     if (userIds.length)
       await this.users
@@ -241,6 +241,17 @@ export class OrganizationMembersRepository {
           { _id: { $in: userIds } },
           { $addToSet: { groups: groupId } },
         )
+        .exec();
+  }
+
+  /** Removes the role from each of the users. */
+  async revokeGroup(
+    userIds: readonly string[],
+    groupId: string,
+  ): Promise<void> {
+    if (userIds.length)
+      await this.users
+        .updateMany({ _id: { $in: userIds } }, { $pull: { groups: groupId } })
         .exec();
   }
 }

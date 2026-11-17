@@ -115,7 +115,7 @@ export class UserEditingController {
    * Remove a user's social sign-in links
    *
    * @remarks
-   * Requires `auth.change_user` and a browser session. No Google, GitHub or Facebook identity signs in to the account any more (a provider can link again only through a verified e-mail matching the account's current one). Sessions already open stay: set a password to end them. Recorded as a `user` revision `staff_remove_social_links`.
+   * Requires `auth.change_user` and a browser session. No Google, GitHub or Facebook identity signs in to the account any more (a provider can link again only through a verified e-mail matching the account's current one). Their open sessions end. Recorded as a `user` revision `staff_remove_social_links`.
    * Errors: 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack, 404 `not_found`. Returns 204.
    */
   @Delete('social-links')
