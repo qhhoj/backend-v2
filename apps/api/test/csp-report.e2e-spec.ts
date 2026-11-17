@@ -6,7 +6,7 @@ import type { ApiTest } from './setup';
 
 describe('CSP reports', () => {
   let api: ApiTest;
-  let warn: jest.SpyInstance;
+  let warn: jest.SpyInstance<void, [unknown]>;
   const send = (type: string, body: string) =>
     api
       .http()
@@ -26,7 +26,9 @@ describe('CSP reports', () => {
   });
   beforeEach(async () => {
     await clearRateLimits(api);
-    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation() as jest.SpyInstance<void, [unknown]>;
   });
   afterEach(() => warn.mockRestore());
   afterAll(() => api.teardown());
