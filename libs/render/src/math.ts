@@ -24,6 +24,10 @@ export type MathBudget = {
   outputBytes: number;
   /** KaTeX output this render may produce; formulas past it show as source. */
   maxOutputBytes: number;
+  /** Parse work spent: tokens of user-defined macros expanded plus parse-tree objects, over every formula. */
+  work: number;
+  /** Parse work this render may spend; formulas past it show as source. */
+  maxWork: number;
   limitReported: boolean;
 };
 const MAX_FORMULAS = 2000;
@@ -38,6 +42,7 @@ export const createMathBudget = (
   userAuthored = false,
   clock: () => number = () => performance.now(),
   maxOutputBytes = MAX_MATH_OUTPUT_BYTES,
+  maxWork = Infinity,
 ): MathBudget => ({
   userAuthored,
   clock,
@@ -45,6 +50,8 @@ export const createMathBudget = (
   formulas: 0,
   outputBytes: 0,
   maxOutputBytes: Math.min(maxOutputBytes, MAX_MATH_OUTPUT_BYTES),
+  work: 0,
+  maxWork,
   limitReported: false,
 });
 
@@ -98,11 +105,12 @@ const emsOf = ({ number, unit }: Measurement) =>
  * `x` × 38k–43k objects (48 expansions of an 800–900-letter `\def`) took 1.4–2.7 s.
  */
 const MAX_USER_FORMULA_NODES = 20_000;
-type TreeWalk = { nodes: number };
-/** Why a user formula's parse tree is refused (too many objects, a dimension or `\arraystretch` beyond ±`USER_MAX_SIZE`), or undefined; stops at the first breach. */
+const FORMULA_TOO_LARGE = 'Formula too large';
+type TreeWalk = { nodes: number; maxNodes: number };
+/** Why a user formula's parse tree is refused (more than `walk.maxNodes` objects, a dimension or `\arraystretch` beyond ±`USER_MAX_SIZE`), or undefined; stops at the first breach. */
 const refusalIn = (node: unknown, walk: TreeWalk): string | undefined => {
   if (typeof node !== 'object' || node === null) return undefined;
-  if (++walk.nodes > MAX_USER_FORMULA_NODES) return 'Formula too large';
+  if (++walk.nodes > walk.maxNodes) return FORMULA_TOO_LARGE;
   if (isMeasurement(node) && !(Math.abs(emsOf(node)) <= USER_MAX_SIZE))
     return SIZE_REFUSAL;
   for (const [key, child] of Object.entries(node)) {
@@ -116,13 +124,66 @@ const refusalIn = (node: unknown, walk: TreeWalk): string | undefined => {
   return undefined;
 };
 /** Why a user formula's parse tree is refused, or undefined. */
-export const formulaRefusal = (tree: unknown) => refusalIn(tree, { nodes: 0 });
+export const formulaRefusal = (tree: unknown) =>
+  refusalIn(tree, { nodes: 0, maxNodes: MAX_USER_FORMULA_NODES });
+
 /** KaTeX's parse tree, macros expanded: an internal export, safe because `katex` is pinned to an exact version. */
 const parseTree = (
   katex as unknown as {
     __parse: (tex: string, options: katex.KatexOptions) => unknown;
   }
 ).__parse;
+
+/** Thrown from inside KaTeX's parser when a formula spends the render's remaining parse work. */
+class MathWorkExceeded extends Error {}
+
+type KatexMacros = NonNullable<katex.KatexOptions['macros']>;
+
+/**
+ * A fresh `macros` object for one KaTeX parse that charges `budget.work` with the tokens of every user-defined macro
+ * KaTeX reads (each expansion reads its definition once), and stops the parse once the work is spent. Built-in
+ * macros are read from KaTeX's own table and are not charged.
+ */
+const chargedMacros = (budget: MathBudget): KatexMacros =>
+  new Proxy<KatexMacros>(
+    {},
+    {
+      get(target, name: string) {
+        const value = target[name] as
+          { tokens?: unknown[] } | string | undefined;
+        budget.work +=
+          typeof value === 'string'
+            ? value.length
+            : (value?.tokens?.length ?? 0);
+        if (budget.work > budget.maxWork) throw new MathWorkExceeded();
+        return value;
+      },
+    },
+  );
+
+/** Parse a user formula within the render's parse work: the refusal of its tree, or the spent limit. */
+const userFormulaCheck = (
+  tex: string,
+  options: katex.KatexOptions,
+  budget: MathBudget,
+): { refusal?: string; spent?: true } => {
+  try {
+    const tree = parseTree(tex, { ...options, macros: chargedMacros(budget) });
+    const remaining = budget.maxWork - budget.work;
+    const walk = {
+      nodes: 0,
+      maxNodes: Math.min(MAX_USER_FORMULA_NODES, remaining),
+    };
+    const refusal = refusalIn(tree, walk);
+    budget.work += walk.nodes;
+    if (refusal === FORMULA_TOO_LARGE && walk.maxNodes < MAX_USER_FORMULA_NODES)
+      return { spent: true };
+    return { refusal };
+  } catch (error) {
+    if (error instanceof MathWorkExceeded) return { spent: true };
+    throw error;
+  }
+};
 
 /** A spent count, size or time limit: the first formula past it says why, later ones show as plain source. */
 const limitExceeded = (
@@ -147,7 +208,8 @@ export function renderMath(
     budget &&
     (++budget.formulas > MAX_FORMULAS ||
       tex.length > MAX_FORMULA_LENGTH ||
-      budget.outputBytes > budget.maxOutputBytes)
+      budget.outputBytes > budget.maxOutputBytes ||
+      budget.work >= budget.maxWork)
   )
     return limitExceeded(budget, tex, displayMode, 'Formula limit exceeded');
   const userAuthored = budget?.userAuthored ?? false;
@@ -175,8 +237,19 @@ export function renderMath(
     ...(userAuthored ? { maxExpand: USER_MAX_EXPAND } : {}),
   };
   try {
-    const refusal = userAuthored && formulaRefusal(parseTree(tex, options));
-    if (refusal) return mathError(tex, displayMode, refusal);
+    if (budget && userAuthored) {
+      const { refusal, spent } = userFormulaCheck(tex, options, budget);
+      if (spent) {
+        budget.work = budget.maxWork;
+        return limitExceeded(
+          budget,
+          tex,
+          displayMode,
+          'Formula limit exceeded',
+        );
+      }
+      if (refusal) return mathError(tex, displayMode, refusal);
+    }
     const html = katex.renderToString(tex, options);
     if (budget) {
       if (budget.outputBytes + html.length > budget.maxOutputBytes) {

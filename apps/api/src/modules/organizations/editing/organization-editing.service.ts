@@ -164,24 +164,19 @@ export class OrganizationEditingService {
     return this.organizationsService.detail(principal, dto.slug ?? slug);
   }
 
-  /** `about` with its rendered HTML when it differs from the stored text, rate limited per user before the render; a body the renderer refuses gives its hit back. */
+  /** `about` with its rendered HTML when it differs from the stored text, rate limited per user before the render; a body the renderer refuses spends its hit too. */
   private async aboutChange(
     principal: Principal,
     storedAbout: string,
     about: string | undefined,
   ): Promise<Partial<Organization>> {
     if (about === undefined || about === storedAbout) return {};
-    const releaseHit = await this.rateLimits.reserve(
+    await this.rateLimits.reserve(
       [`organization-about:${principal.userId}`],
       ORGANIZATION_ABOUT_LIMIT,
       ORGANIZATION_ABOUT_WINDOW_SECONDS,
     );
-    try {
-      return { about, aboutHtml: renderField(about, 'user', 'about') };
-    } catch (error) {
-      await releaseHit();
-      throw error;
-    }
+    return { about, aboutHtml: renderField(about, 'user', 'about') };
   }
 
   private checkStaffFields(
