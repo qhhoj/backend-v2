@@ -92,6 +92,8 @@ export class ProblemDataResponse {
   archiveFiles!: string[];
   /** Whether an `init.yml` was generated; see `GET /problems/{code}/data/init`. */
   hasInit!: boolean;
+  /** Whether the problem has data (an archive or cases) but no `init.yml`: the judge cannot grade it and submissions are refused (409 `problem_has_no_tests`). The editor shows a warning. */
+  isMissingTests!: boolean;
   /** Case count limits for the editor. */
   limits!: ProblemDataLimitsResponse;
   /** Compile checks of the uploaded checker and interactor, run on a judge after each upload. */
@@ -111,6 +113,8 @@ export class ProblemDataResponse {
       cases: data.cases.map((row) => ({ ...row })),
       archiveFiles: extra.archiveFiles,
       hasInit: extra.hasInit,
+      isMissingTests:
+        !extra.hasInit && (data.archive !== null || data.cases.length > 0),
       limits: { softCases: SOFT_TESTCASES, maxCases: extra.maxCases },
       sourceChecks: extra.sourceChecks,
     };

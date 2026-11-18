@@ -54,7 +54,7 @@ describe('submitting inside a contest', () => {
   };
 
   beforeAll(async () => {
-    api = await setupApiTest();
+    api = await setupApiTest({ gradedProblems: true });
     catalog = await seedCatalog(api);
     const roles: Array<[string, Partial<User>]> = [
       ['alice', {}],

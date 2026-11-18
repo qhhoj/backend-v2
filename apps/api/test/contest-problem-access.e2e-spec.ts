@@ -60,7 +60,7 @@ describe('contest-only problem access', () => {
     ).length;
 
   beforeAll(async () => {
-    api = await setupApiTest();
+    api = await setupApiTest({ gradedProblems: true });
     catalog = await seedCatalog(api);
     userId = (await createUserWith(api, 'contestant'))._id;
     session = await loginAs(api, userId);

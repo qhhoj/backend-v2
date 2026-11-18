@@ -34,7 +34,7 @@ import { BULK_REJUDGE_LIMIT } from '../src/modules/submissions/core/rate-limits'
 let api: ApiTest;
 
 beforeAll(async () => {
-  api = await setupApiTest();
+  api = await setupApiTest({ gradedProblems: true });
 });
 afterAll(() => api.teardown());
 

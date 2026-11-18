@@ -23,6 +23,7 @@ import {
   submissionEvent,
   SubmissionEventsService,
 } from '@libs/judging';
+import { INIT_FILE, ProblemDataFilesService } from '@libs/problems';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { ParticipationsRepository } from '../../contests/core/participations.repository';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
@@ -31,6 +32,7 @@ import { JudgesRepository } from '../../judges/judges.repository';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import type { ProblemDocument } from '../../problems/core/problems.repository';
+import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ProblemsService } from '../../problems/core/problems.service';
 import { readMultipartForm } from '../../problems/core/multipart';
 import { SUBMIT_FILE_FIELDS, SubmitFileDto } from './dto/submit-file.dto';
@@ -120,6 +122,7 @@ const isContestStaff = (
 export class SubmissionCreateService {
   constructor(
     private readonly problems: ProblemsService,
+    private readonly problemRows: ProblemsRepository,
     private readonly languages: LanguagesQuerier,
     private readonly judges: JudgesRepository,
     private readonly submissions: SubmissionsRepository,
@@ -129,6 +132,7 @@ export class SubmissionCreateService {
     private readonly currentContest: CurrentContestService,
     private readonly participations: ParticipationsRepository,
     private readonly storage: StorageService,
+    private readonly dataFiles: ProblemDataFilesService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -201,6 +205,7 @@ export class SubmissionCreateService {
       judgeId: draft.judgeId,
       isFileUpload: false,
     });
+    await this.assertHasTests(draft.problem);
     if (draft.judgeId !== undefined)
       await this.assertJudge(
         principal,
@@ -218,6 +223,20 @@ export class SubmissionCreateService {
     const id = await this.insertWithinLimits(principal, { draft, plan, now });
     if (!plan?.finalOnly) await this.announceQueued(id, principal, draft);
     return { id };
+  }
+
+  /** A judge-graded problem whose `init.yml` is missing (a mirror's data is its root's) has no test cases (its setter never configured them), so every run would end in an internal error. Gated on the file, not on `data.cases`: some working problems keep an `init.yml` with no cases in Mongo. */
+  private async assertHasTests(problem: ProblemDocument): Promise<void> {
+    if (problem.externalJudge?.isActive) return;
+    const code = problem.mirrorRoot
+      ? await this.problemRows.codeById(uuidStr(problem.mirrorRoot))
+      : problem.code;
+    if (code && (await this.dataFiles.exists(code, INIT_FILE))) return;
+    throw new AppError(
+      'problem_has_no_tests',
+      409,
+      'This problem has no test cases yet, so it cannot be judged. Ask the problem setter to add them.',
+    );
   }
 
   /** Spam-permitted users skip the per-user lock unless a contest cap applies; everyone else counts under it, so two parallel submits cannot both pass a limit. */
