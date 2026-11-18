@@ -105,12 +105,18 @@ export const createUserWith = (
     ...extra,
   });
 
-export const createProblem = (
+/** The marker of a problem that has test cases: the judge reads nothing else to grade it. */
+export const writeInit = (api: ApiTest, code: string): void => {
+  mkdirSync(join(api.problemDataRoot, code), { recursive: true });
+  writeFileSync(join(api.problemDataRoot, code, 'init.yml'), '{}\n');
+};
+
+export const createProblem = async (
   api: ApiTest,
   catalog: Catalog,
   overrides: Partial<Problem> & { code: string },
-) =>
-  api.problems.create({
+) => {
+  const problem = await api.problems.create({
     name: overrides.code.toUpperCase(),
     timeLimit: 1,
     memoryLimit: 262144,
@@ -122,6 +128,9 @@ export const createProblem = (
     date: new Date(),
     ...overrides,
   });
+  if (api.gradedProblems) writeInit(api, overrides.code);
+  return problem;
+};
 
 export const detailOf = ({ body }: { body: unknown }) =>
   (body as { data: ProblemDetailResponse }).data;

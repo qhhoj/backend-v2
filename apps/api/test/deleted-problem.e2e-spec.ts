@@ -40,7 +40,7 @@ import { contestUrl, createContest } from './contest-fixtures';
 let api: ApiTest;
 
 beforeAll(async () => {
-  api = await setupApiTest();
+  api = await setupApiTest({ gradedProblems: true });
 });
 afterAll(() => api.teardown());
 

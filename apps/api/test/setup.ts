@@ -37,6 +37,7 @@ export async function setupApiTest({
   overrides = [],
   env = {},
   tuning: replaced = {},
+  gradedProblems = false,
 }: {
   controllers?: Type[];
   overrides?: Array<{ provide: unknown; useValue: unknown }>;
@@ -44,6 +45,8 @@ export async function setupApiTest({
   env?: Record<string, string>;
   /** Parts of the api tuning to replace; the whole object is `tuning` on the result, which a spec may change mid-run. */
   tuning?: Partial<ApiTuning>;
+  /** `createProblem` also writes an `init.yml`, as a problem with test cases has; submitting to a problem without one is refused. */
+  gradedProblems?: boolean;
 } = {}) {
   const mailer = new InMemoryMailer();
   const tuning: ApiTuning = { ...apiTuning, ...TEST_TUNING, ...replaced };
@@ -120,6 +123,7 @@ export async function setupApiTest({
       await Promise.all(queriers.map((querier) => querier.resync()));
     },
     tuning,
+    gradedProblems,
     mediaRoot,
     problemDataRoot,
     pdfCacheRoot,

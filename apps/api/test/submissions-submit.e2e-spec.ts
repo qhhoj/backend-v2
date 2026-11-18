@@ -1,3 +1,5 @@
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { MAX_SOURCE_LENGTH } from '@libs/database';
@@ -8,6 +10,7 @@ import {
   createUserWith,
   loginAs,
   seedCatalog,
+  writeInit,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
 import {
@@ -43,7 +46,7 @@ describe('POST /api/internal/problems/:code/submit', () => {
     dataOf<{ id: string }>(response).id;
 
   beforeAll(async () => {
-    api = await setupApiTest();
+    api = await setupApiTest({ gradedProblems: true });
     catalog = await seedCatalog(api);
     const roles: Array<[string, Partial<User>]> = [
       ['alice', {}],
@@ -106,6 +109,20 @@ describe('POST /api/internal/problems/:code/submit', () => {
     if (spent.length) await redis.del(...spent);
   });
   afterAll(() => api.teardown());
+
+  it('refuses a submission to a problem whose init.yml is missing, and accepts it again once it is back', async () => {
+    const initPath = join(api.problemDataRoot, 'sum', 'init.yml');
+    rmSync(initPath);
+    try {
+      await submit('alice')
+        .expect(409)
+        .expect(errorCode('problem_has_no_tests'));
+      expect(await api.submissions.countDocuments({})).toBe(0);
+    } finally {
+      writeInit(api, 'sum');
+    }
+    await submit('alice').expect(201);
+  });
 
   it('stores a queued submission with its source and tells the bridge', async () => {
     const id = idOf(await submit('alice').expect(201));

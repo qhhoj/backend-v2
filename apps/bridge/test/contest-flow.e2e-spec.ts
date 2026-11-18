@@ -99,7 +99,7 @@ describe('a contest across the api, the bridge and the worker', () => {
     );
 
   beforeAll(async () => {
-    api = await setupApiTest();
+    api = await setupApiTest({ gradedProblems: true });
     Object.assign(process.env, {
       JUDGE_BRIDGE_HOST: '127.0.0.1',
       JUDGE_BRIDGE_PORT: '0',

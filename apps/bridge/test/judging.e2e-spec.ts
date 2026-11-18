@@ -99,7 +99,7 @@ describe('judging across the api and the bridge', () => {
 
   beforeAll(async () => {
     countResyncTicks();
-    api = await setupApiTest();
+    api = await setupApiTest({ gradedProblems: true });
     Object.assign(process.env, {
       JUDGE_BRIDGE_HOST: '127.0.0.1',
       JUDGE_BRIDGE_PORT: '0',
