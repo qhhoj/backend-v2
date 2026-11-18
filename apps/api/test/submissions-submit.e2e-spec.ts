@@ -124,6 +124,21 @@ describe('POST /api/internal/problems/:code/submit', () => {
     await submit('alice').expect(201);
   });
 
+  it('looks for the init.yml of a mirror under its root problem, not its own directory', async () => {
+    rmSync(join(api.problemDataRoot, 'mirror'), { recursive: true });
+    await submit('editor', 'mirror').expect(201);
+    const rootInit = join(api.problemDataRoot, 'sum', 'init.yml');
+    rmSync(rootInit);
+    try {
+      await submit('editor', 'mirror')
+        .expect(409)
+        .expect(errorCode('problem_has_no_tests'));
+    } finally {
+      writeInit(api, 'sum');
+      writeInit(api, 'mirror');
+    }
+  });
+
   it('stores a queued submission with its source and tells the bridge', async () => {
     const id = idOf(await submit('alice').expect(201));
     expect(await api.submissions.findById(id).lean()).toMatchObject({

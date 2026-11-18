@@ -32,6 +32,7 @@ import { JudgesRepository } from '../../judges/judges.repository';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import type { ProblemDocument } from '../../problems/core/problems.repository';
+import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ProblemsService } from '../../problems/core/problems.service';
 import { readMultipartForm } from '../../problems/core/multipart';
 import { SUBMIT_FILE_FIELDS, SubmitFileDto } from './dto/submit-file.dto';
@@ -121,6 +122,7 @@ const isContestStaff = (
 export class SubmissionCreateService {
   constructor(
     private readonly problems: ProblemsService,
+    private readonly problemRows: ProblemsRepository,
     private readonly languages: LanguagesQuerier,
     private readonly judges: JudgesRepository,
     private readonly submissions: SubmissionsRepository,
@@ -223,10 +225,13 @@ export class SubmissionCreateService {
     return { id };
   }
 
-  /** A judge-graded problem whose `init.yml` is missing has no test cases (its setter never configured them), so every run would end in an internal error. Gated on the file, not on `data.cases`: some working problems keep an `init.yml` with no cases in Mongo. */
+  /** A judge-graded problem whose `init.yml` is missing (a mirror's data is its root's) has no test cases (its setter never configured them), so every run would end in an internal error. Gated on the file, not on `data.cases`: some working problems keep an `init.yml` with no cases in Mongo. */
   private async assertHasTests(problem: ProblemDocument): Promise<void> {
     if (problem.externalJudge?.isActive) return;
-    if (await this.dataFiles.exists(problem.code, INIT_FILE)) return;
+    const code = problem.mirrorRoot
+      ? await this.problemRows.codeById(uuidStr(problem.mirrorRoot))
+      : problem.code;
+    if (code && (await this.dataFiles.exists(code, INIT_FILE))) return;
     throw new AppError(
       'problem_has_no_tests',
       409,

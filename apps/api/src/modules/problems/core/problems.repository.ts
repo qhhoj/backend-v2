@@ -335,6 +335,15 @@ export class ProblemsRepository {
       : Promise.resolve([]);
   }
 
+  /** The code a problem's data directory is named by, deleted or not: the bridge gives judges this directory. */
+  async codeById(id: string): Promise<string | null> {
+    const row = await this.problems
+      .findOne({ _id: id }, { code: 1 })
+      .lean()
+      .exec();
+    return row?.code ?? null;
+  }
+
   async idByCode(code: string): Promise<string | null> {
     const row = await this.problems
       .findOne({ code, ...LIVE }, { _id: 1 })
