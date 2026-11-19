@@ -66,7 +66,7 @@ export const isProblemRenamed = (error: unknown): boolean =>
     (issue) => issue.code === PROBLEM_RENAMED,
   );
 
-/** Whether `<code>/` holds a finished data write of `dataVersion`: `writing` while a write's marker is up; `unsaved` when the stamp is behind (a write stopped after its Mongo write, so files may be half moved; the next save heals it). A stamp ahead (a database-only restore) or none (legacy data) is finished, as judges read it. */
+/** Whether `<code>/` holds a finished data write of `dataVersion`: `writing` while a write's marker is up; `unsaved` when the stamp is behind (a write stopped after its Mongo write, so files may be half moved; the next save heals it). A stamp ahead (a database-only restore) is finished, as judges read it. No stamp means no save ever finished there (production 2026-11-19: 7 folders, each a bare `init.yml`); it counts as finished here (a package holds what is there), and submits are refused by `hasTests`. */
 export type DataState = 'finished' | 'writing' | 'unsaved';
 
 /** Redis lock held for the whole of one data change of `code` (the judge's marker is up meanwhile); the bridge reads it to hold a submission waiting for that problem's data. */
@@ -188,7 +188,7 @@ export class ProblemDataFilesService {
     );
   }
 
-  /** The stamped version, or null when the directory has none (legacy rsync data) or the stamp is not a number. */
+  /** The stamped version, or null when the directory has none (no save ever finished there) or the stamp is not a number. */
   async readDataVersion(code: string): Promise<number | null> {
     const path = this.dataVersionPath(code);
     await assertRealPathInside(this.root, path);
@@ -199,6 +199,14 @@ export class ProblemDataFilesService {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;
     }
+  }
+
+  /** Whether a judge can grade `code`'s data: an `init.yml` and a data-version stamp (a finished save). */
+  async hasTests(code: string): Promise<boolean> {
+    return (
+      (await this.exists(code, INIT_FILE)) &&
+      (await this.readDataVersion(code)) !== null
+    );
   }
 
   /** See `DataState`; `dataVersion` is the problem's as Mongo holds it. */
