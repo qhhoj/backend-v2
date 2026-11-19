@@ -41,6 +41,11 @@ export class OrganizationsRepository {
       .exec();
   }
 
+  /** One a visitor may sign up into: open and listed. */
+  async isJoinableAtSignup(id: string): Promise<boolean> {
+    return this.exists({ _id: id, isOpen: true, isUnlisted: false });
+  }
+
   /** `includeDeleted`: for records that outlive the organization, such as decided join requests. */
   findByIds(
     ids: readonly string[],
