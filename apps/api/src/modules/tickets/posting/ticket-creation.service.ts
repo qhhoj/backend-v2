@@ -1,12 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError, RateLimitService, unique } from '@libs/common';
-import {
-  contestPath,
-  newTicketDescription,
-  problemPath,
-  ticketPath,
-} from '@libs/community';
+import { newTicketDescription, sitePaths } from '@libs/community';
 import { newId, uuidStr } from '@libs/database';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { contestScopeOf } from '../../contests/core/contest-scope';
@@ -89,7 +84,7 @@ export class TicketCreationService {
       link: { type: 'problem', id: view.id },
       assignees,
       contest: fromContest && current ? uuidStr(current.contest._id) : null,
-      subjectLink: this.discord.link(problemPath(code)),
+      subjectLink: this.discord.link(sitePaths.problem(code)),
     });
   }
 
@@ -116,7 +111,7 @@ export class TicketCreationService {
       assignees: unique([...contest.authors, ...contest.curators].map(uuidStr)),
       contest: uuidStr(contest._id),
       subjectLink: this.discord.link(
-        dto.problem ? problemPath(dto.problem) : contestPath(key),
+        dto.problem ? sitePaths.problem(dto.problem) : sitePaths.contest(key),
       ),
     });
   }
@@ -239,7 +234,7 @@ export class TicketCreationService {
       title: `New ticket on ${sent.subjectLink}`,
       description: newTicketDescription({
         title: dto.title,
-        ticketUrl: this.discord.link(ticketPath(ticketId)),
+        ticketUrl: this.discord.link(sitePaths.ticket(ticketId)),
         body: dto.body,
       }),
       author: this.discord.author(principal.username),

@@ -1,6 +1,7 @@
 import { COMMENT_PAGE_TYPES, uuidStr } from '@libs/database';
 import type { CommentPageType } from '@libs/database';
 import { DAY_MS } from '@libs/common';
+import { sitePaths } from './site-paths';
 
 export { COMMENT_PAGE_TYPES };
 export type { CommentPageType };
@@ -38,12 +39,12 @@ export const pageOf = (comment: {
 export const pageRef = (page: CommentPage): string => `${page.type}:${page.id}`;
 
 type PathFn = (key: string) => string;
-/** SPA route of each page type (contract with the frontend, listed in CONTRIBUTING); `null` for a page type with no screen, like a tag problem, which gets no link. Every type must be listed. */
+/** SPA page of each page type; `null` for a page type with no screen, like a tag problem, which gets no link. Every type must be listed. */
 const PAGE_PATHS = {
-  problem: (key: string) => `/problem/${key}`,
-  editorial: (key: string) => `/problem/${key}/editorial`,
-  contest: (key: string) => `/contest/${key}`,
-  blog: (key: string) => `/post/${key}`,
+  problem: sitePaths.problem,
+  editorial: sitePaths.editorial,
+  contest: sitePaths.contest,
+  blog: sitePaths.post,
   tagProblem: null,
 } satisfies Record<CommentPageType, PathFn | null>;
 export type LinkedPageType = {
@@ -57,7 +58,7 @@ export const UNLINKED_PAGE_TYPES = COMMENT_PAGE_TYPES.filter(
 );
 
 export const pagePath = (type: LinkedPageType, key: string): string =>
-  PAGE_PATHS[type](encodeURIComponent(key));
+  PAGE_PATHS[type](key);
 
 /** Link to a comment on its page, or `null` when the page type has no screen. */
 export const commentLink = (

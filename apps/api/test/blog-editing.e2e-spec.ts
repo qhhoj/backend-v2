@@ -101,7 +101,7 @@ describe('blog editing', () => {
     expect(job).toMatchObject({
       event: 'on_new_blogpost',
       message: {
-        title: `New blog post http://localhost:5173/post/${created.id}`,
+        title: `New blog post http://localhost:5173/blog/${created.id}`,
       },
     });
     await create(session, { visible: false }).expect(201);
@@ -601,7 +601,8 @@ describe('problem webhooks', () => {
     ]);
     expect(jobs.find((job) => job.event === 'on_new_problem')).toMatchObject({
       message: {
-        title: 'New organization problem http://localhost:5173/problem/org_one',
+        title:
+          'New organization problem http://localhost:5173/problems/org_one',
         author: { name: 'root' },
       },
     });

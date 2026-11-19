@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError, InjectJob, Paginated, RateLimitService } from '@libs/common';
 import type { JobProducer } from '@libs/common';
-import { communityJobs } from '@libs/community';
+import { communityJobs, sitePaths } from '@libs/community';
 import type { NotificationFanoutJob } from '@libs/community';
 import {
   contestPhase,
@@ -192,7 +192,7 @@ export class ContestAnnouncementsService {
       const code = codeOf.get(uuidStr(entry.problem));
       if (code)
         hrefs[problemLabel(index, contest.labelStyle)] =
-          `/problems/${encodeURIComponent(code)}`;
+          sitePaths.problem(code);
     });
     return hrefs;
   }

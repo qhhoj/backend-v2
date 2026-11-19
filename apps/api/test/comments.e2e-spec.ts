@@ -992,7 +992,7 @@ describe('comment posting and editing', () => {
     expect(job).toMatchObject({
       event: 'on_new_comment',
       message: {
-        title: `New comment http://localhost:5173/post/${page._id}#comment-${created.id}`,
+        title: `New comment http://localhost:5173/blog/${page._id}#comment-${created.id}`,
       },
     });
     const draft = await createPost(api, {

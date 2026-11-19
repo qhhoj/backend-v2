@@ -6,6 +6,7 @@ import { SettingsService } from '@libs/settings';
 import { discordText, discordWebhookUrl } from './discord';
 import type { DiscordEvent, DiscordMessage } from './discord';
 import { communityJobs } from './jobs';
+import { sitePaths } from './site-paths';
 import type { DiscordWebhookJob } from './jobs';
 
 /** The fields a new-problem announcement shows. */
@@ -37,7 +38,7 @@ export class DiscordWebhooksService {
   author(username: string): { name: string; url: string } {
     return {
       name: username,
-      url: this.link(`/user/${encodeURIComponent(username)}`),
+      url: this.link(sitePaths.user(username)),
     };
   }
 
@@ -48,7 +49,7 @@ export class DiscordWebhooksService {
     username: string,
   ): Promise<void> {
     const suggested = mode === 'suggest';
-    const url = this.link(`/problem/${problem.code}`);
+    const url = this.link(sitePaths.problem(problem.code));
     return this.notify(
       suggested ? 'on_new_suggested_problem' : 'on_new_problem',
       {

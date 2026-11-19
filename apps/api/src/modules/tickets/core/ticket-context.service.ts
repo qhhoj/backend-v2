@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
-import { contestPath, problemPath } from '@libs/community';
+import { sitePaths } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Contest, Ticket, TicketLinkType } from '@libs/database';
 import { ContestAccess } from '../../contests/core/contest-access';
@@ -178,7 +178,7 @@ function linkOf(ticket: TicketDocument, found: Lookups): TicketLinkResponse {
           id,
           key: problem.code,
           title: problem.name,
-          url: problemPath(problem.code),
+          url: sitePaths.problem(problem.code),
         }
       : { type, id, key: null, title: 'Deleted problem', url: '' };
   }
@@ -189,7 +189,7 @@ function linkOf(ticket: TicketDocument, found: Lookups): TicketLinkResponse {
         id,
         key: contest.key,
         title: contest.name,
-        url: contestPath(contest.key),
+        url: sitePaths.contest(contest.key),
       }
     : { type, id, key: null, title: 'Unavailable contest', url: '' };
 }

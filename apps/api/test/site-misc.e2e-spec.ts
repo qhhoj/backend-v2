@@ -214,7 +214,7 @@ afterAll(() => api.teardown());
       );
       const atom = await feed('blog', 'atom');
       expect(atom.headers['content-type']).toMatch(/^application\/atom\+xml/);
-      expect(atom.text).toContain(`/post/${shown._id}`);
+      expect(atom.text).toContain(`/blog/${shown._id}`);
       expect(atom.text).toContain('<author><name>QHHOJ</name></author>');
       const comments = (await feed('comments', 'rss')).text;
       expect(comments).toContain('public words');
