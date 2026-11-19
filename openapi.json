@@ -18698,6 +18698,7 @@
                 "group",
                 "judge",
                 "license",
+                "miscConfig",
                 "organization",
                 "problem",
                 "problemGroup",
@@ -18707,6 +18708,7 @@
                 "submission",
                 "submission_batch",
                 "tagProblem",
+                "ticket",
                 "user"
               ],
               "type": "string"
