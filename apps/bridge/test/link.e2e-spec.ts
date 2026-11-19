@@ -11,7 +11,7 @@ import { JudgeError, Status } from '@libs/judge-proto';
 import { BridgeCommandsService } from '@libs/judging';
 import { JudgesRepository } from '../../api/src/modules/judges/judges.repository';
 import { JudgesService } from '../../api/src/modules/judges/judges.service';
-import type { RevisionsRepository } from '../../api/src/modules/problems/core/revisions.repository';
+import type { RevisionsRepository } from '../../api/src/modules/shared/revisions.repository';
 import { FakeJudge } from './fake-judge';
 import {
   seedCatalog,
