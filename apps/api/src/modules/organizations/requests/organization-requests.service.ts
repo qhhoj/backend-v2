@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import {
@@ -7,7 +7,6 @@ import {
   isDuplicateKey,
   Paginated,
   RateLimitService,
-  REDIS,
 } from '@libs/common';
 import {
   assertNotLockedByOfficialMode,
@@ -17,9 +16,8 @@ import {
 import { uuidStr } from '@libs/database';
 import type { OrganizationRequest } from '@libs/database';
 import { SettingsService } from '@libs/settings';
-import type Redis from 'ioredis';
 import { OrganizationAccess } from '../core/organization-access';
-import { withMemberSlotsLock } from '../core/member-slots-lock';
+import { MemberAdmission } from '../core/member-admission.service';
 import { OrganizationMembersRepository } from '../core/organization-members.repository';
 import { OrganizationPointsService } from '../core/organization-points.service';
 import {
@@ -63,10 +61,10 @@ export class OrganizationRequestsService {
     private readonly members: OrganizationMembersRepository,
     private readonly users: UsersRepository,
     private readonly points: OrganizationPointsService,
+    private readonly admission: MemberAdmission,
     private readonly rateLimits: RateLimitService,
     private readonly notifications: NotificationsService,
     private readonly settings: SettingsService,
-    @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
   /** Legacy `RequestJoinOrganization`. */
@@ -173,40 +171,40 @@ export class OrganizationRequestsService {
     if (state === 'R') {
       await this.finish(id, 'R', principal.userId, now);
     } else {
-      await withMemberSlotsLock(this.redis, organization._id, () =>
-        this.approve(principal, slug, request, now),
-      );
+      await this.approve(principal, organization._id, request, now);
     }
     await this.notifyDecision(organization, request, state);
     return this.respond((await this.requests.findById(id))!, organization.slug);
   }
 
-  /** Checks `slots` (re-read, so a concurrent edit counts) against the live count, then decides the request (compare-and-set) BEFORE adding the member, so a concurrent rejection can never leave a member behind. If adding fails the request is reopened. */
+  /** Decides the request (compare-and-set) BEFORE adding the member, so a concurrent rejection can never leave a member behind; a new member is admitted against `slots` (`MemberAdmission`). If adding fails the request is reopened. */
   private async approve(
     principal: Principal,
-    slug: string,
+    organizationId: string,
     request: OrganizationRequest,
     now: Date,
   ): Promise<void> {
     const id = uuidStr(request._id);
     const userId = uuidStr(request.user);
-    const organization = await this.organizationsService.bySlug(slug);
-    const alreadyMember = await this.members.isMember(userId, organization._id);
-    if (
-      !alreadyMember &&
-      (await this.members.isFull(organization._id, organization.slots))
-    ) {
-      if ((await this.requests.findById(id))?.state !== 'P')
-        throw alreadyDecided();
-      throw conflict(
-        'The organization is full',
-        'organization',
-        'organization_full',
+    if (await this.members.isMember(userId, organizationId))
+      await this.finish(id, 'A', principal.userId, now);
+    else
+      await this.admission.admit(
+        organizationId,
+        async () =>
+          (await this.requests.findById(id))?.state !== 'P'
+            ? alreadyDecided()
+            : conflict(
+                'The organization is full',
+                'organization',
+                'organization_full',
+              ),
+        async () => {
+          await this.finish(id, 'A', principal.userId, now);
+          await this.addApproved(id, userId, organizationId);
+        },
       );
-    }
-    await this.finish(id, 'A', principal.userId, now);
-    if (!alreadyMember) await this.addApproved(id, userId, organization._id);
-    await this.points.refresh([organization._id]);
+    await this.points.refresh([organizationId]);
   }
 
   private async addApproved(

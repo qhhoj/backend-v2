@@ -21,16 +21,15 @@ import {
   ValidationFailedError,
 } from '@libs/common';
 import type { FieldIssue, Mailer } from '@libs/common';
-import { ActivationKey, Language, Organization, uuidStr } from '@libs/database';
+import { ActivationKey, Language, uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
 import { PasswordResetService } from '../password-reset/password-reset.service';
 import type { ActivationResponse } from './dto/activation.response';
-import { withMemberSlotsLock } from '../../organizations/core/member-slots-lock';
-import { OrganizationMembersRepository } from '../../organizations/core/organization-members.repository';
+import { MemberAdmission } from '../../organizations/core/member-admission.service';
 import { OrganizationPointsService } from '../../organizations/core/organization-points.service';
-import { MEMBER_SLOTS_WAIT_SECONDS } from '../../organizations/core/rate-limits';
+import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
 import { withEmailLock } from '../../users/core/email-lock';
 import { ACTIVATION_DAYS, ActivationService } from './activation.service';
 import type { RegisterDto } from './dto/register.dto';
@@ -59,12 +58,11 @@ export class RegistrationService {
     private readonly rateLimit: RateLimitService,
     private readonly activation: ActivationService,
     private readonly organizationPoints: OrganizationPointsService,
-    private readonly members: OrganizationMembersRepository,
+    private readonly admission: MemberAdmission,
     @InjectModel(ActivationKey.name)
     private readonly activationKeys: Model<ActivationKey>,
     @InjectModel(Language.name) private readonly languages: Model<Language>,
-    @InjectModel(Organization.name)
-    private readonly organizations: Model<Organization>,
+    private readonly organizations: OrganizationsRepository,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(MAILER) private readonly mailer: Mailer,
     private readonly passwordReset: PasswordResetService,
@@ -140,25 +138,13 @@ export class RegistrationService {
   private async organizationIssue(
     organizationId: string,
   ): Promise<FieldIssue | null> {
-    const organization = await this.organizations
-      .findOne(
-        {
-          _id: organizationId,
-          isOpen: true,
-          isUnlisted: false,
-          deletedAt: null,
-        },
-        { slots: 1 },
-      )
-      .lean()
-      .exec();
-    if (!organization)
+    if (!(await this.organizations.isJoinableAtSignup(organizationId)))
       return {
         field: 'organizationId',
         code: 'organization_unavailable',
         message: 'Choose one of the listed open organizations.',
       };
-    return (await this.members.isFull(organizationId, organization.slots))
+    return (await this.admission.isFull(organizationId))
       ? organizationFull()
       : null;
   }
@@ -351,27 +337,17 @@ export class RegistrationService {
     }
   }
 
-  /** A signup into an organization counts its members against `slots` and inserts under the organization's member lock, like a join (`withMemberSlotsLock`). */
+  /** A signup into an organization is admitted against `slots` like a join (`MemberAdmission`). */
   private insertWithinSlots(fields: Partial<User>): Promise<UserDocument> {
     const [organizationId] = (fields.organizations ?? []).map(uuidStr);
     if (!organizationId) return this.users.create(fields);
-    return withMemberSlotsLock(
-      this.redis,
+    return this.admission.admit(
       organizationId,
-      async () => {
-        const organization = await this.organizations
-          .findById(organizationId, { slots: 1 })
-          .lean()
-          .exec();
-        if (
-          await this.members.isFull(organizationId, organization?.slots ?? null)
-        )
-          throw new ValidationFailedError('Registration rejected', [
-            organizationFull(),
-          ]);
-        return this.users.create(fields);
-      },
-      MEMBER_SLOTS_WAIT_SECONDS,
+      () =>
+        new ValidationFailedError('Registration rejected', [
+          organizationFull(),
+        ]),
+      () => this.users.create(fields),
     );
   }
 }

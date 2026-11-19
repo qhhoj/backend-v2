@@ -17,6 +17,7 @@ import { OrganizationRequestsController } from './requests/organization-requests
 import { OrganizationRequestsService } from './requests/organization-requests.service';
 import { MembershipController } from './membership/membership.controller';
 import { MembershipService } from './membership/membership.service';
+import { MemberAdmission } from './core/member-admission.service';
 import { OrganizationMembersRepository } from './core/organization-members.repository';
 import { OrganizationRequestsRepository } from './core/organization-requests.repository';
 import { OrganizationPointsService } from './core/organization-points.service';
@@ -65,6 +66,7 @@ import {
   providers: [
     OrganizationsRepository,
     OrganizationRequestsRepository,
+    MemberAdmission,
     OrganizationMembersRepository,
     OrganizationPointsService,
     OrganizationsService,
@@ -85,6 +87,7 @@ import {
   exports: [
     OrganizationsRepository,
     OrganizationRequestsRepository,
+    MemberAdmission,
     OrganizationMembersRepository,
     OrganizationPointsService,
     OrganizationsService,
