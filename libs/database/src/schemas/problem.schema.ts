@@ -178,7 +178,6 @@ export class Problem {
 }
 
 export const ProblemSchema = SchemaFactory.createForClass(Problem);
-
 keepSetupFlagsCurrent(ProblemSchema);
 ProblemSchema.index({ code: 1 }, { unique: true });
 // The admin list's unfinished filter: few problems are unfinished, so the partial index stays small.
