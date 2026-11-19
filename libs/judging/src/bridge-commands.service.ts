@@ -52,7 +52,6 @@ export class BridgeCommandsService {
         type: 'judge',
         submissionIds: submissionIds.slice(start, start + JUDGE_COMMAND_BATCH),
         judgeName,
-        bannedJudges: [],
       });
   }
 

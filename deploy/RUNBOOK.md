@@ -2,7 +2,7 @@
 
 Files: `nginx/qhhoj.conf`, `nginx/qhhoj-staging.conf`, `nginx/security-headers.conf`, `nginx/qhhoj-gate.conf`, `quadlet/*`, `qhhoj-deploy`, `ci/*`, `env.production.example`, `judge/*`, `backup/*`.
 Layout: image `ghcr.io/qhhoj/backend-v2` run by rootful podman quadlets (`/etc/containers/systemd/`, host network, uid/gid 987); frontend under `/var/www/qhhoj/releases/<version>` with `current`; data `/srv/qhhoj`; env `/etc/qhhoj/env`; nginx, MongoDB native; Redis is v2's own instance (`redis-qhhoj.service`, loopback port 6380), not the shared host Redis.
-This host is the shared live old-site box (the production host), v2 goes in place; judge-v2 runs on a separate machine. Never stop, restart or reconfigure anything on it that is not QHHOJ's.
+This host is shared with other services; v2 runs there, and so does the production judge (judge-v2, 4 slots). Never stop, restart or reconfigure anything on it that is not QHHOJ's.
 
 ## How a change reaches production
 
@@ -246,7 +246,7 @@ The step-by-step guide for whoever deploys a judge machine is judge-v2 `DEPLOY.m
 
 ## Judge connection
 
-- Judges run judge-v2 (`qhhoj-judge`, repo `judge-v2`) and open a gRPC `qhhoj.judge.v1` link to `JUDGE_BRIDGE_HOST:JUDGE_BRIDGE_PORT` (default 9999; 9990 on the shared host, where the old DMOJ bridge holds 9999), sending the judge name and key as `x-judge-name`/`x-judge-key` metadata. Runs survive a reconnect within 30 s (resume).
+- Judges run judge-v2 (`qhhoj-judge`, repo `judge-v2`) and open a gRPC `qhhoj.judge.v1` link to `JUDGE_BRIDGE_HOST:JUDGE_BRIDGE_PORT` (default 9999; production uses 9990), sending the judge name and key as `x-judge-name`/`x-judge-key` metadata. Runs survive a reconnect within 30 s (resume).
 - TLS: set `JUDGE_BRIDGE_TLS_CERT` and `JUDGE_BRIDGE_TLS_KEY` (both or neither); a non-loopback host without them refuses to start. Judges pin the private CA (`/etc/qhhoj-judge/bridge-ca.pem`) and check the server name ("Judge hosts" step 6). The pair is read once at start: after renewing it, restart the bridge (`systemctl restart qhhoj-bridge`); judges reconnect and resume. Plaintext is accepted only when the bridge binds loopback (local stacks).
 - Create or rotate the judge and its key in the admin UI (the key is shown once; a rotate or block ends every session of the judge and closes its connections at once). Judges are not migrated; register them fresh and issue new keys. On the host the key lives in `/etc/qhhoj-judge/key` (0400 root) and reaches the daemon through `LoadCredential=`; it is re-read on every reconnect.
 - Limits: one connection per judge (a newer session replaces the older one); a connection with no session is closed after 15 s; 8 such connections per address; an address with 20 failed key checks in a minute is refused for the rest of that minute (logged as `Judge key check failed from <address>`).
@@ -267,7 +267,7 @@ One-time steps, already performed on the production host; repeat them on a rebui
 2. podman 4.9.3 from the Ubuntu 24.04 packages, next to Docker. v2 containers use `--network host` only; Docker and its apps are untouched.
 3. MongoDB 8.0.32 (`mongodb-org`) from the mongodb.org noble repo. `/etc/mongod.conf`: `replSetName: rs0`, `bindIp: 127.0.0.1`, `storage.wiredTiger.engineConfig.cacheSizeGB: 2`, `keyFile: /etc/mongod.keyfile`, `authorization: enabled`. Users `admin` (root) and `qhhoj` (`readWrite` + `dbAdmin` on `qhhoj`, `clusterMonitor`); passwords in `/root/qhhoj-secrets/mongo.env` (mode 600), never in this repo.
 4. Redis: v2 runs its own instance, `redis-qhhoj.service` on 127.0.0.1:6380, not the host's shared Redis (6379, used by the old site). Its ACL user `qhhoj` uses db 0; `REDIS_URL=redis://qhhoj:<password>@127.0.0.1:6380/0`, with the password from the root-only secrets file.
-5. Judge bridge: `JUDGE_BRIDGE_PORT=9990` (the old DMOJ bridge holds 9999). `ufw allow from <judge-machine-ip> to any port 9990 proto tcp`; no other rule opens it. The judge machine's `config.toml` `bridge_url` and `nftables-judge.conf` `BRIDGE_PORT` use 9990 too.
+5. Judge bridge: `JUDGE_BRIDGE_PORT=9990`. For an external judge machine: `ufw allow from <judge-machine-ip> to any port 9990 proto tcp`; no other rule opens it. The judge machine's `config.toml` `bridge_url` and `nftables-judge.conf` `BRIDGE_PORT` use 9990 too.
 6. nginx: the old `qhhoj.com` server block lives in `/etc/nginx/sites-enabled/default` next to other domains' blocks. At the freeze back the file up (`cp -a /etc/nginx/sites-enabled/default /root/qhhoj-rollback/nginx-default`) and replace only that block with `deploy/nginx/qhhoj.conf` (the existing qhhoj.com certificate paths); leave every other block untouched; `nginx -t && systemctl reload nginx`. Cloudflare stays in front, so go-live needs no DNS change.
 7. Freeze of the old site: `supervisorctl stop` its programs (site, celery, celerybeat, bridged, wsevent) and `docker stop pcd` (the DMOJ judge). Other supervisor programs and containers stay running.
 

@@ -109,9 +109,9 @@ function fullRunPointsRefusal(data: JudgedSettings): JudgeRefusal | null {
 }
 
 /**
- * A setting judge-v2 refuses, so every submission would be an internal error: a `generator` and `nobigmath`
- * (init.yml `unsupported_feature`), an output limit above 64 MiB (`plan_cases`), and cases graded with
- * different checkers (grader `single_checker`). Also a case set whose points are all on plain pretests: the judge
+ * A setting judge-v2 cannot grade: a `generator` and `nobigmath` (refused as unsupported, so every submission
+ * waits in the queue), an output limit above 64 MiB (`plan_cases`), and cases graded with different checkers
+ * (grader `single_checker`). Also a case set whose points are all on plain pretests: the judge
  * accepts it, but every full run scores 0.
  */
 export function judgeRefusal(data: JudgedSettings): JudgeRefusal | null {

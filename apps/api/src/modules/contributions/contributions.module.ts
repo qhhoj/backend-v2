@@ -1,4 +1,4 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { JobsModule, RateLimitService } from '@libs/common';
 import { communityJobs } from '@libs/community';
@@ -11,7 +11,7 @@ import { VotesService } from './votes.service';
 @Module({
   imports: [
     AuthModule,
-    forwardRef(() => ProblemsApiModule),
+    ProblemsApiModule,
     JobsModule.register(communityJobs.contributionPoints),
   ],
   providers: [

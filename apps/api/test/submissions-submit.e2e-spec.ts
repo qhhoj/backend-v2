@@ -155,7 +155,7 @@ describe('POST /api/internal/problems/:code/submit', () => {
       'int main() { return 0; }',
     );
     expect(await bridgeCommands(api)).toEqual([
-      { type: 'judge', submissionIds: [id], judgeName: null, bannedJudges: [] },
+      { type: 'judge', submissionIds: [id], judgeName: null },
     ]);
   });
 
@@ -231,13 +231,11 @@ describe('POST /api/internal/problems/:code/submit', () => {
         type: 'judge',
         submissionIds: [chosen],
         judgeName: 'judge-on',
-        bannedJudges: [],
       },
       {
         type: 'judge',
         submissionIds: [mirrored],
         judgeName: 'judge-on',
-        bannedJudges: [],
       },
     ]);
     // stored too, so a requeue or a bridge restart keeps it

@@ -8,13 +8,11 @@ describe('parseBridgeCommand', () => {
       type: 'judge',
       submissionIds: [newId(), newId()],
       judgeName: null,
-      bannedJudges: [],
     },
     {
       type: 'judge',
       submissionIds: [newId()],
       judgeName: 'judge-01',
-      bannedJudges: ['judge-02'],
     },
     { type: 'abort', submissionId: newId() },
     { type: 'disconnect-judge', judgeName: 'judge-01', force: true },
@@ -23,6 +21,17 @@ describe('parseBridgeCommand', () => {
   ])('round-trips %j', (command) =>
     expect(parseBridgeCommand(JSON.stringify(command))).toEqual(command),
   );
+  it('drops fields a judge command does not have', () =>
+    expect(
+      parseBridgeCommand(
+        JSON.stringify({
+          type: 'judge',
+          submissionIds: [],
+          judgeName: null,
+          bannedJudges: ['x'],
+        }),
+      ),
+    ).toEqual({ type: 'judge', submissionIds: [], judgeName: null }));
   it.each([
     'not json',
     'null',
@@ -33,19 +42,16 @@ describe('parseBridgeCommand', () => {
       type: 'judge',
       submissionIds: ['1; drop'],
       judgeName: null,
-      bannedJudges: [],
     }),
     JSON.stringify({
       type: 'judge',
       submissionIds: Array.from({ length: JUDGE_COMMAND_BATCH + 1 }, newId),
       judgeName: null,
-      bannedJudges: [],
     }),
     JSON.stringify({
       type: 'judge',
       submissionIds: [newId()],
-      judgeName: null,
-      bannedJudges: ['a b'],
+      judgeName: 'a b',
     }),
     JSON.stringify({ type: 'judge', submissionIds: [newId()] }),
     JSON.stringify({ type: 'disconnect-judge', judgeName: 'a b', force: true }),

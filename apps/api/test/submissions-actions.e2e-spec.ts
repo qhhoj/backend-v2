@@ -212,7 +212,6 @@ describe('submission actions', () => {
           type: 'judge',
           submissionIds: [id],
           judgeName: null,
-          bannedJudges: [],
         },
       ]);
     });

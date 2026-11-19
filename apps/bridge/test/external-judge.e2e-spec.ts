@@ -366,7 +366,6 @@ describe('External judge adapter (bridge)', () => {
         type: 'judge',
         submissionIds: [id],
         judgeName: null,
-        bannedJudges: [],
       }),
     );
     await finished(id);
