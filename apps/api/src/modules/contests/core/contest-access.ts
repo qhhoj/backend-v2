@@ -81,14 +81,12 @@ const seesEveryContest = (principal: Principal | null) =>
 const isEditorOrSiteEditor = (
   principal: Principal | null,
   contest: ContestAccessView,
-) =>
-  isEditor(principal, contest) || has(principal, 'judge.edit_all_contest');
+) => isEditor(principal, contest) || has(principal, 'judge.edit_all_contest');
 /** `isEditorOrSiteEditor` or a tester: the people a contest's own rules never close anything to. */
 const isContestStaff = (
   principal: Principal | null,
   contest: ContestAccessView,
-) =>
-  isEditorOrSiteEditor(principal, contest) || isTester(principal, contest);
+) => isEditorOrSiteEditor(principal, contest) || isTester(principal, contest);
 
 /** Legacy `is_editable_by`. */
 const canEdit = (principal: Principal | null, contest: ContestAccessView) =>
