@@ -23,7 +23,7 @@ import {
   submissionEvent,
   SubmissionEventsService,
 } from '@libs/judging';
-import { INIT_FILE, ProblemDataFilesService } from '@libs/problems';
+import { ProblemDataFilesService } from '@libs/problems';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { ParticipationsRepository } from '../../contests/core/participations.repository';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
@@ -212,13 +212,13 @@ export class SubmissionCreateService {
     return { id };
   }
 
-  /** A judge-graded problem whose `init.yml` is missing (a mirror's data is its root's) has no test cases (its setter never configured them), so every run would end in an internal error. Gated on the file, not on `data.cases`: some working problems keep an `init.yml` with no cases in Mongo. */
+  /** A judge-graded problem without an `init.yml` or without a data-version stamp (a mirror's data is its root's) has no saved test cases, so every run would end in an internal error. Gated on the files, not on `data.cases`: some working problems keep an `init.yml` with no cases in Mongo. */
   private async assertHasTests(problem: ProblemDocument): Promise<void> {
     if (problem.externalJudge?.isActive) return;
     const code = problem.mirrorRoot
       ? await this.problemRows.codeById(uuidStr(problem.mirrorRoot))
       : problem.code;
-    if (code && (await this.dataFiles.exists(code, INIT_FILE))) return;
+    if (code && (await this.dataFiles.hasTests(code))) return;
     throw new AppError(
       'problem_has_no_tests',
       409,

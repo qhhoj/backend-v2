@@ -109,6 +109,7 @@ export const createUserWith = (
 export const writeInit = (api: ApiTest, code: string): void => {
   mkdirSync(join(api.problemDataRoot, code), { recursive: true });
   writeFileSync(join(api.problemDataRoot, code, 'init.yml'), '{}\n');
+  writeFileSync(join(api.problemDataRoot, code, '.data-version'), '1\n');
 };
 
 export const createProblem = async (

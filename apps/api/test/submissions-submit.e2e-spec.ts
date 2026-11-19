@@ -124,6 +124,19 @@ describe('POST /api/internal/problems/:code/submit', () => {
     await submit('alice').expect(201);
   });
 
+  it('refuses a submission to a problem whose data was never saved (an init.yml but no data-version stamp)', async () => {
+    const stampPath = join(api.problemDataRoot, 'sum', '.data-version');
+    rmSync(stampPath);
+    try {
+      await submit('alice')
+        .expect(409)
+        .expect(errorCode('problem_has_no_tests'));
+    } finally {
+      writeInit(api, 'sum');
+    }
+    await submit('alice').expect(201);
+  });
+
   it('looks for the init.yml of a mirror under its root problem, not its own directory', async () => {
     rmSync(join(api.problemDataRoot, 'mirror'), { recursive: true });
     await submit('editor', 'mirror').expect(201);
