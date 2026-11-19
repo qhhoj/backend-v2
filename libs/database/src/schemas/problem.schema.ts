@@ -179,10 +179,6 @@ export class Problem {
 
 export const ProblemSchema = SchemaFactory.createForClass(Problem);
 
-/** The problem whose data (code, data version, `init.yml`, tests) judges read for `problem`: its mirror root, else itself. */
-export const judgedProblemIdOf = (
-  problem: Pick<Problem, '_id' | 'mirrorRoot'>,
-): string => uuidStr(problem.mirrorRoot ?? problem._id);
 keepSetupFlagsCurrent(ProblemSchema);
 ProblemSchema.index({ code: 1 }, { unique: true });
 // The admin list's unfinished filter: few problems are unfinished, so the partial index stays small.
@@ -225,3 +221,8 @@ ProblemSchema.index(
     language_override: 'textLanguage',
   },
 );
+
+/** The problem whose data (code, data version, `init.yml`, tests) judges read for `problem`: its mirror root, else itself. */
+export const judgedProblemIdOf = (
+  problem: Pick<Problem, '_id' | 'mirrorRoot'>,
+): string => uuidStr(problem.mirrorRoot ?? problem._id);

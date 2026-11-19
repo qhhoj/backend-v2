@@ -91,6 +91,7 @@ type ClaimedSubmission = Pick<
 interface JudgingInputs {
   problem: Pick<
     Problem,
+    | '_id'
     | 'code'
     | 'timeLimit'
     | 'memoryLimit'
