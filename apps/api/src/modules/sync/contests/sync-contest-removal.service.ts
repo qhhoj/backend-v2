@@ -14,6 +14,7 @@ import type { ContestDocument } from '../../contests/core/contests.repository';
 import { isFrozenForSync } from './sync-contest-fields';
 import { SyncActsAsService } from './sync-acts-as.service';
 import { SyncContestOwnership } from './sync-contest-ownership.service';
+import { ContestRemovalRepository } from '../../contests/editing/contest-removal.repository';
 import { SyncParticipantsRepository } from './sync-participants.repository';
 import { SyncRateLimit } from './sync-rate-limit.service';
 
@@ -28,6 +29,7 @@ export class SyncContestRemovalService {
     private readonly ownership: SyncContestOwnership,
     private readonly actsAs: SyncActsAsService,
     private readonly participants: SyncParticipantsRepository,
+    private readonly removal: ContestRemovalRepository,
     private readonly rateLimit: SyncRateLimit,
     @InjectJob(contestJobs.finalJudge)
     private readonly finalJudges: JobProducer<ContestFinalJudgeJob>,
@@ -47,6 +49,7 @@ export class SyncContestRemovalService {
     const owner = { clientId: client.clientId, now };
     if (!(await this.participants.deleteUnstarted(contest._id, owner)))
       throw notDeletable('The contest changed meanwhile and was kept');
+    await this.removal.deleteOwnedRows(contest._id);
     await this.clearLeftovers(contest, key);
     this.logger.log(
       JSON.stringify({

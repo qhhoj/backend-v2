@@ -14,6 +14,7 @@ import {
   createContest,
   hoursFromNow,
   joinParticipation,
+  makeCurrent,
 } from './contest-fixtures';
 import { createProblem, createUserWith, seedCatalog } from './problem-fixtures';
 import type { Catalog } from './problem-fixtures';
@@ -519,12 +520,23 @@ afterAll(() => api.teardown());
     });
 
     describe('removal', () => {
-      it('deletes a hidden contest that has not started, with its participations and final-judge job', async () => {
+      it('deletes a hidden contest that has not started, with its participations, feed keys, current-contest pointers and final-judge job', async () => {
         const { bearer } = await makeClient();
         const key = await create(bearer);
         const contest = await stored(key);
         const user = await createUserWith(api, `lifeplayer${counter}`);
-        await joinParticipation(api, uuidStr(contest._id), user._id);
+        const participation = await joinParticipation(
+          api,
+          uuidStr(contest._id),
+          user._id,
+        );
+        await makeCurrent(api, user._id, uuidStr(participation._id));
+        await api.feedKeys.create({
+          contest: contest._id,
+          keyHash: 'f'.repeat(64),
+          createdBy: user._id,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        });
         const jobId = finalJudgeJobId(uuidStr(contest._id), contest.endTime);
         expect(await finalJudges.getJob(jobId)).toBeDefined();
         await call('delete', bearer, key).expect(204);
@@ -532,6 +544,12 @@ afterAll(() => api.teardown());
         expect(
           await api.participations.countDocuments({ contest: contest._id }),
         ).toBe(0);
+        expect(
+          await api.feedKeys.countDocuments({ contest: contest._id }),
+        ).toBe(0);
+        expect(
+          (await api.users.findById(user._id).lean())?.currentParticipation,
+        ).toBeNull();
         expect(await finalJudges.getJob(jobId)).toBeUndefined();
         await call('delete', bearer, key).expect(404);
       });
