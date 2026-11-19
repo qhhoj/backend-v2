@@ -487,27 +487,26 @@ export class SubmissionsRepository {
     submissionId: string,
     submission: ClaimedSubmission,
   ): Promise<JudgingInputs | null> {
-    const [problem, source, language, metaOf] =
-      await Promise.all([
-        this.problems
-          .findById(submission.problem, {
-            code: 1,
-            timeLimit: 1,
-            memoryLimit: 1,
-            partial: 1,
-            languageLimits: 1,
-            dataVersion: 1,
-            mirrorRoot: 1,
-          })
-          .lean(),
-        this.sources.findById(submissionId).lean(),
-        this.languages
-          .findById(submission.language, { fileOnly: 1, fileSizeLimit: 1 })
-          .lean(),
-        submission.contest
-          ? this.contestMetaOf([submissionId])
-          : Promise.resolve(new Map<string, ContestMeta>()),
-      ]);
+    const [problem, source, language, metaOf] = await Promise.all([
+      this.problems
+        .findById(submission.problem, {
+          code: 1,
+          timeLimit: 1,
+          memoryLimit: 1,
+          partial: 1,
+          languageLimits: 1,
+          dataVersion: 1,
+          mirrorRoot: 1,
+        })
+        .lean(),
+      this.sources.findById(submissionId).lean(),
+      this.languages
+        .findById(submission.language, { fileOnly: 1, fileSizeLimit: 1 })
+        .lean(),
+      submission.contest
+        ? this.contestMetaOf([submissionId])
+        : Promise.resolve(new Map<string, ContestMeta>()),
+    ]);
     if (!problem || !source) return null;
     return {
       problem,
