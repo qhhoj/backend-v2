@@ -585,9 +585,9 @@ export class SubmissionsService {
     principal: Principal,
     contest: ContestDocument,
   ): boolean {
-    return (
-      ContestAccess.isEditor(principal, ContestAccess.accessView(contest)) ||
-      hasPermission(principal, 'judge.edit_all_contest')
+    return ContestAccess.isEditorOrSiteEditor(
+      principal,
+      ContestAccess.accessView(contest),
     );
   }
 

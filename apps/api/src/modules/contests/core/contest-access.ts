@@ -77,6 +77,19 @@ const seesEveryContest = (principal: Principal | null) =>
   has(principal, 'judge.see_private_contest') ||
   has(principal, 'judge.edit_all_contest');
 
+/** Authors, curators and whoever edits every contest. Unlike `canEdit`, an author needs no `judge.edit_own_contest`. */
+const isEditorOrSiteEditor = (
+  principal: Principal | null,
+  contest: ContestAccessView,
+) =>
+  isEditor(principal, contest) || has(principal, 'judge.edit_all_contest');
+/** `isEditorOrSiteEditor` or a tester: the people a contest's own rules never close anything to. */
+const isContestStaff = (
+  principal: Principal | null,
+  contest: ContestAccessView,
+) =>
+  isEditorOrSiteEditor(principal, contest) || isTester(principal, contest);
+
 /** Legacy `is_editable_by`. */
 const canEdit = (principal: Principal | null, contest: ContestAccessView) =>
   has(principal, 'judge.edit_all_contest') ||
@@ -275,8 +288,7 @@ function canSeeFullSubmissionList(
   facts: ViewerFacts,
 ): boolean {
   if (!canSeeFullScoreboard(principal, contest, now, facts)) return false;
-  if (isEditor(principal, contest) || has(principal, 'judge.edit_all_contest'))
-    return true;
+  if (isEditorOrSiteEditor(principal, contest)) return true;
   if (isFrozen(contest, now)) return false;
   return contestPhase(contest, now) === 'ended' || contest.showSubmissionList;
 }
@@ -290,9 +302,7 @@ function isProblemListOpen(
 ): boolean {
   return (
     facts.inContest ||
-    isEditor(principal, contest) ||
-    canEdit(principal, contest) ||
-    isTester(principal, contest) ||
+    isContestStaff(principal, contest) ||
     contestPhase(contest, now) === 'ended'
   );
 }
@@ -315,6 +325,8 @@ export const ContestAccess = {
   accessView,
   isEditor,
   isTester,
+  isEditorOrSiteEditor,
+  isContestStaff,
   keepsSpectating,
   canEdit,
   editableFilter,

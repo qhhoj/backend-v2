@@ -2,6 +2,7 @@ import { uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
 import type { UserDocument } from '@libs/auth';
 import { linkedProviders } from '../../../auth/social/oauth-provider';
+import { secondFactorMethods } from '../../../auth/two-factor/second-factor-methods';
 import { OrganizationSummaryResponse } from '../../../organizations/core/dto/organization.response';
 
 /** The fields staff edit on a user, plus the flags the panel needs to explain what it may do. */
@@ -60,7 +61,7 @@ export class UserEditResponse {
       allowTagging: user.allowTagging,
       notes: user.notes ?? '',
       inContest: user.currentParticipation !== null,
-      hasTwoFactor: user.isTotpEnabled || user.isWebauthnEnabled,
+      hasTwoFactor: secondFactorMethods(user).length > 0,
       socialProviders: linkedProviders(user.socialAuth),
       isActive: user.isActive,
       isStaff: user.isStaff,

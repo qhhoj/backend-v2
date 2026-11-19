@@ -106,7 +106,7 @@ describe('submitting inside a contest', () => {
       ),
     ).toBe(participation._id);
     expect(await bridgeCommands(api)).toEqual([
-      { type: 'judge', submissionIds: [id], judgeName: null, bannedJudges: [] },
+      { type: 'judge', submissionIds: [id], judgeName: null },
     ]);
     const normal = idOf(await submit('alice', 'outside').expect(201));
     expect(await api.submissions.findById(normal).lean()).toMatchObject({

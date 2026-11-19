@@ -105,19 +105,6 @@ function assertExternalAllowed(
 }
 
 /** Legacy `ProblemSubmit.form_valid`; inside a current contest that lists the problem the submission is a contest submission (priority 0, lock, pretests, `maxSubmissions`, FSO pending). */
-/** Authors, curators, testers and contest editors (`judge.edit_all_contest`, or `edit_own_contest` as author or curator). */
-const isContestStaff = (
-  principal: Principal,
-  contest: CurrentParticipation['contest'],
-): boolean => {
-  const view = ContestAccess.accessView(contest);
-  return (
-    ContestAccess.isEditor(principal, view) ||
-    ContestAccess.isTester(principal, view) ||
-    ContestAccess.canEdit(principal, view)
-  );
-};
-
 @Injectable()
 export class SubmissionCreateService {
   constructor(
@@ -376,7 +363,10 @@ export class SubmissionCreateService {
     const { contest, participation } = current;
     if (
       participation.virtual === SPECTATE &&
-      !isContestStaff(principal, contest)
+      !ContestAccess.isContestStaff(
+        principal,
+        ContestAccess.accessView(contest),
+      )
     ) {
       if (contestPhase(contest, now) !== 'ended')
         throw new AppError(
