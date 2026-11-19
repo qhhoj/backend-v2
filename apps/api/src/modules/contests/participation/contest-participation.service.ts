@@ -3,7 +3,6 @@ import type Redis from 'ioredis';
 import {
   constantTimeEqual,
   PrincipalService,
-  SessionService,
   sha256,
   shieldingRights,
   UsersRepository,
@@ -40,7 +39,10 @@ import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
 import { ContestRankingService } from '../ranking/contest-ranking.service';
 import { CurrentContestService } from '../core/current-contest.service';
-import { FeedKeysRepository } from '../feed/feed-keys.repository';
+import {
+  AccountBans,
+  CONTEST_CHEATING_BAN_REASON,
+} from '../../users/moderation/account-bans.service';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
 import type {
   BulkDisqualifyDto,
@@ -75,10 +77,6 @@ import {
   VIRTUAL_RUN_WINDOW_SECONDS,
   ACCESS_CODE_WINDOW_SECONDS,
 } from '../core/rate-limits';
-
-/** Legacy `VNOJ_CONTEST_CHEATING_BAN_MESSAGE`. */
-export const CONTEST_CHEATING_BAN_REASON =
-  'Banned for multiple cheating offenses during contests';
 
 /** `virtual` per listed kind; spectators are listed only on request. */
 const VIRTUAL_OF_KIND = {
@@ -133,8 +131,7 @@ export class ContestParticipationService {
     private readonly rescores: JobProducer<ContestRescoreJob>,
     @Inject(REDIS) private readonly redis: Redis,
     private readonly settings: SettingsService,
-    private readonly sessions: SessionService,
-    private readonly feedKeys: FeedKeysRepository,
+    private readonly bans: AccountBans,
     private readonly ranking: ContestRankingService,
     private readonly principals: PrincipalService,
   ) {}
@@ -471,15 +468,9 @@ export class ContestParticipationService {
     ]);
     if (!user) return;
     if (count >= limit && user.banReason === null && !this.isStaffAccount(user))
-      await this.banForCheating(user);
+      await this.bans.ban(user, CONTEST_CHEATING_BAN_REASON);
     else if (count < limit && user.banReason === CONTEST_CHEATING_BAN_REASON)
-      await this.users.updateIfBanReason(userId, CONTEST_CHEATING_BAN_REASON, {
-        banReason: null,
-        displayRank: 'user',
-        isUnlisted: false,
-        isActive: user.isActiveBeforeBan ?? true,
-        isActiveBeforeBan: null,
-      });
+      await this.bans.unban(user);
   }
 
   /** Superusers, `isStaff` accounts and holders of any right beyond the own-scope ones (directly or through a role). */
@@ -489,27 +480,6 @@ export class ContestParticipationService {
       user.isStaff ||
       shieldingRights(this.principals.build(user).permissions).length > 0
     );
-  }
-
-  /** Signs the user out only when this ban won the compare-and-set on the ban reason. */
-  private async banForCheating(user: UserDocument): Promise<void> {
-    if (
-      await this.users.revokeCredentials(
-        user._id,
-        {
-          banReason: CONTEST_CHEATING_BAN_REASON,
-          displayRank: 'banned',
-          isUnlisted: true,
-          isActive: false,
-          isActiveBeforeBan: user.isActive,
-          apiTokenHash: null,
-        },
-        { banReason: null },
-      )
-    ) {
-      await this.sessions.destroyAllForUser(user._id);
-      await this.feedKeys.revokeMintedBy(user._id, new Date());
-    }
   }
 
   async leave(principal: Principal, key: string): Promise<void> {

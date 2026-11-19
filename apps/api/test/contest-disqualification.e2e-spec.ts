@@ -6,7 +6,7 @@ import { GroupsQuerier, UsersRepository } from '@libs/auth';
 import { contestJobs, rankingCacheKey } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
-import { CONTEST_CHEATING_BAN_REASON } from '../src/modules/contests/participation/contest-participation.service';
+import { CONTEST_CHEATING_BAN_REASON } from '../src/modules/users/moderation/account-bans.service';
 import {
   contestUrl,
   createContest,

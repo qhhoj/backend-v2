@@ -1,4 +1,4 @@
-import { CONTEST_CHEATING_BAN_REASON } from '../src/modules/contests/participation/contest-participation.service';
+import { CONTEST_CHEATING_BAN_REASON } from '../src/modules/users/moderation/account-bans.service';
 
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 
