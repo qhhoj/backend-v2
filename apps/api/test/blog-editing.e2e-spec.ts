@@ -601,7 +601,8 @@ describe('problem webhooks', () => {
     ]);
     expect(jobs.find((job) => job.event === 'on_new_problem')).toMatchObject({
       message: {
-        title: 'New organization problem http://localhost:5173/problems/org_one',
+        title:
+          'New organization problem http://localhost:5173/problems/org_one',
         author: { name: 'root' },
       },
     });

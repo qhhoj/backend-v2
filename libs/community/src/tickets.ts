@@ -12,7 +12,6 @@ export const TICKET_MESSAGE_CAP = 500;
 export const TICKETS_PAGE_SIZE = 50;
 export const TICKET_ASSIGNEES_MAX = 20;
 
-
 /** Legacy `Message: ` prefix, then the first 100 code points of the whole line, shown as plain text. */
 export const ticketMessageDescription = (body: string): string =>
   `Message: ${discordText(excerpt(body, 100 - 'Message: '.length))}`;
