@@ -1,10 +1,9 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { JobsModule, RateLimitService } from '@libs/common';
 import { ExternalJudgeApiModule, judgingJobs } from '@libs/judging';
 import { PolygonApiModule, problemJobs } from '@libs/problems';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
-import { ContributionsModule } from '../contributions/contributions.module';
 import { OrganizationCreationModule } from '../organizations/creation/organization-creation.module';
 import { OrganizationQuotaModule } from '../organizations/quota/organization-quota.module';
 import { DiscordWebhooksModule } from '@libs/community';
@@ -101,7 +100,6 @@ const repositories = [
     AuthModule,
     PolygonApiModule,
     ExternalJudgeApiModule,
-    forwardRef(() => ContributionsModule),
     JobsModule.register(
       problemJobs.pdf,
       problemJobs.polygonImport,

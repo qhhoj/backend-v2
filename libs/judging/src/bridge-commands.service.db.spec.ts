@@ -27,7 +27,6 @@ describe('BridgeCommandsService', () => {
         type: 'judge',
         submissionIds: [submissionId],
         judgeName: 'judge-01',
-        bannedJudges: [],
       },
     ]);
   });

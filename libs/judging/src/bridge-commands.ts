@@ -11,10 +11,8 @@ export type BridgeCommand =
   | {
       type: 'judge';
       submissionIds: string[];
-      /** Only this judge may take them (submit with `judgeId`). */
+      /** Only this judge may take them (submit with `judgeId`). The bridge reads the contest's banned judges from Mongo. */
       judgeName: string | null;
-      /** Judges that must not take it. The api sends none; the bridge reads the contest's banned judges from Mongo. */
-      bannedJudges: string[];
     }
   | { type: 'abort'; submissionId: string }
   | { type: 'disconnect-judge'; judgeName: string; force: boolean }
@@ -43,10 +41,12 @@ export function parseBridgeCommand(raw: string): BridgeCommand | null {
   switch (command.type) {
     case 'judge':
       return isIdList(command.submissionIds, JUDGE_COMMAND_BATCH) &&
-        (command.judgeName === null || isJudgeName(command.judgeName)) &&
-        Array.isArray(command.bannedJudges) &&
-        command.bannedJudges.every(isJudgeName)
-        ? (command as BridgeCommand)
+        (command.judgeName === null || isJudgeName(command.judgeName))
+        ? {
+            type: 'judge',
+            submissionIds: command.submissionIds,
+            judgeName: command.judgeName,
+          }
         : null;
     case 'abort':
       return typeof command.submissionId === 'string' &&
