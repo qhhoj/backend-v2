@@ -25,7 +25,7 @@ import type {
   PolygonImportJob,
   PolygonImportResult,
 } from '@libs/problems';
-import { FakePolygon, setStorageBackfilled } from '@libs/problems/testing';
+import { FakePolygon } from '@libs/problems/testing';
 import { ImportQuota } from '../src/jobs/polygon-import/import-quota.service';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import { PolygonImportError } from '../src/jobs/polygon-import/polygon-import.error';
@@ -1287,7 +1287,6 @@ describe('Polygon link, sync and auto-sync', () => {
         })
       )._id;
       await worker.setSetting('quota.enforce', 'enforce');
-      await setStorageBackfilled(worker.module, true);
     });
     beforeEach(async () => {
       announce.mockClear();

@@ -1,4 +1,4 @@
-import { isLanguageActive, uuidStr } from '@libs/database';
+import { uuidStr } from '@libs/database';
 import type { Language } from '@libs/database';
 
 export class LanguageAdminResponse {
@@ -51,7 +51,7 @@ export class LanguageAdminResponse {
       fileOnly: language.fileOnly,
       fileSizeLimit: language.fileSizeLimit,
       includeInProblem: language.includeInProblem,
-      isActive: isLanguageActive(language),
+      isActive: language.isActive,
       order: language.order ?? 0,
     };
   }

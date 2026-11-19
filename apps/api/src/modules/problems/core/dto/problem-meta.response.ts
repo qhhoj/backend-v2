@@ -1,4 +1,3 @@
-import { isLanguageActive } from '@libs/database';
 import type { Language, License } from '@libs/database';
 
 export class CatalogItemResponse {
@@ -96,7 +95,7 @@ export class LanguageResponse {
       fileOnly,
       fileSizeLimit,
       includeInProblem,
-      isActive: isLanguageActive(language),
+      isActive: language.isActive,
     };
   }
 }

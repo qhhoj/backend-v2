@@ -101,21 +101,6 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
       'S',
       'a manual clean-up of hackmd image links covers every stored statement, deleted problems included, so a restored problem is clean too',
     ],
-  'apps/worker/src/migrations/problem-databytes/problem-databytes.repository.ts':
-    [
-      'S',
-      "recomputes every problem's dataBytes from disk, deleted and purged ones included",
-    ],
-  'apps/worker/src/migrations/problem-setup-flags/problem-setup-flags.migration.ts':
-    [
-      'S',
-      'fills the setup flags on every problem without them, deleted ones included, so a restored problem lists correctly',
-    ],
-  'apps/worker/src/migrations/problem-visibility-flags/problem-visibility-flags.migration.ts':
-    [
-      'S',
-      'fills missing visibility flags on every problem, deleted and purged ones included',
-    ],
   'apps/worker/src/jobs/problem-purge/problem-purge.repository.ts': [
     'S',
     'the purge reads the deleted problems it is removing',

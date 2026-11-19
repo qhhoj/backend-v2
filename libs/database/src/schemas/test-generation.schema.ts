@@ -46,7 +46,7 @@ export class TestGeneration {
   /** `GenerationPlan` from `@libs/judging`: programs, tests, limits, file I/O, deadline. */
   @Prop({ type: Mixed, required: true, validate: PLAIN_OBJECT })
   plan!: Record<string, unknown>;
-  /** The judge feature it needs; rows from before compile checks read as test generation. */
+  /** The judge feature it needs. */
   @Prop({
     type: String,
     enum: TEST_GENERATION_FEATURES,

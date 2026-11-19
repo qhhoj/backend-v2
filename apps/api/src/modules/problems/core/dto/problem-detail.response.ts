@@ -1,10 +1,5 @@
 import type { UserDocument } from '@libs/auth';
-import {
-  compareLanguages,
-  isLanguageActive,
-  STATEMENT_LANGUAGES,
-  uuidStr,
-} from '@libs/database';
+import { compareLanguages, STATEMENT_LANGUAGES, uuidStr } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
 import { ApiProperty } from '@nestjs/swagger';
 import { LanguagesQuerier } from '../../catalog/languages.querier';
@@ -325,12 +320,12 @@ export class ProblemDetailResponse {
       authors: summaries(problem.authors),
       allowedLanguages: context.languages
         .byIds(problem.allowedLanguages.map(uuidStr))
-        .filter(isLanguageActive)
+        .filter((language) => language.isActive)
         .sort(compareLanguages)
         .map((language) => LanguageResponse.from(language)),
       languageLimits: problem.languageLimits.flatMap((limit) => {
         const language = context.languages.byId(uuidStr(limit.languageId));
-        return language && isLanguageActive(language)
+        return language && language.isActive
           ? [
               {
                 language: language.key,

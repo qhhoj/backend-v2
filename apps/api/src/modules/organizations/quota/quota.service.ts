@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { AppError, isDuplicateKey } from '@libs/common';
@@ -19,7 +18,7 @@ import type { QuotaSnapshot } from './quota.types';
 
 /** Monthly credits (atomic, refundable) of an organization, its 80% warnings and its usage snapshot; limits, enforce mode and the storage meter live in `QuotaLedger`. `warn` mode lets everything through but logs and counts, so a site can measure before it blocks. */
 @Injectable()
-export class QuotaService implements OnApplicationBootstrap {
+export class QuotaService {
   private readonly logger = new Logger(QuotaService.name);
 
   constructor(
@@ -29,15 +28,6 @@ export class QuotaService implements OnApplicationBootstrap {
     private readonly usage: Model<OrganizationUsage>,
     private readonly warnings: QuotaWarningNotifier,
   ) {}
-
-  /** Enforcing waits for the size backfill, which only `worker migrate` runs (the deploy runs it before each restart). */
-  async onApplicationBootstrap(): Promise<void> {
-    if (this.settings.get('quota.enforce') !== 'enforce') return;
-    if (!(await this.ledger.isStorageBackfilled()))
-      this.logger.warn(
-        'quota.enforce is "enforce" but the size backfill has not run: quotas stay in warn mode until `worker migrate` has run',
-      );
-  }
 
   priceOf(request: ChargeRequest): number {
     if (request.kind === 'problem')
@@ -99,7 +89,7 @@ export class QuotaService implements OnApplicationBootstrap {
     const amount = this.priceOf(request);
     const { credits: limit, unlimited } =
       await this.ledger.limitsOf(organizationId);
-    if (amount === 0 || unlimited || !(await this.ledger.isEnforcing())) return;
+    if (amount === 0 || unlimited || !this.ledger.isEnforcing()) return;
     const key = { organizationId, month: this.ledger.monthKeyOf(now) };
     if ((await this.creditsUsed(key)) + amount > limit)
       throw await this.refusalFor(key, limit, amount);
@@ -148,7 +138,7 @@ export class QuotaService implements OnApplicationBootstrap {
     const { credits: limit, unlimited } = await this.ledger.limitsOf(
       key.organizationId,
     );
-    const enforcing = !unlimited && (await this.ledger.isEnforcing());
+    const enforcing = !unlimited && this.ledger.isEnforcing();
     if (enforcing && charge.amount > limit)
       throw await this.refusalFor(key, limit, charge.amount);
     await this.ensureUsageRow(key);
@@ -244,17 +234,15 @@ export class QuotaService implements OnApplicationBootstrap {
     now = new Date(),
   ): Promise<QuotaSnapshot> {
     const month = this.ledger.monthKeyOf(now);
-    const [limits, creditsUsed, judgingMs, usedBytes, enforcing] =
-      await Promise.all([
-        this.ledger.limitsOf(organizationId),
-        this.creditsUsed({ organizationId, month }),
-        this.ledger.usedJudgingMs(organizationId, month),
-        this.ledger.usedStorageBytes(organizationId),
-        this.ledger.isEnforcing(),
-      ]);
+    const [limits, creditsUsed, judgingMs, usedBytes] = await Promise.all([
+      this.ledger.limitsOf(organizationId),
+      this.creditsUsed({ organizationId, month }),
+      this.ledger.usedJudgingMs(organizationId, month),
+      this.ledger.usedStorageBytes(organizationId),
+    ]);
     return {
       month,
-      enforcing,
+      enforcing: this.ledger.isEnforcing(),
       unlimited: limits.unlimited,
       credits: meterOf(creditsUsed, limits.credits, limits.unlimited),
       judging: meterOf(judgingMs, limits.judgingMs, limits.unlimited),

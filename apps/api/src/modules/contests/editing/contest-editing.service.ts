@@ -99,13 +99,11 @@ function clonedFields(copied: Contest): Partial<Contest> {
   };
 }
 
-/** Matches the contest only while its organization fields are still `contest`'s; an empty list also matches a legacy row without the field. */
+/** Matches the contest only while its organization fields are still `contest`'s. */
 function unchangedOrganizations(contest: Contest): FilterQuery<Contest> {
   return {
-    ...(contest.organizations.length
-      ? { organizations: contest.organizations }
-      : { 'organizations.0': { $exists: false } }),
-    isOrganizationPrivate: contest.isOrganizationPrivate ? true : { $ne: true },
+    organizations: contest.organizations,
+    isOrganizationPrivate: contest.isOrganizationPrivate,
   };
 }
 
@@ -115,9 +113,6 @@ const VISIBILITY_FLAGS = [
   'isPrivate',
   'isOrganizationPrivate',
 ] as const;
-
-/** Matches a stored flag equal to `value`; false also matches a legacy row without the field. */
-const flagIs = (value: boolean) => (value ? true : { $ne: true });
 
 /**
  * Stored flags the save must still find, so two concurrent edits can neither both charge (a charged edit saves only
@@ -135,9 +130,7 @@ function pinnedFlags(
     : isCharged
       ? ['isOrganizationPrivate' as const]
       : [];
-  return Object.fromEntries(
-    pinned.map((flag) => [flag, flagIs(contest[flag])]),
-  );
+  return Object.fromEntries(pinned.map((flag) => [flag, contest[flag]]));
 }
 
 @Injectable()

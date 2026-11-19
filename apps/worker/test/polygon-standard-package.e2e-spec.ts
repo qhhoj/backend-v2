@@ -11,11 +11,7 @@ import { generationBucket } from '@libs/judging';
 import type { GenerationPlan } from '@libs/judging';
 import { listZipEntries } from '@libs/problems';
 import type { ImportProgress, PolygonImportJob } from '@libs/problems';
-import {
-  buildZip,
-  FakePolygon,
-  setStorageBackfilled,
-} from '@libs/problems/testing';
+import { buildZip, FakePolygon } from '@libs/problems/testing';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import { PolygonImportProcessor } from '../src/jobs/polygon-import/polygon-import.processor';
 import { buildPolygonPackage, properties } from './polygon-fixtures';
@@ -367,7 +363,6 @@ describe('Polygon standard package import', () => {
       },
     );
     await worker.setSetting('quota.enforce', 'enforce');
-    await setStorageBackfilled(worker.module, true);
     const stored = await worker.problems.findOne({ code: 'stdquota' });
     const sync = job('stdquota');
     sync.data.mode = 'update';

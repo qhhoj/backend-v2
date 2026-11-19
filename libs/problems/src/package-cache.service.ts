@@ -9,6 +9,7 @@ import {
   ENV,
   GIB,
   HOUR_MS,
+  isTempName,
   resolveInside,
 } from '@libs/common';
 import type { DataRootsConfig } from '@libs/common';
@@ -114,8 +115,7 @@ export class PackageCacheService {
     let removed = 0;
     for (const name of await this.names()) {
       const isZip = name.endsWith('.zip');
-      // `.tmp` also covers the names written before `atomicWrite` (`<code>.<key>.zip.<run>.tmp`); L24 narrows it to `isTempName`.
-      if (!isZip && !name.endsWith('.tmp')) continue;
+      if (!isZip && !isTempName(name)) continue;
       const path = this.resolveInside(name);
       const found = await stat(path).catch(ignoreMissing(null));
       if (!found) continue;

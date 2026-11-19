@@ -16,7 +16,7 @@ import {
   withRedisLock,
 } from '@libs/common';
 import { contestPhase, LIVE, SPECTATE } from '@libs/contests';
-import { isLanguageActive, SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
+import { SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
 import type { Language } from '@libs/database';
 import {
   BridgeCommandsService,
@@ -415,7 +415,7 @@ export class SubmissionCreateService {
         'language',
         'This language is not allowed for this problem.',
       );
-    if (!isLanguageActive(language))
+    if (!language.isActive)
       throw invalidField(
         'language',
         'This language is turned off for new submissions.',

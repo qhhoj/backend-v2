@@ -30,7 +30,6 @@ import {
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
 import { QuotaLedger } from '@libs/problems';
-import { setStorageBackfilled } from '@libs/problems/testing';
 import { seedOrganizationWorld } from './organization-problem-fixtures';
 import * as markup from '../src/modules/problems/editing/problem-markup';
 import { ORGANIZATION_ABOUT_LIMIT } from '../src/modules/organizations/core/rate-limits';
@@ -263,7 +262,6 @@ afterAll(() => api.teardown());
       'reports every meter full and over at limit 0 with nothing used (%s mode)',
       async (mode) => {
         await api.setSetting('quota.enforce', mode);
-        await setStorageBackfilled(api.app, mode === 'enforce');
         const world = await seedOrganizationWorld(api, {
           quotaMonthlyCredits: 0,
           quotaJudgingMs: 0,
