@@ -7,7 +7,7 @@ import { uuidStr } from '@libs/database';
 import { ContestsRepository } from '../../contests/core/contests.repository';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { TicketNotificationsService } from '../alerts/ticket-notifications.service';
 import type { TicketDetailResponse } from '../core/dto/ticket.response';
 import { TicketAccess } from '../core/ticket-access';

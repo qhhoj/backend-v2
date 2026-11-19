@@ -76,7 +76,7 @@ import { ProblemRescoreEnqueuerService } from './core/problem-rescore.service';
 import { ProblemsRepository } from './core/problems.repository';
 import { ProblemsController } from './core/problems.controller';
 import { ProblemsService } from './core/problems.service';
-import { RevisionsRepository } from './core/revisions.repository';
+import { SharedApiModule } from '../shared/shared-api.module';
 import { ViewerStatusRepository } from './core/viewer-status.repository';
 
 const queriers = [
@@ -85,14 +85,11 @@ const queriers = [
   LicensesQuerier,
   LanguagesQuerier,
 ];
-const repositories = [
-  ProblemsRepository,
-  RevisionsRepository,
-  ViewerStatusRepository,
-];
+const repositories = [ProblemsRepository, ViewerStatusRepository];
 
 @Module({
   imports: [
+    SharedApiModule,
     ContestAccessModule,
     DiscordWebhooksModule,
     OrganizationQuotaModule,
@@ -181,6 +178,8 @@ const repositories = [
     RateLimitService,
   ],
   exports: [
+    // Re-exported while modules still reach the change history through this module; they move to SharedApiModule.
+    SharedApiModule,
     ...queriers,
     ...repositories,
     ProblemsService,

@@ -5,7 +5,7 @@ import type { Principal } from '@libs/auth';
 import { AppError, competitionRanks, Paginated, unique } from '@libs/common';
 import { narrowTo, uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
-import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../shared/dto/user-summary.response';
 import { MemberResponse } from './dto/member.response';
 import {
   MemberListQueryDto,

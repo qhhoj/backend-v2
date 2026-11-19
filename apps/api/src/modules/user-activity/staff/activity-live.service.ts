@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import { ACTIVE_WINDOW_MS, ACTIVITY_PAGE_SIZE } from '@libs/community';
 import { MINUTE_MS } from '@libs/common';
-import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../shared/dto/user-summary.response';
 import { ActiveUsersStore } from '../capture/active-users.store';
 import type { LiveActivityResponse } from './dto/activity.response';
 

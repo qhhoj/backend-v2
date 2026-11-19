@@ -5,7 +5,7 @@ import { AppError, escapeRegExp, excerpt, Paginated } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Comment } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
-import type { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
+import type { UserSummaryResponse } from '../../shared/dto/user-summary.response';
 import { CommentsRepository } from '../core/comments.repository';
 import { CommentsService } from '../core/comments.service';
 import { CommentPageLinkResponse } from '../core/dto/comment.response';

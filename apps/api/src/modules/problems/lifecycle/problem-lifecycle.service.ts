@@ -23,7 +23,7 @@ import { ProblemEvents } from '../core/problem.events';
 import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import { ProblemsRepository } from '../core/problems.repository';
 import type { ProblemDocument } from '../core/problems.repository';
-import { RevisionsRepository } from '../core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import type { DeletedListQueryDto } from './dto/deleted-list.dto';
 import { DeletedProblemResponse } from './dto/deleted-problem.response';
 import type { PurgeQueuedResponse } from './dto/purge-queued.response';

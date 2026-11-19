@@ -12,7 +12,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { trim } from '../../../problems/core/dto/transforms';
+import { trim } from '../../../shared/dto/transforms';
 import { Transform } from 'class-transformer';
 import { IsMailAddress } from '../../core/dto/email';
 import { IsUsername } from '../../core/dto/username';

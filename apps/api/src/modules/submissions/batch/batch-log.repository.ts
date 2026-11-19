@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { Revision } from '@libs/database';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import type {
   BatchAction,
   SubmissionBatchFilterDto,

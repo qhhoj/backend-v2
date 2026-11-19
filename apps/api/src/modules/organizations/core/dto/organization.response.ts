@@ -1,7 +1,7 @@
 import { organizationCodePrefix } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 
 export class OrganizationListItemResponse {
   id!: string;

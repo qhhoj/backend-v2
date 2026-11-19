@@ -8,7 +8,7 @@ import {
 import type { CommentPageType, VoteScore } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Comment } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 import type { PageInfo } from '../comment-pages.service';
 import { POST_BLOCK_REASONS } from '../post-block';
 import type { PostBlock, PostBlockReason } from '../post-block';

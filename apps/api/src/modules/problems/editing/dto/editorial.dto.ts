@@ -3,7 +3,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsUUID, MaxLength } from 'class-validator';
 import { MAX_MARKDOWN_LENGTH } from '../../core/dto/limits';
 import { IsStatementText } from '../../core/dto/statement-text';
-import { IsTimestamp } from '../../core/dto/timestamp';
+import { IsTimestamp } from '../../../shared/dto/timestamp';
 
 export class PutEditorialDto {
   /** Whether the editorial is public once `publishOn` has passed. */

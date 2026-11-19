@@ -21,7 +21,7 @@ import {
   readMultipartFile,
   rejectFile,
   saveMultipartFile,
-} from '../core/multipart';
+} from '../../shared/multipart';
 import { QuotaService } from '../../organizations/quota/quota.service';
 import type { ProblemDocument } from '../core/problems.repository';
 import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';

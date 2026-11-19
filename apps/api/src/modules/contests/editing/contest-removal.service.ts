@@ -14,7 +14,7 @@ import {
   purgeRankingCache,
 } from '@libs/contests';
 import type { ContestFinalJudgeJob, ContestPublishJob } from '@libs/contests';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
 import { ContestRemovalRepository } from './contest-removal.repository';

@@ -14,7 +14,7 @@ import type {
   LabelStyle,
   ScoreboardVisibility,
 } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 import { RatingChangeResponse } from '../../rating/dto/rating-change.response';
 import type { ProblemLimits } from '../contest-problem-limits';
 import { ApiProblemCell } from './api-problem-cells';

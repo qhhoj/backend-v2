@@ -30,7 +30,7 @@ import {
 import { MAX_MARKDOWN_LENGTH } from '../../core/dto/limits';
 import { IsProblemCode } from '../../core/dto/problem-code.decorator';
 import { IsStatementText } from '../../core/dto/statement-text';
-import { IsTimestamp } from '../../core/dto/timestamp';
+import { IsTimestamp } from '../../../shared/dto/timestamp';
 
 export class LanguageLimitDto {
   /** Language id. */

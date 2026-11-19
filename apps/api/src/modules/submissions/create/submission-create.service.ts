@@ -38,7 +38,7 @@ import { ProblemAccess } from '../../problems/core/problem-access';
 import type { ProblemDocument } from '../../problems/core/problems.repository';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ProblemsService } from '../../problems/core/problems.service';
-import { readMultipartForm } from '../../problems/core/multipart';
+import { readMultipartForm } from '../../shared/multipart';
 import { SUBMIT_FILE_FIELDS, SubmitFileDto } from './dto/submit-file.dto';
 import type { SubmitDto } from './dto/submit.dto';
 import type { SubmitResponse } from './dto/submit.response';

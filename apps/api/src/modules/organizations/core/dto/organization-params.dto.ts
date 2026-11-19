@@ -10,7 +10,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { toBoolean, trim } from '../../../problems/core/dto/transforms';
+import { toBoolean, trim } from '../../../shared/dto/transforms';
 import { CREATION_KINDS } from '../organization-access';
 import type { CreationKind } from '../organization-access';
 import { MEMBER_SORTS } from '../organization-members.repository';

@@ -7,7 +7,7 @@ import type { JobProducer } from '@libs/common';
 import { contestJobs, contestPhase, purgeRankingCache } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import type { ContestDocument } from '../core/contests.repository';
 import { ContestsRepository } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';

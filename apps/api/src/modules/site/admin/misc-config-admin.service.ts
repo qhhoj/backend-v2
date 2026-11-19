@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
 import type { Paginated } from '@libs/common';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { MiscConfigQuerier } from '../public/misc-config.querier';
 import type { FlatpageRevisionResponse } from './dto/flatpage-revision.response';
 import { MiscConfigResponse } from './dto/misc-config.response';

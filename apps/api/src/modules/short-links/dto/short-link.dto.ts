@@ -11,7 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { IsTimestamp } from '../../problems/core/dto/timestamp';
+import { IsTimestamp } from '../../shared/dto/timestamp';
 import { MAX_SHORT_PATH_LENGTH } from '../short-target';
 
 export class CreateShortLinkDto {

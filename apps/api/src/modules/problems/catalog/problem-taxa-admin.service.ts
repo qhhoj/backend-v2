@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ProblemGroup, ProblemType } from '@libs/database';
 import type { Model } from 'mongoose';
 import { CatalogItemResponse } from '../core/dto/problem-meta.response';
-import { RevisionsRepository } from '../core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { CatalogAdminService } from './catalog-admin.service';
 import type { CreateTaxonDto, UpdateTaxonDto } from './dto/catalog-admin.dto';
 import { ProblemGroupsQuerier } from './problem-groups.querier';

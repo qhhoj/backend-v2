@@ -1,6 +1,6 @@
 import { IsOptional, Matches } from 'class-validator';
 import { CONTEST_KEY_PATTERN } from '@libs/database';
-import { IsTimestamp } from '../../../problems/core/dto/timestamp';
+import { IsTimestamp } from '../../../shared/dto/timestamp';
 
 export class CloneContestDto {
   /**

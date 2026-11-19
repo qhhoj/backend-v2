@@ -9,7 +9,7 @@ import type {
   TicketTimelineEvent,
   TicketTimelineType,
 } from '@libs/database';
-import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../shared/dto/user-summary.response';
 import type {
   TicketDetailResponse,
   TicketTimelineEventResponse,

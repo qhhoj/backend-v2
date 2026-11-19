@@ -1,4 +1,4 @@
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 
 export class CommentVoteEntryResponse {
   /** The voter; null when the account is gone. */

@@ -36,7 +36,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { MAX_MARKDOWN_LENGTH } from '../../../problems/core/dto/limits';
-import { IsTimestamp } from '../../../problems/core/dto/timestamp';
+import { IsTimestamp } from '../../../shared/dto/timestamp';
 
 export class ContestProblemDto {
   /** Id of the problem to include. */

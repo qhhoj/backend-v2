@@ -17,7 +17,7 @@ import {
 import type { SubmissionGradedJob } from '@libs/judging';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsService } from '../../problems/core/problems.service';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import {
   isInternalError,
   isSubmissionLocked,

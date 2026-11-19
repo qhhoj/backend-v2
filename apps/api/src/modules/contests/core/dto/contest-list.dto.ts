@@ -16,8 +16,8 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { IsTimestamp } from '../../../problems/core/dto/timestamp';
-import { toBoolean } from '../../../problems/core/dto/transforms';
+import { IsTimestamp } from '../../../shared/dto/timestamp';
+import { toBoolean } from '../../../shared/dto/transforms';
 
 /** `newest` and `oldest` order by start time, `name` A to Z, `users` most participants first. */
 export const CONTEST_LIST_SORTS = [

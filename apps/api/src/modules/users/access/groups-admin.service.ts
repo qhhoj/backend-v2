@@ -3,7 +3,7 @@ import { GroupsQuerier, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, conflictIssue, isDuplicateKey, REDIS } from '@libs/common';
 import type Redis from 'ioredis';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { AccessRepository } from './access.repository';
 import type { GroupRow } from './access.repository';
 import { assertDisjoint, assertKnownAdded } from './access-rules';

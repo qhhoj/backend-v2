@@ -18,15 +18,15 @@ import {
   SVG_MAX_BYTES,
 } from '@libs/problems';
 import { sanitizeSvg } from '@libs/render';
-import { readMultipartFile, rejectFile } from '../core/multipart';
-import type { UploadedFile } from '../core/multipart';
+import { readMultipartFile, rejectFile } from '../../shared/multipart';
+import type { UploadedFile } from '../../shared/multipart';
 import { OrganizationProblemRules } from '../editing/organization-problem-rules.service';
 import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import { ProblemEvents } from '../core/problem.events';
 import { ProblemsRepository } from '../core/problems.repository';
 import type { ProblemDocument } from '../core/problems.repository';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from '../core/rate-limits';
-import { RevisionsRepository } from '../core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';
 
 /** The two problem files kept in media storage: their size field (the storage meter), the global permission a site problem needs, and the media folder. */

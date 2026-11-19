@@ -19,7 +19,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { TestSession, Catalog } from './problem-fixtures';
-import { RevisionsRepository } from '../src/modules/problems/core/revisions.repository';
+import { RevisionsRepository } from '../src/modules/shared/revisions.repository';
 import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { getQueueToken } from '@nestjs/bullmq';

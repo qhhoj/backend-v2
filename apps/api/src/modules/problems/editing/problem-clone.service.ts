@@ -16,7 +16,7 @@ import {
 } from './problem-edit-fields';
 import { ProblemsRepository } from '../core/problems.repository';
 import { ProblemsService } from '../core/problems.service';
-import { RevisionsRepository } from '../core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 
 /** Never carried over by a clone: identity, timestamps, people, statement translations, editorial, mirror, Polygon and external judge links, test data, and the setup flags (recomputed when the clone is saved). */
 export const CLONE_RESET_FIELDS = [

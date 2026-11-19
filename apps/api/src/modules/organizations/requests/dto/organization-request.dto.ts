@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { trim } from '../../../problems/core/dto/transforms';
+import { trim } from '../../../shared/dto/transforms';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsIn,

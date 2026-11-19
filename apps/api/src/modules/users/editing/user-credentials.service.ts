@@ -17,7 +17,7 @@ import {
 import { AuthService } from '../../auth/core/auth.service';
 import { linkedProviders } from '../../auth/social/oauth-provider';
 import { PasswordResetService } from '../../auth/password-reset/password-reset.service';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import {
   ADMIN_CREDENTIAL_LIMIT,
   ADMIN_CREDENTIAL_WINDOW_SECONDS,

@@ -18,7 +18,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
-import { IsTimestamp } from '../../../problems/core/dto/timestamp';
+import { IsTimestamp } from '../../../shared/dto/timestamp';
 import { SubmissionListItemResponse } from '../../core/dto/submission-list.response';
 
 export const BATCH_ACTIONS = ['rejudge', 'rescore'] as const;

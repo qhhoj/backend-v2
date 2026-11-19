@@ -6,7 +6,7 @@ import type {
   ShareLanguage,
   ShareTakedown,
 } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 import type { UserDocument } from '@libs/auth';
 
 export class ShareLanguageResponse {

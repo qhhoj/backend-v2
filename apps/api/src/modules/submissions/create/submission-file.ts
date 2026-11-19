@@ -2,8 +2,8 @@ import { invalidField, MAX_UPLOAD_BYTES } from '@libs/common';
 import { LANGUAGE_EXTENSION_PATTERN } from '@libs/database';
 import type { Language } from '@libs/database';
 import { extensionOf, ZipArchive, ZipError } from '@libs/problems';
-import { tooLarge } from '../../problems/core/multipart';
-import type { UploadedFile } from '../../problems/core/multipart';
+import { tooLarge } from '../../shared/multipart';
+import type { UploadedFile } from '../../shared/multipart';
 
 const SCRATCH_KEY = 'SCRATCH';
 const SCRATCH_PROJECT = 'project.json';

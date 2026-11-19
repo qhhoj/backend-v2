@@ -1,7 +1,7 @@
 import { ApiExtraModels, ApiProperty, getSchemaPath } from '@nestjs/swagger';
 import { uuidStr } from '@libs/database';
 import type { Revision } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 import { FieldChangeResponse } from '../../../site/admin/dto/flatpage-revision.response';
 
 export const ORGANIZATION_REVISION_ACTIONS = [

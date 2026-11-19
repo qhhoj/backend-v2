@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
-import { IsTimestamp } from '../../../problems/core/dto/timestamp';
+import { IsTimestamp } from '../../../shared/dto/timestamp';
 
 export const ADDED_PARTICIPATION_KINDS = ['live', 'virtual'] as const;
 export type AddedParticipationKind = (typeof ADDED_PARTICIPATION_KINDS)[number];

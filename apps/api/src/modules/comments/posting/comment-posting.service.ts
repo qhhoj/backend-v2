@@ -14,8 +14,8 @@ import {
 import type { CommentPageType } from '@libs/community';
 import { newId, uuidStr } from '@libs/database';
 import { discordText, DiscordWebhooksService } from '@libs/community';
-import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { UserSummaryResponse } from '../../shared/dto/user-summary.response';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
 import { renderCommentBody } from '../core/comment-markup';
 import { moderatesComments } from '../core/comment-moderators';

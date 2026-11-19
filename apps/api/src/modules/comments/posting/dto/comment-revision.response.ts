@@ -1,4 +1,4 @@
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 
 export class CommentRevisionResponse {
   /** When the edit was made, ISO 8601. */

@@ -5,7 +5,7 @@ import {
   type TicketLinkType,
   type TicketTimelineType,
 } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 
 export class TicketLinkResponse {
   /** problem for a ticket about a problem, general for a site issue, contest for a question to a contest's organisers. */

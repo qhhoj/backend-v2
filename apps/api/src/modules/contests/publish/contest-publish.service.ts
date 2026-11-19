@@ -12,7 +12,7 @@ import type { PublishVerdict } from '@libs/problems';
 import { ProblemEditingService } from '../../problems/editing/problem-editing.service';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import type { ProblemDocument } from '../../problems/core/problems.repository';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
 import type {

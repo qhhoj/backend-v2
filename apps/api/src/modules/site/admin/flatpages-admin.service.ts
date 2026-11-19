@@ -9,7 +9,7 @@ import {
 import { FLATPAGE_URL_MAX_LENGTH, normalizeFlatpageUrl } from '@libs/community';
 import type { Flatpage } from '@libs/database';
 import { fieldDiff } from '@libs/problems';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { renderField } from '../../problems/editing/problem-markup';
 import { FlatpagesRepository } from '../public/flatpages.repository';
 import type { FlatpageFields } from '../public/flatpages.repository';

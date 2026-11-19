@@ -9,12 +9,12 @@ import {
 } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Revision } from '@libs/database';
-import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../shared/dto/user-summary.response';
 import {
   RENDER_PREVIEW_LIMIT,
   RENDER_PREVIEW_WINDOW_SECONDS,
 } from '../../problems/core/rate-limits';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { renderField } from '../../problems/editing/problem-markup';
 import type { FlatpagePreviewDto } from './dto/flatpage-preview.dto';
 import {

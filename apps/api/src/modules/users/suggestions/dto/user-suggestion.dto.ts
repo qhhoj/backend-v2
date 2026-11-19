@@ -1,6 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsString, MinLength } from 'class-validator';
-import { trim } from '../../../problems/core/dto/transforms';
+import { trim } from '../../../shared/dto/transforms';
 import { IsUsername } from '../../core/dto/username';
 
 export class UserSuggestionQueryDto {

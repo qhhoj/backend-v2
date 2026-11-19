@@ -20,7 +20,7 @@ import {
 } from './problem-visibility';
 import { ProblemIoResponse } from './problem-io.response';
 import type { GradingIoSource } from './problem-io.response';
-import { UserSummaryResponse } from './user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 import { VIEWER_MARKS, type ViewerStatus } from '../viewer-status.repository';
 
 export interface ProblemDetailContext {
