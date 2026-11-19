@@ -16,7 +16,11 @@ import {
   withRedisLock,
 } from '@libs/common';
 import { contestPhase, LIVE, SPECTATE } from '@libs/contests';
-import { SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
+import {
+  judgedProblemIdOf,
+  SUBMISSION_PRIORITY,
+  uuidStr,
+} from '@libs/database';
 import type { Language } from '@libs/database';
 import {
   BridgeCommandsService,
@@ -215,9 +219,11 @@ export class SubmissionCreateService {
   /** A judge-graded problem without an `init.yml` or without a data-version stamp (a mirror's data is its root's) has no saved test cases, so every run would end in an internal error. Gated on the files, not on `data.cases`: some working problems keep an `init.yml` with no cases in Mongo. */
   private async assertHasTests(problem: ProblemDocument): Promise<void> {
     if (problem.externalJudge?.isActive) return;
-    const code = problem.mirrorRoot
-      ? await this.problemRows.codeById(uuidStr(problem.mirrorRoot))
-      : problem.code;
+    const judgedId = judgedProblemIdOf(problem);
+    const code =
+      judgedId === uuidStr(problem._id)
+        ? problem.code
+        : await this.problemRows.codeById(judgedId);
     if (code && (await this.dataFiles.hasTests(code))) return;
     throw new AppError(
       'problem_has_no_tests',

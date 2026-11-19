@@ -14,6 +14,7 @@ import {
   Problem,
   Submission,
   SubmissionSource,
+  judgedProblemIdOf,
   uuidStr,
 } from '@libs/database';
 import {
@@ -263,9 +264,10 @@ export class SubmissionsRepository {
         { ...judgedFields, mirrorRoot: 1, 'externalJudge.isActive': 1 },
       )
       .lean();
-    const rootIds = problems.flatMap((problem) =>
-      problem.mirrorRoot ? [uuidStr(problem.mirrorRoot)] : [],
-    );
+    const rootIds = problems.flatMap((problem) => {
+      const judgedId = judgedProblemIdOf(problem);
+      return judgedId === uuidStr(problem._id) ? [] : [judgedId];
+    });
     const roots = rootIds.length
       ? await this.problems
           .find({ _id: { $in: unique(rootIds) } }, judgedFields)
@@ -276,7 +278,7 @@ export class SubmissionsRepository {
     );
     return new Map(
       problems.map((problem) => {
-        const judged = byId.get(uuidStr(problem.mirrorRoot ?? problem._id));
+        const judged = byId.get(judgedProblemIdOf(problem));
         const entry: JudgedProblem = {
           code: judged?.code,
           requiredFeatures: judged?.data
@@ -432,13 +434,15 @@ export class SubmissionsRepository {
 
   /** A mirror is judged with its root's data, so it carries the root's code and version; null when that root is gone. */
   private async judgedDataOf(
-    problem: Pick<Problem, 'code' | 'dataVersion' | 'mirrorRoot'>,
+    problem: Pick<Problem, '_id' | 'code' | 'dataVersion' | 'mirrorRoot'>,
   ): Promise<JudgedData | null> {
-    const judged = problem.mirrorRoot
-      ? await this.problems
-          .findById(problem.mirrorRoot, { code: 1, dataVersion: 1 })
-          .lean()
-      : problem;
+    const judgedId = judgedProblemIdOf(problem);
+    const judged =
+      judgedId === uuidStr(problem._id)
+        ? problem
+        : await this.problems
+            .findById(judgedId, { code: 1, dataVersion: 1 })
+            .lean();
     return judged
       ? { problemCode: judged.code, dataVersion: judged.dataVersion ?? 0 }
       : null;

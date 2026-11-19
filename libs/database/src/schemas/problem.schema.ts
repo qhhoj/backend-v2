@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongooseSchema } from 'mongoose';
 import { baseSchemaOptions, IdProp } from '../schema';
+import { uuidStr } from '../uuid';
 import {
   ProblemData,
   ProblemDataSchema,
@@ -134,7 +135,7 @@ export class Problem {
   @Prop({ type: String, default: 'A', enum: TESTCASE_RESULT_VISIBILITIES })
   testcaseResultVisibility!: string;
   @Prop({ default: false }) allowViewFeedback!: boolean;
-  /** Stored for the migrator; no editing route writes them and `mirrorRoot` is not computed. */
+  /** Frozen legacy mirrors (2 in production, `mirrorOf` = `mirrorRoot`); no v2 route writes them. A mirror is judged with its root's data: see `judgedProblemIdOf`. */
   @Prop({ type: UUID, default: null }) mirrorOf!: string | null;
   @Prop({ type: UUID, default: null }) mirrorRoot!: string | null;
   /** Maintained by the submission-effects job. */
@@ -177,6 +178,11 @@ export class Problem {
 }
 
 export const ProblemSchema = SchemaFactory.createForClass(Problem);
+
+/** The problem whose data (code, data version, `init.yml`, tests) judges read for `problem`: its mirror root, else itself. */
+export const judgedProblemIdOf = (
+  problem: Pick<Problem, '_id' | 'mirrorRoot'>,
+): string => uuidStr(problem.mirrorRoot ?? problem._id);
 keepSetupFlagsCurrent(ProblemSchema);
 ProblemSchema.index({ code: 1 }, { unique: true });
 // The admin list's unfinished filter: few problems are unfinished, so the partial index stays small.
