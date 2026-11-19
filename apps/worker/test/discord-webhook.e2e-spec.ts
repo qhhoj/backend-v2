@@ -24,7 +24,7 @@ describe('discord webhook job', () => {
     message: {
       title: 'New comment http://site/problem/a#comment-1',
       description: 'Hello',
-      author: { name: 'alice', url: 'http://site/user/alice' },
+      author: { name: 'alice', url: 'http://site/users/alice' },
     },
   };
 

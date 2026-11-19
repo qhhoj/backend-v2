@@ -8,6 +8,7 @@ import {
 } from '@libs/database';
 import type { NotificationKind, NotificationPriority } from '@libs/database';
 import { DAY_MS, excerpt } from '@libs/common';
+import { sitePaths } from '../site-paths';
 
 /** An inbox row lives this long after its last activity. */
 export const NOTIFICATION_RETENTION_DAYS = 90;
@@ -16,13 +17,6 @@ export const NOTIFICATION_CAP_PER_USER = 500;
 export const NOTIFICATIONS_PAGE_SIZE = 20;
 /** Recipients one `notify` call writes; a longer list is cut and logged. */
 export const NOTIFY_RECIPIENT_LIMIT = 200;
-
-/** `encodeURIComponent` leaves `! ' ( ) * ~` bare, which the path pattern refuses: escape them too. */
-const pathSegment = (value: string): string =>
-  encodeURIComponent(value).replace(
-    /[!'()*~]/g,
-    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
-  );
 
 /** What a producer says; `NotificationsService.notify` stores it per recipient. */
 export interface NotificationDraft {
@@ -76,7 +70,7 @@ export const contestAnnouncementDraft = ({
   kind: 'contest-announcement',
   title: `Thông báo mới trong "${contestName}"`,
   body: announcementTitle,
-  path: `/contests/${pathSegment(contestKey)}/announcements`,
+  path: sitePaths.contestAnnouncements(contestKey),
   priority: 'high',
   groupKey: `contest-ann:${contestId}`,
 });
@@ -99,7 +93,7 @@ export const organizationRequestDraft = ({
     ? `Yêu cầu tham gia "${organizationName}" đã được duyệt`
     : `Yêu cầu tham gia "${organizationName}" đã bị từ chối`,
   body: '',
-  path: `/organizations/${pathSegment(slug)}`,
+  path: sitePaths.organization(slug),
   priority: 'normal',
   groupKey: `org-request:${requestId}`,
 });

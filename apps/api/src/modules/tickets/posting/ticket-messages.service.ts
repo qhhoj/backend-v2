@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError, RateLimitService } from '@libs/common';
-import { ticketMessageDescription, ticketPath } from '@libs/community';
+import { sitePaths, ticketMessageDescription } from '@libs/community';
 import { newId, uuidStr } from '@libs/database';
 import type { TicketMessage } from '@libs/database';
 import { DiscordWebhooksService } from '@libs/community';
@@ -98,7 +98,7 @@ export class TicketMessagesService {
       open: null,
     });
     await this.discord.notify('on_new_ticket_message', {
-      title: `New ticket reply on ${this.discord.link(ticketPath(ticketId))}`,
+      title: `New ticket reply on ${this.discord.link(sitePaths.ticket(ticketId))}`,
       description: ticketMessageDescription(message.body),
       author: this.discord.author(principal.username),
     });

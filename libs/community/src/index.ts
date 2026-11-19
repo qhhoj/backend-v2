@@ -6,6 +6,7 @@ export * from './jobs';
 export * from './discord';
 export * from './discord-webhooks.service';
 export * from './discord-webhooks.module';
+export * from './site-paths';
 export * from './comments';
 export * from './blog-posts';
 export * from './contribution';

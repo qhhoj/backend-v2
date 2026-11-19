@@ -1,5 +1,6 @@
 import { excerpt, unique } from '@libs/common';
 import type { NotificationDraft } from './notifications';
+import { sitePaths } from './site-paths';
 
 /** Holders of `change_ticket` alerted about a ticket nobody is assigned to. */
 export const TICKET_STAFF_NOTIFY_LIMIT = 100;
@@ -7,9 +8,6 @@ export const TICKET_STAFF_NOTIFY_LIMIT = 100;
 /** Every event of one ticket merges into the user's one unread row. */
 export const ticketGroupKey = (ticketId: string): string =>
   `ticket:${ticketId}`;
-
-/** The SPA page of a ticket. */
-const ticketInboxPath = (ticketId: string): string => `/tickets/${ticketId}`;
 
 /** Everybody in the lists once, without the person who acted. */
 export const ticketRecipients = (
@@ -29,7 +27,7 @@ export const newTicketDraft = ({
   kind: 'ticket-new',
   title: `Phiếu hỗ trợ mới: ${title}`,
   body: excerpt(body, 200),
-  path: ticketInboxPath(ticketId),
+  path: sitePaths.ticket(ticketId),
   priority: 'normal',
   groupKey: ticketGroupKey(ticketId),
 });
@@ -44,7 +42,7 @@ export const assignedTicketDraft = ({
   kind: 'ticket-new',
   title: `Bạn được giao một phiếu hỗ trợ: ${title}`,
   body: '',
-  path: ticketInboxPath(ticketId),
+  path: sitePaths.ticket(ticketId),
   priority: 'normal',
   groupKey: ticketGroupKey(ticketId),
 });
@@ -63,7 +61,7 @@ export const ticketMessageDraft = ({
   kind: 'ticket-message',
   title: 'Phiếu hỗ trợ có trả lời mới',
   body: excerpt(`${ticketTitle}: ${body}`, 200),
-  path: ticketInboxPath(ticketId),
+  path: sitePaths.ticket(ticketId),
   priority,
   groupKey: ticketGroupKey(ticketId),
 });
@@ -80,7 +78,7 @@ export const ticketStatusDraft = ({
   kind: 'ticket-status',
   title: open ? 'Phiếu hỗ trợ đã được mở lại' : 'Phiếu hỗ trợ đã được đóng',
   body: ticketTitle,
-  path: ticketInboxPath(ticketId),
+  path: sitePaths.ticket(ticketId),
   priority: 'normal',
   groupKey: ticketGroupKey(ticketId),
 });

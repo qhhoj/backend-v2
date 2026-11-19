@@ -510,7 +510,7 @@ afterAll(() => api.teardown());
           type: 'problem',
           key: 'open_one',
           title: 'OPEN_ONE',
-          url: '/problem/open_one',
+          url: '/problems/open_one',
         },
         isOpen: true,
         isContributive: false,
