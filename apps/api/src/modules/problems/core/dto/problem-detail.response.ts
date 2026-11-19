@@ -1,9 +1,5 @@
 import type { UserDocument } from '@libs/auth';
-import {
-  compareLanguages,
-  STATEMENT_LANGUAGES,
-  uuidStr,
-} from '@libs/database';
+import { compareLanguages, STATEMENT_LANGUAGES, uuidStr } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
 import { ApiProperty } from '@nestjs/swagger';
 import { LanguagesQuerier } from '../../catalog/languages.querier';

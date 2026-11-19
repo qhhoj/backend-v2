@@ -183,10 +183,9 @@ export class UserDataService {
       const path = join(root, name);
       const file = await stat(path).catch(() => null);
       if (!file) continue;
-      const expired =
-        isTempName(name)
-          ? file.mtime.getTime() + TEMP_FILE_AGE_MS <= now.getTime()
-          : isUserZip(name) && isUserDataExpired(file.mtime, now);
+      const expired = isTempName(name)
+        ? file.mtime.getTime() + TEMP_FILE_AGE_MS <= now.getTime()
+        : isUserZip(name) && isUserDataExpired(file.mtime, now);
       if (expired) {
         await rm(path, { force: true });
         removed += 1;

@@ -130,9 +130,7 @@ function pinnedFlags(
     : isCharged
       ? ['isOrganizationPrivate' as const]
       : [];
-  return Object.fromEntries(
-    pinned.map((flag) => [flag, contest[flag]]),
-  );
+  return Object.fromEntries(pinned.map((flag) => [flag, contest[flag]]));
 }
 
 @Injectable()

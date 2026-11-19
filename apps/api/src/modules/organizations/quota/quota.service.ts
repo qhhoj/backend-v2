@@ -234,17 +234,15 @@ export class QuotaService {
     now = new Date(),
   ): Promise<QuotaSnapshot> {
     const month = this.ledger.monthKeyOf(now);
-    const [limits, creditsUsed, judgingMs, usedBytes, enforcing] =
-      await Promise.all([
-        this.ledger.limitsOf(organizationId),
-        this.creditsUsed({ organizationId, month }),
-        this.ledger.usedJudgingMs(organizationId, month),
-        this.ledger.usedStorageBytes(organizationId),
-        this.ledger.isEnforcing(),
-      ]);
+    const [limits, creditsUsed, judgingMs, usedBytes] = await Promise.all([
+      this.ledger.limitsOf(organizationId),
+      this.creditsUsed({ organizationId, month }),
+      this.ledger.usedJudgingMs(organizationId, month),
+      this.ledger.usedStorageBytes(organizationId),
+    ]);
     return {
       month,
-      enforcing,
+      enforcing: this.ledger.isEnforcing(),
       unlimited: limits.unlimited,
       credits: meterOf(creditsUsed, limits.credits, limits.unlimited),
       judging: meterOf(judgingMs, limits.judgingMs, limits.unlimited),

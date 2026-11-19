@@ -11,10 +11,7 @@ import { generationBucket } from '@libs/judging';
 import type { GenerationPlan } from '@libs/judging';
 import { listZipEntries } from '@libs/problems';
 import type { ImportProgress, PolygonImportJob } from '@libs/problems';
-import {
-  buildZip,
-  FakePolygon,
-} from '@libs/problems/testing';
+import { buildZip, FakePolygon } from '@libs/problems/testing';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import { PolygonImportProcessor } from '../src/jobs/polygon-import/polygon-import.processor';
 import { buildPolygonPackage, properties } from './polygon-fixtures';

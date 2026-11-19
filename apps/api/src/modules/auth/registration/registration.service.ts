@@ -199,10 +199,7 @@ export class RegistrationService {
   /** Null when the catalog has no active C++17. */
   private async defaultLanguageId(): Promise<string | null> {
     const language = await this.languages
-      .findOne(
-        { key: DEFAULT_LANGUAGE_KEY, isActive: true },
-        { _id: 1 },
-      )
+      .findOne({ key: DEFAULT_LANGUAGE_KEY, isActive: true }, { _id: 1 })
       .lean()
       .exec();
     return language ? uuidStr(language._id) : null;
