@@ -4,6 +4,8 @@
 # Env: CHECK_ROOT (default /), CHECK_SKIP_COMMANDS=1 (file checks only), CHECK_KEY_OWNER (default 0),
 #      CHECK_FIXTURES (a directory holding saved `isolate-check-environment` and `nft-output` outputs).
 set -uo pipefail
+# Under pipefail, `cmd | grep -q` fails at random: grep exits on the first match and cmd dies of SIGPIPE.
+# Pipelines below end in `grep ... >/dev/null`, which reads all input; plain strings go in with `<<<`.
 R="${CHECK_ROOT:-/}"; R="${R%/}"
 DATA=/srv/qhhoj/problem-data
 ISOLATE_CONF=/usr/local/etc/isolate
@@ -29,13 +31,13 @@ userns_closed() { file_is /proc/sys/kernel/apparmor_restrict_unprivileged_userns
 data_mount_options() { awk -v d="$DATA" '$2 == d && $3 ~ /^nfs/ { print $4 }' "$R/proc/self/mounts"; }
 data_mount_safe() {
   local options; options="$(data_mount_options)"; [ -n "$options" ] || return 1
-  for flag in ro nosuid nodev noexec; do echo ",$options," | grep -q ",$flag," || return 1; done
+  for flag in ro nosuid nodev noexec; do grep -q ",$flag," <<<",$options," || return 1; done
   local actimeo; actimeo="$(echo ",$options," | sed -n 's/.*,actimeo=\([0-9]*\),.*/\1/p')"
   [ -n "$actimeo" ] && [ "$actimeo" -le 3 ]
 }
 key_private() { [ "$(stat -c '%a %u' "$R/etc/qhhoj-judge/key")" = "400 ${CHECK_KEY_OWNER:-0}" ]; }
 config_root_644() { [ "$(stat -c '%a %u' "$R$CONFIG")" = "644 ${CHECK_KEY_OWNER:-0}" ]; }
-isolate_setuid_root() { stat -c '%a %u' "$R/usr/local/bin/isolate" | grep -qxE "4[0-7]{3} ${CHECK_KEY_OWNER:-0}"; }
+isolate_setuid_root() { stat -c '%a %u' "$R/usr/local/bin/isolate" | grep -xE "4[0-7]{3} ${CHECK_KEY_OWNER:-0}" >/dev/null; }
 user_exists() { grep -q '^qhhoj-judge:' "$R/etc/passwd"; }
 # `key = value` from a flat config file (isolate's or the judge's TOML top level); empty when absent.
 setting() { sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*\"\{0,1\}\([^\"#[:space:]]*\).*/\1/p" "$R$1" | head -n 1; }
@@ -54,7 +56,7 @@ memory_peak_readable() { local cg; cg="$(isolate_cgroup)"; [ -n "$cg" ] && [ -r 
 box_root_local() {
   local box_root; box_root="$(setting "$ISOLATE_CONF" box_root)"; [ -n "$box_root" ] || return 1
   local type; type="$(fs_type_of "$box_root")"
-  [ -n "$type" ] && ! echo "$type" | grep -qE '^(nfs|cifs|smb|fuse)'
+  [ -n "$type" ] && ! grep -qE '^(nfs|cifs|smb|fuse)' <<<"$type"
 }
 online_cpus() { tr ',' '\n' < "$R/sys/devices/system/cpu/online" | awk -F- '{ n += (NF == 2 ? $2 - $1 + 1 : 1) } END { print n }'; }
 # The count of a user's first block in /etc/subuid or /etc/subgid; empty when it has none.
@@ -67,12 +69,28 @@ isolate_boxes() {
   uids="$(subid_count /etc/subuid "$user")"; gids="$(subid_count /etc/subgid "$user")"
   [ -n "$uids" ] && [ -n "$gids" ] && echo $(( uids < gids ? uids : gids ))
 }
+# The judge's worker count: the `cores` list or the CPUs but the first, cut to `slots`; at least 1.
+workers() {
+  local slots cores count
+  slots="$(setting "$CONFIG" slots)"
+  cores="$(sed -n 's/^[[:space:]]*cores[[:space:]]*=[[:space:]]*\[\([^]#]*\)\].*/\1/p' "$R$CONFIG" | head -n 1)"
+  if [ -n "$cores" ]; then count="$(echo "$cores" | tr ',' '\n' | grep -c '[0-9]')"; else count=$(( $(online_cpus) - 1 )); fi
+  [ -n "$slots" ] && [ "$slots" -lt "$count" ] && count="$slots"
+  [ "$count" -ge 1 ] && echo "$count" || echo 1
+}
 enough_boxes() {
-  local num base slots
-  num="$(isolate_boxes)"; base="$(setting "$CONFIG" box_base)"; slots="$(setting "$CONFIG" slots)"
+  local num base
+  num="$(isolate_boxes)"; base="$(setting "$CONFIG" box_base)"
   [ -n "$num" ] || return 1
-  [ -n "$slots" ] || slots=$(( $(online_cpus) - 1 )); [ "$slots" -ge 1 ] || slots=1
-  [ "$num" -ge $(( ${base:-0} + 2 * slots )) ]
+  [ "$num" -ge $(( ${base:-0} + 2 * $(workers) )) ]
+}
+# The judge refuses to start unless every box it owns has a `box<id>.cpus` line and isolate's cgroup has cpuset.
+boxes_cpuset_pinned() {
+  local cg base id; cg="$(isolate_cgroup)"; base="$(setting "$CONFIG" box_base)"; base="${base:-0}"
+  [ -n "$cg" ] && grep -qw cpuset "$R$cg/cgroup.subtree_control" 2>/dev/null || return 1
+  for (( id = base; id < base + 2 * $(workers); id++ )); do
+    grep -qE "^[[:space:]]*box$id\.cpus[[:space:]]*=" "$R$ISOLATE_CONF" || return 1
+  done
 }
 # Saved output under CHECK_FIXTURES, else the real command.
 output_of() { # <fixture name> <command...>
@@ -87,11 +105,11 @@ output_of() { # <fixture name> <command...>
 isolate_env_clean() {
   local report
   report="$(output_of isolate-check-environment isolate-check-environment | sed 's/\x1b\[[0-9;]*m//g')"
-  echo "$report" | grep -q '^Checking for ' || return 1
-  ! echo "$report" | grep -iE '\b(FAIL|CAUTION|WARN(ING)?|ERROR)\b' | grep -viqE 'randomi[sz]|ASLR'
+  grep -q '^Checking for ' <<<"$report" || return 1
+  ! grep -iE '\b(FAIL|CAUTION|WARN(ING)?|ERROR)\b' <<<"$report" | grep -viE 'randomi[sz]|ASLR' >/dev/null
 }
-egress_dropped() { output_of nft-output nft list chain inet filter output | grep -q 'policy drop'; }
-isolate_v2() { isolate --version | grep -q 'isolator 2\.'; }
+egress_dropped() { output_of nft-output nft list chain inet filter output | grep 'policy drop' >/dev/null; }
+isolate_v2() { isolate --version | grep 'isolator 2\.' >/dev/null; }
 tls_handshake() {
   local host="${bridge%:*}"
   openssl s_client -connect "$bridge" -servername "${server_name:-$host}" -verify_hostname "${server_name:-$host}" \
@@ -113,6 +131,7 @@ check "/usr/local/bin/isolate is setuid root" isolate_setuid_root
 check "isolate box_root is on a local filesystem" box_root_local
 check "isolate cgroup has memory.peak (kernel 5.19+; without it runs report no cg-mem)" memory_peak_readable
 check "isolate num_boxes >= box_base + 2*slots" enough_boxes
+check "every judge box has a box<id>.cpus line and isolate's cgroup has cpuset (qhhoj-judge isolate-cpus)" boxes_cpuset_pinned
 if [ "${CHECK_SKIP_COMMANDS:-0}" != 1 ] || [ -n "${CHECK_FIXTURES:-}" ]; then
   check "isolate-check-environment clean except the ASLR waiver" isolate_env_clean
   check "egress chain inet filter output has policy drop" egress_dropped
