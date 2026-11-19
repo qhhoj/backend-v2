@@ -100,7 +100,6 @@ interface JudgingInputs {
   >;
   source: string;
   language: Pick<Language, 'fileOnly' | 'fileSizeLimit'> | null;
-  earlierAttempts: number;
   contestMeta: ContestMeta | undefined;
 }
 
@@ -128,7 +127,7 @@ const languageLimitOf = (
 /** `PROBLEM_LIMITS.memoryLimit.min` is 0; isolate needs a positive `--cg-mem`. */
 const MIN_MEMORY_LIMIT_KIB = 1024;
 
-/** The Assign for a claimed run: limits (a per-language override wins; memory at least 1 MiB), the data version, the source or its file, short-circuiting for non-partial problems (not in a contest whose format scores every case), contest meta and the attempt number. Pure. */
+/** The Assign for a claimed run: limits (a per-language override wins; memory at least 1 MiB), the data version, the source or its file, short-circuiting for non-partial problems (not in a contest whose format scores every case). Pure. */
 function assignRequest(
   queued: QueuedSubmission,
   submission: ClaimedSubmission,
@@ -151,9 +150,6 @@ function assignRequest(
     ),
     shortCircuit: !problem.partial && !contestMeta?.scoresEveryCase,
     pretestsOnly: contestMeta?.pretestsOnly ?? false,
-    inContest: contestMeta?.virtual ?? null,
-    attemptNo: inputs.earlierAttempts + 1,
-    userId: uuidStr(submission.user),
   };
 }
 
@@ -168,8 +164,6 @@ const IN_FLIGHT = { $in: [...IN_FLIGHT_STATUSES] };
 
 /** What a contest submission adds to dispatch and to the judge's request. */
 export interface ContestMeta {
-  /** The participation's number: 0 live, -1 spectate, n virtual (`in-contest`). */
-  virtual: number;
   /** Live and spectating rows only (legacy `judge_submission`). */
   bannedJudges: string[];
   /** The contest's current `runPretestsOnly` and the problem's `isPretested` (legacy recomputed it on every judge, so a rejudge after the contest runs every test). */
@@ -381,7 +375,6 @@ export class SubmissionsRepository {
           [
             uuidStr(entry._id),
             {
-              virtual,
               bannedJudges: virtual <= LIVE ? contest.bannedJudges : [],
               pretestsOnly:
                 contest.runPretestsOnly && (problem?.isPretested ?? false),
@@ -391,41 +384,6 @@ export class SubmissionsRepository {
         ];
       }),
     );
-  }
-
-  /** Earlier attempts at the problem by the same user: within the participation for a contest submission (legacy), else outside contests; CE and IE do not count. */
-  private async countEarlierAttempts(submission: {
-    _id: string;
-    user: string;
-    problem: string;
-    contest?: string | null;
-    date: Date;
-  }): Promise<number> {
-    const earlier = {
-      date: { $lt: submission.date },
-      status: { $nin: ['CE', 'IE'] },
-    };
-    if (!submission.contest)
-      return this.submissions.countDocuments({
-        user: submission.user,
-        problem: submission.problem,
-        contest: null,
-        ...earlier,
-      });
-    const entry = await this.contestSubmissions
-      .findById(submission._id, { participation: 1 })
-      .lean();
-    if (!entry) return 0;
-    const siblings = await this.contestSubmissions
-      .distinct('_id', {
-        participation: uuidStr(entry.participation),
-        problem: submission.problem,
-      })
-      .exec();
-    return this.submissions.countDocuments({
-      _id: { $in: siblings },
-      ...earlier,
-    });
   }
 
   /** Compare-and-set QU → P for `judgeName` with the next generation, then the Assign. Null when it is no longer queued (aborted, rejudged, claimed by another judge). */
@@ -524,39 +482,36 @@ export class SubmissionsRepository {
       .lean();
   }
 
-  /** The five reads run together, as one `Promise.all`; null when the problem or the source is gone. */
+  /** The four reads run together, as one `Promise.all`; null when the problem or the source is gone. */
   private async loadJudgingInputs(
     submissionId: string,
     submission: ClaimedSubmission,
   ): Promise<JudgingInputs | null> {
-    const [problem, source, language, earlierAttempts, metaOf] =
-      await Promise.all([
-        this.problems
-          .findById(submission.problem, {
-            code: 1,
-            timeLimit: 1,
-            memoryLimit: 1,
-            partial: 1,
-            languageLimits: 1,
-            dataVersion: 1,
-            mirrorRoot: 1,
-          })
-          .lean(),
-        this.sources.findById(submissionId).lean(),
-        this.languages
-          .findById(submission.language, { fileOnly: 1, fileSizeLimit: 1 })
-          .lean(),
-        this.countEarlierAttempts(submission),
-        submission.contest
-          ? this.contestMetaOf([submissionId])
-          : Promise.resolve(new Map<string, ContestMeta>()),
-      ]);
+    const [problem, source, language, metaOf] = await Promise.all([
+      this.problems
+        .findById(submission.problem, {
+          code: 1,
+          timeLimit: 1,
+          memoryLimit: 1,
+          partial: 1,
+          languageLimits: 1,
+          dataVersion: 1,
+          mirrorRoot: 1,
+        })
+        .lean(),
+      this.sources.findById(submissionId).lean(),
+      this.languages
+        .findById(submission.language, { fileOnly: 1, fileSizeLimit: 1 })
+        .lean(),
+      submission.contest
+        ? this.contestMetaOf([submissionId])
+        : Promise.resolve(new Map<string, ContestMeta>()),
+    ]);
     if (!problem || !source) return null;
     return {
       problem,
       source: source.source,
       language,
-      earlierAttempts,
       contestMeta: metaOf.get(submissionId),
     };
   }

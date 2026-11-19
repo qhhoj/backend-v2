@@ -25,11 +25,7 @@ export const assignOf = (request: AssignRequest): Assign => ({
   memoryLimitKib: request.memoryLimit,
   shortCircuit: request.shortCircuit,
   pretestsOnly: request.pretestsOnly,
-  meta: {
-    inContest: request.inContest ?? undefined,
-    attemptNo: request.attemptNo,
-    userId: request.userId,
-  },
+  meta: undefined,
 });
 
 /** The bounds the bridge enforces, sent in Welcome so the judge can stay inside them. */

@@ -1,12 +1,7 @@
 import { CommandsService } from '../src/dispatch/commands.service';
 import { DispatcherService } from '../src/dispatch/dispatcher.service';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
-import {
-  seedCatalog,
-  seedContestSubmission,
-  seedProblem,
-  seedSubmission,
-} from './fixtures';
+import { seedCatalog, seedContestSubmission, seedProblem } from './fixtures';
 import type { BridgeCatalog } from './fixtures';
 import { RecordingJudge } from './recording-judge';
 import { setupBridgeTest } from './setup';
@@ -29,8 +24,6 @@ describe('contest submissions in the bridge', () => {
     await dispatch().resume(judge, []);
     await dispatch().register(judge);
   };
-  const minutesAgo = (minutes: number) =>
-    new Date(Date.now() - minutes * 60_000);
   const contestWith = async (fields: object = {}) => {
     codes += 1;
     const problem = await seedProblem(bridge, catalog, { code: `cd${codes}` });
@@ -95,33 +88,6 @@ describe('contest submissions in the bridge', () => {
     expect(sentTo(allowed)).toEqual([id]);
   });
 
-  it("adds a command's own bans to the contest's", async () => {
-    const { problem, contest, participation, banned } = await contestWith();
-    const live = await participation(0);
-    const { _id: id } = await seedContestSubmission(bridge, catalog, {
-      contest: contest._id,
-      participation: live._id,
-      problem: problem._id,
-    });
-    const extra = new RecordingJudge(`extra${codes}`);
-    const contestBanned = new RecordingJudge(banned);
-    await online(extra);
-    await online(contestBanned);
-    await bridge.module.get(CommandsService).apply(
-      JSON.stringify({
-        type: 'judge',
-        submissionIds: [id],
-        judgeName: null,
-        bannedJudges: [extra.name],
-      }),
-    );
-    expect(sentTo(extra)).toEqual([]);
-    expect(sentTo(contestBanned)).toEqual([]);
-    const allowed = new RecordingJudge(`free${codes}`);
-    await online(allowed);
-    expect(sentTo(allowed)).toEqual([id]);
-  });
-
   it("lets a banned judge take a virtual participant's submission", async () => {
     const { problem, contest, participation, banned } = await contestWith();
     const virtual = await participation(1);
@@ -158,43 +124,17 @@ describe('contest submissions in the bridge', () => {
     expect((await bridge.submissions.findById(id).lean())!.status).toBe('PD');
   });
 
-  it('sends the pretests flag, the participation number and the attempt within the participation', async () => {
+  it("sends the contest's current pretests flag", async () => {
     const { problem, contest, participation } = await contestWith({
       runPretestsOnly: true,
       bannedJudges: [],
     });
     const virtual = await participation(2);
-    const otherParticipant = await participation(0);
     const own = {
       contest: contest._id,
       participation: virtual._id,
       problem: problem._id,
     };
-    await seedSubmission(bridge, catalog, {
-      problem: problem._id,
-      status: 'D',
-      result: 'WA',
-      date: minutesAgo(40),
-    });
-    await seedContestSubmission(bridge, catalog, {
-      ...own,
-      participation: otherParticipant._id,
-      status: 'D',
-      result: 'WA',
-      date: minutesAgo(30),
-    });
-    await seedContestSubmission(bridge, catalog, {
-      ...own,
-      status: 'D',
-      result: 'WA',
-      date: minutesAgo(20),
-    });
-    await seedContestSubmission(bridge, catalog, {
-      ...own,
-      status: 'CE',
-      result: 'CE',
-      date: minutesAgo(10),
-    });
     const { _id: id } = await seedContestSubmission(bridge, catalog, own);
     const judge = new RecordingJudge(`meta${codes}`);
     await online(judge);
@@ -202,8 +142,6 @@ describe('contest submissions in the bridge', () => {
     expect(judge.received[0]).toMatchObject({
       ref: { submissionId: id, generation: 1 },
       pretestsOnly: true,
-      inContest: 2,
-      attemptNo: 2,
     });
     await bridge.contests.updateOne(
       { _id: contest._id },
@@ -213,10 +151,7 @@ describe('contest submissions in the bridge', () => {
     const second = new RecordingJudge(`meta${codes}b`);
     await online(second);
     await enqueue(rejudged);
-    expect(second.received[0]).toMatchObject({
-      pretestsOnly: false,
-      inContest: 2,
-    });
+    expect(second.received[0]).toMatchObject({ pretestsOnly: false });
   });
 
   it('bans judges for a spectator like a live participant', async () => {

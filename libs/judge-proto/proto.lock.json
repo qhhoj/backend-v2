@@ -1,7 +1,7 @@
 {
   "source": "judge-v2",
-  "tag": "proto-v1.4.1",
-  "commit": "77bf6645460e1aadd72692fb0ec9b9bc88b7e669",
+  "tag": "proto-v1.4.2",
+  "commit": "a866b72e34a62188a7d6cb3310a367a4f78cd4cc",
   "files": {
     "README.md": "d8e36b6d73f196ab1b1cfdcfc310b3224a973d5c4f7f0d96ec3a7bd01ab71009",
     "compat/v1.shape.json": "28c1f4c43b99b87f33623cce3577753e2cee4b720c2c0fec0f096d1d3614c9e7",
@@ -16,7 +16,7 @@
     "conformance/scenarios/08-flood.yaml": "7f0428f91c3382348daa5edc163a8e3e88c8c8d1738d7e6a2530d8d99eb102d5",
     "conformance/scenarios/09-oversized-message.yaml": "bbeb62fc728d4fccf3d557d520e1b35241e782029a61d3e0b28c3144858d9960",
     "conformance/scenarios/10-oversized-hello.yaml": "3d1ec60dbe09ed41f4248d8d4c1414528eaaee98b4ba4c0a238356886d4f0ac7",
-    "conformance/scenarios/11-grade.yaml": "f39859fc68c5fa8ebbcd66c7a9d9aa9da21c4ac1ac91ec88c649192cce555f8b",
+    "conformance/scenarios/11-grade.yaml": "f2e2e605caeb6f121a1c7cb5b81cb3ae70e6bc7a9b79677777abb65d0ef43c50",
     "conformance/scenarios/12-compile-error.yaml": "2c6de4cd5c810c45d35e46826f75e0853a236b6fb3f7da9b0238550cd5aaf288",
     "conformance/scenarios/13-duplicate-seq.yaml": "af923744e8b005996316cba546d09f7466a80c9e92ad567c268a77f5dd11c55d",
     "conformance/scenarios/14-seq-gap.yaml": "ad91dc6881cdd8776edce3077de8415d7a2ba8d1e2bca0d50592bee2b77aa2cc",
@@ -110,7 +110,7 @@
     "golden/upload-chunk.json": "4da9d2efc41d4681fb55bddb8225616808efc9d207ec12af1a3a571edc92add4",
     "golden/upload-receipt.bin": "58c789bfd002eb5f27601d89c0371e8e1890c79e5ff0aa64be8423d422596d83",
     "golden/upload-receipt.json": "4a2973da7005c13a376e71eb5ae3c150ced60c9b03f4e0d50d06cf93d9ea97ea",
-    "qhhoj/judge/v1/judge.proto": "16dcf6776938cba8239cd01d2a262845d96d22e17ec11b15f48c4170c45b7ad4",
+    "qhhoj/judge/v1/judge.proto": "fed62ccfe01fc54192a43267c86ad10cda6f1cd0fd6497cebaa4bebc16675fdd",
     "version.json": "9720348fe802a9256c1c516ef203ca68d7c3254f0fe2fa77664972c6f5ce7e72"
   }
 }
