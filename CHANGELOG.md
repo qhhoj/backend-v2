@@ -1,5 +1,17 @@
 # qhhoj-backend
 
+## 2.43.2
+
+### Patch Changes
+
+- 4c868c7: Add a Content-Security-Policy report endpoint (`POST /api/internal/csp-report`) and point the site's report-only policy at it.
+- 89555e1: Security update (GHSA-339x-xfw8-834q)
+- 89555e1: Security update (GHSA-3hx2-vpwm-g4p3)
+- 2a8a019: Security update (GHSA-hvc9-h6jm-2qrf)
+- 8443a2c: Security update (GHSA-qx9v-48j6-q8rh)
+- b347b3d: Security update (GHSA-wfrh-6pph-p53m)
+- cad700d: Refuse a submission to a judge-graded problem with no `init.yml` (409 `problem_has_no_tests`); the problem data response gains `isMissingTests`
+
 ## 2.43.1
 
 ### Patch Changes
