@@ -38,6 +38,8 @@ control_dir = "$FULLSTACK_CONTROL_DIR"
 
 [isolate]
 allow_unbounded_disk = true   # dev only: no disk quota on this machine's box root
+allow_taskset_pinning = true   # dev only: this machine has no cpuset pinning for isolate boxes
+allow_unpatched_isolate = true # dev only: isolate here is built without the key patch
 TOML
 
 start judge "$RUN/judge.log" "$JUDGE_V2_BIN" --config "$dir/config.toml"
