@@ -11,6 +11,7 @@ import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { ContestAccessModule } from './core/contest-access.module';
 import { BalloonsModule } from './balloons/balloons.module';
 import { ExportModule } from './export/export.module';
+import { AccountBansModule } from '../users/moderation/account-bans.module';
 import { FeedModule } from './feed/feed.module';
 import { ContestTagsModule } from './tags/contest-tags.module';
 import { GhostsModule } from './ghosts/ghosts.module';
@@ -69,6 +70,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
 
 @Module({
   imports: [
+    AccountBansModule,
     AuthModule,
     OrganizationCreationModule,
     ContestAccessModule,

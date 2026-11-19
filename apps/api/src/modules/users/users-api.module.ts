@@ -30,6 +30,7 @@ import { UserEditingController } from './editing/user-editing.controller';
 import { UserMembershipEditor } from './editing/user-membership-editor';
 import { UserProfileEditingService } from './editing/user-profile-editing.service';
 import { UserModerationController } from './moderation/user-moderation.controller';
+import { AccountBansModule } from './moderation/account-bans.module';
 import { UserModerationService } from './moderation/user-moderation.service';
 import { ProfileController } from './profile/profile.controller';
 import { ProfileService } from './profile/profile.service';
@@ -42,6 +43,7 @@ import { UserSuggestionsService } from './suggestions/user-suggestions.service';
 
 @Module({
   imports: [
+    AccountBansModule,
     AuthModule,
     AuthApiModule,
     BlogApiModule,

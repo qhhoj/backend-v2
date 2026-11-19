@@ -3,8 +3,11 @@ import { PrincipalService, SessionService, UsersRepository } from '@libs/auth';
 import type { Principal, UserDocument } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
-import { CONTEST_CHEATING_BAN_REASON } from '../../contests/participation/contest-participation.service';
-import { FeedKeysRepository } from '../../contests/feed/feed-keys.repository';
+import {
+  AccountBans,
+  activeAfterUnban,
+  CONTEST_CHEATING_BAN_REASON,
+} from './account-bans.service';
 import { assertHoldsRightsOf } from '../editing/editable-target';
 
 @Injectable()
@@ -13,11 +16,11 @@ export class UserModerationService {
     private readonly users: UsersRepository,
     private readonly sessions: SessionService,
     private readonly revisions: RevisionsRepository,
-    private readonly feedKeys: FeedKeysRepository,
+    private readonly bans: AccountBans,
     private readonly principals: PrincipalService,
   ) {}
 
-  /** Legacy `Profile.ban_user`, plus every session, the API token and the contest feed keys the user minted revoked (the guard also rejects inactive users on the next request), so an unban brings none of them back; the active flag is remembered for `unban`. Audit-logged as a `user` revision. */
+  /** Legacy `Profile.ban_user` (`AccountBans.ban`). Audit-logged as a `user` revision. */
   async ban(
     principal: Principal,
     username: string,
@@ -28,43 +31,19 @@ export class UserModerationService {
         reason: ['Reserved for automatic contest-cheating bans.'],
       });
     const user = await this.target(principal, username);
-    if (
-      !(await this.users.revokeCredentials(
-        user._id,
-        {
-          banReason: reason,
-          displayRank: 'banned',
-          isUnlisted: true,
-          isActive: false,
-          isActiveBeforeBan: user.isActive,
-          apiTokenHash: null,
-        },
-        { banReason: null },
-      ))
-    )
+    if (!(await this.bans.ban(user, reason)))
       throw new AppError('conflict', 409, 'That user is already banned');
-    await this.sessions.destroyAllForUser(user._id);
-    await this.feedKeys.revokeMintedBy(user._id, new Date());
     await this.auditBan(principal, user, 'ban', {
       reason,
       isActive: false,
     });
   }
 
-  /** Legacy `Profile.unban_user`: restores rank `user` and listed; the account is active again only if it was before the ban (a pending signup or a deactivated account stays inactive). Audit-logged. */
+  /** Legacy `Profile.unban_user` (`AccountBans.unban`): a pending signup or a deactivated account stays inactive. Audit-logged. */
   async unban(principal: Principal, username: string): Promise<void> {
     const user = await this.target(principal, username);
-    const isActive = user.isActiveBeforeBan ?? true;
-    if (
-      user.banReason === null ||
-      !(await this.users.updateIfBanReason(user._id, user.banReason, {
-        banReason: null,
-        displayRank: 'user',
-        isUnlisted: false,
-        isActive,
-        isActiveBeforeBan: null,
-      }))
-    )
+    const isActive = activeAfterUnban(user);
+    if (!(await this.bans.unban(user)))
       throw new AppError('conflict', 409, 'That user is not banned');
     await this.auditBan(principal, user, 'unban', { reason: null, isActive });
   }
