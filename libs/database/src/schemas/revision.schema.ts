@@ -4,10 +4,34 @@ import { baseSchemaOptions, IdProp } from '../schema';
 
 const UUID = MongooseSchema.Types.UUID;
 
+/** Every kind of object a `revisions` row records; the audit log lists each one. */
+export const REVISION_ENTITIES = [
+  'problem',
+  'tagProblem',
+  'problemType',
+  'problemGroup',
+  'license',
+  'contest',
+  'contestParticipation',
+  'submission',
+  'submission_batch',
+  'user',
+  'group',
+  'organization',
+  'blogPost',
+  'comment',
+  'flatpage',
+  'judge',
+  'share',
+  'ticket',
+  'miscConfig',
+] as const;
+export type RevisionEntity = (typeof REVISION_ENTITIES)[number];
+
 @Schema({ ...baseSchemaOptions, collection: 'revisions' })
 export class Revision {
   @IdProp() _id!: string;
-  @Prop({ required: true }) entity!: string;
+  @Prop({ type: String, required: true }) entity!: RevisionEntity;
   @Prop({ type: UUID, required: true }) entityId!: string;
   @Prop({ required: true }) action!: string;
   @Prop({ type: UUID, default: null }) userId!: string | null;

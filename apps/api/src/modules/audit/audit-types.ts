@@ -1,28 +1,7 @@
-/**
- * The object kinds whose writes leave a record: every `revisions.entity` the API and worker write, plus `setting`
- * (the `settingRevisions` collection). A kind added to `revisions` later still shows in the unfiltered feed;
- * add it here to make it filterable and labelled.
- */
-export const AUDIT_TYPES = [
-  'problem',
-  'tagProblem',
-  'problemType',
-  'problemGroup',
-  'license',
-  'contest',
-  'contestParticipation',
-  'submission',
-  'submission_batch',
-  'user',
-  'group',
-  'organization',
-  'blogPost',
-  'comment',
-  'flatpage',
-  'judge',
-  'share',
-  'setting',
-] as const;
+import { REVISION_ENTITIES } from '@libs/database';
+
+/** The object kinds whose writes leave a record: every `revisions` kind, plus `setting` (the `settingRevisions` collection). */
+export const AUDIT_TYPES = [...REVISION_ENTITIES, 'setting'] as const;
 export type AuditType = (typeof AUDIT_TYPES)[number];
 
 /** Settings keep their own history collection; every other kind is a `revisions` row. */
