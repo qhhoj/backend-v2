@@ -82,9 +82,6 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
       memoryLimit: 65536,
       shortCircuit: false,
       pretestsOnly: false,
-      inContest: null,
-      attemptNo: 1,
-      userId: catalog.user._id,
     });
     expect(await stored(id)).toMatchObject({
       status: 'P',

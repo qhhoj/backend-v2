@@ -19,8 +19,4 @@ export interface AssignRequest {
   memoryLimit: number;
   shortCircuit: boolean;
   pretestsOnly: boolean;
-  /** Participation number (0 live, -1 spectate, n virtual); null outside contests. */
-  inContest: number | null;
-  attemptNo: number;
-  userId: string;
 }

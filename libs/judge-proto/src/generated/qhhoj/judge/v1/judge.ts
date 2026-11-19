@@ -441,6 +441,7 @@ export interface Pong {
   load: number;
 }
 
+/** Unused: no judge reads it, and the bridge sends none since 2026-11-19. Kept so v1 stays additive-only. */
 export interface Meta {
   /** Participation number: 0 live, -1 spectate, n virtual; absent outside contests. */
   inContest?: number | undefined;

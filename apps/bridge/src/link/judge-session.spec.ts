@@ -81,9 +81,6 @@ const assignment = (ref: AssignmentRef): AssignRequest => ({
   memoryLimit: 65536,
   shortCircuit: true,
   pretestsOnly: false,
-  inContest: null,
-  attemptNo: 1,
-  userId: newId(),
 });
 const HELLO = JudgeMessage.fromPartial({
   body: {
