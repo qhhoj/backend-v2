@@ -1,5 +1,20 @@
 # qhhoj-backend
 
+## 2.43.3
+
+### Patch Changes
+
+- 674e865: check-host: no random failures from `grep -q` under pipefail.
+- 0697a92: One name for each contest role check; the staff panel's two-factor flag uses the login rule.
+- 89d1f41: The bridge no longer fills the unused Assign metadata, saving one or two database reads per judging.
+- be2315f: Remove the one-off data migrations production has recorded and the reads that still accepted the rows they backfilled.
+- 39c67b2: The staff ban and the contest-cheating ban share one implementation.
+- ea208ab: Deleting a synced contest removes everything the contest editor's delete removes.
+- b69ec4d: Join, request approval and signup into an organization share one slot check. An approval now waits briefly for a held member lock instead of refusing at once.
+- af1c968: Links in mails, Discord messages, feeds and notifications use the site's plural paths (`/problems/`, `/contests/`, `/blog/`, `/tickets/`, `/users/`).
+- b311578: The `judge` bridge command no longer carries an always-empty banned-judge list; the problems and contributions modules no longer import each other.
+- cafe1d8: The audit log can filter by tickets and site settings changes (`ticket`, `miscConfig`); revision kinds come from one typed list.
+
 ## 2.43.2
 
 ### Patch Changes
