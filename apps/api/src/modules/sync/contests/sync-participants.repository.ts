@@ -3,10 +3,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import {
   CI,
   Contest,
-  ContestAnnouncement,
-  ContestGhost,
-  ContestParticipation,
-  ContestPublicRankingLink,
   ContestSubmission,
   Submission,
   uuidStr,
@@ -14,20 +10,12 @@ import {
 } from '@libs/database';
 import type { Model } from 'mongoose';
 
-/** The writes of the sync API that the contest modules do not offer: the contestant list by username, and removing an unstarted contest with what belongs to it alone. */
+/** The writes of the sync API that the contest modules do not offer: the contestant list by username, and the conditional delete of an unstarted contest. */
 @Injectable()
 export class SyncParticipantsRepository {
   constructor(
     @InjectModel(User.name) private readonly users: Model<User>,
     @InjectModel(Contest.name) private readonly contests: Model<Contest>,
-    @InjectModel(ContestParticipation.name)
-    private readonly participations: Model<ContestParticipation>,
-    @InjectModel(ContestAnnouncement.name)
-    private readonly announcements: Model<ContestAnnouncement>,
-    @InjectModel(ContestPublicRankingLink.name)
-    private readonly rankingLinks: Model<ContestPublicRankingLink>,
-    @InjectModel(ContestGhost.name)
-    private readonly ghosts: Model<ContestGhost>,
     @InjectModel(ContestSubmission.name)
     private readonly contestSubmissions: Model<ContestSubmission>,
     @InjectModel(Submission.name)
@@ -72,9 +60,7 @@ export class SyncParticipantsRepository {
     return inContest !== null || submitted !== null;
   }
 
-  /**
-   * Deletes the contest only while it is still owned by `clientId`, hidden and not started, in one conditional write, so a person publishing it meanwhile keeps it; then what belongs to it alone (participations, announcements, public ranking link, ghosts). False when the contest no longer qualified.
-   */
+  /** Deletes the contest row only while it is still owned by `clientId`, hidden and not started, in one conditional write, so a person publishing it meanwhile keeps it. False when the contest no longer qualified; the caller then removes what belongs to it (`ContestRemovalRepository.deleteOwnedRows`). */
   async deleteUnstarted(
     contestId: string,
     owner: { clientId: string; now: Date },
@@ -87,12 +73,6 @@ export class SyncParticipantsRepository {
         startTime: { $gt: owner.now },
       })
       .exec();
-    if (deletedCount !== 1) return false;
-    const byContest = { contest: contestId };
-    await this.participations.deleteMany(byContest).exec();
-    await this.announcements.deleteMany(byContest).exec();
-    await this.rankingLinks.deleteMany(byContest).exec();
-    await this.ghosts.deleteMany(byContest).exec();
-    return true;
+    return deletedCount === 1;
   }
 }
