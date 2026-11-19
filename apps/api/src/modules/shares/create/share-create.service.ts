@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError, invalidField, issueError } from '@libs/common';
-import { isLanguageActive, uuidStr } from '@libs/database';
+import { uuidStr } from '@libs/database';
 import type { Language, ShareCopy, ShareLanguage } from '@libs/database';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
@@ -155,7 +155,7 @@ export class ShareCreateService {
 
   private pasteLanguage(languageId: string): ShareLanguage {
     const language = this.languages.byId(languageId);
-    if (!language || !isLanguageActive(language))
+    if (!language || !language.isActive)
       throw invalidField('languageId', 'Unknown language.', 'language_unknown');
     if (language.fileOnly)
       throw invalidField(

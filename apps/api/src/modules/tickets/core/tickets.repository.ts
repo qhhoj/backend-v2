@@ -69,10 +69,10 @@ function unchangedSince(
 
 @Injectable()
 export class TicketsRepository {
-  /** Open tickets whose newest message was not written by staff. `null` matches a document without the field (tickets from the migrator's raw bulkWrite, and tickets that predate the flag), so they count as waiting. Through `{isOpen, lastMessageByStaff}`. */
+  /** Open tickets whose newest message was not written by staff. Through `{isOpen, lastMessageByStaff}`. */
   static readonly AWAITING_STAFF: FilterQuery<Ticket> = {
     isOpen: true,
-    lastMessageByStaff: { $in: [false, null] },
+    lastMessageByStaff: false,
   };
 
   constructor(

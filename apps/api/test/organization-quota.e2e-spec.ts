@@ -26,12 +26,11 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { NotificationsService } from '@libs/community';
 import {
-  LEGACY_STORAGE_BACKFILL_KEY,
   ProblemDataFilesService,
   QuotaLedger,
   problemJobs,
 } from '@libs/problems';
-import { buildZip, setStorageBackfilled } from '@libs/problems/testing';
+import { buildZip } from '@libs/problems/testing';
 import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 import { ProblemDataStore } from '../src/modules/problems/data/problem-data.store';
 
@@ -53,11 +52,9 @@ describe('organization quota', () => {
   });
   const enforce = async () => {
     await api.setSetting('quota.enforce', 'enforce');
-    await setStorageBackfilled(api.app, true);
   };
   const warn = async () => {
     await api.setSetting('quota.enforce', 'warn');
-    await setStorageBackfilled(api.app, false);
   };
   const limited = (credits: number) =>
     createOrganization(api, { quotaMonthlyCredits: credits });
@@ -182,29 +179,6 @@ describe('organization quota', () => {
         Promise.resolve('made'),
       );
       expect(await usedBy(organization._id)).toBe(10);
-    });
-  });
-
-  describe('the size backfill that enforce waits for', () => {
-    it('stays recorded through a Redis flush', async () => {
-      await api.app.get<Redis>(REDIS).flushdb();
-      const organization = await limited(5);
-      await expect(
-        quota.charged(organization._id, request(), () =>
-          Promise.resolve('made'),
-        ),
-      ).rejects.toMatchObject({ code: 'quota_exceeded' });
-    });
-
-    it("counts as done by the earlier releases' Redis flag while it has no record", async () => {
-      await setStorageBackfilled(api.app, false);
-      const ledger = api.app.get(QuotaLedger);
-      const redis = api.app.get<Redis>(REDIS);
-      await redis.del(LEGACY_STORAGE_BACKFILL_KEY);
-      expect(await ledger.isEnforcing()).toBe(false);
-      await redis.set(LEGACY_STORAGE_BACKFILL_KEY, '1');
-      expect(await ledger.isEnforcing()).toBe(true);
-      await redis.del(LEGACY_STORAGE_BACKFILL_KEY);
     });
   });
 
@@ -360,7 +334,6 @@ describe('contest quota', () => {
   });
   beforeEach(async () => {
     await api.setSetting('quota.enforce', 'enforce');
-    await setStorageBackfilled(api.app, true);
   });
 
   it('charges the contest price to the first listed organization', async () => {
@@ -572,7 +545,6 @@ describe('problem creation quota', () => {
   });
   beforeEach(async () => {
     await api.setSetting('quota.enforce', 'enforce');
-    await setStorageBackfilled(api.app, true);
   });
 
   it('charges the first listed organization of a new organization problem', async () => {
@@ -740,7 +712,6 @@ describe('problem data quota', () => {
   });
   beforeEach(async () => {
     await api.setSetting('quota.enforce', 'enforce');
-    await setStorageBackfilled(api.app, true);
   });
   afterAll(() => jest.restoreAllMocks());
 

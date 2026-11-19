@@ -207,13 +207,13 @@ describe('user data export', () => {
     utimesSync(stale, eightDaysAgo, eightDaysAgo);
     for (const path of [temporary, legacy, ...foreign])
       utimesSync(path, eightDaysAgo, eightDaysAgo);
-    expect(await service.sweep()).toBe(3);
+    expect(await service.sweep()).toBe(2);
     expect([
       existsSync(fresh),
       existsSync(stale),
       existsSync(temporary),
       existsSync(legacy),
       ...foreign.map((path) => existsSync(path)),
-    ]).toEqual([true, false, false, false, true, true]);
+    ]).toEqual([true, false, false, true, true, true]);
   });
 });

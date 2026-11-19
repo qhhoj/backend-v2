@@ -21,7 +21,7 @@ export class Language {
   @Prop({ default: false }) fileOnly!: boolean;
   @Prop({ default: 0 }) fileSizeLimit!: number;
   @Prop({ default: false }) includeInProblem!: boolean;
-  /** false hides it from the submit form and refuses new submissions in it; past submissions still show it. Rows from before the field read as active (`isLanguageActive`). */
+  /** false hides it from the submit form and refuses new submissions in it; past submissions still show it. */
   @Prop({ default: true }) isActive!: boolean;
   /** Lists show languages by `order`, then name; lower first. */
   @Prop({ default: 0 }) order!: number;
@@ -29,10 +29,6 @@ export class Language {
 
 export const LanguageSchema = SchemaFactory.createForClass(Language);
 ciIndex(LanguageSchema, 'key');
-
-/** A row stored before `isActive` existed has no field: it is active. */
-export const isLanguageActive = (language: Pick<Language, 'isActive'>) =>
-  language.isActive !== false;
 
 /** `order` (missing on old rows: 0), then name. */
 export const compareLanguages = (

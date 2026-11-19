@@ -408,12 +408,10 @@ export class ProblemEditingService {
       (fields.isPublic !== undefined ||
         fields.isOrganizationPrivate !== undefined) &&
       !hasPermission(principal, 'judge.change_public_visibility');
-    // False also matches a legacy row without the field (the document reads the schema default).
-    const flagIs = (value: boolean) => (value ? true : { $ne: true });
     const guard = isGuarded
       ? {
-          isPublic: flagIs(original.isPublic),
-          isOrganizationPrivate: flagIs(original.isOrganizationPrivate),
+          isPublic: original.isPublic,
+          isOrganizationPrivate: original.isOrganizationPrivate,
         }
       : {};
     // A rename writes only over the code its directory move started from (another rename may have won the lock first).

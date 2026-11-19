@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { AppError, isDuplicateKey } from '@libs/common';
@@ -19,7 +18,7 @@ import type { QuotaSnapshot } from './quota.types';
 
 /** Monthly credits (atomic, refundable) of an organization, its 80% warnings and its usage snapshot; limits, enforce mode and the storage meter live in `QuotaLedger`. `warn` mode lets everything through but logs and counts, so a site can measure before it blocks. */
 @Injectable()
-export class QuotaService implements OnApplicationBootstrap {
+export class QuotaService {
   private readonly logger = new Logger(QuotaService.name);
 
   constructor(
@@ -29,15 +28,6 @@ export class QuotaService implements OnApplicationBootstrap {
     private readonly usage: Model<OrganizationUsage>,
     private readonly warnings: QuotaWarningNotifier,
   ) {}
-
-  /** Enforcing waits for the size backfill, which only `worker migrate` runs (the deploy runs it before each restart). */
-  async onApplicationBootstrap(): Promise<void> {
-    if (this.settings.get('quota.enforce') !== 'enforce') return;
-    if (!(await this.ledger.isStorageBackfilled()))
-      this.logger.warn(
-        'quota.enforce is "enforce" but the size backfill has not run: quotas stay in warn mode until `worker migrate` has run',
-      );
-  }
 
   priceOf(request: ChargeRequest): number {
     if (request.kind === 'problem')

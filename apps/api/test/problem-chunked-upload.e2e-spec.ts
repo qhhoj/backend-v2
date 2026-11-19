@@ -7,7 +7,7 @@ import type { Model } from 'mongoose';
 import { REDIS } from '@libs/common';
 import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
 import { ProblemDataFilesService, QuotaLedger } from '@libs/problems';
-import { buildZip, setStorageBackfilled } from '@libs/problems/testing';
+import { buildZip } from '@libs/problems/testing';
 import { UPLOAD_LIMIT } from '../src/modules/problems/core/rate-limits';
 import { CHUNK_BYTES } from '../src/modules/problems/data/chunked/chunked-upload.limits';
 import * as partsStore from '../src/modules/problems/data/chunked/upload-parts.store';
@@ -62,7 +62,6 @@ beforeAll(async () => {
   editor = await loginAs(api, editorId);
   coEditor = await loginAs(api, coEditorId);
   await api.setSetting('quota.enforce', 'enforce');
-  await setStorageBackfilled(api.app, true);
   editorIds = [editorId, coEditorId];
 });
 afterAll(() => api.teardown());

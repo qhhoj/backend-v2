@@ -28,10 +28,6 @@ describe('MigrationRunner', () => {
         .map((migration) => migration.id);
       expect(new Set(ids).size).toBe(ids.length);
       const runner = test.module.get(MigrationRunner);
-
-      await expect(runner.assertNonePending()).rejects.toThrow(
-        `migrations pending: ${ids.join(', ')}; run \`worker migrate\` first`,
-      );
       expect(await runner.runPending()).toEqual(ids);
       expect(await runner.runPending()).toEqual([]);
       await expect(runner.assertNonePending()).resolves.toBeUndefined();
@@ -70,6 +66,9 @@ describe('MigrationRunner', () => {
       );
       expect(ran).toEqual(['a']);
       expect(await recordedIds(test)).toEqual(['a']);
+      await expect(runner.assertNonePending()).rejects.toThrow(
+        'migrations pending: b, c; run `worker migrate` first',
+      );
 
       failure = Object.assign(
         new Error("ENOSPC: no space left on device, open '/srv/p/secret'"),

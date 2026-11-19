@@ -4,7 +4,6 @@ import type Redis from 'ioredis';
 import type { FilterQuery, Model } from 'mongoose';
 import { AppError, REDIS } from '@libs/common';
 import {
-  MigrationRecord,
   Organization,
   OrganizationCreditEntry,
   OrganizationJudgingCharge,
@@ -15,10 +14,6 @@ import {
 import { SettingsService } from '@libs/settings';
 import { sumStoredBytesByOrganization } from './organization-storage';
 import { quotaMonthOf } from './quota-month';
-import {
-  LEGACY_STORAGE_BACKFILL_KEY,
-  STORAGE_BACKFILL_MIGRATION,
-} from './storage-backfill';
 import type {
   EffectiveLimits,
   PricedCharge,
@@ -48,24 +43,11 @@ export class QuotaLedger {
     @InjectModel(Problem.name) private readonly problems: Model<Problem>,
     @InjectModel(OrganizationJudgingCharge.name)
     private readonly judgingCharges: Model<OrganizationJudgingCharge>,
-    @InjectModel(MigrationRecord.name)
-    private readonly migrations: Model<MigrationRecord>,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  /** `enforce` blocks only after the size backfill has finished; until then the site stays in warn mode whatever the setting says. */
-  async isEnforcing(): Promise<boolean> {
-    return (
-      this.settings.get('quota.enforce') === 'enforce' &&
-      (await this.isStorageBackfilled())
-    );
-  }
-
-  /** The `migrations` row, which a Redis flush cannot erase; else the Redis flag of earlier releases. */
-  async isStorageBackfilled(): Promise<boolean> {
-    if (await this.migrations.exists({ _id: STORAGE_BACKFILL_MIGRATION }))
-      return true;
-    return (await this.redis.get(LEGACY_STORAGE_BACKFILL_KEY)) === '1';
+  isEnforcing(): boolean {
+    return this.settings.get('quota.enforce') === 'enforce';
   }
 
   monthKeyOf(now: Date): string {

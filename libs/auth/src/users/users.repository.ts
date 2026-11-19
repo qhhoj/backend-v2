@@ -288,8 +288,7 @@ export class UsersRepository {
         {
           _id: userId,
           isTotpEnabled: true,
-          // legacy documents may lack the field; $in with null matches absence
-          lastTotpTimecode: previous === 0 ? { $in: [0, null] } : previous,
+          lastTotpTimecode: previous,
         },
         { $set: { lastTotpTimecode: next } },
       )

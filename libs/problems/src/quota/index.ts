@@ -4,4 +4,3 @@ export * from './organization-storage';
 export * from './judging-charges.service';
 export * from './quota-ledger.service';
 export * from './quota-ledger.module';
-export * from './storage-backfill';

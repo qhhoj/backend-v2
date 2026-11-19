@@ -155,23 +155,6 @@ describe('automatic publish after the contest', () => {
     expect(await isPublic(problem)).toBe(true);
   });
 
-  it('treats a contest row without an outcome field as due', async () => {
-    const editor = await seedUser(worker, { permissions: RIGHTS });
-    const problem = await seedProblem(worker, {
-      isPublic: false,
-      authors: [editor._id],
-    });
-    const contest = await contestOf(editor._id, [problem]);
-    await worker.db
-      .collection('contests')
-      .updateOne(
-        { _id: toUuid(contest._id) as never },
-        { $unset: { autoPublishOutcome: '' } },
-      );
-    expect(await service.run(contest._id)).toBe('published');
-    expect(await isPublic(problem)).toBe(true);
-  });
-
   it('does not publish or release a problem deleted after it was read', async () => {
     const repository = worker.module.get(ContestPublishRepository);
     const problem = await seedProblem(worker, {

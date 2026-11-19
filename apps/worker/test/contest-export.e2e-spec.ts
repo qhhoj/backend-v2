@@ -292,15 +292,15 @@ describe('contest export', () => {
       fileAged(contestExportPath(root, newId()), weekOld),
       fileAged(contestDataPath(root, newId()), weekOld),
       fileAged(join(root, `.${newId()}.tmp`), dayOld),
-      fileAged(join(root, `${newId()}.export.zip.run.tmp`), dayOld),
     ];
     const kept = [
       fileAged(contestExportPath(root, newId()), hours(6 * 24)),
       fileAged(join(root, `.${newId()}.tmp`), hours(23)),
       fileAged(join(root, 'notes.zip'), weekOld),
       fileAged(join(root, 'readme.txt'), weekOld),
+      fileAged(join(root, `${newId()}.export.zip.run.tmp`), dayOld),
     ];
-    expect(await worker.module.get(ContestZipSweepService).sweep()).toBe(4);
+    expect(await worker.module.get(ContestZipSweepService).sweep()).toBe(3);
     expect(removed.filter((path) => existsSync(path))).toEqual([]);
     expect(kept.filter((path) => !existsSync(path))).toEqual([]);
   });

@@ -54,7 +54,7 @@ export class GenerationsRepository {
       .lean();
     return rows.map((row) => ({
       id: uuidStr(row._id),
-      feature: row.feature ?? 'generate.polygon',
+      feature: row.feature,
     }));
   }
 

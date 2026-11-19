@@ -199,9 +199,8 @@ export class RegistrationService {
   /** Null when the catalog has no active C++17. */
   private async defaultLanguageId(): Promise<string | null> {
     const language = await this.languages
-      // A row stored before `isActive` existed has no field and is active (`isLanguageActive`).
       .findOne(
-        { key: DEFAULT_LANGUAGE_KEY, isActive: { $ne: false } },
+        { key: DEFAULT_LANGUAGE_KEY, isActive: true },
         { _id: 1 },
       )
       .lean()
