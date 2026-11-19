@@ -22674,7 +22674,7 @@
     },
     "/api/internal/admin/users/{username}/social-links": {
       "delete": {
-        "description": "Requires `auth.change_user` and a browser session. No Google, GitHub or Facebook identity signs in to the account any more (a provider can link again only through a verified e-mail matching the account's current one). Sessions already open stay: set a password to end them. Recorded as a `user` revision `staff_remove_social_links`.\nErrors: 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack, 404 `not_found`. Returns 204.",
+        "description": "Requires `auth.change_user` and a browser session. No Google, GitHub or Facebook identity signs in to the account any more (a provider can link again only through a verified e-mail matching the account's current one). Their open sessions end. Recorded as a `user` revision `staff_remove_social_links`.\nErrors: 403 `forbidden` for yourself, a superuser unless you are one, or a user holding a permission you lack, 404 `not_found`. Returns 204.",
         "operationId": "UserEditingController_removeSocialLinks",
         "parameters": [
           {
@@ -32020,7 +32020,7 @@
         "x-enveloped": true
       },
       "post": {
-        "description": "Requires `judge.add_organization`. The creator is always an admin;\n`adminIds` adds more. New organizations are unlisted until staff lists\nthem, and the short name defaults to the first 20 characters of the slug.\n`isUnlisted`, `slots` and `shortName` need `judge.edit_all_organization`\n(403 `forbidden`). A taken slug is 400 `validation_failed`. A user may\nadminister at most three organizations unless the actor holds\n`judge.spam_organization`: issue code `admin_cap` on `adminIds`, a 403\nfor the creator and a 400 for another admin. Recorded in the history.",
+        "description": "Requires `judge.add_organization`. The creator is always an admin;\n`adminIds` adds more (others than the creator need\n`judge.edit_all_organization`: 422 `not_a_member`). New organizations are unlisted until staff lists\nthem, and the short name defaults to the first 20 characters of the slug.\n`isUnlisted`, `slots` and `shortName` need `judge.edit_all_organization`\n(403 `forbidden`). A taken slug is 400 `validation_failed`. A user may\nadminister at most three organizations unless the actor holds\n`judge.spam_organization`: issue code `admin_cap` on `adminIds`, a 403\nfor the creator and a 400 for another admin. Recorded in the history.",
         "operationId": "OrganizationEditingController_create",
         "parameters": [],
         "requestBody": {
@@ -32333,7 +32333,7 @@
         ]
       },
       "patch": {
-        "description": "Organization administrators only. Changes the fields sent (null is refused\nfor `slots`); `about` is re-rendered, `adminIds` is the whole new admin\nlist and must not be empty, and new admins are subject to the three-\norganization cap. Staff fields `isUnlisted`, `slots` and `shortName` need\n`judge.edit_all_organization`. A slug that is taken is 400\n`validation_failed`; the admin cap is issue code `admin_cap`. New admins\nbecome members, so 409 `organization_full` when those not yet members do\nnot fit in `slots`. Changed fields are recorded in the history.",
+        "description": "Organization administrators only. Changes the fields sent (null is refused\nfor `slots`); `about` is re-rendered, `adminIds` is the whole new admin\nlist and must not be empty, and new admins are subject to the three-\norganization cap. A new admin must already be a member, unless the actor\nholds `judge.edit_all_organization`: 422 `not_a_member` on `adminIds`. An\nadmin who is removed loses the admin role when they administer no other\norganization. Staff fields `isUnlisted`, `slots` and `shortName` need\n`judge.edit_all_organization`. A slug that is taken is 400\n`validation_failed`; the admin cap is issue code `admin_cap`. New admins\nbecome members, so 409 `organization_full` when those not yet members do\nnot fit in `slots`. Changed fields are recorded in the history.",
         "operationId": "OrganizationEditingController_update",
         "parameters": [
           {
