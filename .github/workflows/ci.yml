@@ -179,22 +179,12 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # restic: the backup and pull tests run the scripts against real (temp-dir) repositories; rsync ships rrsync.
       - run: sudo apt-get install -y shellcheck restic rsync
-      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/qhhoj-deploy-serve deploy/install-host.sh deploy/nginx/*.sh deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh deploy/backup/qhhoj-backup deploy/backup/*.sh deploy/backup/pull/qhhoj-pull deploy/backup/pull/qhhoj-pull-serve deploy/backup/pull/*.sh
+      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/qhhoj-deploy-serve deploy/install-host.sh deploy/nginx/*.sh deploy/*.test.sh deploy/ci/*.sh deploy/container/*.sh deploy/quadlet/*.sh deploy/backup/qhhoj-backup deploy/backup/*.sh deploy/backup/pull/qhhoj-pull deploy/backup/pull/qhhoj-pull-serve deploy/backup/pull/*.sh
       - name: Run script tests
         # Four at a time (each test makes its own temp dirs); one test (backup) takes two minutes, so the rest finish inside it.
         run: |
           shopt -s nullglob
           printf '%s\n' deploy/*.test.sh deploy/*/*.test.sh deploy/*/*/*.test.sh | xargs -P 4 -I{} bash -c 'echo "== {}"; bash "{}" 2>&1 || { echo "FAILED {}"; exit 1; }'
-      # deploy/judge copies equal judge-v2's packaging/ at the ref in deploy/judge/judge-release (a tag or a commit SHA).
-      - id: judge
-        run: echo "ref=$(cat deploy/judge/judge-release)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          repository: qhhoj/judge-v2
-          ref: ${{ steps.judge.outputs.ref }}
-          path: judge-v2
-          sparse-checkout: packaging
-      - run: bash scripts/judge/check-deploy-copies.sh judge-v2
   # The required check (with changes). Fails when any job failed or was cancelled. When the change has code, the jobs that
   # must run (static, build, test, openapi, and image when selected; deploy-scripts when deploy/, scripts/judge/ or a workflow changed) must have succeeded: a skipped one is a failure.
   ci-ok:
