@@ -230,7 +230,7 @@ export class QuotaLedger {
     if (unlimited) return;
     const usedBytes = await this.usedStorageBytes(organizationId);
     if (usedBytes + addedBytes <= limit) return;
-    if (await this.isEnforcing())
+    if (this.isEnforcing())
       throw quotaExceeded({
         meter: 'storage',
         limit,

@@ -89,7 +89,7 @@ export class QuotaService {
     const amount = this.priceOf(request);
     const { credits: limit, unlimited } =
       await this.ledger.limitsOf(organizationId);
-    if (amount === 0 || unlimited || !(await this.ledger.isEnforcing())) return;
+    if (amount === 0 || unlimited || !this.ledger.isEnforcing()) return;
     const key = { organizationId, month: this.ledger.monthKeyOf(now) };
     if ((await this.creditsUsed(key)) + amount > limit)
       throw await this.refusalFor(key, limit, amount);
@@ -138,7 +138,7 @@ export class QuotaService {
     const { credits: limit, unlimited } = await this.ledger.limitsOf(
       key.organizationId,
     );
-    const enforcing = !unlimited && (await this.ledger.isEnforcing());
+    const enforcing = !unlimited && this.ledger.isEnforcing();
     if (enforcing && charge.amount > limit)
       throw await this.refusalFor(key, limit, charge.amount);
     await this.ensureUsageRow(key);
