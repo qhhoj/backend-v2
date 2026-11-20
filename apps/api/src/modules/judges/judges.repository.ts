@@ -20,9 +20,7 @@ export type JudgeChanges = Partial<
 
 @Injectable()
 export class JudgesRepository {
-  constructor(
-    @InjectModel(Judge.name) private readonly judges: Model<Judge>,
-  ) {}
+  constructor(@InjectModel(Judge.name) private readonly judges: Model<Judge>) {}
 
   /** Connected judges and judges that may connect at all (neither blocked nor disabled). */
   async counts(): Promise<{ online: number; total: number }> {
