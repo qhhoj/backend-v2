@@ -10,6 +10,7 @@ import { GenerationsService } from '../generations/generations.service';
 import { RunsService } from '../submissions/runs.service';
 import type { Claimed, GraceOutcome } from '../submissions/runs.service';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
+import { DispatchQueue } from './dispatch-queue';
 import { GraceRegistry } from './grace';
 import { GRACE_CLOCK, TIMER_GRACE_CLOCK } from './grace-clock';
 import type { GraceClock } from './grace-clock';
@@ -18,7 +19,6 @@ import { RunDeadlines } from './run-deadlines';
 import type { RunBudget } from './run-deadlines';
 import {
   freeSlots,
-  insertQueued,
   mayStartGeneration,
   nextFor,
   pickJudge,
@@ -46,17 +46,6 @@ const GRACE_OUTCOME_TEXT: Record<GraceOutcome, string> = {
 /** A run resumed after a bridge restart whose row gives no budget (problem gone, or Started stored before its case count was kept) assumes this time limit and no case count. */
 const UNKNOWN_RUN_BUDGET: RunBudget = { timeLimitSeconds: 20, caseCount: null };
 
-const isSameEntry = (left: QueuedSubmission, right: QueuedSubmission) =>
-  left.priority === right.priority &&
-  left.judgeName === right.judgeName &&
-  left.bannedJudges.join() === right.bannedJudges.join() &&
-  left.retryBannedJudges.join() === right.retryBannedJudges.join() &&
-  left.requiredFeatures.join() === right.requiredFeatures.join() &&
-  JSON.stringify(left.refusedBy) === JSON.stringify(right.refusedBy) &&
-  left.retryAfter === right.retryAfter &&
-  left.waitsForData === right.waitsForData &&
-  left.dataVersion === right.dataVersion;
-
 /** A session between Hello and `register`: it holds the runs it resumed; `plan` is open until its Welcome goes out. `reading` holds the listed runs whose row is still being read (by `windingKey`), so a resync tick never requeues them meanwhile; a QU row of that generation or newer voids such a hold, and the resume then drops the run. Kept out of `inFlight`: aborts, grace and slots see a run only once it is resumed. */
 interface Resuming {
   judge: DispatchTarget;
@@ -69,8 +58,7 @@ interface Resuming {
 export class DispatcherService {
   private readonly logger = new Logger(DispatcherService.name);
   private readonly judges = new Map<string, DispatchTarget>();
-  private readonly queue: QueuedSubmission[] = [];
-  private readonly queued = new Map<string, QueuedSubmission>();
+  private readonly queue = new DispatchQueue();
   /** Sessions still in their handshake, by judge name. */
   private readonly resuming = new Map<string, Resuming>();
   private readonly grace: GraceRegistry;
@@ -138,9 +126,9 @@ export class DispatcherService {
   /** A judge with a free slot takes queued work until its slots are full or nothing fits. */
   async offerWork(judge: DispatchTarget): Promise<void> {
     while (this.takesWork(judge)) {
-      const next = nextFor(judge, this.queue, this.connected());
+      const next = nextFor(judge, this.queue.ordered(), this.connected());
       if (!next) break;
-      this.removeQueued(next.id);
+      this.queue.remove(next.id);
       await this.dispatch(judge, next);
     }
     await this.offerGenerations(judge);
@@ -153,7 +141,7 @@ export class DispatcherService {
       this.generations.hasQueuedFor(judge) &&
       mayStartGeneration(
         judge,
-        nextFor(judge, this.queue, this.connected()) !== null,
+        nextFor(judge, this.queue.ordered(), this.connected()) !== null,
       )
     )
       await this.generations.startFor(judge);
@@ -371,7 +359,7 @@ export class DispatcherService {
     }
     if (this.abortResumed(submissionId)) return;
     if (this.grace.requestAbort(submissionId)) return;
-    this.removeQueued(submissionId);
+    this.queue.remove(submissionId);
   }
 
   async setDisabled(name: string, isDisabled: boolean): Promise<void> {
@@ -416,23 +404,16 @@ export class DispatcherService {
 
   /** Resync tick: judges that answered RETRY may take those rows again. */
   async clearRetryBans(): Promise<void> {
-    for (const entry of this.queue)
+    for (const entry of this.queue.ordered())
       if (entry.retryBannedJudges.length)
-        this.replaceQueued({ ...entry, retryBannedJudges: [] });
+        this.queue.replace({ ...entry, retryBannedJudges: [] });
     for (const judge of this.connected()) await this.offerWork(judge);
-  }
-
-  /** Swaps a queued entry for a copy with other constraints, keeping its place in the queue. */
-  private replaceQueued(entry: QueuedSubmission): void {
-    const index = this.queue.findIndex(({ id }) => id === entry.id);
-    this.queue[index] = entry;
-    this.queued.set(entry.id, entry);
   }
 
   /** Resync tick: a queued entry takes the judge features its problem needs now and its data version (a sync or a data edit may have changed them since the row was read; a new version lifts older refusals); its other fields stay, as some come only from a command. */
   async refreshRequiredFeatures(rows: QueuedSubmission[]): Promise<void> {
     const changed = rows.flatMap((row) => {
-      const queued = this.queued.get(row.id);
+      const queued = this.queue.get(row.id);
       return queued &&
         (queued.requiredFeatures.join() !== row.requiredFeatures.join() ||
           queued.dataVersion !== row.dataVersion)
@@ -446,7 +427,7 @@ export class DispatcherService {
         : [];
     });
     if (!changed.length) return;
-    for (const entry of changed) this.replaceQueued(entry);
+    for (const entry of changed) this.queue.replace(entry);
     for (const judge of this.connected()) await this.offerWork(judge);
   }
 
@@ -456,7 +437,7 @@ export class DispatcherService {
   }
 
   hasQueued(submissionId: string): boolean {
-    return this.queued.has(submissionId);
+    return this.queue.has(submissionId);
   }
 
   connectedNames(): string[] {
@@ -478,7 +459,7 @@ export class DispatcherService {
   }
 
   queuedIds(): string[] {
-    return this.queue.map((submission) => submission.id);
+    return this.queue.ids();
   }
 
   /** Shutdown: no more dispatching, no grace timer fires; sessions ending from now on leave their rows P/G. */
@@ -497,13 +478,11 @@ export class DispatcherService {
   private async enqueueOne(submission: QueuedSubmission): Promise<void> {
     this.voidOlderRuns(submission);
     if (this.isHeld(submission.id)) return;
-    const queued = this.queued.get(submission.id);
-    if (queued && isSameEntry(queued, submission)) return;
-    this.removeQueued(submission.id);
+    if (this.queue.holdsSame(submission)) return;
+    this.queue.remove(submission.id);
     const judge = this.stopped ? null : pickJudge(this.connected(), submission);
     if (judge) return this.dispatch(judge, submission);
-    insertQueued(this.queue, submission);
-    this.queued.set(submission.id, submission);
+    this.queue.insert(submission);
   }
 
   /** The row is QU at `generation`, so a run of that generation or older still held (live, resumed by a handshaking session, or in grace) is void: the judge is told to stop, and the slot comes back with its `Final{ABORTED}` (`winding`). A newer run (claimed after the row was read), a claim in flight, and a run whose Final is being stored (`settling`: a RETRY's own requeue read by a resync tick before the session ended the run) are kept. */
@@ -762,13 +741,5 @@ export class DispatcherService {
   /** Registered sessions that are not ending. */
   private connected(): DispatchTarget[] {
     return [...this.judges.values()].filter((judge) => !judge.isClosed);
-  }
-
-  private removeQueued(submissionId: string): void {
-    if (!this.queued.delete(submissionId)) return;
-    const index = this.queue.findIndex(
-      (submission) => submission.id === submissionId,
-    );
-    if (index !== -1) this.queue.splice(index, 1);
   }
 }
