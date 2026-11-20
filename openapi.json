@@ -8561,6 +8561,14 @@
       },
       "OrganizationUsageResponse": {
         "properties": {
+          "costs": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UsageCostsResponse"
+              }
+            ],
+            "description": "What one problem, one contest or 10 MiB of data costs in credits."
+          },
           "credits": {
             "allOf": [
               {
@@ -8637,6 +8645,7 @@
           "judging",
           "storage",
           "quota",
+          "costs",
           "recent",
           "topProblems"
         ],
@@ -17920,6 +17929,28 @@
         },
         "required": [
           "url"
+        ],
+        "type": "object"
+      },
+      "UsageCostsResponse": {
+        "properties": {
+          "contest": {
+            "description": "Credits to create or clone an organization contest.",
+            "type": "number"
+          },
+          "dataPer10MiB": {
+            "description": "Credits per 10 MiB (started) of an uploaded data archive.",
+            "type": "number"
+          },
+          "problem": {
+            "description": "Credits to create or clone an organization problem.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "problem",
+          "contest",
+          "dataPer10MiB"
         ],
         "type": "object"
       },
@@ -34204,7 +34235,7 @@
     },
     "/api/internal/organizations/{slug}/usage": {
       "get": {
-        "description": "Organization administrators only. Returns the current month's credits,\njudging milliseconds and storage against the organization's limits,\nwhether quotas are enforced, the most recent credit entries with the users\nwho spent them, and the five problems that used the most judging time this\nmonth.",
+        "description": "Organization administrators only. Returns the current month's credits,\njudging milliseconds and storage against the organization's limits,\nwhether quotas are enforced, the credit price of a problem, a contest and\n10 MiB of data (`costs`), the most recent credit entries with the users\nwho spent them, and the five problems that used the most judging time this\nmonth.",
         "operationId": "OrganizationUsageController_one",
         "parameters": [
           {

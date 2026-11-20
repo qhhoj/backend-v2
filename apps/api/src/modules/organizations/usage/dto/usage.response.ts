@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import type { QuotaMeter } from '../../quota/quota.types';
+import type { QuotaCosts, QuotaMeter } from '../../quota/quota.types';
 
 export class QuotaMeterResponse implements QuotaMeter {
   /**
@@ -64,6 +64,16 @@ export class UsageQuotaResponse {
   @ApiProperty({ type: Number, nullable: true }) storageBytes!: number | null;
 }
 
+/** Credit prices of the site, the ones charged when a credit is spent. */
+export class UsageCostsResponse implements QuotaCosts {
+  /** Credits to create or clone an organization problem. */
+  problem!: number;
+  /** Credits to create or clone an organization contest. */
+  contest!: number;
+  /** Credits per 10 MiB (started) of an uploaded data archive. */
+  dataPer10MiB!: number;
+}
+
 export class OrganizationUsageResponse {
   /** The organization. */
   organization!: UsageOrganizationResponse;
@@ -81,6 +91,8 @@ export class OrganizationUsageResponse {
   storage!: QuotaMeterResponse;
   /** The caps staff set for this organization. */
   quota!: UsageQuotaResponse;
+  /** What one problem, one contest or 10 MiB of data costs in credits. */
+  costs!: UsageCostsResponse;
   /** The most recent credit entries. */
   recent!: CreditEntryResponse[];
   /** Up to five problems that used the most judging time this month, heaviest first. */

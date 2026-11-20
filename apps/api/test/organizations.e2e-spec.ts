@@ -164,6 +164,7 @@ afterAll(() => api.teardown());
       judgingMs: number | null;
       storageBytes: number | null;
     };
+    costs: { problem: number; contest: number; dataPer10MiB: number };
     topProblems: Array<{
       code: string;
       name: string;
@@ -256,6 +257,30 @@ afterAll(() => api.teardown());
         ['refund', -10],
         ['problem', 10],
       ]);
+    });
+
+    it('gives the credit prices from the quota.cost settings', async () => {
+      const world = await seedOrganizationWorld(api);
+      await api.setSetting('quota.cost.problem', 7);
+      await api.setSetting('quota.cost.contest', 13);
+      await api.setSetting('quota.cost.dataPer10MiB', 3);
+      try {
+        const body = dataOf<Usage>(
+          await get(
+            usageUrl(world.organization.slug),
+            world.admin.session,
+          ).expect(200),
+        );
+        expect(body.costs).toEqual({
+          problem: 7,
+          contest: 13,
+          dataPer10MiB: 3,
+        });
+      } finally {
+        await api.setSetting('quota.cost.problem', 10);
+        await api.setSetting('quota.cost.contest', 20);
+        await api.setSetting('quota.cost.dataPer10MiB', 1);
+      }
     });
 
     it.each(['enforce', 'warn'])(

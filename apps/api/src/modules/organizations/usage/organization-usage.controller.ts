@@ -47,7 +47,8 @@ export class OrganizationUsageController {
    * @remarks
    * Organization administrators only. Returns the current month's credits,
    * judging milliseconds and storage against the organization's limits,
-   * whether quotas are enforced, the most recent credit entries with the users
+   * whether quotas are enforced, the credit price of a problem, a contest and
+   * 10 MiB of data (`costs`), the most recent credit entries with the users
    * who spent them, and the five problems that used the most judging time this
    * month.
    */
