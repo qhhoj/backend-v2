@@ -38,6 +38,7 @@ import { ContestStreamsController } from './announcements/contest-streams.contro
 import { ContestStreamsService } from './announcements/contest-streams.service';
 import { ContestParticipationController } from './participation/contest-participation.controller';
 import { ContestParticipationService } from './participation/contest-participation.service';
+import { ContestDisqualificationService } from './participation/contest-disqualification.service';
 import { ParticipationAdminController } from './participation/participation-admin.controller';
 import { ParticipationAdminRepository } from './participation/participation-admin.repository';
 import { ParticipationAdminService } from './participation/participation-admin.service';
@@ -132,6 +133,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestEditFieldsService,
     ContestEditingService,
     ContestParticipationService,
+    ContestDisqualificationService,
     ContestProblemOpsService,
     ContestPublishService,
     ContestRemovalRepository,
