@@ -4,7 +4,7 @@ import type { Principal, UserDocument } from '@libs/auth';
 import { AppError, REDIS, ValidationFailedError } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type Redis from 'ioredis';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { editableTarget } from '../editing/editable-target';
 import { AccessRepository } from './access.repository';
 import type { GroupRow } from './access.repository';

@@ -5,7 +5,7 @@ import type { AuthContext } from '@libs/auth';
 import { AppError, Paginated, unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { PolygonSyncRun } from '@libs/database';
-import { UserSummaryResponse } from '../core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../shared/dto/user-summary.response';
 import { ProblemImportsService } from '../imports/problem-imports.service';
 import { PolygonSyncRunResponse } from './dto/polygon-sync-run.response';
 import { PolygonSyncRunsQueryDto } from './dto/polygon-sync-runs.dto';

@@ -10,7 +10,7 @@ import { LanguagesQuerier } from '../catalog/languages.querier';
 import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import type { ProblemDocument } from '../core/problems.repository';
 import { ProblemsRepository } from '../core/problems.repository';
-import { RevisionsRepository } from '../core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import type { PutExternalJudgeDto } from './dto/external-judge.dto';
 import type {
   ExternalJudgeLinkResponse,

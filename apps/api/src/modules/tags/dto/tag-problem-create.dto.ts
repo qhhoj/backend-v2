@@ -1,7 +1,7 @@
 import { Transform } from 'class-transformer';
 import { IsUrl, Length, MaxLength } from 'class-validator';
 
-import { trim } from '../../problems/core/dto/transforms';
+import { trim } from '../../shared/dto/transforms';
 
 export class CreateTagProblemDto {
   /** URL of the problem on a supported judge; the problem code and judge are derived from it. */

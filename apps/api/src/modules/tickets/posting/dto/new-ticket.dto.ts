@@ -11,7 +11,7 @@ import {
   TICKET_ISSUE_URL_MAX_LENGTH,
   TICKET_TITLE_MAX_LENGTH,
 } from '@libs/community';
-import { trim } from '../../../problems/core/dto/transforms';
+import { trim } from '../../../shared/dto/transforms';
 
 export class NewTicketMessageDto {
   /** Message text in Markdown. */

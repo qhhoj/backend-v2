@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { uuidStr } from '@libs/database';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { ShareAccessService } from '../core/share-access.service';
 import { shareRevision } from '../core/share-revision';
 import { SharesRepository } from '../core/shares.repository';

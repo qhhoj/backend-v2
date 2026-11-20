@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
-import { ProblemsApiModule } from '../problems/problems-api.module';
+import { SharedApiModule } from '../shared/shared-api.module';
 import { ActiveUsersStore } from './capture/active-users.store';
 import { ActivityWriterRepository } from './capture/activity-writer.repository';
 import { UserActivityCaptureService } from './capture/user-activity-capture.service';
@@ -13,7 +13,7 @@ import { ActivitySummaryService } from './staff/activity-summary.service';
 import { UserActivityStaffController } from './staff/user-activity-staff.controller';
 
 @Module({
-  imports: [AuthModule, ProblemsApiModule],
+  imports: [AuthModule, SharedApiModule],
   controllers: [UserActivityStaffController],
   providers: [
     ActivityWriterRepository,

@@ -5,7 +5,7 @@ import { AppError, Paginated, RateLimitService, unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Share } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import {
   MANAGE_LIMIT,
   MANAGE_WINDOW_SECONDS,

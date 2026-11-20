@@ -19,7 +19,7 @@ import {
   RENDER_PREVIEW_LIMIT,
   RENDER_PREVIEW_WINDOW_SECONDS,
 } from '../core/rate-limits';
-import { RevisionsRepository } from '../core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 
 /** Statement text outside the problem document's own fields: translations, editorial and the markdown preview. */
 @Injectable()

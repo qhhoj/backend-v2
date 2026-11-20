@@ -17,7 +17,7 @@ import { discordText, DiscordWebhooksService } from '@libs/community';
 import { OrganizationAccess } from '../../organizations/core/organization-access';
 import type { OrganizationDocument } from '../../organizations/core/organizations.repository';
 import { OrganizationsService } from '../../organizations/core/organizations.service';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { renderField } from '../../problems/editing/problem-markup';
 import { BlogAccess } from '../core/blog-access';
 import { BlogPostsRepository } from '../core/blog-posts.repository';

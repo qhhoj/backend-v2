@@ -15,7 +15,7 @@ import type {
   PolygonImportErrorCode,
 } from '@libs/problems';
 import type { ProblemDocument } from '../core/problems.repository';
-import { RevisionsRepository } from '../core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { ProblemImportsService } from '../imports/problem-imports.service';
 import { UpdatePolygonLinkDto } from './dto/polygon-link.dto';
 import {

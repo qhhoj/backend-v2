@@ -4,7 +4,7 @@ import type { AuthContext } from '@libs/auth';
 import { AppError, Paginated, unique } from '@libs/common';
 import type { HasMorePageMetaResponse } from '@libs/common';
 import { ACTIVITY_PAGE_SIZE } from '@libs/community';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { activityFilter } from './activity-filter';
 import type { ActivityScope } from './activity-filter';
 import { ActivityLogsRepository } from './activity-logs.repository';

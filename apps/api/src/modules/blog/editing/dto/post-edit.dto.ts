@@ -14,7 +14,7 @@ import {
 } from 'class-validator';
 import { BLOG_TITLE_MAX_LENGTH } from '@libs/community';
 import { MAX_MARKDOWN_LENGTH } from '../../../problems/core/dto/limits';
-import { IsTimestamp } from '../../../problems/core/dto/timestamp';
+import { IsTimestamp } from '../../../shared/dto/timestamp';
 
 /** Empty, an http(s) URL or a site path (legacy free text up to 150). */
 const IMAGE_PATTERN = /^(|https?:\/\/[^\s"'<>]+|\/[^\s"'<>]*)$/;

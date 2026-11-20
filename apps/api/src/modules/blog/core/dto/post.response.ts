@@ -3,7 +3,7 @@ import { uuidStr } from '@libs/database';
 import type { BlogPost } from '@libs/database';
 import { VOTE_SCORES } from '@libs/community';
 import type { VoteScore } from '@libs/community';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 import { OrganizationSummaryResponse } from '../../../organizations/core/dto/organization.response';
 
 export class PostListItemResponse {

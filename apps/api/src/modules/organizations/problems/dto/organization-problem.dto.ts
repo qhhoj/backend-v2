@@ -16,7 +16,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { trim } from '../../../problems/core/dto/transforms';
+import { trim } from '../../../shared/dto/transforms';
 
 export const ARCHIVE_FILTERS = ['false', 'true', 'all'] as const;
 export type ArchiveFilter = (typeof ARCHIVE_FILTERS)[number];

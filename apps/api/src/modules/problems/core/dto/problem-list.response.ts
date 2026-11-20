@@ -8,7 +8,7 @@ import { statementFor } from '@libs/problems';
 import { CatalogItemResponse } from './problem-meta.response';
 import { ApiProperty } from '@nestjs/swagger';
 import { VIEWER_MARKS, type ViewerStatus } from '../viewer-status.repository';
-import { UserSummaryResponse } from './user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 
 /** What is still missing before a problem is ready; the rules mirror the admin editor's setup checklist. */
 export class ProblemSetupResponse {

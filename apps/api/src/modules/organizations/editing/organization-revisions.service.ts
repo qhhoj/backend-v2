@@ -5,8 +5,8 @@ import { Paginated, unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Organization, Revision } from '@libs/database';
 import { fieldDiff } from '@libs/problems';
-import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { UserSummaryResponse } from '../../shared/dto/user-summary.response';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { OrganizationRevisionResponse } from './dto/organization-revision.response';
 import type { OrganizationRevisionAction } from './dto/organization-revision.response';
 

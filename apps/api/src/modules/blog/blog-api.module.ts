@@ -5,7 +5,7 @@ import { CommentsApiModule } from '../comments/comments-api.module';
 import { DiscordWebhooksModule } from '@libs/community';
 import { ContributionsModule } from '../contributions/contributions.module';
 import { OrganizationsApiModule } from '../organizations/organizations-api.module';
-import { ProblemsApiModule } from '../problems/problems-api.module';
+import { SharedApiModule } from '../shared/shared-api.module';
 import { BlogAccessModule } from './core/blog-access.module';
 import { BlogPostsController } from './core/blog-posts.controller';
 import { BlogDraftsController } from './drafts/blog-drafts.controller';
@@ -27,7 +27,7 @@ import { OrganizationPostsController } from './core/organization-posts.controlle
     OrganizationsApiModule,
     ContributionsModule,
     DiscordWebhooksModule,
-    ProblemsApiModule,
+    SharedApiModule,
   ],
   controllers: [
     BlogPostsController,

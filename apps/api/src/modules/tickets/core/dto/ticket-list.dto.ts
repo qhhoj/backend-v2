@@ -12,7 +12,7 @@ import {
   Min,
 } from 'class-validator';
 import { toArray } from '@libs/common';
-import { toBoolean, trim } from '../../../problems/core/dto/transforms';
+import { toBoolean, trim } from '../../../shared/dto/transforms';
 
 export class TicketPageQueryDto {
   /** 1-based page number. */

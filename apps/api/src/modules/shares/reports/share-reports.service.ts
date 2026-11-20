@@ -10,7 +10,7 @@ import {
 } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { ShareReport } from '@libs/database';
-import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../shared/dto/user-summary.response';
 import type { SettledReportStatus } from '../../comments/reports/dto/report-comment.dto';
 import { ShareSummaryResponse } from '../core/dto/share.response';
 import {

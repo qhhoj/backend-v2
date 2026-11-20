@@ -17,7 +17,7 @@ import {
 import { IsProblemCode } from '../../core/dto/problem-code.decorator';
 import { toArray, LowercaseUuid } from '@libs/common';
 import { LANGUAGE_PAIR, SYNC_JOB_ID } from '@libs/problems';
-import { toBoolean } from '../../core/dto/transforms';
+import { toBoolean } from '../../../shared/dto/transforms';
 
 export const IMPORT_MODES = ['create', 'update'] as const;
 export type ImportMode = (typeof IMPORT_MODES)[number];

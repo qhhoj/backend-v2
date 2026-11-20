@@ -19,7 +19,7 @@ import { maxTestcasesFor } from '../core/dto/limits';
 import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import { ProblemsRepository } from '../core/problems.repository';
 import type { ProblemDocument } from '../core/problems.repository';
-import { RevisionsRepository } from '../core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { SourceChecksService } from './source-checks.service';
 
 /** A data write lost to another one that landed first (409 `conflict`). */

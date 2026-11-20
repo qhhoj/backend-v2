@@ -39,7 +39,7 @@ import {
   type ProblemDocument,
 } from '../core/problems.repository';
 import { ProblemsService } from '../core/problems.service';
-import { RevisionsRepository } from '../core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 
 /** What a submission or a user's points are worth depends on these (legacy rescored on each). */
 const RESCORE_FIELDS = ['points', 'partial', 'isOrganizationPrivate'] as const;

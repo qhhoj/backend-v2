@@ -4,7 +4,7 @@ import {
   COMMENT_REPORT_STATUSES,
 } from '@libs/database';
 import type { CommentReportReason, CommentReportStatus } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 import { CommentPageLinkResponse } from '../../core/dto/comment.response';
 
 export class CommentReportEntryResponse {

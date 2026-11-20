@@ -2,7 +2,7 @@ import { ApiExtraModels, ApiProperty, getSchemaPath } from '@nestjs/swagger';
 import { ANY_JSON_VALUE } from '../../../settings/dto/any-json-value';
 import { uuidStr } from '@libs/database';
 import type { Revision } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 
 export const FLATPAGE_REVISION_ACTIONS = ['create', 'edit', 'delete'] as const;
 export type FlatpageRevisionAction = (typeof FLATPAGE_REVISION_ACTIONS)[number];

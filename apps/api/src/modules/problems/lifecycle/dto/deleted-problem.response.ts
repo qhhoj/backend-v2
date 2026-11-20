@@ -1,6 +1,6 @@
 import type { UserDocument } from '@libs/auth';
 import type { Problem } from '@libs/database';
-import { UserSummaryResponse } from '../../core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 import { daysLeft } from '../problem-lifecycle-rules';
 
 export class DeletedProblemResponse {

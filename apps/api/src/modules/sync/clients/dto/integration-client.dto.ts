@@ -15,7 +15,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { IsTimestamp } from '../../../problems/core/dto/timestamp';
+import { IsTimestamp } from '../../../shared/dto/timestamp';
 
 export class CreateIntegrationClientDto {
   /** Label to recognise the client, 1-60 characters. */

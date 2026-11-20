@@ -4,7 +4,7 @@ import {
 } from '@libs/database';
 import type { ContestPublicRankingLink } from '@libs/database';
 import { IsIn, IsInt, IsString, Max, Min, ValidateIf } from 'class-validator';
-import { IsTimestamp } from '../../../problems/core/dto/timestamp';
+import { IsTimestamp } from '../../../shared/dto/timestamp';
 
 export class UpdateRankingLinkDto {
   /**

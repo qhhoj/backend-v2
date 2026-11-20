@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrincipalService, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, isDuplicateKey, ValidationFailedError } from '@libs/common';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { USERNAME_TAKEN } from '../core/dto/username';
 import { changeableTarget } from './editable-target';
 

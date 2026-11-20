@@ -13,7 +13,7 @@ import type {
   ShareKind,
   SubmissionResult,
 } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 import { SubmissionBatchResponse } from '../../../submissions/core/dto/submission-detail.response';
 import {
   ShareLanguageResponse,

@@ -2,7 +2,7 @@ import { AppError, isDuplicateKey } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import { fieldDiff } from '@libs/problems';
 import type { Model } from 'mongoose';
-import type { RevisionsRepository } from '../core/revisions.repository';
+import type { RevisionsRepository } from '../../shared/revisions.repository';
 
 /** What tells one catalog apart: the revision entity, its unique field and how a missing row is named in errors. */
 export interface CatalogAdminConfig {

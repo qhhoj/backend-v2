@@ -11,7 +11,7 @@ import {
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { COMMENT_PAGE_TYPES } from '@libs/community';
 import type { CommentPageType } from '@libs/community';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 import { CommentPageLinkResponse } from '../../core/dto/comment.response';
 import { ReportedCommentResponse } from '../../reports/dto/comment-report-queue-item.response';
 

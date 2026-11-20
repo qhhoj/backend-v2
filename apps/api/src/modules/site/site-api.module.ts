@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
-import { ProblemsApiModule } from '../problems/problems-api.module';
+import { SharedApiModule } from '../shared/shared-api.module';
 import { CspReportController } from './csp/csp-report.controller';
 import { FlatpageHistoryService } from './admin/flatpage-history.service';
 import { FlatpagesAdminController } from './admin/flatpages-admin.controller';
@@ -16,7 +16,7 @@ import { MiscConfigQuerier } from './public/misc-config.querier';
 import { SiteController } from './public/site.controller';
 
 @Module({
-  imports: [AuthModule, ProblemsApiModule],
+  imports: [AuthModule, SharedApiModule],
   controllers: [
     FlatpagesController,
     SiteController,

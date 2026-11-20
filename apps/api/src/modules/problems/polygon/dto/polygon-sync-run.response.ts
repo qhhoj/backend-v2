@@ -18,7 +18,7 @@ import {
   ApiImportErrorCode,
   ApiImportErrorParams,
 } from '../../imports/dto/import-error.decorators';
-import { UserSummaryResponse } from '../../core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 
 /** One finished Polygon import or sync job. */
 export class PolygonSyncRunResponse {

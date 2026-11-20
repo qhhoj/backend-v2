@@ -5,7 +5,7 @@ import {
   TICKET_CANNED_REPLY_BODY_MAX,
   TICKET_CANNED_REPLY_TITLE_MAX,
 } from '@libs/database';
-import { trim } from '../../../problems/core/dto/transforms';
+import { trim } from '../../../shared/dto/transforms';
 
 export class CreateCannedReplyDto {
   /** Short name of the template. */

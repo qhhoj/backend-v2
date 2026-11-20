@@ -2,7 +2,7 @@ import type { ProblemSolution, StatementLanguage } from '@libs/database';
 import type { ProblemDocument } from '../problems.repository';
 import { statementFor } from '@libs/problems';
 import { ProblemRefResponse } from './problem-ref.response';
-import { UserSummaryResponse } from './user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 
 export class EditorialResponse {
   /** The problem the editorial belongs to. */

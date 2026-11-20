@@ -9,7 +9,7 @@ import {
   RateLimitService,
 } from '@libs/common';
 import { isProblemRenamed } from '@libs/problems';
-import { rejectFile, saveMultipartFile } from '../../core/multipart';
+import { rejectFile, saveMultipartFile } from '../../../shared/multipart';
 import type { ProblemDocument } from '../../core/problems.repository';
 import {
   UPLOAD_CHUNK_LIMIT,

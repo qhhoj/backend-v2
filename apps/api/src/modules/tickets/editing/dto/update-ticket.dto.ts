@@ -13,7 +13,7 @@ import {
   TICKET_NOTES_MAX_LENGTH,
   TICKET_TITLE_MAX_LENGTH,
 } from '@libs/community';
-import { trim } from '../../../problems/core/dto/transforms';
+import { trim } from '../../../shared/dto/transforms';
 
 /** Every field is optional; `RefuseNullFieldsPipe` turns an explicit `null` into `must_not_be_null`. */
 export class UpdateTicketDto {

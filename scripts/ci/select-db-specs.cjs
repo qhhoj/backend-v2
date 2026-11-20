@@ -96,6 +96,19 @@ const MODULES = [
       'apps/worker/test/polygon',
     ],
   ],
+  // Shared helpers (revisions, multipart, DTO transforms) serve these modules.
+  [
+    /^apps\/api\/src\/modules\/shared\//,
+    [
+      `${API_TESTS}problem`,
+      `${API_TESTS}comments`,
+      `${API_TESTS}contest`,
+      `${API_TESTS}organization`,
+      `${API_TESTS}ticket`,
+      `${API_TESTS}user-`,
+      'apps/bridge/test/link',
+    ],
+  ],
   [/^apps\/api\/src\/modules\/shares\//, [`${API_TESTS}shares`]],
   [/^apps\/api\/src\/modules\/seo\//, [`${API_TESTS}seo`]],
   [

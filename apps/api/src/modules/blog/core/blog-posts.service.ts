@@ -12,7 +12,7 @@ import { VotesRepository } from '../../contributions/votes.repository';
 import { OrganizationAccess } from '../../organizations/core/organization-access';
 import { OrganizationsService } from '../../organizations/core/organizations.service';
 import { OrganizationSummaryResponse } from '../../organizations/core/dto/organization.response';
-import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../shared/dto/user-summary.response';
 import { BlogAccess } from './blog-access';
 import { BlogPostsRepository } from './blog-posts.repository';
 import type { BlogPostDocument } from './blog-posts.repository';

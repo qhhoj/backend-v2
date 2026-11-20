@@ -19,7 +19,7 @@ import {
   ProblemContestResponse,
   ProblemDetailResponse,
 } from './dto/problem-detail.response';
-import { UserSummaryResponse } from './dto/user-summary.response';
+import { UserSummaryResponse } from '../../shared/dto/user-summary.response';
 import {
   ProblemListQueryDto,
   ProblemFilterQueryDto,

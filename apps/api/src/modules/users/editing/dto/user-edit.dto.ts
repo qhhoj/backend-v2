@@ -16,7 +16,7 @@ import {
 } from 'class-validator';
 import { ABOUT_MAX_LENGTH } from '@libs/community';
 import { CurrentPasswordDto } from '../../../auth/core/dto/current-password.dto';
-import { trim } from '../../../problems/core/dto/transforms';
+import { trim } from '../../../shared/dto/transforms';
 import { IsMailAddress } from '../../core/dto/email';
 import { IsUsername } from '../../core/dto/username';
 import { FIRST_NAME_MAX_LENGTH } from '../../profile/dto/profile.dto';

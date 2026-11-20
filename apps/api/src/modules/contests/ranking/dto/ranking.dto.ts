@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
-import { toBoolean } from '../../../problems/core/dto/transforms';
+import { toBoolean } from '../../../shared/dto/transforms';
 
 export class RankingQueryDto {
   /** Include virtual participations. */

@@ -50,7 +50,7 @@ import type { VoteResponse } from '../src/modules/contributions/dto/vote.respons
 import { CommentPostingService } from '../src/modules/comments/posting/comment-posting.service';
 import { CommentsRepository } from '../src/modules/comments/core/comments.repository';
 import * as commentMarkup from '../src/modules/comments/core/comment-markup';
-import { RevisionsRepository } from '../src/modules/problems/core/revisions.repository';
+import { RevisionsRepository } from '../src/modules/shared/revisions.repository';
 
 let api: ApiTest;
 beforeAll(async () => {

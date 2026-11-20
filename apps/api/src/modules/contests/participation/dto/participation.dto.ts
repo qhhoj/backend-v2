@@ -14,7 +14,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { toBoolean } from '../../../problems/core/dto/transforms';
+import { toBoolean } from '../../../shared/dto/transforms';
 
 export const PARTICIPATION_KINDS = ['live', 'virtual', 'spectate'] as const;
 export type ParticipationKind = (typeof PARTICIPATION_KINDS)[number];

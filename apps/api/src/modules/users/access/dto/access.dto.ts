@@ -13,7 +13,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { trim } from '../../../problems/core/dto/transforms';
+import { trim } from '../../../shared/dto/transforms';
 
 /** Legacy `auth_group.name` max_length. */
 export const GROUP_NAME_MAX_LENGTH = 150;

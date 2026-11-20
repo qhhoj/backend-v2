@@ -10,7 +10,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { toBoolean, trim } from '../../../problems/core/dto/transforms';
+import { toBoolean, trim } from '../../../shared/dto/transforms';
 
 export const STAFF_USER_SORTS = ['lastAccess', '-lastAccess'] as const;
 export type StaffUserSort = (typeof STAFF_USER_SORTS)[number];

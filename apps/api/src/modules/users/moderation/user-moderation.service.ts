@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrincipalService, SessionService, UsersRepository } from '@libs/auth';
 import type { Principal, UserDocument } from '@libs/auth';
 import { AppError } from '@libs/common';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import {
   AccountBans,
   activeAfterUnban,

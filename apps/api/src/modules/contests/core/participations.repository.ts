@@ -20,8 +20,8 @@ import {
   User,
   uuidStr,
 } from '@libs/database';
-import { VIRTUAL_JOIN_ATTEMPTS } from '../core/rate-limits';
-import type { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
+import { VIRTUAL_JOIN_ATTEMPTS } from './rate-limits';
+import type { UserSummaryResponse } from '../../shared/dto/user-summary.response';
 import type { OwnSubmission } from './viewer-problem-results';
 
 export type ParticipationDocument = HydratedDocument<ContestParticipation>;

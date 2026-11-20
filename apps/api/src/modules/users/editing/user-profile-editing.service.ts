@@ -18,7 +18,7 @@ import type Redis from 'ioredis';
 import { PasswordResetService } from '../../auth/password-reset/password-reset.service';
 import { linkedProviders } from '../../auth/social/oauth-provider';
 import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
-import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { EMAIL_TAKEN, normaliseEmail } from '../core/dto/email';
 import { withEmailLock } from '../core/email-lock';
 import type { UpdateUserByStaffDto } from './dto/user-edit.dto';

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { License } from '@libs/database';
 import type { Model } from 'mongoose';
-import { RevisionsRepository } from '../core/revisions.repository';
+import { RevisionsRepository } from '../../shared/revisions.repository';
 import { CatalogAdminService } from './catalog-admin.service';
 import type {
   CreateLicenseDto,

@@ -14,7 +14,7 @@ import { SettingsService } from '@libs/settings';
 import { uuidStr } from '@libs/database';
 import type { Comment } from '@libs/database';
 import { VotesRepository } from '../../contributions/votes.repository';
-import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../shared/dto/user-summary.response';
 import { moderatesComments } from './comment-moderators';
 import { CommentLocksRepository } from './comment-locks.repository';
 import { CommentPagesService } from './comment-pages.service';

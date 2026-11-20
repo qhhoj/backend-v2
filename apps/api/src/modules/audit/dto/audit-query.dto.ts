@@ -11,7 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { IsTimestamp } from '../../problems/core/dto/timestamp';
+import { IsTimestamp } from '../../shared/dto/timestamp';
 import { AUDIT_PAGE_SIZE, AUDIT_TYPES } from '../audit-types';
 import type { AuditType } from '../audit-types';
 

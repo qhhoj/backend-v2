@@ -11,7 +11,7 @@ import {
 } from 'class-validator';
 import { COMMENT_REPORT_STATUSES, SHARE_REPORT_REASONS } from '@libs/database';
 import type { CommentReportStatus, ShareReportReason } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../shared/dto/user-summary.response';
 import {
   REPORT_NOTE_MAX_LENGTH,
   REPORT_QUEUES,

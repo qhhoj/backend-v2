@@ -10,7 +10,7 @@ import type {
   CreatedJudgeResponse,
   JudgeKeyResponse,
 } from './dto/judge.response';
-import { RevisionsRepository } from '../problems/core/revisions.repository';
+import { RevisionsRepository } from '../shared/revisions.repository';
 import { judgeEditAction, judgeFieldChanges } from './judge-revision';
 import type { JudgeAction, JudgeFieldChanges } from './judge-revision';
 import { JudgesRepository } from './judges.repository';

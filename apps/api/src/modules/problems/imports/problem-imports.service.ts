@@ -35,7 +35,7 @@ import type { ImportJob, ImportQueue } from './import-queue';
 import { meteredOrganizationOf } from './import-charge';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
 import { codeTakenError } from '../editing/problem-edit-fields';
-import { rejectFile, saveMultipartFile } from '../core/multipart';
+import { rejectFile, saveMultipartFile } from '../../shared/multipart';
 import { ProblemDataStore } from '../data/problem-data.store';
 import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import { ProblemsRepository } from '../core/problems.repository';
