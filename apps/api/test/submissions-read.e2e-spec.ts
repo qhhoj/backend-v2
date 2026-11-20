@@ -5,6 +5,7 @@ import {
   createUserWith,
   loginAs,
   seedCatalog,
+  writeInit,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
 import { SubmissionsRepository } from '../src/modules/submissions/core/submissions.repository';
@@ -706,6 +707,7 @@ afterAll(() => api.teardown());
         allowedLanguages: [catalog.languages.cpp, ...Object.values(languages)],
         bannedUsers: [bannedUser._id],
       });
+      writeInit(api, 'files');
       session = await loginAs(api, uploader._id);
     });
     beforeEach(async () => {
