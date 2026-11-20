@@ -1,6 +1,6 @@
 import type { User } from '@libs/database';
 import { LEGACY_APPEARANCE_ACCENTS } from './appearance';
-import type { AppearanceResponse } from './appearance';
+import type { AppearanceResponse } from './appearance.response';
 
 /** The Clay and Glass theme ids (retired 2026-11-15) and what each became; the SPA maps them the same way. */
 const LEGACY_SITE_THEMES: Readonly<Record<string, string>> = {

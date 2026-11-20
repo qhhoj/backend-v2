@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { BIT_ROAM_COUNT_SCHEMA } from './profile.dto';
-import { AppearanceResponse } from '../../../accounts/appearance';
+import { AppearanceResponse } from '../../../accounts/appearance.response';
 import type { OrganizationSummaryResponse } from '../../../organizations/core/dto/organization.response';
 
 export class ProfileOrganizationResponse implements OrganizationSummaryResponse {

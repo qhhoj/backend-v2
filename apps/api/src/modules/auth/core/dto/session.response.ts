@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { uuidStr } from '@libs/database';
-import { AppearanceResponse } from '../../../accounts/appearance';
+import { AppearanceResponse } from '../../../accounts/appearance.response';
 import {
   currentAppearance,
   currentSiteTheme,
