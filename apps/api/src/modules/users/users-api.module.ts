@@ -8,7 +8,8 @@ import { CommentsApiModule } from '../comments/comments-api.module';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { FeedModule } from '../contests/feed/feed.module';
 import { OrganizationsApiModule } from '../organizations/organizations-api.module';
-import { ProblemsApiModule } from '../problems/problems-api.module';
+import { CatalogApiModule } from '../problems/catalog/catalog-api.module';
+import { SharedApiModule } from '../shared/shared-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { UserDataController } from './data/user-data.controller';
 import { UserDataService } from './data/user-data.service';
@@ -51,7 +52,8 @@ import { UserSuggestionsService } from './suggestions/user-suggestions.service';
     ContestAccessModule,
     FeedModule,
     OrganizationsApiModule,
-    ProblemsApiModule,
+    CatalogApiModule,
+    SharedApiModule,
     SubmissionsApiModule,
     JobsModule.register(communityJobs.userData),
   ],
