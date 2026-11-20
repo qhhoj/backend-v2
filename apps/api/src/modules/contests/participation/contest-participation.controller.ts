@@ -20,6 +20,7 @@ import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse, limiterAddress } from '@libs/common';
 import type { Paginated } from '@libs/common';
 import { ContestParticipationService } from './contest-participation.service';
+import { ContestDisqualificationService } from './contest-disqualification.service';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
 import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
 import {
@@ -38,7 +39,10 @@ import {
 @ApiTags('Contests')
 @Controller('api/internal/contests')
 export class ContestParticipationController {
-  constructor(private readonly participation: ContestParticipationService) {}
+  constructor(
+    private readonly participation: ContestParticipationService,
+    private readonly disqualification: ContestDisqualificationService,
+  ) {}
 
   /**
    * Get the contest the viewer is currently in
@@ -160,7 +164,12 @@ export class ContestParticipationController {
     @Param() { key, id }: ParticipationParamsDto,
     @Body() { disqualified }: DisqualifyDto,
   ): Promise<ParticipationSummaryResponse> {
-    return this.participation.disqualify(auth.principal, key, id, disqualified);
+    return this.disqualification.disqualify(
+      auth.principal,
+      key,
+      id,
+      disqualified,
+    );
   }
 
   /**
@@ -182,7 +191,7 @@ export class ContestParticipationController {
     @Param() { key }: ContestKeyParamDto,
     @Body() body: BulkDisqualifyDto,
   ): Promise<BulkDisqualifyResponse> {
-    return this.participation.disqualifyMany(auth.principal, key, body);
+    return this.disqualification.disqualifyMany(auth.principal, key, body);
   }
 
   /**
