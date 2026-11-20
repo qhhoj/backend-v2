@@ -29,6 +29,8 @@ export const UNCOUNTED_ATTEMPT_STATUSES: readonly SubmissionStatus[] = [
 ];
 /** Handed to a judge: P until `grading-begin`, then G. */
 export const IN_FLIGHT_STATUSES: readonly SubmissionStatus[] = ['P', 'G'];
+/** Not yet handed to a judge: queued, or a contest's final submission held until the contest ends. */
+export const WAITING_STATUSES: readonly SubmissionStatus[] = ['QU', 'PD'];
 export const SUBMISSION_RESULTS = [
   'AC',
   'WA',
