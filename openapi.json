@@ -8561,6 +8561,14 @@
       },
       "OrganizationUsageResponse": {
         "properties": {
+          "costs": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UsageCostsResponse"
+              }
+            ],
+            "description": "What one problem, one contest or 10 MiB of data costs in credits."
+          },
           "credits": {
             "allOf": [
               {
@@ -8637,6 +8645,7 @@
           "judging",
           "storage",
           "quota",
+          "costs",
           "recent",
           "topProblems"
         ],
@@ -14671,7 +14680,7 @@
             "type": "number"
           },
           "cases": {
-            "description": "Every case when the problem shows them (`testcaseResultVisibility` A) or to superusers.",
+            "description": "Every case when the problem shows them (`testcaseResultVisibility` A), or to the problem's editors and superusers.",
             "items": {
               "$ref": "#/components/schemas/SubmissionCaseResponse"
             },
@@ -17920,6 +17929,28 @@
         },
         "required": [
           "url"
+        ],
+        "type": "object"
+      },
+      "UsageCostsResponse": {
+        "properties": {
+          "contest": {
+            "description": "Credits to create or clone an organization contest.",
+            "type": "number"
+          },
+          "dataPer10MiB": {
+            "description": "Credits per 10 MiB (started) of an uploaded data archive.",
+            "type": "number"
+          },
+          "problem": {
+            "description": "Credits to create or clone an organization problem.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "problem",
+          "contest",
+          "dataPer10MiB"
         ],
         "type": "object"
       },
@@ -34204,7 +34235,7 @@
     },
     "/api/internal/organizations/{slug}/usage": {
       "get": {
-        "description": "Organization administrators only. Returns the current month's credits,\njudging milliseconds and storage against the organization's limits,\nwhether quotas are enforced, the most recent credit entries with the users\nwho spent them, and the five problems that used the most judging time this\nmonth.",
+        "description": "Organization administrators only. Returns the current month's credits,\njudging milliseconds and storage against the organization's limits,\nwhether quotas are enforced, the credit price of a problem, a contest and\n10 MiB of data (`costs`), the most recent credit entries with the users\nwho spent them, and the five problems that used the most judging time this\nmonth.",
         "operationId": "OrganizationUsageController_one",
         "parameters": [
           {
@@ -41708,7 +41739,7 @@
     },
     "/api/internal/submissions/{id}": {
       "get": {
-        "description": "Public: the result (verdict, points, test case results) is open to anyone\nwho may see the submission's problem. Test case results follow\n`testcaseResultVisibility`: every case, batch summaries only, or totals\nonly. The source is not part of it: `sourceAccess` tells whether the source\nendpoint will answer (the owner, problem editors and\n`judge.view_all_submission` always; others by the problem's\n`submissionSourceVisibility`: everyone, only after solving the problem, or\nowner and testers only; never visitors). Checker feedback, program output\nand the compile log come only with source access, then by their own rules.\n`viewer` tells which of abort, rejudge and reject the caller may use (all\nfalse for visitors). Errors: 404 `not_found` and 403 `contest_running`\n(another user's contest submission while the contest's list is not open to\nthe viewer). Visitors are limited to 300 requests per IP per minute (429\n`rate_limited`).",
+        "description": "Public: the result (verdict, points, test case results) is open to anyone\nwho may see the submission's problem. Test case results follow\n`testcaseResultVisibility`: every case, batch summaries only, or totals\nonly; the problem's editors see every case. The source is not part of it: `sourceAccess` tells whether the source\nendpoint will answer (the owner, problem editors and\n`judge.view_all_submission` always; others by the problem's\n`submissionSourceVisibility`: everyone, only after solving the problem, or\nowner and testers only; never visitors). Checker feedback, program output\nand the compile log come only with source access, then by their own rules.\n`viewer` tells which of abort, rejudge and reject the caller may use (all\nfalse for visitors). Errors: 404 `not_found` and 403 `contest_running`\n(another user's contest submission while the contest's list is not open to\nthe viewer). Visitors are limited to 300 requests per IP per minute (429\n`rate_limited`).",
         "operationId": "SubmissionsController_detail",
         "parameters": [
           {

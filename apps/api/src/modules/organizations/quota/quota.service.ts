@@ -14,7 +14,7 @@ import { SettingsService } from '@libs/settings';
 import { meterOf } from './quota-meter';
 import { QuotaWarningNotifier } from './quota-warning.notifier';
 import { BYTES_PER_COST_UNIT } from './quota.constants';
-import type { QuotaSnapshot } from './quota.types';
+import type { QuotaCosts, QuotaSnapshot } from './quota.types';
 
 /** Monthly credits (atomic, refundable) of an organization, its 80% warnings and its usage snapshot; limits, enforce mode and the storage meter live in `QuotaLedger`. `warn` mode lets everything through but logs and counts, so a site can measure before it blocks. */
 @Injectable()
@@ -28,6 +28,15 @@ export class QuotaService {
     private readonly usage: Model<OrganizationUsage>,
     private readonly warnings: QuotaWarningNotifier,
   ) {}
+
+  /** The prices `priceOf` charges, for a page that shows what one more problem, contest or 10 MiB of data costs. */
+  costs(): QuotaCosts {
+    return {
+      problem: this.settings.get('quota.cost.problem'),
+      contest: this.settings.get('quota.cost.contest'),
+      dataPer10MiB: this.settings.get('quota.cost.dataPer10MiB'),
+    };
+  }
 
   priceOf(request: ChargeRequest): number {
     if (request.kind === 'problem')

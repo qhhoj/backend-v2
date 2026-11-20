@@ -146,6 +146,7 @@ export class OrganizationUsageService {
         judgingMs: caps.quotaJudgingMs,
         storageBytes: caps.quotaStorageBytes,
       },
+      costs: this.quota.costs(),
       recent: await this.entriesOf(recent),
       topProblems,
     };

@@ -14,3 +14,10 @@ export interface QuotaSnapshot {
   judging: QuotaMeter;
   storage: QuotaMeter;
 }
+
+/** Credit prices from the `quota.cost.*` settings. */
+export interface QuotaCosts {
+  problem: number;
+  contest: number;
+  dataPer10MiB: number;
+}
