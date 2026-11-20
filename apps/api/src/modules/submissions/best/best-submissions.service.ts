@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
 import { SubmissionListItemResponse } from '../core/dto/submission-list.response';
+import { SubmissionFiltersService } from '../core/submission-filters.service';
 import { SubmissionsService } from '../core/submissions.service';
 import { BestSubmissionsRepository } from './best-submissions.repository';
 
@@ -9,6 +10,7 @@ import { BestSubmissionsRepository } from './best-submissions.repository';
 export class BestSubmissionsService {
   constructor(
     private readonly submissions: SubmissionsService,
+    private readonly filters: SubmissionFiltersService,
     private readonly best: BestSubmissionsRepository,
   ) {}
 
@@ -18,7 +20,7 @@ export class BestSubmissionsService {
     code: string,
     { page, pageSize }: { page: number; pageSize: number },
   ): Promise<Paginated<SubmissionListItemResponse>> {
-    const filter = await this.submissions.filterFor(
+    const filter = await this.filters.filterFor(
       principal,
       { problem: code },
       await this.submissions.viewerScope(principal),

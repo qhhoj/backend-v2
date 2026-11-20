@@ -10,7 +10,7 @@ import type {
   SubmissionStatsResponse,
   VerdictCountResponse,
 } from './dto/submission-stats.response';
-import { SubmissionsService } from './submissions.service';
+import { SubmissionFiltersService } from './submission-filters.service';
 
 export const STATS_CACHE_KEY = 'submissions:stats';
 export const STATS_CACHE_SECONDS = 30;
@@ -21,7 +21,7 @@ export class SubmissionStatsService {
   constructor(
     @InjectModel(Submission.name)
     private readonly submissions: Model<Submission>,
-    private readonly list: SubmissionsService,
+    private readonly filters: SubmissionFiltersService,
     private readonly judges: JudgesRepository,
     private readonly settings: SettingsService,
     @Inject(REDIS) private readonly redis: Redis,
@@ -41,7 +41,7 @@ export class SubmissionStatsService {
   }
 
   private async compute(now: Date): Promise<SubmissionStatsResponse> {
-    const visible = (await this.list.filterFor(null, {}, null)) ?? {
+    const visible = (await this.filters.filterFor(null, {}, null)) ?? {
       _id: { $in: [] },
     };
     const since = startOfDayIn(this.settings.get('site.timeZone'), now);

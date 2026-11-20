@@ -26,6 +26,7 @@ import { SubmissionStatsService } from './core/submission-stats.service';
 import { SubmissionContestsService } from './core/submission-contests.service';
 import { SubmissionsController } from './core/submissions.controller';
 import { SubmissionsRepository } from './core/submissions.repository';
+import { SubmissionFiltersService } from './core/submission-filters.service';
 import { SubmissionsService } from './core/submissions.service';
 
 @Module({
@@ -58,6 +59,7 @@ import { SubmissionsService } from './core/submissions.service';
     BestSubmissionsRepository,
   ],
   providers: [
+    SubmissionFiltersService,
     SubmissionsRepository,
     ExternalRunsRepository,
     SubmissionCreateService,
