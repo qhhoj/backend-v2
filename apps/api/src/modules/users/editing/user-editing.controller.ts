@@ -17,7 +17,7 @@ import {
 } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { RefuseNullFieldsPipe } from '@libs/common';
-import { UsernameParamDto } from '../core/dto/username-params.dto';
+import { UsernameParamDto } from '../../accounts/username-params.dto';
 import {
   RenameUserDto,
   SetUserPasswordDto,

@@ -1,10 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { BIT_ROAM_COUNT_SCHEMA } from './profile.dto';
-import type {
-  AppearanceAccent,
-  AppearanceBackground,
-  AppearanceContrast,
-} from './profile.dto';
+import { AppearanceResponse } from '../../../accounts/appearance';
 import type { OrganizationSummaryResponse } from '../../../organizations/core/dto/organization.response';
 
 export class ProfileOrganizationResponse implements OrganizationSummaryResponse {
@@ -20,15 +16,6 @@ export class ProfileOrganizationResponse implements OrganizationSummaryResponse 
   isOpen!: boolean;
   /** Whether the caller administers the organization. */
   isAdmin!: boolean;
-}
-
-export class AppearanceResponse {
-  /** Accent preset. */
-  accent!: AppearanceAccent;
-  /** Contrast level; absent means `standard`. */
-  contrast?: AppearanceContrast;
-  /** Page background style; absent means the default (`blueprint`). */
-  background?: AppearanceBackground;
 }
 
 export class BitRoamResponse {

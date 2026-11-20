@@ -6,8 +6,8 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { IsMailAddress } from '../../../users/core/dto/email';
-import { IsUsername } from '../../../users/core/dto/username';
+import { IsMailAddress } from '../../../accounts/email';
+import { IsUsername } from '../../../accounts/username';
 
 export class RegisterDto {
   /** Desired login name: letters, digits and underscores, up to 30 characters. */

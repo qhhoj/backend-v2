@@ -7,7 +7,7 @@ import {
   SessionOnly,
 } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { UsernameParamDto } from '../core/dto/username-params.dto';
+import { UsernameParamDto } from '../../accounts/username-params.dto';
 import { BanDto } from './dto/ban.dto';
 import { UserModerationService } from './user-moderation.service';
 

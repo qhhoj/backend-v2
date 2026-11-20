@@ -19,53 +19,23 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { ABOUT_MAX_LENGTH } from '@libs/community';
+import {
+  ACCEPTED_ACCENTS,
+  APPEARANCE_BACKGROUNDS,
+  APPEARANCE_CONTRASTS,
+} from '../../../accounts/appearance';
+import type {
+  AppearanceAccent,
+  AppearanceBackground,
+  AppearanceContrast,
+  LegacyAppearanceAccent,
+} from '../../../accounts/appearance';
 import { IsTimeZone } from '../../core/dto/is-time-zone';
 
 /** Theme ids are owned by the SPA's registry (unknown ids fall back to the OS scheme), so the API checks the shape only; retired ids are answered as their successors (`currentSiteTheme`). */
 export const SITE_THEME_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 /** Legacy `first_name` max_length. */
 export const FIRST_NAME_MAX_LENGTH = 30;
-/** The frontend's accents (frontend `src/theme/appearance.ts`, palette A), picker order; the first is the site's. */
-export const APPEARANCE_ACCENTS = [
-  'ultramarine',
-  'teal',
-  'plum',
-  'terracotta',
-  'graphite',
-] as const;
-export type AppearanceAccent = (typeof APPEARANCE_ACCENTS)[number];
-/** The Clay and Glass accents (retired 2026-11-15) and the accent each one became: accepted from older clients and stored, answered and kept as the new id. */
-export const LEGACY_APPEARANCE_ACCENTS = {
-  clay: 'terracotta',
-  orchid: 'plum',
-  ocean: 'ultramarine',
-  mint: 'teal',
-  sunset: 'terracotta',
-  gold: 'terracotta',
-  mono: 'graphite',
-  red: 'terracotta',
-} as const satisfies Record<string, AppearanceAccent>;
-export type LegacyAppearanceAccent = keyof typeof LEGACY_APPEARANCE_ACCENTS;
-const ACCEPTED_ACCENTS = [
-  ...APPEARANCE_ACCENTS,
-  ...Object.keys(LEGACY_APPEARANCE_ACCENTS),
-];
-/** Standard or the high-contrast palette; absent in a look means `standard`. */
-export const APPEARANCE_CONTRASTS = ['standard', 'high'] as const;
-export type AppearanceContrast = (typeof APPEARANCE_CONTRASTS)[number];
-/** The frontend's page-background styles (frontend `src/theme/appearance.ts`); absent in a look means the default, `blueprint`. */
-export const APPEARANCE_BACKGROUNDS = [
-  'none',
-  'paper',
-  'grainy',
-  'blueprint',
-  'contour',
-  'halftone',
-  'dither',
-  'stipple',
-  'landscape',
-] as const;
-export type AppearanceBackground = (typeof APPEARANCE_BACKGROUNDS)[number];
 /** The only profile field a PATCH may set to `null`: the site's look. */
 export const NULLABLE_PROFILE_FIELDS = ['appearance'];
 

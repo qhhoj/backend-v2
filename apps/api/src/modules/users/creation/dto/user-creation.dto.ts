@@ -14,8 +14,8 @@ import {
 } from 'class-validator';
 import { trim } from '../../../shared/dto/transforms';
 import { Transform } from 'class-transformer';
-import { IsMailAddress } from '../../core/dto/email';
-import { IsUsername } from '../../core/dto/username';
+import { IsMailAddress } from '../../../accounts/email';
+import { IsUsername } from '../../../accounts/username';
 import { FIRST_NAME_MAX_LENGTH } from '../../profile/dto/profile.dto';
 
 /** Rows per batch request: each row hashes a password, so larger imports are sent in several requests. */

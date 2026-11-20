@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { uuidStr } from '@libs/database';
-import { AppearanceResponse } from '../../../users/profile/dto/profile.response';
+import { AppearanceResponse } from '../../../accounts/appearance';
 import {
   currentAppearance,
   currentSiteTheme,
-} from '../../../users/profile/current-look';
+} from '../../../accounts/current-look';
 import { Principal, SessionData, UserDocument } from '@libs/auth';
 
 import {
