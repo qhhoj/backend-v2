@@ -161,7 +161,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
   lockedAfter!: Date | null;
   /** Which actions the caller may use on this submission. */
   viewer!: SubmissionViewerResponse;
-  /** Every case when the problem shows them (`testcaseResultVisibility` A) or to superusers. */
+  /** Every case when the problem shows them (`testcaseResultVisibility` A), or to the problem's editors and superusers. */
   cases!: SubmissionCaseResponse[] | null;
   /** Batch summaries when the problem shows only those (B). */
   batches!: SubmissionBatchResponse[] | null;

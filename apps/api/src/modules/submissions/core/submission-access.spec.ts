@@ -175,6 +175,17 @@ describe('caseVisibility', () => {
       ).cases,
     ).toBe('all');
   });
+  it.each(['A', 'B', 'S'])(
+    'shows every case to an editor of the problem under testcaseResultVisibility %s',
+    (testcaseResultVisibility) =>
+      expect(
+        caseVisibility(
+          viewer(),
+          { ...shown, testcaseResultVisibility },
+          { canEdit: true, isInContest: false, readsSource: true },
+        ).cases,
+      ).toBe('all'),
+  );
   it.each([
     ['A', false, false, true],
     ['C', false, false, true],

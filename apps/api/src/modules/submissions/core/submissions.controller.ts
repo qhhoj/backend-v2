@@ -76,7 +76,7 @@ export class SubmissionsController {
    * Public: the result (verdict, points, test case results) is open to anyone
    * who may see the submission's problem. Test case results follow
    * `testcaseResultVisibility`: every case, batch summaries only, or totals
-   * only. The source is not part of it: `sourceAccess` tells whether the source
+   * only; the problem's editors see every case. The source is not part of it: `sourceAccess` tells whether the source
    * endpoint will answer (the owner, problem editors and
    * `judge.view_all_submission` always; others by the problem's
    * `submissionSourceVisibility`: everyone, only after solving the problem, or

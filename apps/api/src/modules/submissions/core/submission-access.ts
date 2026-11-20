@@ -90,7 +90,7 @@ export interface CaseVisibility {
   output: boolean;
 }
 
-/** Legacy status page: superusers and `A` see every case, `B` batch summaries, `S` only the totals; feedback for superusers, editors or `allowViewFeedback`; program output unless `testcaseVisibility` is O (authors and editors only; A = always, C = outside contests, `isInContest`). Feedback and output describe what the code did on the jury's data, so a viewer who may not read the source (`readsSource` false, visitors included) gets neither. */
+/** Legacy status page: superusers, the problem's editors (`canEdit`) and `A` see every case, `B` batch summaries, `S` only the totals; feedback for superusers, editors or `allowViewFeedback`; program output unless `testcaseVisibility` is O (authors and editors only; A = always, C = outside contests, `isInContest`). Feedback and output describe what the code did on the jury's data, so a viewer who may not read the source (`readsSource` false, visitors included) gets neither. */
 export function caseVisibility(
   principal: Principal | null,
   problem: {
@@ -106,7 +106,9 @@ export function caseVisibility(
 ): CaseVisibility {
   return {
     cases:
-      principal?.isSuperuser || problem.testcaseResultVisibility === 'A'
+      principal?.isSuperuser ||
+      canEdit ||
+      problem.testcaseResultVisibility === 'A'
         ? 'all'
         : problem.testcaseResultVisibility === 'B'
           ? 'batches'

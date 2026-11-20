@@ -14680,7 +14680,7 @@
             "type": "number"
           },
           "cases": {
-            "description": "Every case when the problem shows them (`testcaseResultVisibility` A) or to superusers.",
+            "description": "Every case when the problem shows them (`testcaseResultVisibility` A), or to the problem's editors and superusers.",
             "items": {
               "$ref": "#/components/schemas/SubmissionCaseResponse"
             },
@@ -41739,7 +41739,7 @@
     },
     "/api/internal/submissions/{id}": {
       "get": {
-        "description": "Public: the result (verdict, points, test case results) is open to anyone\nwho may see the submission's problem. Test case results follow\n`testcaseResultVisibility`: every case, batch summaries only, or totals\nonly. The source is not part of it: `sourceAccess` tells whether the source\nendpoint will answer (the owner, problem editors and\n`judge.view_all_submission` always; others by the problem's\n`submissionSourceVisibility`: everyone, only after solving the problem, or\nowner and testers only; never visitors). Checker feedback, program output\nand the compile log come only with source access, then by their own rules.\n`viewer` tells which of abort, rejudge and reject the caller may use (all\nfalse for visitors). Errors: 404 `not_found` and 403 `contest_running`\n(another user's contest submission while the contest's list is not open to\nthe viewer). Visitors are limited to 300 requests per IP per minute (429\n`rate_limited`).",
+        "description": "Public: the result (verdict, points, test case results) is open to anyone\nwho may see the submission's problem. Test case results follow\n`testcaseResultVisibility`: every case, batch summaries only, or totals\nonly; the problem's editors see every case. The source is not part of it: `sourceAccess` tells whether the source\nendpoint will answer (the owner, problem editors and\n`judge.view_all_submission` always; others by the problem's\n`submissionSourceVisibility`: everyone, only after solving the problem, or\nowner and testers only; never visitors). Checker feedback, program output\nand the compile log come only with source access, then by their own rules.\n`viewer` tells which of abort, rejudge and reject the caller may use (all\nfalse for visitors). Errors: 404 `not_found` and 403 `contest_running`\n(another user's contest submission while the contest's list is not open to\nthe viewer). Visitors are limited to 300 requests per IP per minute (429\n`rate_limited`).",
         "operationId": "SubmissionsController_detail",
         "parameters": [
           {
