@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { BlogAccessModule } from '../blog/core/blog-access.module';
 import { CommentsApiModule } from '../comments/comments-api.module';
 import { OrganizationsApiModule } from '../organizations/organizations-api.module';
-import { ProblemsApiModule } from '../problems/problems-api.module';
+import { CatalogApiModule } from '../problems/catalog/catalog-api.module';
 import { UsersApiModule } from '../users/users-api.module';
 import { FeedsController } from './feeds.controller';
 import { FeedsService } from './feeds.service';
@@ -17,7 +17,7 @@ import { HomeService } from './home.service';
     CommentsApiModule,
     OrganizationsApiModule,
     UsersApiModule,
-    ProblemsApiModule,
+    CatalogApiModule,
   ],
   controllers: [HomeController, FeedsController],
   providers: [HomeRepository, HomeService, FeedsService],

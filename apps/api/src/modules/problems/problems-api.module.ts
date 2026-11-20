@@ -10,7 +10,6 @@ import { DiscordWebhooksModule } from '@libs/community';
 import { LanguagesAdminController } from './catalog/languages-admin.controller';
 import { LanguagesAdminService } from './catalog/languages-admin.service';
 import { LanguageUsageRepository } from './catalog/language-usage.repository';
-import { LanguagesQuerier } from './catalog/languages.querier';
 import { LicensesAdminController } from './catalog/licenses-admin.controller';
 import { LicensesAdminService } from './catalog/licenses-admin.service';
 import { ProblemGroupsAdminController } from './catalog/problem-groups-admin.controller';
@@ -21,9 +20,6 @@ import {
 } from './catalog/problem-taxa-admin.service';
 import { ProblemBulkVisibilityController } from './bulk/problem-bulk-visibility.controller';
 import { ProblemBulkVisibilityService } from './bulk/problem-bulk-visibility.service';
-import { LicensesQuerier } from './catalog/licenses.querier';
-import { ProblemGroupsQuerier } from './catalog/problem-groups.querier';
-import { ProblemTypesQuerier } from './catalog/problem-types.querier';
 import { ChunkedUploadsController } from './data/chunked/chunked-uploads.controller';
 import { ChunkedUploadsService } from './data/chunked/chunked-uploads.service';
 import { UploadPartsStore } from './data/chunked/upload-parts.store';
@@ -76,20 +72,16 @@ import { ProblemRescoreEnqueuerService } from './core/problem-rescore.service';
 import { ProblemsRepository } from './core/problems.repository';
 import { ProblemsController } from './core/problems.controller';
 import { ProblemsService } from './core/problems.service';
+import { CatalogApiModule } from './catalog/catalog-api.module';
 import { SharedApiModule } from '../shared/shared-api.module';
 import { ViewerStatusRepository } from './core/viewer-status.repository';
 
-const queriers = [
-  ProblemTypesQuerier,
-  ProblemGroupsQuerier,
-  LicensesQuerier,
-  LanguagesQuerier,
-];
 const repositories = [ProblemsRepository, ViewerStatusRepository];
 
 @Module({
   imports: [
     SharedApiModule,
+    CatalogApiModule,
     ContestAccessModule,
     DiscordWebhooksModule,
     OrganizationQuotaModule,
@@ -132,7 +124,6 @@ const repositories = [ProblemsRepository, ViewerStatusRepository];
     ProblemExternalJudgeController,
   ],
   providers: [
-    ...queriers,
     ...repositories,
     ProblemsService,
     LanguagesAdminService,
@@ -178,9 +169,9 @@ const repositories = [ProblemsRepository, ViewerStatusRepository];
     RateLimitService,
   ],
   exports: [
-    // Re-exported while modules still reach the change history through this module; they move to SharedApiModule.
+    // Re-exported while modules still reach the change history and the catalogs through this module.
     SharedApiModule,
-    ...queriers,
+    CatalogApiModule,
     ...repositories,
     ProblemsService,
     ProblemEditingService,
