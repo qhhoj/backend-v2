@@ -39,10 +39,7 @@ import type {
 } from './submission-access';
 import { SubmissionContestsService } from './submission-contests.service';
 import { SubmissionFiltersService } from './submission-filters.service';
-import type {
-  ListScope,
-  SubmissionFilters,
-} from './submission-filters.service';
+import type { ListScope } from './submission-filters.service';
 import { isContestRow, problemRowsOf } from './contest-rows';
 import { sourceFilename } from './source-file';
 import { TEST_SUMMARY_CAP, testSummaryOf } from './test-summary';
