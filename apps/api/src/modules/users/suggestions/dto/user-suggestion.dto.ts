@@ -1,7 +1,7 @@
 import { Transform } from 'class-transformer';
 import { IsString, MinLength } from 'class-validator';
 import { trim } from '../../../shared/dto/transforms';
-import { IsUsername } from '../../core/dto/username';
+import { IsUsername } from '../../../accounts/username';
 
 export class UserSuggestionQueryDto {
   /** Case-insensitive username prefix (letters, digits, underscores; 1-30 characters); surrounding spaces are dropped. */

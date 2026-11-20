@@ -30,7 +30,7 @@ import type { ActivationResponse } from './dto/activation.response';
 import { MemberAdmission } from '../../organizations/core/member-admission.service';
 import { OrganizationPointsService } from '../../organizations/core/organization-points.service';
 import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
-import { withEmailLock } from '../../users/core/email-lock';
+import { withEmailLock } from '../../accounts/email-lock';
 import { ACTIVATION_DAYS, ActivationService } from './activation.service';
 import type { RegisterDto } from './dto/register.dto';
 import {

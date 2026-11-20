@@ -19,8 +19,8 @@ import { PasswordResetService } from '../../auth/password-reset/password-reset.s
 import { linkedProviders } from '../../auth/social/oauth-provider';
 import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
 import { RevisionsRepository } from '../../shared/revisions.repository';
-import { EMAIL_TAKEN, normaliseEmail } from '../core/dto/email';
-import { withEmailLock } from '../core/email-lock';
+import { EMAIL_TAKEN, normaliseEmail } from '../../accounts/email';
+import { withEmailLock } from '../../accounts/email-lock';
 import type { UpdateUserByStaffDto } from './dto/user-edit.dto';
 import { UserEditResponse } from './dto/user-edit.response';
 import { asCurrentSuperuser } from '../access/superuser-lock';

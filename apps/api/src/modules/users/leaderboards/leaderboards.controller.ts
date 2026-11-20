@@ -3,7 +3,7 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { Public } from '@libs/auth';
 import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
-import { UsernameParamDto } from '../core/dto/username-params.dto';
+import { UsernameParamDto } from '../../accounts/username-params.dto';
 import {
   ContributorListQueryDto,
   RankQueryDto,

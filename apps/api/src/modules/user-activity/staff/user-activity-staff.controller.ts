@@ -19,7 +19,7 @@ import {
 import type { AuthContext } from '@libs/auth';
 import { ApiHasMoreResponse, RawResponse } from '@libs/common';
 import type { HasMorePageMetaResponse, Paginated } from '@libs/common';
-import { UsernameParamDto } from '../../users/core/dto/username-params.dto';
+import { UsernameParamDto } from '../../accounts/username-params.dto';
 import { ActivityExportService } from './activity-export.service';
 import { ActivityLiveService } from './activity-live.service';
 import { ActivityLogsService } from './activity-logs.service';

@@ -23,7 +23,10 @@ import {
   ABOUT_EDIT_LIMIT,
   ABOUT_EDIT_WINDOW_SECONDS,
 } from '../core/rate-limits';
-import { currentAppearance, currentSiteTheme } from './current-look';
+import {
+  currentAppearance,
+  currentSiteTheme,
+} from '../../accounts/current-look';
 import type { UpdateProfileDto } from './dto/profile.dto';
 import type { ProfileResponse } from './dto/profile.response';
 

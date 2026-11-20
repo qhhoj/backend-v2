@@ -11,7 +11,7 @@ import {
   Min,
 } from 'class-validator';
 import { MISC_CONFIG_KEY_MAX } from '@libs/database';
-import { IsStoredUuid } from '../../../users/core/dto/is-stored-uuid';
+import { IsStoredUuid } from '../../../accounts/is-stored-uuid';
 
 /** Unvalidated: a malformed id is a 404. */
 export class SiteIdParamDto {

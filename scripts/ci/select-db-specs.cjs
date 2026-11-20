@@ -40,6 +40,16 @@ const MODULES = [
   ],
   [/^apps\/api\/src\/modules\/audit\//, [`${API_TESTS}admin-`]],
   [
+    /^apps\/api\/src\/modules\/accounts\//,
+    [
+      `${API_TESTS}auth-`,
+      `${API_TESTS}registration`,
+      `${API_TESTS}user-`,
+      `${API_TESTS}social`,
+      `${API_TESTS}site-`,
+    ],
+  ],
+  [
     /^apps\/api\/src\/modules\/auth\//,
     [
       `${API_TESTS}auth-`,

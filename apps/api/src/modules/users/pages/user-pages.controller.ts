@@ -17,7 +17,7 @@ import { RecentCommentsService } from '../../comments/core/recent-comments.servi
 import { BlogPostsService } from '../../blog/core/blog-posts.service';
 import { PostPageQueryDto } from '../../blog/core/dto/post-list.dto';
 import { PostListItemResponse } from '../../blog/core/dto/post.response';
-import { UsernameParamDto } from '../core/dto/username-params.dto';
+import { UsernameParamDto } from '../../accounts/username-params.dto';
 import {
   ActivityQueryDto,
   PpBreakdownQueryDto,
