@@ -25,6 +25,7 @@ import {
 import { SubmissionsRepository } from '../core/submissions.repository';
 import type { SubmissionState } from '../core/submissions.repository';
 import { SubmissionsService } from '../core/submissions.service';
+import { SubmissionFiltersService } from '../core/submission-filters.service';
 import type {
   SubmissionFeedEventResponse,
   SubmissionStateEventResponse,
@@ -96,6 +97,7 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
     private readonly hub: EventStreamHubService,
     @Inject(STREAM_LIMITS) private readonly limits: StreamLimits,
     private readonly submissions: SubmissionsService,
+    private readonly filters: SubmissionFiltersService,
     private readonly submissionRows: SubmissionsRepository,
     private readonly problems: ProblemsRepository,
     private readonly problemEvents: ProblemEvents,
@@ -263,12 +265,12 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
     for (const entry of this.feed) entry.stream.send(frame);
   }
 
-  /** The anonymous submission list's rules: the problem, then the contest (`SubmissionsService.hiddenByContest`), read when the event is delivered so a freeze or a closed list applies at once. */
+  /** The anonymous submission list's rules: the problem, then the contest (`SubmissionFiltersService.hiddenByContest`), read when the event is delivered so a freeze or a closed list applies at once. */
   private async isFeedSubmission(event: SubmissionEvent): Promise<boolean> {
     if (!(await this.isFeedProblem(event.problemId))) return false;
     const contestId = await this.contestOf(event.submissionId);
     if (contestId === undefined) return false;
-    return !(await this.submissions.hiddenByContest(null, {
+    return !(await this.filters.hiddenByContest(null, {
       contestId,
       userId: event.userId,
     }));
