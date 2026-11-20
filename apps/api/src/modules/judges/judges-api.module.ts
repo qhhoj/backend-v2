@@ -4,6 +4,7 @@ import { JudgingModule } from '@libs/judging';
 import { CatalogApiModule } from '../problems/catalog/catalog-api.module';
 import { SharedApiModule } from '../shared/shared-api.module';
 import { JudgesController } from './judges.controller';
+import { JudgeRunsRepository } from './judge-runs.repository';
 import { JudgesRepository } from './judges.repository';
 import { JudgesService } from './judges.service';
 import { JudgeQueueRepository } from './queue/judge-queue.repository';
@@ -18,6 +19,7 @@ import { RuntimesService } from './runtimes/runtimes.service';
     JudgesService,
     RuntimesService,
     JudgesRepository,
+    JudgeRunsRepository,
     JudgeQueueRepository,
     JudgeQueueService,
   ],

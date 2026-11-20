@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { HydratedDocument, Model } from 'mongoose';
-import { IN_FLIGHT_STATUSES, Judge, Submission } from '@libs/database';
+import { Judge } from '@libs/database';
 
 export type JudgeDocument = HydratedDocument<Judge>;
 /** A judge without its key hash. */
@@ -22,8 +22,6 @@ export type JudgeChanges = Partial<
 export class JudgesRepository {
   constructor(
     @InjectModel(Judge.name) private readonly judges: Model<Judge>,
-    @InjectModel(Submission.name)
-    private readonly submissions: Model<Submission>,
   ) {}
 
   /** Connected judges and judges that may connect at all (neither blocked nor disabled). */
@@ -97,26 +95,6 @@ export class JudgesRepository {
       .updateOne({ name: from, online: false }, { $set: { name: to } })
       .exec();
     return matchedCount === 1;
-  }
-
-  /** A run handed to the judge before it went offline: its session may still resume it under this name. */
-  async hasRunsInFlight(name: string): Promise<boolean> {
-    return (
-      (await this.submissions.exists({
-        status: { $in: [...IN_FLIGHT_STATUSES] },
-        judgedOn: name,
-      })) !== null
-    );
-  }
-
-  /** Queued and pending final submissions pinned to `from` wait for `to` instead. */
-  async movePins(from: string, to: string): Promise<void> {
-    await this.submissions
-      .updateMany(
-        { status: { $in: ['QU', 'PD'] }, pinnedJudge: from },
-        { $set: { pinnedJudge: to } },
-      )
-      .exec();
   }
 
   /** Submit with `judgeId`: the judge is connected and runs the language (every judge sees the whole data root). */

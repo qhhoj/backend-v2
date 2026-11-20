@@ -10,6 +10,7 @@ import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import { JudgeError, Status } from '@libs/judge-proto';
 import { BridgeCommandsService } from '@libs/judging';
 import { JudgesRepository } from '../../api/src/modules/judges/judges.repository';
+import { JudgeRunsRepository } from '../../api/src/modules/judges/judge-runs.repository';
 import { JudgesService } from '../../api/src/modules/judges/judges.service';
 import type { RevisionsRepository } from '../../api/src/modules/shared/revisions.repository';
 import { FakeJudge } from './fake-judge';
@@ -181,7 +182,8 @@ describe('Judge link (gRPC)', () => {
   describe('driven by the api judges service (admin path)', () => {
     const admin = () =>
       new JudgesService(
-        new JudgesRepository(bridge.judges, bridge.submissions),
+        new JudgesRepository(bridge.judges),
+        new JudgeRunsRepository(bridge.submissions),
         commands,
         // the admin audit trail is the api's concern; this suite drives only the bridge side
         { append: () => Promise.resolve() } as unknown as RevisionsRepository,

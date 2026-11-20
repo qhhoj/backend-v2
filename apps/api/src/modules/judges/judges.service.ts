@@ -13,6 +13,7 @@ import type {
 import { RevisionsRepository } from '../shared/revisions.repository';
 import { judgeEditAction, judgeFieldChanges } from './judge-revision';
 import type { JudgeAction, JudgeFieldChanges } from './judge-revision';
+import { JudgeRunsRepository } from './judge-runs.repository';
 import { JudgesRepository } from './judges.repository';
 import type { JudgeChanges } from './judges.repository';
 
@@ -28,6 +29,7 @@ const notFound = () =>
 export class JudgesService {
   constructor(
     private readonly judges: JudgesRepository,
+    private readonly runs: JudgeRunsRepository,
     private readonly commands: BridgeCommandsService,
     private readonly revisions: RevisionsRepository,
   ) {}
@@ -127,7 +129,7 @@ export class JudgesService {
   ): Promise<JudgeResponse> {
     const judge = await this.one(name);
     if (newName === name) return judge;
-    if (await this.judges.hasRunsInFlight(name))
+    if (await this.runs.hasRunsInFlight(name))
       throw conflictIssue(
         'name',
         'judge_busy',
@@ -147,7 +149,7 @@ export class JudgesService {
         'judge_online',
         'Disconnect the judge before renaming it.',
       );
-    await this.judges.movePins(name, newName);
+    await this.runs.movePins(name, newName);
     await this.record(principal, judge, 'rename', {
       name: { before: name, after: newName },
     });
