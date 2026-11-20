@@ -1,5 +1,14 @@
 # qhhoj-backend
 
+## 2.43.5
+
+### Patch Changes
+
+- 9d7cdb7: Bridge: the dispatcher's waiting queue (ordered list plus id index) moves to `DispatchQueue`; no behaviour change.
+- c209e74: `GET /organizations/:slug/usage` returns `costs { problem, contest, dataPer10MiB }`, the credit prices from the `quota.cost.*` settings.
+
+  Submissions: a problem's editors who may read a submission's source see every test case result of it, whatever `testcaseResultVisibility` is.
+
 ## 2.43.4
 
 ### Patch Changes
