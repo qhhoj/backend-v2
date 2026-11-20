@@ -1,5 +1,18 @@
 # qhhoj-backend
 
+## 2.43.4
+
+### Patch Changes
+
+- bd4eac9: Shared account rules (e-mail and username checks, e-mail lock, site look) move to `modules/accounts/`; auth no longer imports users.
+- 717a5ba: `CatalogApiModule` owns the cached catalog queriers; the judges, home and users modules import it and `SharedApiModule` instead of the problems module.
+- 1997ae9: Disqualification moves from `ContestParticipationService` to `ContestDisqualificationService`.
+- 50c407d: The judges module's submission queries (runs in flight, pins on rename) move to `JudgeRunsRepository`; `WAITING_STATUSES` names the queued and pending set.
+- e2bb7cd: The submit check and the bridge pick a mirror's judged data through one helper, `judgedProblemIdOf`.
+- 77b55f4: Shared API helpers (change history, user summary, DTO transforms and timestamps, multipart) move out of the problems module into `modules/shared`.
+- c3a6f98: Submission list filters move from `SubmissionsService` to `SubmissionFiltersService`.
+- 5b0bbe9: A problem whose data was never saved (an `init.yml` without a data-version stamp) refuses submissions with `problem_has_no_tests` instead of judging them into internal errors.
+
 ## 2.43.3
 
 ### Patch Changes
