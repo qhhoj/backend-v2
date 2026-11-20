@@ -17,7 +17,7 @@ export class DispatchQueue {
   private readonly entries: QueuedSubmission[] = [];
   private readonly byId = new Map<string, QueuedSubmission>();
 
-  /** The entries in dispatch order, for `nextFor`; the same array the queue changes. */
+  /** The entries in dispatch order, for `nextFor`; the live array, so do not insert or remove while iterating it. */
   ordered(): readonly QueuedSubmission[] {
     return this.entries;
   }
@@ -45,9 +45,10 @@ export class DispatchQueue {
     this.byId.set(submission.id, submission);
   }
 
-  /** Swaps a queued entry for a copy with other constraints, keeping its place in the queue. */
+  /** Swaps a queued entry for a copy with other constraints, keeping its place in the queue; an id not queued is ignored. */
   replace(entry: QueuedSubmission): void {
     const index = this.entries.findIndex(({ id }) => id === entry.id);
+    if (index === -1) return;
     this.entries[index] = entry;
     this.byId.set(entry.id, entry);
   }
