@@ -22,7 +22,7 @@ import { JudgesRepository } from '../src/judges/judges.repository';
 import { JudgeLinkServer } from '../src/link/judge-link.server';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import { countResyncTicks, resyncTicks } from './resync-ticks';
-import { setupBridgeTest } from './setup';
+import { closeAfterFailedInit, setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
 
 const KEY = 'restart key';
@@ -506,8 +506,7 @@ describe('Bridge restart', () => {
       await expect(contender.init()).rejects.toThrow(/EADDRINUSE/);
     } finally {
       process.env.JUDGE_BRIDGE_PORT = '0';
-      // a failed init surfaces its error again when closed
-      await contender.close().catch(() => undefined);
+      await closeAfterFailedInit(contender);
     }
     expect(await submissionRow(id)).toMatchObject({
       status: 'G',
