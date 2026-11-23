@@ -72,6 +72,7 @@ export class ProblemExternalJudgeService {
     dto: PutExternalJudgeDto,
   ): Promise<ProblemExternalJudgeResponse> {
     const problem = await this.linkableProblem(auth.principal, code);
+    this.assertCanBeActive(dto);
     this.assertMappable(dto);
     const link = this.linkOf(problem.externalJudge, dto, problem);
     const changes: Record<string, unknown> = { externalJudge: link };
@@ -138,6 +139,16 @@ export class ProblemExternalJudgeService {
       connected: this.client.isConfigured(),
       link: problem.externalJudge && linkResponse(problem.externalJudge),
     };
+  }
+
+  /** An active link sends submissions to the external judge, which would never take them while none is configured. An inactive link sends nothing, so it is still stored. */
+  private assertCanBeActive(dto: PutExternalJudgeDto): void {
+    if (dto.isActive && !this.client.isConfigured())
+      throw new AppError(
+        'external_judge_not_configured',
+        409,
+        'No external judge is configured, so a link cannot be active',
+      );
   }
 
   /** Every mapped language exists and takes typed source. */
