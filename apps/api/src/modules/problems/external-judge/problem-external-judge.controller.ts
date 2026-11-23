@@ -56,7 +56,9 @@ export class ProblemExternalJudgeController {
    * Needs edit rights on the problem, and `judge.edit_all_problem` on a
    * manually managed or mirror problem (403 `forbidden`). Replaces the link:
    * the remote OJ and problem and the site-to-remote language mapping. Every
-   * language must exist and take typed source (400 `validation_failed`). While
+   * language must exist and take typed source (400 `validation_failed`). An
+   * active link is refused while no external judge is configured (409
+   * `external_judge_not_configured`); an inactive one is stored. While
    * `isActive`, the problem's allowed languages become exactly the mapped ones
    * and its submissions are judged by the external judge. Writes a revision.
    */
