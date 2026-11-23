@@ -1,5 +1,12 @@
 # qhhoj-backend
 
+## 2.43.6
+
+### Patch Changes
+
+- ad541cd: fix(problems): PUT external-judge refuses an active link with 409 external_judge_not_configured while no external judge is configured
+- fb08ecd: fix(similarity): the engine child watches the worker channel from its first line, so it exits when the worker dies before the config line arrives
+
 ## 2.43.5
 
 ### Patch Changes
