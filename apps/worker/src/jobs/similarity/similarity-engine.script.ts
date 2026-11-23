@@ -9,14 +9,16 @@ export const ENGINE_SOURCE = String.raw`
 import { createInterface } from 'node:readline';
 
 // The IPC channel only exists to report the parent's death through 'disconnect'; it must not keep the process alive.
+// Watch it from the first line: on a slow host the parent can be gone before the config line arrives, and the event is not repeated.
 process.channel?.unref();
+process.on('disconnect', () => process.exit(1));
+if (!process.connected) process.exit(1);
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 let config = null;
 const submissions = [];
 
-// The worker may die without cleaning up (SIGKILL, OOM kill): never outlive it or the deadline.
-function exitWithParentOrDeadline(timeoutMs) {
-  process.on('disconnect', () => process.exit(1));
+// The worker may die without cleaning up (SIGKILL, OOM kill): never outlive it (above) or the deadline.
+function exitAtDeadline(timeoutMs) {
   setTimeout(() => process.exit(1), timeoutMs).unref();
 }
 
@@ -24,7 +26,7 @@ for await (const line of input) {
   if (config !== null) submissions.push(JSON.parse(line));
   else {
     config = JSON.parse(line);
-    exitWithParentOrDeadline(config.timeoutMs);
+    exitAtDeadline(config.timeoutMs);
   }
 }
 

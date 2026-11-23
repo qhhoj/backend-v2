@@ -244,19 +244,24 @@ describe('SimilarityEngine', () => {
     await expect(comparison).rejects.toBeInstanceOf(EngineShutdownError);
   });
 
-  it('child exits when the worker goes away, without waiting for the deadline', async () => {
+  it('child exits with code 1 and no error output when the worker goes away', async () => {
     const child = spawn(
       process.execPath,
       ['--input-type=module', '-e', ENGINE_SOURCE],
-      { stdio: ['pipe', 'ignore', 'ignore', 'ipc'] },
+      { stdio: ['pipe', 'ignore', 'pipe', 'ipc'] },
     );
-    const exited = once(child, 'exit');
-    // Config only, stdin left open: the child is idle, as it is while the worker waits on it.
-    child.stdin!.write(JSON.stringify({ timeoutMs: 600_000 }) + '\n');
-    await sleep(500);
-    child.disconnect();
-    const exitCode = (await exited)[0] as number | null;
-    expect(exitCode).toBe(1);
+    try {
+      let stderr = '';
+      child.stderr?.on('data', (chunk) => (stderr += String(chunk)));
+      const exited = once(child, 'exit');
+      // Stdin left open and no config sent: the child can only learn of the worker's death from the closed channel, however late it starts.
+      child.disconnect();
+      const exitCode = (await exited)[0] as number | null;
+      expect(exitCode).toBe(1);
+      expect(stderr).toBe('');
+    } finally {
+      child.kill('SIGKILL');
+    }
   });
 
   it('does not depend on the working directory', async () => {
