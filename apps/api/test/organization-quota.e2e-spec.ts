@@ -586,14 +586,29 @@ describe('problem creation quota', () => {
     expect(await usedBy(organization._id)).toBe(10);
   });
 
-  // broken by #231 (issue #244); removed together with credits
-  it.skip('refunds the credits when the code is already taken', async () => {
+  it('spends nothing when the code is already taken', async () => {
     const organization = await limited(100);
     await createProblem(api, catalog, { code: 'takenquota' });
     await post(editor, {
       ...orgPayload([organization._id]),
       code: 'takenquota',
     }).expect(400);
+    expect(await usedBy(organization._id)).toBeNull();
+    expect(
+      await ledger.countDocuments({ organization: organization._id }),
+    ).toBe(0);
+  });
+
+  it('refunds the credits when another request takes the code after the check', async () => {
+    const organization = await limited(100);
+    const code = 'racedquota';
+    await createProblem(api, catalog, { code });
+    // The up-front check misses the problem once, as if it were created a moment later.
+    const check = jest
+      .spyOn(api.app.get(ProblemsRepository), 'idByCode')
+      .mockResolvedValueOnce(null);
+    await post(editor, { ...orgPayload([organization._id]), code }).expect(400);
+    check.mockRestore();
     expect(await usedBy(organization._id)).toBe(0);
     const entries = await ledger
       .find({ organization: organization._id })
