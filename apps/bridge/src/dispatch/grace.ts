@@ -60,7 +60,7 @@ export class GraceRegistry {
     return entryOf(entry);
   }
 
-  /** The row went back to QU (a rejudge): a held run of generation ≤ `generation` is void. */
+  /** The row went back to QU (a rejudge) or a newer claim took it: a held run of generation ≤ `generation` is void. */
   discard(submissionId: string, generation: number): void {
     const entry = this.held.get(submissionId);
     if (entry && entry.ref.generation <= generation) this.remove(submissionId);
