@@ -1,13 +1,14 @@
 import { tmpdir } from 'node:os';
 import { getQueueToken } from '@nestjs/bullmq';
-import { getModelToken } from '@nestjs/mongoose';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import type { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { MongoClient } from 'mongodb';
-import type { Model } from 'mongoose';
-import { TUNING } from '@libs/common';
+import type { Connection, Model } from 'mongoose';
+import { REDIS, TUNING } from '@libs/common';
 import { TEST_ENV, TEST_REDIS_URL, TEST_TUNING } from '@libs/common/testing';
 import {
   Contest,
@@ -60,6 +61,19 @@ export const FAST_TIMINGS: BridgeTimings = {
   deferralWindowMs: 600_000,
 };
 
+/**
+ * Closes a module whose `init()` failed. Nest's `close()` then throws the init error again and skips the shutdown
+ * hooks, which leaves the cron jobs, the Mongo connection, the Redis connection and the graded queue's connection open: jest never exits. So they are closed here.
+ */
+export async function closeAfterFailedInit(module: TestingModule) {
+  await module.close().catch(() => undefined);
+  for (const job of module.get(SchedulerRegistry).getCronJobs().values())
+    await job.stop();
+  await module.get<Connection>(getConnectionToken()).close();
+  await module.get<Redis>(REDIS).quit();
+  await module.get<Queue>(getQueueToken(judgingJobs.graded.queue)).close();
+}
+
 export async function setupBridgeTest({
   timings = {},
   env = {},
@@ -103,7 +117,7 @@ export async function setupBridgeTest({
     try {
       await compiled.init();
     } catch (error) {
-      await compiled.close();
+      await closeAfterFailedInit(compiled);
       throw error;
     }
     return compiled;
