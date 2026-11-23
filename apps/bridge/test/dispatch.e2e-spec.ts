@@ -4,9 +4,11 @@ import { TEST_REDIS_URL } from '@libs/common/testing';
 import type { SubmissionCase } from '@libs/database';
 import { BRIDGE_COMMANDS_STREAM, BridgeCommandsService } from '@libs/judging';
 import { recordSubmissionEvents } from '@libs/judging/testing';
+import { Resume_Action } from '@libs/judge-proto';
 import type { AssignmentRef } from '@libs/judge-proto';
 import { CommandsService } from '../src/dispatch/commands.service';
 import { DispatcherService } from '../src/dispatch/dispatcher.service';
+import { windingKey } from '../src/dispatch/slots';
 import { RunsService } from '../src/submissions/runs.service';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import {
@@ -17,7 +19,8 @@ import {
 } from './fixtures';
 import type { BridgeCatalog } from './fixtures';
 import { RecordingJudge } from './recording-judge';
-import { setupBridgeTest } from './setup';
+import { ManualGraceClock } from './conformance/manual-grace-clock';
+import { FAST_TIMINGS, setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
 
 describe('DispatcherService (with Mongo)', () => {
@@ -26,6 +29,8 @@ describe('DispatcherService (with Mongo)', () => {
   let dispatch: DispatcherService;
   let repository: SubmissionsRepository;
   let names = 0;
+  /** Grace ends only when a test advances it: no test waits on a timer. */
+  const graceClock = new ManualGraceClock();
   /** A unique judge name, so judges left registered by earlier tests never compete. */
   const judgeNamed = (prefix: string, slots = 1) =>
     new RecordingJudge(`${prefix}-${(names += 1)}`, slots);
@@ -62,7 +67,7 @@ describe('DispatcherService (with Mongo)', () => {
     dispatch.runEnded(judge, refOf(judge, id), { retried: false });
 
   beforeAll(async () => {
-    bridge = await setupBridgeTest();
+    bridge = await setupBridgeTest({ graceClock });
     catalog = await seedCatalog(bridge);
     dispatch = bridge.module.get(DispatcherService);
     repository = bridge.module.get(SubmissionsRepository);
@@ -132,12 +137,18 @@ describe('DispatcherService (with Mongo)', () => {
     const judge = await online(judgeNamed('outage'));
     const lost = await submit();
     const outage = new Error('mongo down');
-    jest.spyOn(repository, 'claimRun').mockRejectedValueOnce(outage);
-    await enqueue(lost);
-    expect(judge.inFlight.size).toBe(0);
-    const next = await submit();
-    await enqueue(next);
-    expect(sentTo(judge)).toEqual([next]);
+    const failing = jest
+      .spyOn(repository, 'claimRun')
+      .mockRejectedValueOnce(outage);
+    try {
+      await enqueue(lost);
+      expect(judge.inFlight.size).toBe(0);
+      const next = await submit();
+      await enqueue(next);
+      expect(sentTo(judge)).toEqual([next]);
+    } finally {
+      failing.mockRestore();
+    }
     judge.isClosed = true;
   });
 
@@ -159,6 +170,179 @@ describe('DispatcherService (with Mongo)', () => {
     await finish(judge, one);
     expect(sentTo(judge)).toHaveLength(3);
     judge.isClosed = true;
+  });
+
+  describe('a stale queued entry claimed while a judge resumes the run whose grace expired (#377)', () => {
+    /** `open` lets whatever awaits `closed` go on. */
+    const gate = () => {
+      let open: () => void = () => undefined;
+      const closed = new Promise<void>((resolve) => (open = resolve));
+      return { closed, open };
+    };
+
+    /** A judge holds the submission's generation 1, and a resync read from before that claim (generation 0) is kept; `busy` is full with other work. */
+    const holdWithStaleRead = async () => {
+      const busy = await online(judgeNamed('stale-claimer'));
+      const other = await submit();
+      await enqueue(other);
+      const id = await submit();
+      const staleRead = await repository.loadQueued([id]);
+      const lost = await online(judgeNamed('stale-holder'));
+      await enqueue(id);
+      return { busy, other, id, staleRead, ref: refOf(lost, id), lost };
+    };
+
+    /** Holds the resume read (`read`), the grace expiry's read of the QU row (`load`) and, after its write, the other judge's claim (`claim`) until their gates open; `readReached`, `loadReached` and `claimReached` open when each call gets there. */
+    const slowRepository = (id: string) => {
+      const real = {
+        resumableRun: repository.resumableRun.bind(repository),
+        loadQueued: repository.loadQueued.bind(repository),
+        claimRun: repository.claimRun.bind(repository),
+      };
+      const [read, load, claim] = [gate(), gate(), gate()];
+      const [readReached, loadReached, claimReached] = [gate(), gate(), gate()];
+      let requeueRead: ReturnType<typeof real.loadQueued> = Promise.resolve([]);
+      const spies = [
+        jest
+          .spyOn(repository, 'resumableRun')
+          .mockImplementation(async (...args) => {
+            const stored = await real.resumableRun(...args);
+            readReached.open();
+            await read.closed;
+            return stored;
+          }),
+        jest
+          .spyOn(repository, 'loadQueued')
+          .mockImplementation((ids, options) => {
+            if (ids?.length !== 1 || ids[0] !== id)
+              return real.loadQueued(ids, options);
+            requeueRead = load.closed.then(() => real.loadQueued(ids, options));
+            loadReached.open();
+            return requeueRead;
+          }),
+        jest
+          .spyOn(repository, 'claimRun')
+          .mockImplementation(async (queued, judgeName) => {
+            const outcome = await real.claimRun(queued, judgeName);
+            if (queued.id === id) claimReached.open();
+            await claim.closed;
+            return outcome;
+          }),
+      ];
+      return {
+        read,
+        load,
+        claim,
+        readReached,
+        loadReached,
+        claimReached,
+        requeueRead: () => requeueRead,
+        restore: () => {
+          for (const held of [read, load, claim]) held.open();
+          for (const spy of spies) spy.mockRestore();
+        },
+      };
+    };
+
+    /** The judge stopped the voided run (its `Final{ABORTED}`), and the claimer's Final is stored: only generation 2 writes a verdict. */
+    const finishBoth = async (
+      resuming: RecordingJudge,
+      busy: RecordingJudge,
+      ref: AssignmentRef,
+    ) => {
+      const runs = bridge.module.get(RunsService);
+      const graded = { kind: 'graded', log: '', dataVersionUsed: 0 } as const;
+      const live = refOf(busy, ref.submissionId);
+      const voided = await runs.final(
+        { ref, judgeName: resuming.name, seq: 1 },
+        graded,
+      );
+      await dispatch.windingEnded(resuming, ref);
+      const stored = await runs.final(
+        { ref: live, judgeName: busy.name, seq: 1 },
+        graded,
+      );
+      await finish(busy, ref.submissionId);
+      return { voided, stored, winding: [...resuming.winding] };
+    };
+
+    const orderings = [
+      {
+        when: 'after the claim',
+        readDuringClaim: false,
+        resumed: Resume_Action.ACTION_DROP,
+        aborted: false,
+      },
+      {
+        when: 'during the claim',
+        readDuringClaim: true,
+        resumed: Resume_Action.ACTION_CONTINUE,
+        aborted: true,
+      },
+    ];
+    it.each(orderings)(
+      'gives the run one holder when the resume read returns $when',
+      async ({ readDuringClaim, resumed, aborted }) => {
+        const { busy, other, id, staleRead, ref, lost } =
+          await holdWithStaleRead();
+        const slow = slowRepository(id);
+        if (!readDuringClaim) slow.claim.open();
+        try {
+          const resuming = new RecordingJudge(lost.name);
+          brought.push(resuming);
+          // the Hello puts generation 1 in grace; the grace ends while Mongo is read
+          const plan = dispatch.resume(resuming, [{ ref, lastSeqSent: 0 }]);
+          await dispatch.enqueue(staleRead);
+          expect(dispatch.hasQueued(id)).toBe(true);
+          await slow.readReached.closed;
+          graceClock.advance(FAST_TIMINGS.resumeGraceMs);
+          await slow.loadReached.closed;
+          expect(await statusOf(id)).toMatchObject({
+            status: 'QU',
+            judgeGeneration: 1,
+          });
+          // the busy judge's slot frees and it claims the stale entry
+          const freed = finish(busy, other);
+          await slow.claimReached.closed;
+          if (!readDuringClaim) await freed;
+          slow.read.open();
+          const { resume } = await plan;
+          slow.claim.open();
+          await freed;
+          slow.load.open();
+          await slow.requeueRead();
+          const row = await statusOf(id);
+          expect({
+            resumed: resume.map((entry) => entry.action),
+            aborted: resuming.aborts,
+            resumedHolds: resuming.inFlight.get(id),
+            winding: [...resuming.winding],
+            live: busy.inFlight.get(id),
+            row: [row.status, row.judgedOn, row.judgeGeneration],
+          }).toEqual({
+            resumed: [resumed],
+            aborted: aborted ? [ref] : [],
+            resumedHolds: undefined,
+            winding: [windingKey(ref)],
+            live: 2,
+            row: ['P', busy.name, 2],
+          });
+          expect(await finishBoth(resuming, busy, ref)).toEqual({
+            voided: 'stale',
+            stored: 'applied',
+            winding: [],
+          });
+          const judged = await statusOf(id);
+          expect([
+            judged.status,
+            judged.judgedOn,
+            judged.judgeGeneration,
+          ]).toEqual(['D', busy.name, 2]);
+        } finally {
+          slow.restore();
+        }
+      },
+    );
   });
 
   describe('commands from the api', () => {
@@ -312,6 +496,7 @@ describe('DispatcherService (with Mongo)', () => {
           false,
         );
         await dispatch.judgeLost(judge);
+        graceClock.advance(FAST_TIMINGS.resumeGraceMs);
         await recorder.waitFor((events) =>
           events.some(
             (event) => event.submissionId === lost && event.type === 'queued',

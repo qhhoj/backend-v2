@@ -485,7 +485,7 @@ export class DispatcherService {
     this.queue.insert(submission);
   }
 
-  /** The row is QU at `generation`, so a run of that generation or older still held (live, resumed by a handshaking session, or in grace) is void: the judge is told to stop, and the slot comes back with its `Final{ABORTED}` (`winding`). A newer run (claimed after the row was read), a claim in flight, and a run whose Final is being stored (`settling`: a RETRY's own requeue read by a resync tick before the session ended the run) are kept. */
+  /** Runs of `generation` or older are void (the row is QU at it, or a claim moved it past it): a run of one still held (live, resumed by a handshaking session, or in grace) ends, the judge is told to stop, and the slot comes back with its `Final{ABORTED}` (`winding`). A newer run (claimed after the row was read), a claim in flight, and a run whose Final is being stored (`settling`: a RETRY's own requeue read by a resync tick before the session ended the run) are kept. */
   private voidOlderRuns(submission: QueuedSubmission): void {
     this.grace.discard(submission.id, submission.generation);
     this.voidReads(submission);
@@ -701,7 +701,7 @@ export class DispatcherService {
     );
   }
 
-  /** Reserves a slot, claims in Mongo, then sends. A row no longer QU frees the slot; if the session ended during the claim, the claim is given back. */
+  /** Reserves a slot, claims in Mongo, voids runs of older generations, then sends. A row no longer QU frees the slot; if the session ended during the claim, the claim is given back. */
   private async dispatch(
     judge: DispatchTarget,
     submission: QueuedSubmission,
@@ -716,6 +716,12 @@ export class DispatcherService {
       judge.inFlight.delete(submission.id);
       throw error;
     }
+    // the row moved past every older generation: a run of one held meanwhile (a stale entry claimed during a resume) is void
+    if (claimed)
+      this.voidOlderRuns({
+        ...submission,
+        generation: claimed.request.ref.generation - 1,
+      });
     if (judge.isClosed || this.judges.get(judge.name) !== judge)
       return this.giveBack(judge, submission, claimed);
     if (!claimed) return void judge.inFlight.delete(submission.id);
