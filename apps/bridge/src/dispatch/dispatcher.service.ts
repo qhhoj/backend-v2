@@ -701,7 +701,7 @@ export class DispatcherService {
     );
   }
 
-  /** Reserves a slot, claims in Mongo, then sends. A row no longer QU frees the slot; if the session ended during the claim, the claim is given back. */
+  /** Reserves a slot, claims in Mongo, voids runs of older generations, then sends. A row no longer QU frees the slot; if the session ended during the claim, the claim is given back. */
   private async dispatch(
     judge: DispatchTarget,
     submission: QueuedSubmission,
@@ -716,6 +716,12 @@ export class DispatcherService {
       judge.inFlight.delete(submission.id);
       throw error;
     }
+    // the row moved past every older generation: a run of one held meanwhile (a stale entry claimed during a resume) is void
+    if (claimed)
+      this.voidOlderRuns({
+        ...submission,
+        generation: claimed.request.ref.generation - 1,
+      });
     if (judge.isClosed || this.judges.get(judge.name) !== judge)
       return this.giveBack(judge, submission, claimed);
     if (!claimed) return void judge.inFlight.delete(submission.id);

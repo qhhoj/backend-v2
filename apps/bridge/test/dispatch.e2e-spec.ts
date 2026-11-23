@@ -4,6 +4,7 @@ import { TEST_REDIS_URL } from '@libs/common/testing';
 import type { SubmissionCase } from '@libs/database';
 import { BRIDGE_COMMANDS_STREAM, BridgeCommandsService } from '@libs/judging';
 import { recordSubmissionEvents } from '@libs/judging/testing';
+import { Resume_Action } from '@libs/judge-proto';
 import type { AssignmentRef } from '@libs/judge-proto';
 import { CommandsService } from '../src/dispatch/commands.service';
 import { DispatcherService } from '../src/dispatch/dispatcher.service';
@@ -159,6 +160,80 @@ describe('DispatcherService (with Mongo)', () => {
     await finish(judge, one);
     expect(sentTo(judge)).toHaveLength(3);
     judge.isClosed = true;
+  });
+
+  it('a stale queued entry claimed while a judge resumes the run whose grace expired gives the run one holder (#377)', async () => {
+    const busy = await online(judgeNamed('stale-claimer'));
+    const other = await submit();
+    await enqueue(other);
+    const id = await submit();
+    // a resync read before the claim below: its entry names generation 0
+    const staleRead = await repository.loadQueued([id]);
+    const lost = await online(judgeNamed('stale-holder'));
+    await enqueue(id);
+    const ref = refOf(lost, id);
+    const resumableRun = repository.resumableRun.bind(repository);
+    const loadQueued = repository.loadQueued.bind(repository);
+    let readDone = false;
+    let openRead: () => void = () => undefined;
+    const readGate = new Promise<void>((resolve) => (openRead = resolve));
+    // the row is read G/P at generation 1, and the read returns only after the other claim
+    const slowRead = jest
+      .spyOn(repository, 'resumableRun')
+      .mockImplementation(async (...args) => {
+        const stored = await resumableRun(...args);
+        readDone = true;
+        await readGate;
+        return stored;
+      });
+    let requeueRead: Promise<unknown> | null = null;
+    let openLoad: () => void = () => undefined;
+    const loadGate = new Promise<void>((resolve) => (openLoad = resolve));
+    // the grace expiry's own read of the QU row lands after the other claim
+    const slowLoad = jest
+      .spyOn(repository, 'loadQueued')
+      .mockImplementation((ids, options) => {
+        if (ids?.length !== 1 || ids[0] !== id) return loadQueued(ids, options);
+        requeueRead = loadGate.then(() => loadQueued(ids, options));
+        return requeueRead as ReturnType<typeof loadQueued>;
+      });
+    try {
+      const resuming = new RecordingJudge(lost.name);
+      brought.push(resuming);
+      // the Hello puts generation 1 in grace; its timer expires during the read
+      const plan = dispatch.resume(resuming, [{ ref, lastSeqSent: 0 }]);
+      await dispatch.enqueue(staleRead);
+      expect(dispatch.hasQueued(id)).toBe(true);
+      await waitUntil(() => readDone && requeueRead !== null);
+      expect(await statusOf(id)).toMatchObject({
+        status: 'QU',
+        judgeGeneration: 1,
+      });
+      // the busy judge's slot frees and it claims the stale entry
+      await finish(busy, other);
+      openRead();
+      const { resume } = await plan;
+      openLoad();
+      await requeueRead;
+      expect({
+        resumed: resume.map((entry) => entry.action),
+        resumedHolds: resuming.inFlight.get(id),
+        live: busy.inFlight.get(id),
+        row: await statusOf(id),
+      }).toEqual({
+        resumed: [Resume_Action.ACTION_DROP],
+        resumedHolds: undefined,
+        live: 2,
+        row: expect.objectContaining({
+          status: 'P',
+          judgedOn: busy.name,
+          judgeGeneration: 2,
+        }),
+      });
+    } finally {
+      slowRead.mockRestore();
+      slowLoad.mockRestore();
+    }
   });
 
   describe('commands from the api', () => {
